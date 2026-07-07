@@ -95,7 +95,7 @@ describe("GitDiffViewer", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Ask for changes on hovered line" }),
+      screen.getByRole("button", { name: "要求修改当前行" }),
     );
 
     expect(onInsertComposerText).toHaveBeenCalledTimes(1);

@@ -83,7 +83,7 @@ describe("useFileLinkOpener", () => {
 
     const items = menuNewMock.mock.calls[0]?.[0]?.items ?? [];
     const copyLinkItem = items.find(
-      (item: { text?: string; action?: () => Promise<void> }) => item.text === "Copy Link",
+      (item: { text?: string; action?: () => Promise<void> }) => item.text === "复制链接",
     );
 
     await copyLinkItem?.action?.();
