@@ -3,6 +3,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import type { Options as NotificationOptions } from "@tauri-apps/plugin-notification";
 import type {
   AppSettings,
+  CodexStatus,
   CodexUpdateResult,
   CodexDoctorResult,
   DictationModelStatus,
@@ -80,6 +81,14 @@ export async function pickImageFiles(): Promise<string[]> {
   return Array.isArray(selection) ? selection : [selection];
 }
 
+export async function pickAttachmentFiles(): Promise<string[]> {
+  const selection = await open({ multiple: true });
+  if (!selection) {
+    return [];
+  }
+  return Array.isArray(selection) ? selection : [selection];
+}
+
 export async function exportMarkdownFile(
   content: string,
   defaultFileName = "plan.md",
@@ -117,6 +126,10 @@ export async function listWorkspaces(): Promise<WorkspaceInfo[]> {
 
 export async function getCodexConfigPath(): Promise<string> {
   return invoke<string>("get_codex_config_path");
+}
+
+export async function getCodexStatus(): Promise<CodexStatus> {
+  return invoke<CodexStatus>("get_codex_status");
 }
 
 export type TextFileResponse = {
@@ -196,6 +209,13 @@ async function fileWrite(
 
 export async function readImageAsDataUrl(path: string): Promise<string> {
   return invoke<string>("read_image_as_data_url", { path });
+}
+
+export async function saveComposerImages(
+  workspaceId: string,
+  images: string[],
+): Promise<string[]> {
+  return invoke<string[]>("save_composer_images", { workspaceId, images });
 }
 
 export async function readGlobalAgentsMd(): Promise<GlobalAgentsResponse> {
@@ -871,6 +891,10 @@ export async function isMobileRuntime(): Promise<boolean> {
 
 export async function updateAppSettings(settings: AppSettings): Promise<AppSettings> {
   return invoke<AppSettings>("update_app_settings", { settings });
+}
+
+export async function listSystemFonts(): Promise<string[]> {
+  return invoke<string[]>("list_system_fonts");
 }
 
 export async function tailscaleStatus(): Promise<TailscaleStatus> {

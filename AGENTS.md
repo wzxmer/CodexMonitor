@@ -167,3 +167,5 @@ Use extra care in high-churn/high-complexity files:
 - Task-oriented code map: `docs/codebase-map.md`
 - Multi-agent upstream sync runbook: `docs/multi-agent-sync-runbook.md`
 - Setup/build/release/test commands: `README.md`
+
+@RTK.md

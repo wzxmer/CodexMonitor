@@ -12,6 +12,7 @@ mod daemon_binary;
 mod dictation;
 mod event_sink;
 mod files;
+mod fonts;
 mod git;
 mod git_utils;
 mod local_usage;
@@ -134,6 +135,14 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     let state = app_handle.state::<state::AppState>();
+                    files::attachments::cleanup_all_workspace_attachments(state.inner()).await;
+                });
+            }
+            #[cfg(desktop)]
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = app_handle.state::<state::AppState>();
                     let settings = state.app_settings.lock().await.clone();
                     if matches!(
                         settings.remote_backend_provider,
@@ -183,10 +192,13 @@ pub fn run() {
             settings::get_app_settings,
             settings::update_app_settings,
             settings::get_codex_config_path,
+            settings::get_codex_status,
             files::file_read,
             files::file_write,
             files::read_image_as_data_url,
+            files::save_composer_images,
             files::write_text_file,
+            fonts::list_system_fonts,
             codex::get_config_model,
             menu::menu_set_accelerators,
             tray::set_tray_recent_threads,

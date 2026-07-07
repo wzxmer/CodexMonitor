@@ -10,11 +10,13 @@ use crate::backend::app_server::WorkspaceSession;
 use crate::codex::args::resolve_workspace_codex_args;
 use crate::codex::home::resolve_workspace_codex_home;
 use crate::shared::process_core::kill_child_process_tree;
-use crate::types::{AppSettings, WorkspaceEntry};
+use crate::types::{AppSettings, WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
 
 use super::helpers::resolve_entry_and_parent;
 
 static CONNECT_WORKSPACE_SPAWN_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+const LOCAL_CODEX_WORKSPACE_ID: &str = "__local_codex_sessions__";
+const LOCAL_CODEX_WORKSPACE_NAME: &str = "本机 Codex 历史会话";
 
 pub(super) fn workspace_session_spawn_lock() -> &'static Mutex<()> {
     CONNECT_WORKSPACE_SPAWN_LOCK.get_or_init(|| Mutex::new(()))
@@ -51,6 +53,36 @@ pub(super) async fn take_live_shared_session(
     }
 }
 
+fn local_codex_workspace_entry() -> WorkspaceEntry {
+    let path = crate::codex::home::resolve_home_dir()
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| ".".into())
+        .to_string_lossy()
+        .to_string();
+    WorkspaceEntry {
+        id: LOCAL_CODEX_WORKSPACE_ID.to_string(),
+        name: LOCAL_CODEX_WORKSPACE_NAME.to_string(),
+        path,
+        kind: WorkspaceKind::Main,
+        parent_id: None,
+        worktree: None,
+        settings: WorkspaceSettings::default(),
+    }
+}
+
+async fn resolve_connect_entry(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    workspace_id: &str,
+) -> Result<(WorkspaceEntry, Option<WorkspaceEntry>), String> {
+    match resolve_entry_and_parent(workspaces, workspace_id).await {
+        Ok(result) => Ok(result),
+        Err(_) if workspace_id == LOCAL_CODEX_WORKSPACE_ID => {
+            Ok((local_codex_workspace_entry(), None))
+        }
+        Err(error) => Err(error),
+    }
+}
+
 pub(crate) async fn connect_workspace_core<F, Fut>(
     workspace_id: String,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
@@ -62,7 +94,7 @@ where
     F: Fn(WorkspaceEntry, Option<String>, Option<String>, Option<PathBuf>) -> Fut,
     Fut: Future<Output = Result<Arc<WorkspaceSession>, String>>,
 {
-    let (entry, parent_entry) = resolve_entry_and_parent(workspaces, &workspace_id).await?;
+    let (entry, parent_entry) = resolve_connect_entry(workspaces, &workspace_id).await?;
     let _spawn_guard = workspace_session_spawn_lock().lock().await;
     if let Some(existing_for_entry) = {
         let sessions = sessions.lock().await;
@@ -248,6 +280,37 @@ mod tests {
             assert_eq!(spawn_calls.load(Ordering::SeqCst), 1);
             assert!(sessions.lock().await.contains_key(&entry.id));
             kill_session_by_id(&sessions, &entry.id).await;
+        });
+    }
+
+    #[test]
+    fn connect_local_codex_workspace_spawns_without_workspace_entry() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let workspaces = Mutex::new(HashMap::<String, WorkspaceEntry>::new());
+            let sessions = Mutex::new(HashMap::<String, Arc<WorkspaceSession>>::new());
+            let app_settings = Mutex::new(AppSettings::default());
+            let spawn_calls = Arc::new(AtomicUsize::new(0));
+            let spawn_calls_ref = spawn_calls.clone();
+
+            connect_workspace_core(
+                LOCAL_CODEX_WORKSPACE_ID.to_string(),
+                &workspaces,
+                &sessions,
+                &app_settings,
+                move |entry, _default_bin, _codex_args, _codex_home| {
+                    let spawn_calls_ref = spawn_calls_ref.clone();
+                    async move {
+                        spawn_calls_ref.fetch_add(1, Ordering::SeqCst);
+                        Ok(make_session(entry))
+                    }
+                },
+            )
+            .await
+            .expect("local codex history workspace should spawn");
+
+            assert_eq!(spawn_calls.load(Ordering::SeqCst), 1);
+            assert!(sessions.lock().await.contains_key(LOCAL_CODEX_WORKSPACE_ID));
+            kill_session_by_id(&sessions, LOCAL_CODEX_WORKSPACE_ID).await;
         });
     }
 }

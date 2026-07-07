@@ -1,7 +1,8 @@
 use tauri::{State, Window};
 
 use crate::shared::settings_core::{
-    get_app_settings_core, get_codex_config_path_core, update_app_settings_core,
+    get_app_settings_core, get_codex_config_path_core, get_codex_status_core,
+    update_app_settings_core, CodexStatusDto,
 };
 use crate::state::AppState;
 use crate::types::{AppSettings, BackendMode};
@@ -37,6 +38,11 @@ pub(crate) async fn update_app_settings(
 #[tauri::command]
 pub(crate) async fn get_codex_config_path() -> Result<String, String> {
     get_codex_config_path_core()
+}
+
+#[tauri::command]
+pub(crate) async fn get_codex_status() -> Result<CodexStatusDto, String> {
+    Ok(get_codex_status_core())
 }
 
 fn should_reset_remote_backend(previous: &AppSettings, updated: &AppSettings) -> bool {

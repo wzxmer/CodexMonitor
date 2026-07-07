@@ -23,6 +23,10 @@ pub(super) async fn try_handle(
             };
             Some(Ok(Value::String(path)))
         }
+        "get_codex_status" => Some(
+            serde_json::to_value(settings_core::get_codex_status_core())
+                .map_err(|err| err.to_string()),
+        ),
         "get_config_model" => {
             let workspace_id = match parse_string(params, "workspaceId") {
                 Ok(value) => value,

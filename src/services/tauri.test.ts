@@ -42,6 +42,7 @@ import {
   tailscaleDaemonStop,
   tailscaleStatus,
   pickImageFiles,
+  pickAttachmentFiles,
   pickWorkspacePaths,
   writeGlobalAgentsMd,
   writeGlobalCodexConfigToml,
@@ -149,6 +150,18 @@ describe("tauri invoke wrappers", () => {
         },
       ],
     });
+  });
+
+  it("opens an unfiltered attachment picker", async () => {
+    const openMock = vi.mocked(open);
+    openMock.mockResolvedValueOnce(["/tmp/notes.md", "/tmp/data.json"]);
+
+    await expect(pickAttachmentFiles()).resolves.toEqual([
+      "/tmp/notes.md",
+      "/tmp/data.json",
+    ]);
+
+    expect(openMock).toHaveBeenCalledWith({ multiple: true });
   });
 
   it("returns null when markdown export is cancelled", async () => {

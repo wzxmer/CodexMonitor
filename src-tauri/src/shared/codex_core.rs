@@ -1,6 +1,7 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -21,6 +22,7 @@ use crate::types::WorkspaceEntry;
 const LOGIN_START_TIMEOUT: Duration = Duration::from_secs(30);
 #[allow(dead_code)]
 const MAX_INLINE_IMAGE_BYTES: u64 = 50 * 1024 * 1024;
+const MAX_INLINE_TEXT_ATTACHMENT_BYTES: usize = 1024 * 1024;
 const THREAD_LIST_SOURCE_KINDS: &[&str] = &[
     "cli",
     "vscode",
@@ -30,6 +32,7 @@ const THREAD_LIST_SOURCE_KINDS: &[&str] = &[
     "subAgentThreadSpawn",
     "unknown",
 ];
+const LOCAL_CODEX_WORKSPACE_ID: &str = "__local_codex_sessions__";
 
 #[allow(dead_code)]
 fn image_extension_for_path(path: &str) -> Option<String> {
@@ -119,8 +122,12 @@ pub(crate) fn normalize_file_path(raw: &str) -> String {
         return path.to_string();
     };
 
-    let mut decoded = Vec::with_capacity(path.len());
-    let bytes = path.as_bytes();
+    percent_decode_lossy(path)
+}
+
+fn percent_decode_lossy(value: &str) -> String {
+    let mut decoded = Vec::with_capacity(value.len());
+    let bytes = value.as_bytes();
     let mut index = 0usize;
     while index < bytes.len() {
         if bytes[index] == b'%' && index + 2 < bytes.len() {
@@ -204,10 +211,105 @@ async fn get_session_clone(
     workspace_id: &str,
 ) -> Result<Arc<WorkspaceSession>, String> {
     let sessions = sessions.lock().await;
-    sessions
-        .get(workspace_id)
-        .cloned()
-        .ok_or_else(|| "workspace not connected".to_string())
+    if let Some(session) = sessions.get(workspace_id).cloned() {
+        return Ok(session);
+    }
+    if workspace_id == LOCAL_CODEX_WORKSPACE_ID {
+        return sessions
+            .values()
+            .next()
+            .cloned()
+            .ok_or_else(|| "workspace not connected".to_string());
+    }
+    Err("workspace not connected".to_string())
+}
+
+fn data_url_attachment_name(meta: &str) -> String {
+    meta.split(';')
+        .find_map(|part| part.strip_prefix("name="))
+        .map(|value| value.trim_matches('"').to_string())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "pasted-file".to_string())
+}
+
+fn parse_text_attachment_data_url(input: &str) -> Result<Option<(String, String)>, String> {
+    let Some(rest) = input.strip_prefix("data:") else {
+        return Ok(None);
+    };
+    let Some((meta, encoded)) = rest.split_once(',') else {
+        return Err("Invalid attachment data URL".to_string());
+    };
+    if meta.starts_with("image/") {
+        return Ok(None);
+    }
+    let name = data_url_attachment_name(meta);
+    let bytes = if meta
+        .split(';')
+        .any(|part| part.eq_ignore_ascii_case("base64"))
+    {
+        STANDARD
+            .decode(encoded.as_bytes())
+            .map_err(|err| format!("Failed to decode pasted attachment: {err}"))?
+    } else {
+        percent_decode_lossy(encoded).into_bytes()
+    };
+    if bytes.len() > MAX_INLINE_TEXT_ATTACHMENT_BYTES {
+        return Err(format!(
+            "Attachment is too large to inline as text: {name} (max 1 MB)"
+        ));
+    }
+    if bytes.iter().any(|byte| *byte == 0) {
+        return Err(format!("Attachment is binary and cannot be inlined as text: {name}"));
+    }
+    let content = String::from_utf8(bytes)
+        .map_err(|_| format!("Attachment is not valid UTF-8 text: {name}"))?;
+    Ok(Some((name, content)))
+}
+
+fn read_text_attachment_path(path: &str) -> Result<(String, String, bool), String> {
+    let normalized = normalize_file_path(path);
+    let target = PathBuf::from(&normalized);
+    let name = target
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(normalized.as_str())
+        .to_string();
+    let mut file = std::fs::File::open(&target)
+        .map_err(|err| format!("Failed to open attachment {normalized}: {err}"))?;
+    let mut bytes = Vec::new();
+    file.by_ref()
+        .take((MAX_INLINE_TEXT_ATTACHMENT_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|err| format!("Failed to read attachment {normalized}: {err}"))?;
+    let truncated = bytes.len() > MAX_INLINE_TEXT_ATTACHMENT_BYTES;
+    if truncated {
+        bytes.truncate(MAX_INLINE_TEXT_ATTACHMENT_BYTES);
+    }
+    if bytes.iter().any(|byte| *byte == 0) {
+        return Err(format!(
+            "Attachment is binary and cannot be inlined as text: {normalized}"
+        ));
+    }
+    let mut content = String::from_utf8(bytes)
+        .map_err(|_| format!("Attachment is not valid UTF-8 text: {normalized}"))?;
+    if truncated {
+        content.push_str("\n\n[Attachment truncated after 1 MB]");
+    }
+    Ok((name, content, truncated))
+}
+
+fn build_text_attachment_item(name: &str, content: &str, truncated: bool) -> Value {
+    let truncated_note = if truncated { " truncated=\"true\"" } else { "" };
+    json!({
+        "type": "text",
+        "text": format!(
+            "<attached_file name=\"{}\"{}>\n{}\n</attached_file>",
+            name.replace('"', "&quot;"),
+            truncated_note,
+            content
+        )
+    })
 }
 
 async fn resolve_workspace_and_parent(
@@ -413,7 +515,7 @@ fn build_turn_input_items(
             if trimmed.is_empty() {
                 continue;
             }
-            if trimmed.starts_with("data:")
+            if trimmed.starts_with("data:image/")
                 || trimmed.starts_with("http://")
                 || trimmed.starts_with("https://")
             {
@@ -423,8 +525,13 @@ fn build_turn_input_items(
                     "type": "image",
                     "url": read_image_as_data_url_core(trimmed)?,
                 }));
-            } else {
+            } else if image_mime_type_for_path(trimmed).is_some() {
                 input.push(json!({ "type": "localImage", "path": trimmed }));
+            } else if let Some((name, content)) = parse_text_attachment_data_url(trimmed)? {
+                input.push(build_text_attachment_item(&name, &content, false));
+            } else {
+                let (name, content, truncated) = read_text_attachment_path(trimmed)?;
+                input.push(build_text_attachment_item(&name, &content, truncated));
             }
         }
     }
@@ -1007,6 +1114,47 @@ mod tests {
         assert!(should_inline_image_path_for_codex("/tmp/photo.heic"));
         assert!(should_inline_image_path_for_codex("/tmp/photo.HEIF"));
         assert!(!should_inline_image_path_for_codex("/tmp/photo.png"));
+    }
+
+    #[test]
+    fn build_turn_input_items_inlines_text_data_attachments() {
+        let input = build_turn_input_items(
+            "read this".to_string(),
+            Some(vec![
+                "data:text/plain;name=notes.txt;base64,aGVsbG8gd29ybGQ=".to_string(),
+            ]),
+            None,
+        )
+        .expect("text data attachment should inline");
+
+        assert_eq!(input[0]["type"], "text");
+        assert_eq!(input[1]["type"], "text");
+        let text = input[1]["text"].as_str().unwrap_or_default();
+        assert!(text.contains("<attached_file name=\"notes.txt\""));
+        assert!(text.contains("hello world"));
+    }
+
+    #[test]
+    fn build_turn_input_items_inlines_text_file_paths() {
+        let dir = std::env::temp_dir().join("codex_monitor_text_attachment_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let text_path = dir.join("notes.md");
+        std::fs::write(&text_path, "# Notes\nhello").unwrap();
+
+        let input = build_turn_input_items(
+            String::new(),
+            Some(vec![text_path.display().to_string()]),
+            None,
+        )
+        .expect("text file attachment should inline");
+
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["type"], "text");
+        let text = input[0]["text"].as_str().unwrap_or_default();
+        assert!(text.contains("<attached_file name=\"notes.md\""));
+        assert!(text.contains("# Notes\nhello"));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

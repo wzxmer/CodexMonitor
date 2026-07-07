@@ -2,6 +2,7 @@ use serde_json::json;
 use std::path::PathBuf;
 use tauri::{AppHandle, State};
 
+pub(crate) mod attachments;
 use self::io::TextFileResponse;
 use self::policy::{FileKind, FileScope};
 use crate::remote_backend;
@@ -108,6 +109,15 @@ pub(crate) async fn read_image_as_data_url(
 
     let _ = app;
     codex_core::read_image_as_data_url_core(&normalized)
+}
+
+#[tauri::command]
+pub(crate) async fn save_composer_images(
+    workspace_id: String,
+    images: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    attachments::save_composer_images_impl(workspace_id, images, &*state).await
 }
 
 #[tauri::command]

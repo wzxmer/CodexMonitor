@@ -489,6 +489,8 @@ pub(crate) struct AppSettings {
     pub(crate) ui_scale: f64,
     #[serde(default = "default_theme", rename = "theme")]
     pub(crate) theme: String,
+    #[serde(default = "default_theme_accent", rename = "themeAccent")]
+    pub(crate) theme_accent: String,
     #[serde(
         default = "default_usage_show_remaining",
         rename = "usageShowRemaining"
@@ -499,6 +501,46 @@ pub(crate) struct AppSettings {
         rename = "showMessageFilePath"
     )]
     pub(crate) show_message_file_path: bool,
+    #[serde(
+        default = "default_message_tool_groups_collapsed_by_default",
+        rename = "messageToolGroupsCollapsedByDefault"
+    )]
+    pub(crate) message_tool_groups_collapsed_by_default: bool,
+    #[serde(
+        default = "default_message_reading_style",
+        rename = "messageReadingStyle"
+    )]
+    pub(crate) message_reading_style: String,
+    #[serde(
+        default = "default_message_canvas_color",
+        rename = "messageCanvasColor"
+    )]
+    pub(crate) message_canvas_color: String,
+    #[serde(
+        default = "default_message_user_bubble_color",
+        rename = "messageUserBubbleColor"
+    )]
+    pub(crate) message_user_bubble_color: String,
+    #[serde(
+        default = "default_message_user_text_color",
+        rename = "messageUserTextColor"
+    )]
+    pub(crate) message_user_text_color: String,
+    #[serde(
+        default = "default_message_assistant_bubble_color",
+        rename = "messageAssistantBubbleColor"
+    )]
+    pub(crate) message_assistant_bubble_color: String,
+    #[serde(
+        default = "default_message_assistant_accent_color",
+        rename = "messageAssistantAccentColor"
+    )]
+    pub(crate) message_assistant_accent_color: String,
+    #[serde(
+        default = "default_message_assistant_text_color",
+        rename = "messageAssistantTextColor"
+    )]
+    pub(crate) message_assistant_text_color: String,
     #[serde(
         default = "default_chat_history_scrollback_items",
         rename = "chatHistoryScrollbackItems"
@@ -513,8 +555,22 @@ pub(crate) struct AppSettings {
     pub(crate) automatic_app_update_checks_enabled: bool,
     #[serde(default = "default_ui_font_family", rename = "uiFontFamily")]
     pub(crate) ui_font_family: String,
+    #[serde(default = "default_ui_latin_font_family", rename = "uiLatinFontFamily")]
+    pub(crate) ui_latin_font_family: String,
+    #[serde(default = "default_ui_cjk_font_family", rename = "uiCjkFontFamily")]
+    pub(crate) ui_cjk_font_family: String,
+    #[serde(default = "default_ui_font_size", rename = "uiFontSize")]
+    pub(crate) ui_font_size: u8,
+    #[serde(default = "default_ui_font_weight", rename = "uiFontWeight")]
+    pub(crate) ui_font_weight: u16,
     #[serde(default = "default_code_font_family", rename = "codeFontFamily")]
     pub(crate) code_font_family: String,
+    #[serde(default = "default_message_font_size", rename = "messageFontSize")]
+    pub(crate) message_font_size: u8,
+    #[serde(default = "default_message_font_weight", rename = "messageFontWeight")]
+    pub(crate) message_font_weight: u16,
+    #[serde(default = "default_message_font_family", rename = "messageFontFamily")]
+    pub(crate) message_font_family: String,
     #[serde(default = "default_code_font_size", rename = "codeFontSize")]
     pub(crate) code_font_size: u8,
     #[serde(
@@ -564,6 +620,11 @@ pub(crate) struct AppSettings {
         rename = "followUpMessageBehavior"
     )]
     pub(crate) follow_up_message_behavior: String,
+    #[serde(
+        default = "default_composer_send_shortcut",
+        rename = "composerSendShortcut"
+    )]
+    pub(crate) composer_send_shortcut: String,
     #[serde(
         default = "default_composer_follow_up_hint_enabled",
         rename = "composerFollowUpHintEnabled"
@@ -707,12 +768,48 @@ fn default_theme() -> String {
     "system".to_string()
 }
 
+fn default_theme_accent() -> String {
+    "codex".to_string()
+}
+
 fn default_usage_show_remaining() -> bool {
     false
 }
 
 fn default_show_message_file_path() -> bool {
     true
+}
+
+fn default_message_tool_groups_collapsed_by_default() -> bool {
+    false
+}
+
+fn default_message_reading_style() -> String {
+    "bubble".to_string()
+}
+
+fn default_message_canvas_color() -> String {
+    "#eef1f6".to_string()
+}
+
+fn default_message_user_bubble_color() -> String {
+    "#d9ebff".to_string()
+}
+
+fn default_message_user_text_color() -> String {
+    "#102033".to_string()
+}
+
+fn default_message_assistant_bubble_color() -> String {
+    "#f7f9fc".to_string()
+}
+
+fn default_message_assistant_accent_color() -> String {
+    "#8aa8d8".to_string()
+}
+
+fn default_message_assistant_text_color() -> String {
+    "#263040".to_string()
 }
 
 fn default_chat_history_scrollback_items() -> Option<u32> {
@@ -727,8 +824,36 @@ fn default_ui_font_family() -> String {
     "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif".to_string()
 }
 
+fn default_ui_latin_font_family() -> String {
+    "\"Segoe UI\", Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif".to_string()
+}
+
+fn default_ui_cjk_font_family() -> String {
+    "\"Microsoft YaHei UI\", \"Microsoft YaHei\", \"Segoe UI\", sans-serif".to_string()
+}
+
 fn default_code_font_family() -> String {
     "ui-monospace, \"Cascadia Mono\", \"Segoe UI Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace".to_string()
+}
+
+fn default_ui_font_size() -> u8 {
+    13
+}
+
+fn default_ui_font_weight() -> u16 {
+    500
+}
+
+fn default_message_font_size() -> u8 {
+    13
+}
+
+fn default_message_font_weight() -> u16 {
+    500
+}
+
+fn default_message_font_family() -> String {
+    "\"Segoe UI\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", system-ui, sans-serif".to_string()
 }
 
 fn default_code_font_size() -> u8 {
@@ -926,6 +1051,10 @@ fn default_steer_enabled() -> bool {
 
 fn default_follow_up_message_behavior() -> String {
     "queue".to_string()
+}
+
+fn default_composer_send_shortcut() -> String {
+    "enter".to_string()
 }
 
 fn default_composer_follow_up_hint_enabled() -> bool {
@@ -1155,13 +1284,30 @@ impl Default for AppSettings {
             last_composer_reasoning_effort: None,
             ui_scale: 1.0,
             theme: default_theme(),
+            theme_accent: default_theme_accent(),
             usage_show_remaining: default_usage_show_remaining(),
             show_message_file_path: default_show_message_file_path(),
+            message_tool_groups_collapsed_by_default:
+                default_message_tool_groups_collapsed_by_default(),
+            message_reading_style: default_message_reading_style(),
+            message_canvas_color: default_message_canvas_color(),
+            message_user_bubble_color: default_message_user_bubble_color(),
+            message_user_text_color: default_message_user_text_color(),
+            message_assistant_bubble_color: default_message_assistant_bubble_color(),
+            message_assistant_accent_color: default_message_assistant_accent_color(),
+            message_assistant_text_color: default_message_assistant_text_color(),
             chat_history_scrollback_items: default_chat_history_scrollback_items(),
             thread_title_autogeneration_enabled: false,
             automatic_app_update_checks_enabled: true,
             ui_font_family: default_ui_font_family(),
+            ui_latin_font_family: default_ui_latin_font_family(),
+            ui_cjk_font_family: default_ui_cjk_font_family(),
+            ui_font_size: default_ui_font_size(),
+            ui_font_weight: default_ui_font_weight(),
             code_font_family: default_code_font_family(),
+            message_font_size: default_message_font_size(),
+            message_font_weight: default_message_font_weight(),
+            message_font_family: default_message_font_family(),
             code_font_size: default_code_font_size(),
             notification_sounds_enabled: true,
             system_notifications_enabled: true,
@@ -1174,6 +1320,7 @@ impl Default for AppSettings {
             collaboration_modes_enabled: true,
             steer_enabled: true,
             follow_up_message_behavior: default_follow_up_message_behavior(),
+            composer_send_shortcut: default_composer_send_shortcut(),
             composer_follow_up_hint_enabled: default_composer_follow_up_hint_enabled(),
             pause_queued_messages_when_response_required:
                 default_pause_queued_messages_when_response_required(),
