@@ -112,7 +112,7 @@ export function SettingsAboutSection({
         <div className="settings-label">应用更新</div>
         <SettingsToggleRow
           title="自动检查应用更新"
-          subtitle="启用后，CodexMonitor 启动时会检查新版本。"
+          subtitle="启用后，汉化增强版 CodexMonitor 启动时会检查新版本。更新检测来源：wzxmer/CodexMonitor。"
         >
           <SettingsToggleSwitch
             pressed={appSettings.automaticAppUpdateChecksEnabled}

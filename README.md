@@ -1,12 +1,14 @@
 # CodexMonitor
 
-[![gitcgr](https://gitcgr.com/badge/Dimillian/CodexMonitor.svg)](https://gitcgr.com/Dimillian/CodexMonitor)
+[![GitHub](https://img.shields.io/badge/GitHub-wzxmer%2FCodexMonitor-24292f?logo=github)](https://github.com/wzxmer/CodexMonitor)
 
 ![CodexMonitor](screenshot.png)
 
 ## 中文说明
 
 这是基于原版 CodexMonitor 的中文增强版，主要面向 Windows、macOS、Linux 桌面端使用。它用于管理多个 Codex Agent、工作区、会话、Git 变更和常用提示词。
+
+关键词：CodexMonitor 汉化、CodexMonitor 中文版、CodexMonitor 汉化增强版、Codex Monitor 中文增强版、Codex 桌面客户端、Codex 多会话管理。
 
 本 fork 主要改动：
 
@@ -16,15 +18,13 @@
 - 附件与图片体验：粘贴/发送图片支持预览，附件按内容类型处理。
 - 桌面端打包：新增 GitHub Actions 自动构建 Windows、macOS、Linux 安装包。
 
-### 自动打包
+### 下载
 
-Actions 中的 `Build Installers` 会生成：
+各平台安装包请到 Releases 下载：
 
-- Windows: `.exe`、`.msi`
-- macOS: `.dmg`
-- Linux: `.deb`
-
-推送到 `main` 或手动运行 workflow 会触发打包，构建完成后可在对应 Actions run 的 Artifacts 中下载安装包。推送 `v*` tag 会在打包完成后自动创建 GitHub Release，并把安装包上传到 Release assets。
+- Windows: [下载 `.exe` 或 `.msi`](https://github.com/wzxmer/CodexMonitor/releases/latest)
+- macOS: [下载 `.dmg`](https://github.com/wzxmer/CodexMonitor/releases/latest)
+- Linux: [下载 `.AppImage` 或 `.rpm`](https://github.com/wzxmer/CodexMonitor/releases/latest)
 
 ## Original README
 
