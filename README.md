@@ -22,9 +22,9 @@ Actions 中的 `Build Installers` 会生成：
 
 - Windows: `.exe`、`.msi`
 - macOS: `.dmg`
-- Linux: `.deb`、`.rpm`
+- Linux: `.deb`
 
-推送到 `main`、手动运行 workflow，或推送 `v*` tag 都会触发打包。构建完成后可在对应 Actions run 的 Artifacts 中下载安装包。
+推送到 `main` 或手动运行 workflow 会触发打包，构建完成后可在对应 Actions run 的 Artifacts 中下载安装包。推送 `v*` tag 会在打包完成后自动创建 GitHub Release，并把安装包上传到 Release assets。
 
 ## Original README
 
