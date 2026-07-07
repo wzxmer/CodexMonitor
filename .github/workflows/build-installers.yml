@@ -129,5 +129,6 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          files: release-artifacts/*
+          files: release-artifacts/**/*
           generate_release_notes: true
+          overwrite_files: true
