@@ -14,5 +14,8 @@
         "windowEffects": null
       }
     ]
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false
   }
 }
