@@ -3,6 +3,8 @@ name: Build Installers
 on:
   workflow_dispatch:
   push:
+    branches:
+      - "main"
     tags:
       - "v*"
 
@@ -26,11 +28,10 @@ jobs:
               src-tauri/target/release/bundle/nsis/*.exe
           - name: macOS installers
             os: macos-latest
-            command: npm run tauri -- build --bundles dmg,app
+            command: npm run tauri -- build --bundles dmg
             artifact: macos-installers
             paths: |
               src-tauri/target/release/bundle/dmg/*.dmg
-              src-tauri/target/release/bundle/macos/*.app
           - name: Linux installers
             os: ubuntu-24.04
             command: npm run tauri -- build --bundles deb,rpm,appimage
