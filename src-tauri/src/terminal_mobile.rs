@@ -58,3 +58,11 @@ pub(crate) async fn terminal_close(
 ) -> Result<(), String> {
     Err(UNSUPPORTED_MESSAGE.to_string())
 }
+
+#[tauri::command]
+pub(crate) async fn terminal_open_external(
+    _workspace_id: String,
+    _state: State<'_, AppState>,
+) -> Result<(), String> {
+    Err(UNSUPPORTED_MESSAGE.to_string())
+}

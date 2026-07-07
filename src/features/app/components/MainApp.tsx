@@ -624,6 +624,7 @@ export default function MainApp() {
     systemNotificationsEnabled: appSettings.systemNotificationsEnabled,
     subagentSystemNotificationsEnabled:
       appSettings.subagentSystemNotificationsEnabled,
+    codexPetEnabled: appSettings.codexPetEnabled,
     isSubagentThread,
     getWorkspaceName,
     onThreadNotificationSent: (workspaceId, threadId) =>
@@ -775,6 +776,7 @@ export default function MainApp() {
     systemNotificationsEnabled: appSettings.systemNotificationsEnabled,
     subagentSystemNotificationsEnabled:
       appSettings.subagentSystemNotificationsEnabled,
+    codexPetEnabled: appSettings.codexPetEnabled,
     isSubagentThread,
     approvals,
     userInputRequests,
@@ -872,6 +874,7 @@ export default function MainApp() {
     ensureTerminalWithTitle,
     restartTerminalSession,
     requestTerminalFocus,
+    onOpenExternalTerminal,
   } = useTerminalController({
     activeWorkspaceId,
     activeWorkspace,
@@ -1189,6 +1192,7 @@ export default function MainApp() {
     settings: {
       steerEnabled: appSettings.steerEnabled,
       followUpMessageBehavior: appSettings.followUpMessageBehavior,
+      composerTriggerMode: appSettings.composerTriggerMode,
       experimentalAppsEnabled: appSettings.experimentalAppsEnabled,
       pauseQueuedMessagesWhenResponseRequired:
         appSettings.pauseQueuedMessagesWhenResponseRequired,
@@ -1415,9 +1419,8 @@ export default function MainApp() {
   });
 
   const handleRefreshAllWorkspaceThreadsFromSidebar = useCallback(() => {
-    selectHome();
     void handleRefreshAllWorkspaceThreads();
-  }, [handleRefreshAllWorkspaceThreads, selectHome]);
+  }, [handleRefreshAllWorkspaceThreads]);
 
   const handleSelectLocalCodexThread = useCallback(
     async (cwd: string, threadId: string) => {
@@ -1897,6 +1900,7 @@ export default function MainApp() {
     onSelectTerminal,
     onNewTerminal,
     onCloseTerminal,
+    onOpenExternalTerminal,
     terminalState,
     onClearDebug: clearDebugEntries,
     onCopyDebug: handleCopyDebug,

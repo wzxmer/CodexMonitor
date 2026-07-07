@@ -1,5 +1,6 @@
 import type { ConversationItem } from "@/types";
 import { normalizeItem, prepareThreadItems, upsertItem } from "@utils/threadItems";
+import { attachmentDisplayName } from "@utils/attachments";
 import type { ThreadAction, ThreadState } from "../useThreadsReducer";
 import {
   addSummaryBoundary,
@@ -23,6 +24,19 @@ function sameMessageImages(left?: string[], right?: string[]) {
   );
 }
 
+function sameMessageAttachments(left?: string[], right?: string[]) {
+  const leftAttachments = left ?? [];
+  const rightAttachments = right ?? [];
+  return (
+    leftAttachments.length === rightAttachments.length &&
+    leftAttachments.every(
+      (attachment, index) =>
+        attachmentDisplayName(attachment) ===
+        attachmentDisplayName(rightAttachments[index] ?? ""),
+    )
+  );
+}
+
 export function reduceThreadItems(state: ThreadState, action: ThreadAction): ThreadState {
   switch (action.type) {
     case "addAssistantMessage": {
@@ -32,6 +46,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         kind: "message",
         role: "assistant",
         text: action.text,
+        createdAt: Date.now(),
       };
       return {
         ...state,
@@ -49,6 +64,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         list[index] = {
           ...existing,
           text: mergeStreamingText(existing.text, action.delta),
+          createdAt: existing.createdAt ?? Date.now(),
         };
       } else {
         list.push({
@@ -56,6 +72,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
           kind: "message",
           role: "assistant",
           text: action.delta,
+          createdAt: Date.now(),
         });
       }
       const updatedItems = prepareThreadItems(list, { maxItemsPerThread: state.maxItemsPerThread });
@@ -84,6 +101,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         list[index] = {
           ...existing,
           text: action.text || existing.text,
+          createdAt: existing.createdAt ?? Date.now(),
         };
       } else {
         list.push({
@@ -91,6 +109,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
           kind: "message",
           role: "assistant",
           text: action.text,
+          createdAt: Date.now(),
         });
       }
       const updatedItems = prepareThreadItems(list, { maxItemsPerThread: state.maxItemsPerThread });
@@ -152,7 +171,8 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         pendingReplacementIndex >= 0 &&
         nextItem.id !== pendingReplacement.messageId &&
         userMessage.text === pendingReplacement.text &&
-        sameMessageImages(userMessage.images, pendingReplacement.images);
+        sameMessageImages(userMessage.images, pendingReplacement.images) &&
+        sameMessageAttachments(userMessage.attachments, pendingReplacement.attachments);
       const nextList =
         action.replaceExisting && existingIndex >= 0
           ? [
@@ -176,6 +196,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
                 messageId: userMessage.id,
                 text: userMessage.text,
                 images: userMessage.images,
+                attachments: userMessage.attachments,
               },
             }
           : shouldReplacePendingEcho

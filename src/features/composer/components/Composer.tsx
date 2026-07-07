@@ -9,6 +9,7 @@ import {
 import type {
   AppMention,
   AppOption,
+  ComposerTriggerMode,
   ComposerSendShortcut,
   ComposerSendIntent,
   ComposerEditorSettings,
@@ -62,6 +63,8 @@ type ComposerProps = {
   followUpMessageBehavior: FollowUpMessageBehavior;
   composerSendShortcut: ComposerSendShortcut;
   onSelectComposerSendShortcut?: (shortcut: ComposerSendShortcut) => void;
+  composerTriggerMode?: ComposerTriggerMode;
+  onSelectComposerTriggerMode?: (mode: ComposerTriggerMode) => void;
   collaborationModes: { id: string; label: string }[];
   selectedCollaborationModeId: string | null;
   onSelectCollaborationMode: (id: string | null) => void;
@@ -174,6 +177,8 @@ export const Composer = memo(function Composer({
   followUpMessageBehavior,
   composerSendShortcut,
   onSelectComposerSendShortcut,
+  composerTriggerMode = "default",
+  onSelectComposerTriggerMode,
   collaborationModes,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
@@ -325,6 +330,7 @@ export const Composer = memo(function Composer({
     apps,
     prompts,
     files,
+    composerTriggerMode,
     textareaRef,
     setText: setComposerText,
     setSelectionStart,
@@ -682,6 +688,8 @@ export const Composer = memo(function Composer({
         onSelectAccessMode={onSelectAccessMode}
         composerSendShortcut={composerSendShortcut}
         onSelectComposerSendShortcut={onSelectComposerSendShortcut}
+        composerTriggerMode={composerTriggerMode}
+        onSelectComposerTriggerMode={onSelectComposerTriggerMode}
         contextUsage={contextUsage}
       />
     </footer>

@@ -14,7 +14,9 @@ use tokio::time::Instant;
 
 use crate::backend::app_server::WorkspaceSession;
 use crate::codex::config as codex_config;
-use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
+use crate::codex::home::{
+    resolve_default_codex_home, resolve_home_dir, resolve_workspace_codex_home,
+};
 use crate::rules;
 use crate::shared::account::{build_account_response, read_auth_account};
 use crate::types::WorkspaceEntry;
@@ -343,6 +345,13 @@ async fn resolve_workspace_path_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     workspace_id: &str,
 ) -> Result<String, String> {
+    if workspace_id == LOCAL_CODEX_WORKSPACE_ID {
+        return Ok(resolve_home_dir()
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| ".".into())
+            .to_string_lossy()
+            .to_string());
+    }
     let workspaces = workspaces.lock().await;
     let entry = workspaces
         .get(workspace_id)

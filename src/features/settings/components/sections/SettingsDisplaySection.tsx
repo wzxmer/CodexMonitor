@@ -1125,6 +1125,20 @@ export function SettingsDisplaySection({
       <div className="settings-subsection-title">声音</div>
       <div className="settings-subsection-subtitle">控制通知声音提醒。</div>
       <SettingsToggleRow
+        title="Codex 宠物"
+        subtitle="启用后由宠物接管提醒，系统通知会自动静音。"
+      >
+        <SettingsToggleSwitch
+          pressed={Boolean(appSettings.codexPetEnabled)}
+          onClick={() =>
+            void onUpdateAppSettings({
+              ...appSettings,
+              codexPetEnabled: !appSettings.codexPetEnabled,
+            })
+          }
+        />
+      </SettingsToggleRow>
+      <SettingsToggleRow
         title="通知声音"
         subtitle="窗口未聚焦时，长时间运行的 agent 完成后播放提示音。"
       >
@@ -1140,10 +1154,15 @@ export function SettingsDisplaySection({
       </SettingsToggleRow>
       <SettingsToggleRow
         title="系统通知"
-        subtitle="窗口未聚焦时，长时间运行的 agent 完成后显示系统通知。"
+        subtitle={
+          appSettings.codexPetEnabled
+            ? "Codex 宠物启用中，系统通知已自动静音。"
+            : "窗口未聚焦时，长时间运行的 agent 完成后显示系统通知。"
+        }
       >
         <SettingsToggleSwitch
           pressed={appSettings.systemNotificationsEnabled}
+          disabled={Boolean(appSettings.codexPetEnabled)}
           onClick={() =>
             void onUpdateAppSettings({
               ...appSettings,
@@ -1154,10 +1173,15 @@ export function SettingsDisplaySection({
       </SettingsToggleRow>
       <SettingsToggleRow
         title="子 agent 通知"
-        subtitle="系统通知中包含派生的子 agent 会话。"
+        subtitle={
+          appSettings.codexPetEnabled
+            ? "Codex 宠物启用中，子 agent 系统通知也会静音。"
+            : "系统通知中包含派生的子 agent 会话。"
+        }
       >
         <SettingsToggleSwitch
           pressed={appSettings.subagentSystemNotificationsEnabled}
+          disabled={Boolean(appSettings.codexPetEnabled)}
           onClick={() =>
             void onUpdateAppSettings({
               ...appSettings,
@@ -1179,6 +1203,7 @@ export function SettingsDisplaySection({
           type="button"
           className="ghost settings-button-compact"
           onClick={onTestSystemNotification}
+          disabled={Boolean(appSettings.codexPetEnabled)}
         >
           测试通知
         </button>

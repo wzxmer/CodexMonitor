@@ -120,23 +120,6 @@
   min-width: 0;
 }
 
-.sidebar-title-button {
-  min-width: max-content;
-  margin-left: -6px;
-  padding: 4px 6px;
-  border-radius: 8px;
-  white-space: nowrap;
-  writing-mode: horizontal-tb;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.sidebar-title-button:hover,
-.sidebar-title-button:focus-visible {
-  background: var(--surface-hover);
-  transform: none;
-  box-shadow: none;
-}
-
 .sidebar-title-add {
   display: inline-flex;
   align-items: center;
@@ -167,6 +150,37 @@
   box-shadow: none;
   transform: none;
   border-radius: 8px;
+}
+
+.sidebar-home-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  line-height: 1;
+  border-radius: 8px;
+  box-shadow: none;
+  transform: none;
+  transition: background-color 120ms ease, color 120ms ease;
+  flex-shrink: 0;
+}
+
+.sidebar-home-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.sidebar-home-toggle:hover,
+.sidebar-home-toggle:focus-visible {
+  color: var(--text-strong);
+  background: var(--surface-hover);
+  box-shadow: none;
+  transform: none;
 }
 
 .sidebar-header-actions {
@@ -1023,11 +1037,17 @@
 }
 
 .thread-pin-button {
+  all: unset;
+  box-sizing: border-box;
   width: 22px;
   height: 22px;
-  border: 1px solid var(--border-quiet);
+  min-width: 22px;
+  max-width: 22px;
+  min-height: 22px;
+  max-height: 22px;
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: var(--cm-surface-panel);
+  background: transparent;
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
@@ -1049,10 +1069,14 @@
 }
 
 .thread-pin-button:hover,
-.thread-pin-button.is-pinned {
+.thread-pin-button:focus-visible {
   color: var(--text-strong);
   border-color: var(--border-accent-soft);
   background: var(--cm-surface-panel-active);
+}
+
+.thread-pin-button.is-pinned {
+  color: var(--text-muted);
 }
 
 .thread-pin-button svg {

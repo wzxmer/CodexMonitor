@@ -48,7 +48,7 @@ export type ThreadState = {
   lastAgentMessageByThread: Record<string, { text: string; timestamp: number }>;
   pendingUserMessageReplacementByThread: Record<
     string,
-    { messageId: string; text: string; images?: string[] }
+    { messageId: string; text: string; images?: string[]; attachments?: string[] }
   >;
 };
 

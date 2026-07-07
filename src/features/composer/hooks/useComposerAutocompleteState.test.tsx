@@ -71,6 +71,51 @@ describe("useComposerAutocompleteState file mentions", () => {
 });
 
 describe("useComposerAutocompleteState slash commands", () => {
+  it("swaps slash and at triggers when requested", () => {
+    const textareaRef = createRef<HTMLTextAreaElement>();
+    textareaRef.current = {
+      focus: vi.fn(),
+      setSelectionRange: vi.fn(),
+    } as unknown as HTMLTextAreaElement;
+
+    const fileResult = renderHook(() =>
+      useComposerAutocompleteState({
+        text: "/",
+        selectionStart: 1,
+        disabled: false,
+        appsEnabled: true,
+        skills: [],
+        apps: [],
+        prompts: [],
+        files: ["src/App.tsx"],
+        composerTriggerMode: "swap-slash-at",
+        textareaRef,
+        setText: vi.fn(),
+        setSelectionStart: vi.fn(),
+      }),
+    );
+    expect(fileResult.result.current.autocompleteMatches[0]?.group).toBe("Files");
+
+    const commandResult = renderHook(() =>
+      useComposerAutocompleteState({
+        text: "@",
+        selectionStart: 1,
+        disabled: false,
+        appsEnabled: false,
+        skills: [],
+        apps: [],
+        prompts: [],
+        files: ["src/App.tsx"],
+        composerTriggerMode: "swap-slash-at",
+        textareaRef,
+        setText: vi.fn(),
+        setSelectionStart: vi.fn(),
+      }),
+    );
+    expect(commandResult.result.current.autocompleteMatches.map((item) => item.label))
+      .toContain("mcp");
+  });
+
   it("includes built-in slash commands in alphabetical order when apps are enabled", () => {
     const text = "/";
     const selectionStart = text.length;

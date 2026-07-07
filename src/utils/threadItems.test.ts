@@ -632,6 +632,27 @@ describe("threadItems", () => {
     expect(next[0]).toEqual(incoming);
   });
 
+  it("replaces matching local user messages when file attachment echoes as a name", () => {
+    const local: ConversationItem = {
+      id: "local-user-attachment",
+      kind: "message",
+      role: "user",
+      text: "看这个日志",
+      attachments: ['data:text/plain;name="trace.log";base64,AAA'],
+    };
+    const incoming: ConversationItem = {
+      id: "server-user-attachment",
+      kind: "message",
+      role: "user",
+      text: "看这个日志",
+      attachments: ["trace.log"],
+    };
+
+    const next = upsertItem([local], incoming);
+    expect(next).toHaveLength(1);
+    expect(next[0]).toEqual(incoming);
+  });
+
   it("preserves streamed reasoning content when completion item is empty", () => {
     const existing: ConversationItem = {
       id: "reasoning-1",
@@ -802,6 +823,51 @@ describe("threadItems", () => {
       expect(item.role).toBe("user");
       expect(item.text).toBe("Please $Review");
       expect(item.images).toEqual(["https://example.com/image.png"]);
+    }
+  });
+
+  it("extracts inline attached_file payloads from user text", () => {
+    const item = buildConversationItemFromThreadItem({
+      type: "userMessage",
+      id: "msg-attached-file",
+      content: [
+        {
+          type: "text",
+          text: '请分析\n<attached_file name="notes.log">very long log body</attached_file>',
+        },
+      ],
+    });
+
+    expect(item).not.toBeNull();
+    if (item && item.kind === "message") {
+      expect(item.role).toBe("user");
+      expect(item.text).toBe("请分析");
+      expect(item.text).not.toContain("very long log body");
+      expect(item.attachments).toEqual(["notes.log"]);
+    }
+  });
+
+  it("treats non-image data URL inputs as file attachments", () => {
+    const item = buildConversationItemFromThreadItem({
+      type: "userMessage",
+      id: "msg-text-attachment",
+      content: [
+        { type: "text", text: "看这个日志" },
+        {
+          type: "image",
+          url: 'data:text/plain;name="trace.log";base64,AAA',
+        },
+      ],
+    });
+
+    expect(item).not.toBeNull();
+    if (item && item.kind === "message") {
+      expect(item.role).toBe("user");
+      expect(item.text).toBe("看这个日志");
+      expect(item.images).toBeUndefined();
+      expect(item.attachments).toEqual([
+        'data:text/plain;name="trace.log";base64,AAA',
+      ]);
     }
   });
 

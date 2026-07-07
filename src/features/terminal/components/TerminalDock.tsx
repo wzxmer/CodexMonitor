@@ -1,4 +1,5 @@
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import MonitorUp from "lucide-react/dist/esm/icons/monitor-up";
 import type { TerminalTab } from "../hooks/useTerminalTabs";
 
 type TerminalDockProps = {
@@ -8,6 +9,7 @@ type TerminalDockProps = {
   onSelectTerminal: (terminalId: string) => void;
   onNewTerminal: () => void;
   onCloseTerminal: (terminalId: string) => void;
+  onOpenExternalTerminal: () => void;
   onResizeStart?: (event: ReactMouseEvent) => void;
   terminalNode: ReactNode;
 };
@@ -19,6 +21,7 @@ export function TerminalDock({
   onSelectTerminal,
   onNewTerminal,
   onCloseTerminal,
+  onOpenExternalTerminal,
   onResizeStart,
   terminalNode,
 }: TerminalDockProps) {
@@ -74,6 +77,15 @@ export function TerminalDock({
             +
           </button>
         </div>
+        <button
+          className="terminal-external-button"
+          type="button"
+          onClick={onOpenExternalTerminal}
+          aria-label="在系统终端打开"
+          title="在系统终端打开"
+        >
+          <MonitorUp size={14} aria-hidden />
+        </button>
       </div>
       <div className="terminal-body">{terminalNode}</div>
     </section>

@@ -1,20 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { pickAttachmentFiles, saveComposerImages } from "../../../services/tauri";
+import { isImageAttachment } from "../../../utils/attachments";
 
 type UseComposerImagesArgs = {
   activeThreadId: string | null;
   activeWorkspaceId: string | null;
 };
-
-function isImageAttachment(path: string) {
-  if (path.startsWith("data:image/")) {
-    return true;
-  }
-  if (path.startsWith("http://") || path.startsWith("https://")) {
-    return true;
-  }
-  return /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|heif)$/i.test(path);
-}
 
 export function useComposerImages({
   activeThreadId,

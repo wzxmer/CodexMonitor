@@ -1466,3 +1466,24 @@
     background: var(--surface-topbar);
   }
 }
+
+.settings-code-details {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-code-details summary {
+  cursor: pointer;
+  color: var(--text-stronger);
+}
+
+.settings-code-details pre {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  color: var(--text-stronger);
+}

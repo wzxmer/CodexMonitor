@@ -3,6 +3,7 @@ import type {
   AppSettings,
   ComposerEditorSettings,
   ComposerSendShortcut,
+  ComposerTriggerMode,
   WorkspaceInfo,
 } from "@/types";
 import type { ThreadState } from "@/features/threads/hooks/useThreadsReducer";
@@ -15,6 +16,7 @@ import type { useMainAppPromptActions } from "@app/hooks/useMainAppPromptActions
 import type { useMainAppSidebarMenuOrchestration } from "@app/hooks/useMainAppSidebarMenuOrchestration";
 import type { useMainAppWorktreeState } from "@app/hooks/useMainAppWorktreeState";
 import type { LayoutNodesOptions } from "@/features/layout/hooks/layoutNodes/types";
+import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 
 type SidebarProps = LayoutNodesOptions["primary"]["sidebarProps"];
 type ComposerProps = NonNullable<LayoutNodesOptions["primary"]["composerProps"]>;
@@ -198,6 +200,7 @@ type UseMainAppLayoutSurfacesArgs = {
   onSelectTerminal: LayoutNodesOptions["secondary"]["terminalDockProps"]["onSelectTerminal"];
   onNewTerminal: LayoutNodesOptions["secondary"]["terminalDockProps"]["onNewTerminal"];
   onCloseTerminal: LayoutNodesOptions["secondary"]["terminalDockProps"]["onCloseTerminal"];
+  onOpenExternalTerminal: LayoutNodesOptions["secondary"]["terminalDockProps"]["onOpenExternalTerminal"];
   terminalState: LayoutNodesOptions["secondary"]["terminalState"];
   onClearDebug: () => void;
   onCopyDebug: () => void;
@@ -488,6 +491,7 @@ function buildPrimarySurface({
       ? {
           onSend: handleComposerSendWithDraftStart,
           onStop: () => {
+            composerWorkspaceState.clearQueuedMessages(activeThreadId);
             interruptTurn();
           },
           canStop: composerWorkspaceState.canInterrupt,
@@ -508,6 +512,13 @@ function buildPrimarySurface({
             void onUpdateAppSettings({
               ...appSettings,
               composerSendShortcut: shortcut,
+            });
+          },
+          composerTriggerMode: appSettings.composerTriggerMode ?? "default",
+          onSelectComposerTriggerMode: (mode: ComposerTriggerMode) => {
+            void onUpdateAppSettings({
+              ...appSettings,
+              composerTriggerMode: mode,
             });
           },
           isProcessing: composerWorkspaceState.isProcessing,
@@ -611,6 +622,14 @@ function buildPrimarySurface({
       onDismiss: dismissErrorToast,
     },
     homeProps: {
+      onStartNoProjectChat: () => {
+        threadNavigation.exitDiffView();
+        threadNavigation.clearDraftState();
+        threadNavigation.selectWorkspace(LOCAL_CODEX_WORKSPACE_ID);
+        if (isCompact) {
+          setActiveTab("codex");
+        }
+      },
       onAddWorkspace: handleAddWorkspace,
       onAddWorkspaceFromUrl: openWorkspaceFromUrlPrompt,
       latestAgentRuns,
@@ -911,6 +930,7 @@ function buildSecondarySurface({
   onSelectTerminal,
   onNewTerminal,
   onCloseTerminal,
+  onOpenExternalTerminal,
   terminalState,
   onClearDebug,
   onCopyDebug,
@@ -931,6 +951,7 @@ function buildSecondarySurface({
       onSelectTerminal,
       onNewTerminal,
       onCloseTerminal,
+      onOpenExternalTerminal,
       onResizeStart: onResizeTerminal,
     },
     terminalState,
@@ -1108,6 +1129,7 @@ export function useMainAppLayoutSurfaces({
   onSelectTerminal,
   onNewTerminal,
   onCloseTerminal,
+  onOpenExternalTerminal,
   terminalState,
   onClearDebug,
   onCopyDebug,
@@ -1273,6 +1295,7 @@ export function useMainAppLayoutSurfaces({
     onSelectTerminal,
     onNewTerminal,
     onCloseTerminal,
+    onOpenExternalTerminal,
     terminalState,
     onClearDebug,
     onCopyDebug,

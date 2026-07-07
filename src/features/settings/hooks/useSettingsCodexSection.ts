@@ -9,6 +9,7 @@ import type {
   WorkspaceInfo,
 } from "@/types";
 import { getCodexStatus } from "@services/tauri";
+import { listMcpServerStatus } from "@services/tauri";
 import { useGlobalAgentsMd } from "./useGlobalAgentsMd";
 import { useGlobalCodexConfigToml } from "./useGlobalCodexConfigToml";
 import { useSettingsDefaultModels } from "./useSettingsDefaultModels";
@@ -54,6 +55,12 @@ export type SettingsCodexSectionProps = {
     result: CodexStatus | null;
     error: string | null;
   };
+  mcpStatusState: {
+    status: "idle" | "loading" | "done";
+    result: unknown | null;
+    error: string | null;
+    workspaceName: string | null;
+  };
   globalAgentsMeta: string;
   globalAgentsError: string | null;
   globalAgentsContent: string;
@@ -77,6 +84,7 @@ export type SettingsCodexSectionProps = {
   onRunDoctor: () => Promise<void>;
   onRunCodexUpdate: () => Promise<void>;
   onRefreshCodexStatus: () => void;
+  onRefreshMcpStatus: () => void;
   onRefreshGlobalAgents: () => void;
   onSaveGlobalAgents: () => void;
   onRefreshGlobalConfig: () => void;
@@ -106,6 +114,12 @@ export const useSettingsCodexSection = ({
     result: CodexStatus | null;
     error: string | null;
   }>({ status: "idle", result: null, error: null });
+  const [mcpStatusState, setMcpStatusState] = useState<{
+    status: "idle" | "loading" | "done";
+    result: unknown | null;
+    error: string | null;
+    workspaceName: string | null;
+  }>({ status: "idle", result: null, error: null, workspaceName: null });
 
   const {
     models: defaultModels,
@@ -175,6 +189,42 @@ export const useSettingsCodexSection = ({
         });
       });
   }, []);
+
+  const refreshMcpStatus = useCallback(() => {
+    const workspace = projects.find((entry) => entry.connected) ?? null;
+    if (!workspace) {
+      setMcpStatusState({
+        status: "done",
+        result: null,
+        error: "需要先连接一个 Codex 项目或无项目会话。",
+        workspaceName: null,
+      });
+      return;
+    }
+    setMcpStatusState((current) => ({
+      status: "loading",
+      result: current.result,
+      error: null,
+      workspaceName: workspace.name,
+    }));
+    listMcpServerStatus(workspace.id)
+      .then((result) => {
+        setMcpStatusState({
+          status: "done",
+          result,
+          error: null,
+          workspaceName: workspace.name,
+        });
+      })
+      .catch((error) => {
+        setMcpStatusState({
+          status: "done",
+          result: null,
+          error: error instanceof Error ? error.message : String(error),
+          workspaceName: workspace.name,
+        });
+      });
+  }, [projects]);
 
   useEffect(() => {
     refreshCodexStatus();
@@ -294,6 +344,7 @@ export const useSettingsCodexSection = ({
     doctorState,
     codexUpdateState,
     codexStatusState,
+    mcpStatusState,
     globalAgentsMeta: globalAgentsEditorMeta.meta,
     globalAgentsError,
     globalAgentsContent,
@@ -317,6 +368,7 @@ export const useSettingsCodexSection = ({
     onRunDoctor: handleRunDoctor,
     onRunCodexUpdate: handleRunCodexUpdate,
     onRefreshCodexStatus: refreshCodexStatus,
+    onRefreshMcpStatus: refreshMcpStatus,
     onRefreshGlobalAgents: () => {
       void refreshGlobalAgents();
     },

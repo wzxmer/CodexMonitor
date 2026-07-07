@@ -863,4 +863,60 @@ describe("threadReducer", () => {
     expect(echoed.pendingUserMessageReplacementByThread["thread-1"]).toBeUndefined();
   });
 
+  it("replaces edited user messages when file attachments echo as names", () => {
+    const base = threadReducer(
+      {
+        ...initialState,
+        itemsByThread: {
+          "thread-1": [
+            {
+              id: "msg-user-file-1",
+              kind: "message",
+              role: "user",
+              text: "old text",
+              attachments: ['data:text/plain;name="trace.log";base64,AAA'],
+            },
+          ],
+        },
+      },
+      {
+        type: "upsertItem",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        replaceExisting: true,
+        item: {
+          id: "msg-user-file-1",
+          kind: "message",
+          role: "user",
+          text: "edited text",
+          attachments: ['data:text/plain;name="trace.log";base64,AAA'],
+        },
+      },
+    );
+
+    const echoed = threadReducer(base, {
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      item: {
+        id: "server-user-file-2",
+        kind: "message",
+        role: "user",
+        text: "edited text",
+        attachments: ["trace.log"],
+      },
+    });
+
+    expect(echoed.itemsByThread["thread-1"]).toEqual([
+      {
+        id: "server-user-file-2",
+        kind: "message",
+        role: "user",
+        text: "edited text",
+        attachments: ["trace.log"],
+      },
+    ]);
+    expect(echoed.pendingUserMessageReplacementByThread["thread-1"]).toBeUndefined();
+  });
+
 });

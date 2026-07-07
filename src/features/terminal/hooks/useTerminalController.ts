@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DebugEntry, WorkspaceInfo } from "../../../types";
-import { closeTerminalSession } from "../../../services/tauri";
+import { closeTerminalSession, openExternalTerminal } from "../../../services/tauri";
 import { buildErrorDebugEntry } from "../../../utils/debugEntries";
 import { useTerminalSession } from "./useTerminalSession";
 import { useTerminalTabs } from "./useTerminalTabs";
@@ -137,6 +137,15 @@ export function useTerminalController({
     [onDebug, shouldIgnoreTerminalCloseError],
   );
 
+  const onOpenExternalTerminal = useCallback(() => {
+    if (!activeWorkspaceId) {
+      return;
+    }
+    openExternalTerminal(activeWorkspaceId).catch((error) => {
+      onDebug(buildErrorDebugEntry("terminal external open error", error));
+    });
+  }, [activeWorkspaceId, onDebug]);
+
   return {
     terminalTabs,
     activeTerminalId,
@@ -147,5 +156,6 @@ export function useTerminalController({
     ensureTerminalWithTitle,
     restartTerminalSession,
     requestTerminalFocus,
+    onOpenExternalTerminal,
   };
 }

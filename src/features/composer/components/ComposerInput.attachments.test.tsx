@@ -214,7 +214,7 @@ describe("Composer attachments integration", () => {
       dispatchPaste(textarea, [textItem, imageItem]);
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual(["粘贴的图片"]);
+    expect(getAttachmentNames(harness.container)).toEqual(["paste.png"]);
     expect(harness.container.querySelector(".composer-attachment-thumb img")).toBeTruthy();
 
     harness.unmount();
@@ -236,7 +236,7 @@ describe("Composer attachments integration", () => {
       dispatchPaste(textarea, [item]);
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual(["粘贴的附件"]);
+    expect(getAttachmentNames(harness.container)).toEqual(["notes.txt"]);
     expect(harness.container.querySelector(".composer-attachment-thumb img")).toBeNull();
 
     harness.unmount();

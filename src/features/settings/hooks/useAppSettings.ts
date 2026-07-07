@@ -39,6 +39,7 @@ const allowedComposerSendShortcut = new Set([
   "enter",
   "ctrl-enter",
 ]);
+const allowedComposerTriggerMode = new Set(["default", "swap-slash-at"]);
 const DEFAULT_REMOTE_BACKEND_HOST = "127.0.0.1:4732";
 const DEFAULT_REMOTE_BACKEND_ID = "remote-default";
 const DEFAULT_REMOTE_BACKEND_NAME = "Primary remote";
@@ -227,6 +228,7 @@ function buildDefaultSettings(): AppSettings {
     notificationSoundsEnabled: true,
     systemNotificationsEnabled: true,
     subagentSystemNotificationsEnabled: true,
+    codexPetEnabled: false,
     splitChatDiffView: false,
     preloadGitDiffs: true,
     gitDiffIgnoreWhitespaceChanges: false,
@@ -236,6 +238,7 @@ function buildDefaultSettings(): AppSettings {
     steerEnabled: true,
     followUpMessageBehavior: "queue",
     composerSendShortcut: "enter",
+    composerTriggerMode: "default",
     composerFollowUpHintEnabled: true,
     pauseQueuedMessagesWhenResponseRequired: true,
     unifiedExecEnabled: true,
@@ -373,6 +376,12 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     composerSendShortcut: allowedComposerSendShortcut.has(settings.composerSendShortcut)
       ? settings.composerSendShortcut
       : "enter",
+    composerTriggerMode: allowedComposerTriggerMode.has(settings.composerTriggerMode ?? "")
+      ? settings.composerTriggerMode
+      : "default",
+    codexPetEnabled: typeof settings.codexPetEnabled === "boolean"
+      ? settings.codexPetEnabled
+      : false,
     reviewDeliveryMode:
       settings.reviewDeliveryMode === "detached" ? "detached" : "inline",
     chatHistoryScrollbackItems,

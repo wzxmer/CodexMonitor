@@ -604,6 +604,8 @@ pub(crate) struct AppSettings {
         rename = "subagentSystemNotificationsEnabled"
     )]
     pub(crate) subagent_system_notifications_enabled: bool,
+    #[serde(default, rename = "codexPetEnabled")]
+    pub(crate) codex_pet_enabled: bool,
     #[serde(
         default = "default_collaboration_modes_enabled",
         rename = "collaborationModesEnabled"
@@ -625,6 +627,11 @@ pub(crate) struct AppSettings {
         rename = "composerSendShortcut"
     )]
     pub(crate) composer_send_shortcut: String,
+    #[serde(
+        default = "default_composer_trigger_mode",
+        rename = "composerTriggerMode"
+    )]
+    pub(crate) composer_trigger_mode: String,
     #[serde(
         default = "default_composer_follow_up_hint_enabled",
         rename = "composerFollowUpHintEnabled"
@@ -1057,6 +1064,10 @@ fn default_composer_send_shortcut() -> String {
     "enter".to_string()
 }
 
+fn default_composer_trigger_mode() -> String {
+    "default".to_string()
+}
+
 fn default_composer_follow_up_hint_enabled() -> bool {
     true
 }
@@ -1312,6 +1323,7 @@ impl Default for AppSettings {
             notification_sounds_enabled: true,
             system_notifications_enabled: true,
             subagent_system_notifications_enabled: true,
+            codex_pet_enabled: false,
             split_chat_diff_view: default_split_chat_diff_view(),
             preload_git_diffs: default_preload_git_diffs(),
             git_diff_ignore_whitespace_changes: default_git_diff_ignore_whitespace_changes(),
@@ -1321,6 +1333,7 @@ impl Default for AppSettings {
             steer_enabled: true,
             follow_up_message_behavior: default_follow_up_message_behavior(),
             composer_send_shortcut: default_composer_send_shortcut(),
+            composer_trigger_mode: default_composer_trigger_mode(),
             composer_follow_up_hint_enabled: default_composer_follow_up_hint_enabled(),
             pause_queued_messages_when_response_required:
                 default_pause_queued_messages_when_response_required(),

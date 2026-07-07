@@ -1,4 +1,5 @@
 import type { ConversationItem } from "../types";
+import { attachmentDisplayName } from "./attachments";
 import { normalizeThreadTimestamp } from "./threadItems.shared";
 
 function mergeUserInputQuestions(
@@ -37,6 +38,22 @@ function sameMessageImages(
   );
 }
 
+function sameMessageAttachments(
+  left: Extract<ConversationItem, { kind: "message" }>["attachments"],
+  right: Extract<ConversationItem, { kind: "message" }>["attachments"],
+) {
+  const leftAttachments = left ?? [];
+  const rightAttachments = right ?? [];
+  return (
+    leftAttachments.length === rightAttachments.length &&
+    leftAttachments.every(
+      (attachment, index) =>
+        attachmentDisplayName(attachment) ===
+        attachmentDisplayName(rightAttachments[index] ?? ""),
+    )
+  );
+}
+
 export function upsertItem(list: ConversationItem[], item: ConversationItem) {
   const index = list.findIndex((entry) => entry.id === item.id);
   if (index === -1) {
@@ -47,7 +64,8 @@ export function upsertItem(list: ConversationItem[], item: ConversationItem) {
           entry.role === "user" &&
           entry.id.startsWith("local-user-") &&
           entry.text === item.text &&
-          sameMessageImages(entry.images, item.images),
+          sameMessageImages(entry.images, item.images) &&
+          sameMessageAttachments(entry.attachments, item.attachments),
       );
       if (localIndex >= 0) {
         const next = [...list];
@@ -73,6 +91,7 @@ export function upsertItem(list: ConversationItem[], item: ConversationItem) {
       ...item,
       text: incomingText.length >= existingText.length ? incomingText : existingText,
       images: item.images?.length ? item.images : existing.images,
+      attachments: item.attachments?.length ? item.attachments : existing.attachments,
     };
     return next;
   }

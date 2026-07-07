@@ -90,6 +90,33 @@ describe("Messages", () => {
     expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
+  it("renders non-image message attachments without image preview", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-attachment-1",
+        kind: "message",
+        role: "user",
+        text: "看这个日志",
+        attachments: ['data:text/plain;name="trace.log";base64,AAA'],
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".message-image-grid")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open image 1" })).toBeNull();
+    expect(screen.getByText("trace.log")).toBeTruthy();
+  });
+
   it("preserves newlines when images are attached", () => {
     const items: ConversationItem[] = [
       {
@@ -1866,6 +1893,36 @@ describe("Messages", () => {
     expect(onUpdateConversationStyle).toHaveBeenCalledWith({
       messageReadingStyle: "cli",
     });
+  });
+
+  it("uses a concrete timestamp for CLI assistant message headers", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "assistant-cli-time",
+        kind: "message",
+        role: "assistant",
+        text: "Readable output",
+        createdAt: new Date("2026-07-07T15:21:59").getTime(),
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        messageReadingStyle="cli"
+      />,
+    );
+
+    expect(
+      container.querySelector(".message.assistant .message-bubble")?.getAttribute(
+        "data-cli-timestamp",
+      ),
+    ).toMatch(/2026-07-07 \d{2}:21:59/);
   });
 
   it("updates conversation colors and font from the style popover", () => {

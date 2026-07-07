@@ -1,23 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { subscribeWindowDragDrop } from "../../../services/dragDrop";
-
-const imageExtensions = [
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".webp",
-  ".bmp",
-  ".tiff",
-  ".tif",
-  ".heic",
-  ".heif",
-];
-
-function isImagePath(path: string) {
-  const lower = path.toLowerCase();
-  return imageExtensions.some((ext) => lower.endsWith(ext));
-}
+import { isImageAttachment, withFileNameInDataUrl } from "../../../utils/attachments";
 
 function isDragFileTransfer(types: readonly string[] | undefined) {
   if (!types || types.length === 0) {
@@ -37,7 +20,11 @@ function readFilesAsDataUrls(files: File[]) {
         new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onload = () =>
-            resolve(typeof reader.result === "string" ? reader.result : "");
+            resolve(
+              typeof reader.result === "string"
+                ? withFileNameInDataUrl(reader.result, file.name)
+                : "",
+            );
           reader.onerror = () => resolve("");
           reader.readAsDataURL(file);
         }),
@@ -193,7 +180,7 @@ export function useComposerImageDrop({
     const filePaths = files
       .map((file) => (file as File & { path?: string }).path ?? "")
       .filter(Boolean)
-      .filter((path) => isImagePath(path) || path.length > 0);
+      .filter((path) => isImageAttachment(path) || path.length > 0);
     const inlineFiles = files.filter((file) => {
       const path = (file as File & { path?: string }).path ?? "";
       return !path;
@@ -211,7 +198,11 @@ export function useComposerImageDrop({
           new Promise<string>((resolve) => {
             const reader = new FileReader();
             reader.onload = () =>
-              resolve(typeof reader.result === "string" ? reader.result : "");
+              resolve(
+                typeof reader.result === "string"
+                  ? withFileNameInDataUrl(reader.result, file.name)
+                  : "",
+              );
             reader.onerror = () => resolve("");
             reader.readAsDataURL(file);
           }),

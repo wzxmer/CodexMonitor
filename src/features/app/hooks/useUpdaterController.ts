@@ -15,6 +15,7 @@ type Params = {
   notificationSoundsEnabled: boolean;
   systemNotificationsEnabled: boolean;
   subagentSystemNotificationsEnabled: boolean;
+  codexPetEnabled?: boolean;
   isSubagentThread?: (workspaceId: string, threadId: string) => boolean;
   getWorkspaceName?: (workspaceId: string) => string | undefined;
   onThreadNotificationSent?: (workspaceId: string, threadId: string) => void;
@@ -29,6 +30,7 @@ export function useUpdaterController({
   notificationSoundsEnabled,
   systemNotificationsEnabled,
   subagentSystemNotificationsEnabled,
+  codexPetEnabled = false,
   isSubagentThread,
   getWorkspaceName,
   onThreadNotificationSent,
@@ -50,6 +52,8 @@ export function useUpdaterController({
   });
   const isWindowFocused = useWindowFocusState();
   const nextTestSoundIsError = useRef(false);
+  const effectiveSystemNotificationsEnabled =
+    systemNotificationsEnabled && !codexPetEnabled;
 
   const subscribeUpdaterCheckEvent = useCallback(
     (handler: () => void) =>
@@ -82,7 +86,7 @@ export function useUpdaterController({
   });
 
   useAgentSystemNotifications({
-    enabled: systemNotificationsEnabled,
+    enabled: effectiveSystemNotificationsEnabled,
     subagentNotificationsEnabled: subagentSystemNotificationsEnabled,
     isSubagentThread,
     isWindowFocused,
@@ -100,7 +104,7 @@ export function useUpdaterController({
   }, [errorSoundUrl, onDebug, successSoundUrl]);
 
   const handleTestSystemNotification = useCallback(() => {
-    if (!systemNotificationsEnabled) {
+    if (!effectiveSystemNotificationsEnabled) {
       return;
     }
     void sendNotification(
@@ -115,7 +119,7 @@ export function useUpdaterController({
         payload: error instanceof Error ? error.message : String(error),
       });
     });
-  }, [onDebug, systemNotificationsEnabled]);
+  }, [effectiveSystemNotificationsEnabled, onDebug]);
 
   return {
     updaterState,

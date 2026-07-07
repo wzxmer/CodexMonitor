@@ -123,6 +123,7 @@ export function useTerminalSession({
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const inputDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const contextMenuCleanupRef = useRef<(() => void) | null>(null);
   const openedSessionsRef = useRef<Set<string>>(new Set());
   const outputBuffersRef = useRef<Map<string, string>>(new Map());
   const activeKeyRef = useRef<string | null>(null);
@@ -167,6 +168,51 @@ export function useTerminalSession({
   const writeToTerminal = useCallback((data: string) => {
     terminalRef.current?.write(data);
   }, []);
+
+  const sendInputToActiveSession = useCallback(
+    (data: string) => {
+      const workspace = activeWorkspaceRef.current;
+      const terminalId = activeTerminalIdRef.current;
+      if (!workspace || !terminalId) {
+        return;
+      }
+      const key = `${workspace.id}:${terminalId}`;
+      if (!openedSessionsRef.current.has(key)) {
+        return;
+      }
+      void writeTerminalSession(workspace.id, terminalId, data).catch((error) => {
+        if (shouldIgnoreTerminalError(error)) {
+          openedSessionsRef.current.delete(key);
+          return;
+        }
+        onDebug?.(buildErrorDebugEntry("terminal write error", error));
+      });
+    },
+    [onDebug],
+  );
+
+  const copyTerminalSelection = useCallback(async () => {
+    const selection = terminalRef.current?.getSelection();
+    if (!selection) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(selection);
+    } catch (error) {
+      onDebug?.(buildErrorDebugEntry("terminal copy error", error));
+    }
+  }, [onDebug]);
+
+  const pasteClipboardToTerminal = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        sendInputToActiveSession(text);
+      }
+    } catch (error) {
+      onDebug?.(buildErrorDebugEntry("terminal paste error", error));
+    }
+  }, [onDebug, sendInputToActiveSession]);
 
   const focusTerminalIfRequested = useCallback(() => {
     if (!pendingFocusRef.current) {
@@ -245,6 +291,8 @@ export function useTerminalSession({
     if (!isVisible) {
       inputDisposableRef.current?.dispose();
       inputDisposableRef.current = null;
+      contextMenuCleanupRef.current?.();
+      contextMenuCleanupRef.current = null;
       if (terminalRef.current) {
         terminalRef.current.dispose();
         terminalRef.current = null;
@@ -271,31 +319,62 @@ export function useTerminalSession({
       terminalRef.current = terminal;
       fitAddonRef.current = fitAddon;
 
-      inputDisposableRef.current = terminal.onData((data: string) => {
-        const workspace = activeWorkspaceRef.current;
-        const terminalId = activeTerminalIdRef.current;
-        if (!workspace || !terminalId) {
-          return;
+      terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+        if (event.type !== "keydown") {
+          return true;
         }
-        const key = `${workspace.id}:${terminalId}`;
-        if (!openedSessionsRef.current.has(key)) {
-          return;
+        const key = event.key.toLowerCase();
+        const hasModifier = event.ctrlKey || event.metaKey;
+        if (!hasModifier && !(event.shiftKey && event.key === "Insert")) {
+          return true;
         }
-        void writeTerminalSession(workspace.id, terminalId, data).catch((error) => {
-          if (shouldIgnoreTerminalError(error)) {
-            openedSessionsRef.current.delete(key);
-            return;
+        if (hasModifier && key === "a") {
+          terminal.selectAll();
+          return false;
+        }
+        if (hasModifier && key === "c") {
+          if (event.shiftKey) {
+            void copyTerminalSelection();
+            return false;
           }
-          onDebug?.(buildErrorDebugEntry("terminal write error", error));
-        });
+          if (terminal.hasSelection()) {
+            void copyTerminalSelection();
+            return false;
+          }
+          return true;
+        }
+        if (hasModifier && key === "v") {
+          void pasteClipboardToTerminal();
+          return false;
+        }
+        if (event.shiftKey && event.key === "Insert") {
+          void pasteClipboardToTerminal();
+          return false;
+        }
+        return true;
+      });
+
+      const handleContextMenu = (event: MouseEvent) => {
+        event.preventDefault();
+        terminal.focus();
+        void pasteClipboardToTerminal();
+      };
+      terminal.element?.addEventListener("contextmenu", handleContextMenu);
+      contextMenuCleanupRef.current = () => {
+        terminal.element?.removeEventListener("contextmenu", handleContextMenu);
+      };
+      inputDisposableRef.current = terminal.onData((data: string) => {
+        sendInputToActiveSession(data);
       });
     }
-  }, [isVisible, onDebug]);
+  }, [copyTerminalSelection, isVisible, pasteClipboardToTerminal, sendInputToActiveSession]);
 
   useEffect(() => {
     return () => {
       inputDisposableRef.current?.dispose();
       inputDisposableRef.current = null;
+      contextMenuCleanupRef.current?.();
+      contextMenuCleanupRef.current = null;
       if (terminalRef.current) {
         terminalRef.current.dispose();
         terminalRef.current = null;

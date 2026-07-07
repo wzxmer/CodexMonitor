@@ -660,8 +660,53 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "刷新所有项目会话" }));
+    fireEvent.click(screen.getByRole("button", { name: "刷新会话" }));
     expect(onRefreshAllThreads).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens home only from the home header button", () => {
+    const onSelectHome = vi.fn();
+    const onRefreshAllThreads = vi.fn();
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[
+          {
+            id: "ws-1",
+            name: "Workspace",
+            path: "/tmp/workspace",
+            connected: true,
+            settings: { sidebarCollapsed: false },
+          },
+        ]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Workspaces",
+            workspaces: [
+              {
+                id: "ws-1",
+                name: "Workspace",
+                path: "/tmp/workspace",
+                connected: true,
+                settings: { sidebarCollapsed: false },
+              },
+            ],
+          },
+        ]}
+        onSelectHome={onSelectHome}
+        onRefreshAllThreads={onRefreshAllThreads}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "项目" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "刷新会话" }));
+    expect(onRefreshAllThreads).toHaveBeenCalledTimes(1);
+    expect(onSelectHome).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "打开首页" }));
+    expect(onSelectHome).toHaveBeenCalledTimes(1);
   });
 
   it("shows the local Codex sessions entry without connect or add actions when no Codex session is available", () => {
@@ -1175,7 +1220,7 @@ describe("Sidebar", () => {
       />,
     );
 
-    const refreshButton = screen.getByRole("button", { name: "刷新所有项目会话" });
+    const refreshButton = screen.getByRole("button", { name: "刷新会话" });
     expect(refreshButton.getAttribute("aria-busy")).toBe("true");
     const icon = refreshButton.querySelector("svg");
     expect(icon?.getAttribute("class") ?? "").toContain("spinning");

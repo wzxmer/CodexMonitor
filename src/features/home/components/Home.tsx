@@ -13,6 +13,7 @@ import type {
 } from "../homeTypes";
 
 type HomeProps = {
+  onStartNoProjectChat?: () => void;
   onAddWorkspace: () => void;
   onAddWorkspaceFromUrl: () => void;
   latestAgentRuns: LatestAgentRun[];
@@ -33,6 +34,7 @@ type HomeProps = {
 };
 
 export function Home({
+  onStartNoProjectChat,
   onAddWorkspace,
   onAddWorkspaceFromUrl,
   latestAgentRuns,
@@ -65,6 +67,7 @@ export function Home({
         onSelectThread={onSelectThread}
       />
       <HomeActions
+        onStartNoProjectChat={onStartNoProjectChat ?? (() => {})}
         onAddWorkspace={onAddWorkspace}
         onAddWorkspaceFromUrl={onAddWorkspaceFromUrl}
       />

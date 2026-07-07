@@ -20,6 +20,7 @@ import X from "lucide-react/dist/esm/icons/x";
 import { exportMarkdownFile } from "@services/tauri";
 import { pushErrorToast } from "@services/toasts";
 import type { ConversationItem } from "../../../types";
+import { attachmentDisplayName } from "../../../utils/attachments";
 import type { ParsedFileLocation } from "../../../utils/fileLinks";
 import { PierreDiffBlock } from "../../git/components/PierreDiffBlock";
 import {
@@ -116,6 +117,28 @@ type CommandOutputProps = {
   output: string;
 };
 
+function extractTimestampFromMessageId(id: string) {
+  const match = id.match(/\d{13}/);
+  if (!match) {
+    return null;
+  }
+  const value = Number(match[0]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function formatCliTimestamp(timestamp: number) {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) {
+    return "";
+  }
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate(),
+  )} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
+    date.getSeconds(),
+  )}`;
+}
+
 const MessageImageGrid = memo(function MessageImageGrid({
   images,
   onOpen,
@@ -203,6 +226,34 @@ const ImageLightbox = memo(function ImageLightbox({
       </div>
     </div>,
     document.body,
+  );
+});
+
+const MessageAttachmentList = memo(function MessageAttachmentList({
+  attachments,
+}: {
+  attachments: string[];
+}) {
+  if (attachments.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="message-attachments" aria-label="附件">
+      {attachments.map((attachment, index) => {
+        const name = attachmentDisplayName(attachment);
+        return (
+          <span
+            key={`${attachment}-${index}`}
+            className="message-attachment"
+            title={attachment}
+          >
+            <FileText size={14} aria-hidden />
+            <span className="message-attachment-name">{name}</span>
+          </span>
+        );
+      })}
+    </div>
   );
 });
 
@@ -400,10 +451,12 @@ export const MessageRow = memo(function MessageRow({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(item.text);
+  const fallbackCreatedAtRef = useRef<number>(Date.now());
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectionSnapshotRef = useRef<string | null>(null);
   const hasText = item.text.trim().length > 0;
+  const attachments = item.attachments ?? [];
   const imageItems = useMemo(() => {
     if (!item.images || item.images.length === 0) {
       return [];
@@ -422,10 +475,21 @@ export const MessageRow = memo(function MessageRow({
     item.role === "assistant" &&
     hasText &&
     imageItems.length === 0 &&
+    attachments.length === 0 &&
     isStandaloneMarkdownTable(item.text);
   const isLongUserMessage =
-    item.role === "user" && (item.text.trim().length > 180 || imageItems.length > 0);
+    item.role === "user" &&
+    (item.text.trim().length > 180 || imageItems.length > 0 || attachments.length > 0);
   const canEditUserMessage = item.role === "user" && Boolean(onResendUserMessage);
+  const cliTimestamp = useMemo(
+    () =>
+      formatCliTimestamp(
+        item.createdAt ??
+          extractTimestampFromMessageId(item.id) ??
+          fallbackCreatedAtRef.current,
+      ),
+    [item.createdAt, item.id],
+  );
 
   useEffect(() => {
     setIsEditing(false);
@@ -506,6 +570,7 @@ export const MessageRow = memo(function MessageRow({
       <div
         ref={bubbleRef}
         className={`bubble message-bubble${isTableOnlyAssistantMessage ? " message-bubble-table-only" : ""}`}
+        data-cli-timestamp={cliTimestamp}
       >
         {imageItems.length > 0 && (
           <MessageImageGrid
@@ -514,6 +579,7 @@ export const MessageRow = memo(function MessageRow({
             hasText={hasText}
           />
         )}
+        <MessageAttachmentList attachments={attachments} />
         {isEditing ? (
           <div className="message-edit-form">
             <textarea

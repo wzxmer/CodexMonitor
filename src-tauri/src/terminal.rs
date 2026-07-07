@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
@@ -51,7 +52,21 @@ async fn get_terminal_session(
 
 #[cfg(target_os = "windows")]
 fn shell_path() -> String {
-    std::env::var("COMSPEC").unwrap_or_else(|_| "powershell.exe".to_string())
+    if let Ok(shell) = std::env::var("CODEX_MONITOR_SHELL") {
+        let trimmed = shell.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    for candidate in windows_pwsh_candidates() {
+        if Path::new(candidate).exists() {
+            return candidate.to_string();
+        }
+    }
+    find_executable_in_path("pwsh.exe")
+        .or_else(|| find_executable_in_path("powershell.exe"))
+        .or_else(|| std::env::var("COMSPEC").ok())
+        .unwrap_or_else(|| "powershell.exe".to_string())
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -71,22 +86,101 @@ fn windows_shell_args(shell: &str) -> Vec<&'static str> {
     }
 }
 
+#[cfg(any(target_os = "windows", test))]
+fn windows_pwsh_candidates() -> Vec<&'static str> {
+    vec![
+        r"C:\Program Files\PowerShell\7\pwsh.exe",
+        r"C:\Program Files (x86)\PowerShell\7\pwsh.exe",
+    ]
+}
+
+#[cfg(target_os = "windows")]
+fn find_executable_in_path(exe: &str) -> Option<String> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|dir| dir.join(exe))
+        .find(|candidate| candidate.exists())
+        .map(|candidate| candidate.to_string_lossy().to_string())
+}
+
 fn unix_shell_args() -> Vec<&'static str> {
     vec!["-i"]
 }
 
 #[cfg(target_os = "windows")]
-fn configure_shell_args(cmd: &mut CommandBuilder) {
-    for arg in windows_shell_args(&shell_path()) {
+fn configure_shell_args(cmd: &mut CommandBuilder, shell: &str) {
+    for arg in windows_shell_args(shell) {
         cmd.arg(arg);
     }
 }
 
 #[cfg(not(target_os = "windows"))]
-fn configure_shell_args(cmd: &mut CommandBuilder) {
+fn configure_shell_args(cmd: &mut CommandBuilder, _shell: &str) {
     for arg in unix_shell_args() {
         cmd.arg(arg);
     }
+}
+
+#[cfg(target_os = "windows")]
+fn spawn_external_terminal(cwd: &Path) -> Result<(), String> {
+    let shell = shell_path();
+    let shell_args = windows_shell_args(&shell)
+        .into_iter()
+        .map(String::from)
+        .collect();
+    let candidates: Vec<(String, Vec<String>)> = vec![
+        ("wt.exe".to_string(), vec!["-d".to_string(), cwd.to_string_lossy().to_string()]),
+        (shell, shell_args),
+        (
+            std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string()),
+            vec!["/K".to_string()],
+        ),
+    ];
+
+    let mut last_error = None;
+    for (program, args) in candidates {
+        let result = Command::new(&program).args(args).current_dir(cwd).spawn();
+        match result {
+            Ok(_) => return Ok(()),
+            Err(error) => {
+                last_error = Some(format!("{program}: {error}"));
+            }
+        }
+    }
+    Err(format!(
+        "Failed to open system terminal{}",
+        last_error
+            .map(|message| format!(" ({message})"))
+            .unwrap_or_default()
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn spawn_external_terminal(cwd: &Path) -> Result<(), String> {
+    Command::new("open")
+        .args(["-a", "Terminal"])
+        .arg(cwd)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Failed to open system terminal: {e}"))
+}
+
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+fn spawn_external_terminal(cwd: &Path) -> Result<(), String> {
+    let candidates = ["x-terminal-emulator", "gnome-terminal", "konsole", "alacritty", "kitty"];
+    let mut last_error = None;
+    for program in candidates {
+        match Command::new(program).current_dir(cwd).spawn() {
+            Ok(_) => return Ok(()),
+            Err(error) => last_error = Some(format!("{program}: {error}")),
+        }
+    }
+    Err(format!(
+        "Failed to open system terminal{}",
+        last_error
+            .map(|message| format!(" ({message})"))
+            .unwrap_or_default()
+    ))
 }
 
 fn resolve_locale() -> String {
@@ -229,9 +323,10 @@ pub(crate) async fn terminal_open(
         .openpty(size)
         .map_err(|e| format!("Failed to open pty: {e}"))?;
 
-    let mut cmd = CommandBuilder::new(shell_path());
+    let shell = shell_path();
+    let mut cmd = CommandBuilder::new(&shell);
     cmd.cwd(cwd);
-    configure_shell_args(&mut cmd);
+    configure_shell_args(&mut cmd, &shell);
     cmd.env("TERM", "xterm-256color");
     let locale = resolve_locale();
     cmd.env("LANG", &locale);
@@ -372,9 +467,20 @@ pub(crate) async fn terminal_close(
     Ok(())
 }
 
+#[tauri::command]
+pub(crate) async fn terminal_open_external(
+    workspace_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let cwd = get_workspace_path(&workspace_id, &state).await?;
+    tokio::task::spawn_blocking(move || spawn_external_terminal(&cwd))
+        .await
+        .map_err(|e| format!("Terminal open task failed: {e}"))?
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{unix_shell_args, windows_shell_args};
+    use super::{unix_shell_args, windows_pwsh_candidates, windows_shell_args};
 
     #[test]
     fn windows_shell_args_match_powershell_variants() {
@@ -409,5 +515,13 @@ mod tests {
     #[test]
     fn unix_shell_args_stay_interactive() {
         assert_eq!(unix_shell_args(), vec!["-i"]);
+    }
+
+    #[test]
+    fn windows_pwsh_candidates_prefer_pwsh_7() {
+        assert_eq!(
+            windows_pwsh_candidates()[0],
+            r"C:\Program Files\PowerShell\7\pwsh.exe"
+        );
     }
 }

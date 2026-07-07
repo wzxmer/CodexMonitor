@@ -1,6 +1,30 @@
 import type { ConversationItem } from "../types";
+import { extractAttachedFilesFromText, isImageAttachment } from "./attachments";
 import { parseCollabToolCallItem } from "./threadItems.collab";
 import { asNumber, asString } from "./threadItems.shared";
+
+function extractCreatedAt(item: Record<string, unknown>) {
+  const raw =
+    item.createdAt ??
+    item.created_at ??
+    item.timestamp ??
+    item.time ??
+    item.created;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return raw > 0 && raw < 10_000_000_000 ? raw * 1000 : raw;
+  }
+  if (typeof raw === "string") {
+    const parsedNumber = Number(raw);
+    if (Number.isFinite(parsedNumber) && parsedNumber > 0) {
+      return parsedNumber < 10_000_000_000 ? parsedNumber * 1000 : parsedNumber;
+    }
+    const parsedDate = Date.parse(raw);
+    if (Number.isFinite(parsedDate)) {
+      return parsedDate;
+    }
+  }
+  return undefined;
+}
 
 function extractImageInputValue(input: Record<string, unknown>) {
   const value =
@@ -15,12 +39,17 @@ function extractImageInputValue(input: Record<string, unknown>) {
 function parseUserInputs(inputs: Array<Record<string, unknown>>) {
   const textParts: string[] = [];
   const images: string[] = [];
+  const attachments: string[] = [];
   inputs.forEach((input) => {
     const type = asString(input.type);
     if (type === "text") {
       const text = asString(input.text);
       if (text) {
-        textParts.push(text);
+        const parsed = extractAttachedFilesFromText(text);
+        if (parsed.text) {
+          textParts.push(parsed.text);
+        }
+        attachments.push(...parsed.attachments.map((attachment) => attachment.name));
       }
       return;
     }
@@ -34,11 +63,15 @@ function parseUserInputs(inputs: Array<Record<string, unknown>>) {
     if (type === "image" || type === "localImage") {
       const value = extractImageInputValue(input);
       if (value) {
-        images.push(value);
+        if (isImageAttachment(value)) {
+          images.push(value);
+        } else {
+          attachments.push(value);
+        }
       }
     }
   });
-  return { text: textParts.join(" ").trim(), images };
+  return { text: textParts.join(" ").trim(), images, attachments };
 }
 
 export function buildConversationItem(
@@ -54,13 +87,15 @@ export function buildConversationItem(
   }
   if (type === "userMessage") {
     const content = Array.isArray(item.content) ? item.content : [];
-    const { text, images } = parseUserInputs(content as Array<Record<string, unknown>>);
+    const { text, images, attachments } = parseUserInputs(content as Array<Record<string, unknown>>);
     return {
       id,
       kind: "message",
       role: "user",
       text,
+      createdAt: extractCreatedAt(item),
       images: images.length > 0 ? images : undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
     };
   }
   if (type === "reasoning") {
@@ -216,13 +251,15 @@ export function buildConversationItemFromThreadItem(
   }
   if (type === "userMessage") {
     const content = Array.isArray(item.content) ? item.content : [];
-    const { text, images } = parseUserInputs(content as Array<Record<string, unknown>>);
+    const { text, images, attachments } = parseUserInputs(content as Array<Record<string, unknown>>);
     return {
       id,
       kind: "message",
       role: "user",
       text,
+      createdAt: extractCreatedAt(item),
       images: images.length > 0 ? images : undefined,
+      attachments: attachments.length > 0 ? attachments : undefined,
     };
   }
   if (type === "agentMessage") {
@@ -231,6 +268,7 @@ export function buildConversationItemFromThreadItem(
       kind: "message",
       role: "assistant",
       text: asString(item.text),
+      createdAt: extractCreatedAt(item),
     };
   }
   if (type === "reasoning") {

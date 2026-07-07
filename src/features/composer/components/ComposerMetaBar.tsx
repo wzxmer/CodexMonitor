@@ -1,8 +1,9 @@
 import type { CSSProperties } from "react";
-import { BrainCog, SlidersHorizontal, Zap } from "lucide-react";
+import { BrainCog, Repeat2, SlidersHorizontal, Zap } from "lucide-react";
 import { RoundedSelect } from "@/features/design-system/components/select/RoundedSelect";
 import type {
   AccessMode,
+  ComposerTriggerMode,
   ComposerSendShortcut,
   ServiceTier,
   ThreadTokenUsage,
@@ -26,6 +27,8 @@ type ComposerMetaBarProps = {
   onSelectAccessMode: (mode: AccessMode) => void;
   composerSendShortcut: ComposerSendShortcut;
   onSelectComposerSendShortcut?: (shortcut: ComposerSendShortcut) => void;
+  composerTriggerMode?: ComposerTriggerMode;
+  onSelectComposerTriggerMode?: (mode: ComposerTriggerMode) => void;
   codexArgsOptions?: CodexArgsOption[];
   selectedCodexArgsOverride?: string | null;
   onSelectCodexArgsOverride?: (value: string | null) => void;
@@ -49,6 +52,8 @@ export function ComposerMetaBar({
   onSelectAccessMode,
   composerSendShortcut,
   onSelectComposerSendShortcut,
+  composerTriggerMode = "default",
+  onSelectComposerTriggerMode,
   codexArgsOptions = [],
   selectedCodexArgsOverride = null,
   onSelectCodexArgsOverride,
@@ -110,6 +115,10 @@ export function ComposerMetaBar({
   const sendShortcutOptions: Array<{ value: ComposerSendShortcut; label: string }> = [
     { value: "ctrl-enter", label: "Enter 换行，Ctrl+Enter 发送" },
     { value: "enter", label: "Enter 发送，Ctrl+Enter 换行" },
+  ];
+  const triggerModeOptions: Array<{ value: ComposerTriggerMode; label: string }> = [
+    { value: "default", label: "默认 / @" },
+    { value: "swap-slash-at", label: "对调 @ /" },
   ];
 
   return (
@@ -309,6 +318,23 @@ export function ComposerMetaBar({
               options={sendShortcutOptions}
               onChange={(nextValue) =>
                 onSelectComposerSendShortcut(nextValue as ComposerSendShortcut)
+              }
+            />
+          </div>
+        )}
+        {onSelectComposerTriggerMode && (
+          <div className="composer-select-wrap composer-select-wrap--trigger">
+            <span className="composer-icon" aria-hidden>
+              <Repeat2 size={14} strokeWidth={1.8} />
+            </span>
+            <RoundedSelect
+              className="composer-select composer-select--shortcut"
+              ariaLabel="快捷符号"
+              disabled={disabled}
+              value={composerTriggerMode}
+              options={triggerModeOptions}
+              onChange={(nextValue) =>
+                onSelectComposerTriggerMode(nextValue as ComposerTriggerMode)
               }
             />
           </div>

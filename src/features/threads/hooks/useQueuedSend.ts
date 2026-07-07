@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppMention,
   ComposerSendIntent,
+  ComposerTriggerMode,
   FollowUpMessageBehavior,
   QueuedMessage,
   SendMessageResult,
@@ -16,6 +17,7 @@ type UseQueuedSendOptions = {
   queueFlushPaused?: boolean;
   steerEnabled: boolean;
   followUpMessageBehavior: FollowUpMessageBehavior;
+  composerTriggerMode?: ComposerTriggerMode;
   appsEnabled: boolean;
   activeWorkspace: WorkspaceInfo | null;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
@@ -62,6 +64,7 @@ type UseQueuedSendResult = {
     appMentions?: AppMention[],
   ) => Promise<void>;
   removeQueuedMessage: (threadId: string, messageId: string) => void;
+  clearQueuedMessages: (threadId?: string | null) => void;
   steerQueuedMessage: (messageId: string) => Promise<void>;
 };
 
@@ -76,32 +79,42 @@ type SlashCommandKind =
   | "review"
   | "status";
 
-function parseSlashCommand(text: string, appsEnabled: boolean): SlashCommandKind | null {
-  if (appsEnabled && /^\/apps\b/i.test(text)) {
+function buildCommandRegex(trigger: string, command: SlashCommandKind) {
+  const escaped = trigger.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escaped}${command}\\b`, "i");
+}
+
+function parseSlashCommand(
+  text: string,
+  appsEnabled: boolean,
+  composerTriggerMode: ComposerTriggerMode = "default",
+): SlashCommandKind | null {
+  const trigger = composerTriggerMode === "swap-slash-at" ? "@" : "/";
+  if (appsEnabled && buildCommandRegex(trigger, "apps").test(text)) {
     return "apps";
   }
-  if (/^\/fork\b/i.test(text)) {
+  if (buildCommandRegex(trigger, "fork").test(text)) {
     return "fork";
   }
-  if (/^\/fast\b/i.test(text)) {
+  if (buildCommandRegex(trigger, "fast").test(text)) {
     return "fast";
   }
-  if (/^\/mcp\b/i.test(text)) {
+  if (buildCommandRegex(trigger, "mcp").test(text)) {
     return "mcp";
   }
-  if (/^\/review\b/i.test(text)) {
+  if (buildCommandRegex(trigger, "review").test(text)) {
     return "review";
   }
-  if (/^\/compact\b/i.test(text)) {
+  if (buildCommandRegex(trigger, "compact").test(text)) {
     return "compact";
   }
-  if (/^\/new\b/i.test(text)) {
+  if (buildCommandRegex(trigger, "new").test(text)) {
     return "new";
   }
-  if (/^\/resume\b/i.test(text)) {
+  if (buildCommandRegex(trigger, "resume").test(text)) {
     return "resume";
   }
-  if (/^\/status\b/i.test(text)) {
+  if (buildCommandRegex(trigger, "status").test(text)) {
     return "status";
   }
   return null;
@@ -115,6 +128,7 @@ export function useQueuedSend({
   queueFlushPaused = false,
   steerEnabled,
   followUpMessageBehavior,
+  composerTriggerMode = "default",
   appsEnabled,
   activeWorkspace,
   connectWorkspace,
@@ -140,6 +154,7 @@ export function useQueuedSend({
   const [hasStartedByThread, setHasStartedByThread] = useState<
     Record<string, boolean>
   >({});
+  const queueCancelGenerationByThread = useRef<Record<string, number>>({});
 
   const activeQueue = useMemo(
     () => (activeThreadId ? queuedByThread[activeThreadId] ?? [] : []),
@@ -164,6 +179,33 @@ export function useQueuedSend({
     },
     [],
   );
+
+  const clearQueuedMessages = useCallback((threadId?: string | null) => {
+    if (!threadId) {
+      return;
+    }
+    queueCancelGenerationByThread.current[threadId] =
+      (queueCancelGenerationByThread.current[threadId] ?? 0) + 1;
+    setQueuedByThread((prev) => {
+      if (!prev[threadId]?.length) {
+        return prev;
+      }
+      const { [threadId]: _, ...rest } = prev;
+      return rest;
+    });
+    setInFlightByThread((prev) => {
+      if (!prev[threadId]) {
+        return prev;
+      }
+      return { ...prev, [threadId]: null };
+    });
+    setHasStartedByThread((prev) => {
+      if (!prev[threadId]) {
+        return prev;
+      }
+      return { ...prev, [threadId]: false };
+    });
+  }, []);
 
   const prependQueuedMessage = useCallback((threadId: string, item: QueuedMessage) => {
     setQueuedByThread((prev) => ({
@@ -219,7 +261,8 @@ export function useQueuedSend({
       }
       if (command === "new" && activeWorkspace) {
         const threadId = await startThreadForWorkspace(activeWorkspace.id);
-        const rest = trimmed.replace(/^\/new\b/i, "").trim();
+        const trigger = composerTriggerMode === "swap-slash-at" ? "@" : "/";
+        const rest = trimmed.replace(buildCommandRegex(trigger, "new"), "").trim();
         if (threadId && rest) {
           await sendUserMessageToThread(activeWorkspace, threadId, rest, []);
         }
@@ -237,6 +280,7 @@ export function useQueuedSend({
       startFast,
       startStatus,
       startThreadForWorkspace,
+      composerTriggerMode,
     ],
   );
 
@@ -249,7 +293,7 @@ export function useQueuedSend({
       options?: { replaceMessageId?: string },
     ) => {
       const trimmed = text.trim();
-      const command = parseSlashCommand(trimmed, appsEnabled);
+      const command = parseSlashCommand(trimmed, appsEnabled, composerTriggerMode);
       const nextImages = command ? [] : images;
       const nextMentions = command ? [] : appMentions;
       const canSteerCurrentTurn =
@@ -307,6 +351,7 @@ export function useQueuedSend({
     [
       activeThreadId,
       appsEnabled,
+      composerTriggerMode,
       activeWorkspace,
       clearActiveImages,
       connectWorkspace,
@@ -329,7 +374,7 @@ export function useQueuedSend({
       appMentions: AppMention[] = [],
     ) => {
       const trimmed = text.trim();
-      const command = parseSlashCommand(trimmed, appsEnabled);
+      const command = parseSlashCommand(trimmed, appsEnabled, composerTriggerMode);
       const nextImages = command ? [] : images;
       const nextMentions = command ? [] : appMentions;
       if (!trimmed && nextImages.length === 0) {
@@ -348,6 +393,7 @@ export function useQueuedSend({
     [
       activeThreadId,
       appsEnabled,
+      composerTriggerMode,
       clearActiveImages,
       createQueuedItem,
       enqueueMessage,
@@ -436,6 +482,8 @@ export function useQueuedSend({
     }
     const threadId = activeThreadId;
     const nextItem = queue[0];
+    const cancelGeneration =
+      queueCancelGenerationByThread.current[threadId] ?? 0;
     setInFlightByThread((prev) => ({ ...prev, [threadId]: nextItem }));
     setHasStartedByThread((prev) => ({ ...prev, [threadId]: false }));
     setQueuedByThread((prev) => ({
@@ -444,8 +492,18 @@ export function useQueuedSend({
     }));
     (async () => {
       try {
+        if (
+          (queueCancelGenerationByThread.current[threadId] ?? 0) !==
+          cancelGeneration
+        ) {
+          return;
+        }
         const trimmed = nextItem.text.trim();
-        const command = parseSlashCommand(trimmed, appsEnabled);
+        const command = parseSlashCommand(
+          trimmed,
+          appsEnabled,
+          composerTriggerMode,
+        );
         if (command) {
           await runSlashCommand(command, trimmed);
         } else {
@@ -457,6 +515,12 @@ export function useQueuedSend({
           }
         }
       } catch {
+        if (
+          (queueCancelGenerationByThread.current[threadId] ?? 0) !==
+          cancelGeneration
+        ) {
+          return;
+        }
         setInFlightByThread((prev) => ({ ...prev, [threadId]: null }));
         setHasStartedByThread((prev) => ({ ...prev, [threadId]: false }));
         prependQueuedMessage(threadId, nextItem);
@@ -465,6 +529,7 @@ export function useQueuedSend({
   }, [
     activeThreadId,
     appsEnabled,
+    composerTriggerMode,
     inFlightByThread,
     isProcessing,
     isReviewing,
@@ -481,6 +546,7 @@ export function useQueuedSend({
     handleSend,
     queueMessage,
     removeQueuedMessage,
+    clearQueuedMessages,
     steerQueuedMessage,
   };
 }

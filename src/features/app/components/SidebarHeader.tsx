@@ -2,6 +2,7 @@ import ArrowDownUp from "lucide-react/dist/esm/icons/arrow-down-up";
 import BetweenHorizontalStart from "lucide-react/dist/esm/icons/between-horizontal-start";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import FolderPlus from "lucide-react/dist/esm/icons/folder-plus";
+import House from "lucide-react/dist/esm/icons/house";
 import FolderTree from "lucide-react/dist/esm/icons/folder-tree";
 import ListFilter from "lucide-react/dist/esm/icons/list-filter";
 import ListTree from "lucide-react/dist/esm/icons/list-tree";
@@ -138,12 +139,17 @@ export function SidebarHeader({
             <FolderPlus aria-hidden />
           </button>
           <button
-            className="subtitle subtitle-button sidebar-title-button"
+            className="sidebar-home-toggle ds-tooltip-trigger"
             onClick={onSelectHome}
             data-tauri-drag-region="false"
             aria-label="打开首页"
+            data-tooltip="主页"
+            data-tooltip-align="start"
+            data-tooltip-placement="bottom"
+            title="主页"
+            type="button"
           >
-            项目
+            <House aria-hidden />
           </button>
         </div>
       </div>
@@ -239,10 +245,10 @@ export function SidebarHeader({
           className="ghost sidebar-refresh-toggle ds-tooltip-trigger"
           onClick={onRefreshAllThreads}
           data-tauri-drag-region="false"
-          aria-label="刷新所有项目会话"
+          aria-label="刷新会话"
           type="button"
-          title="刷新所有项目会话"
-          data-tooltip="刷新所有项目会话"
+          title="刷新会话"
+          data-tooltip="刷新会话"
           data-tooltip-align="end"
           data-tooltip-placement="bottom"
           disabled={refreshDisabled}

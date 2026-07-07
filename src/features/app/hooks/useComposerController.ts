@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import type {
   AppMention,
   ComposerSendIntent,
+  ComposerTriggerMode,
   FollowUpMessageBehavior,
   QueuedMessage,
   SendMessageResult,
@@ -20,6 +21,7 @@ export function useComposerController({
   queueFlushPaused = false,
   steerEnabled,
   followUpMessageBehavior,
+  composerTriggerMode,
   appsEnabled,
   connectWorkspace,
   startThreadForWorkspace,
@@ -43,6 +45,7 @@ export function useComposerController({
   queueFlushPaused?: boolean;
   steerEnabled: boolean;
   followUpMessageBehavior: FollowUpMessageBehavior;
+  composerTriggerMode?: ComposerTriggerMode;
   appsEnabled: boolean;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   startThreadForWorkspace: (
@@ -77,6 +80,7 @@ export function useComposerController({
   const [composerInsert, setComposerInsert] = useState<QueuedMessage | null>(
     null,
   );
+  const draftKey = activeThreadId ?? activeWorkspaceId;
   const {
     activeImages,
     attachImages,
@@ -92,6 +96,7 @@ export function useComposerController({
     handleSend,
     queueMessage,
     removeQueuedMessage,
+    clearQueuedMessages,
     steerQueuedMessage,
   } = useQueuedSend({
     activeThreadId,
@@ -101,6 +106,7 @@ export function useComposerController({
     queueFlushPaused,
     steerEnabled,
     followUpMessageBehavior,
+    composerTriggerMode,
     appsEnabled,
     activeWorkspace,
     connectWorkspace,
@@ -120,21 +126,21 @@ export function useComposerController({
 
   const activeDraft = useMemo(
     () =>
-      activeThreadId ? composerDraftsByThread[activeThreadId] ?? "" : "",
-    [activeThreadId, composerDraftsByThread],
+      draftKey ? composerDraftsByThread[draftKey] ?? "" : "",
+    [composerDraftsByThread, draftKey],
   );
 
   const handleDraftChange = useCallback(
     (next: string) => {
-      if (!activeThreadId) {
+      if (!draftKey) {
         return;
       }
       setComposerDraftsByThread((prev) => ({
         ...prev,
-        [activeThreadId]: next,
+        [draftKey]: next,
       }));
     },
-    [activeThreadId],
+    [draftKey],
   );
 
   const handleSendPrompt = useCallback(
@@ -191,6 +197,7 @@ export function useComposerController({
     handleSend,
     queueMessage,
     removeQueuedMessage,
+    clearQueuedMessages,
     steerQueuedMessage,
     prefillDraft,
     setPrefillDraft,

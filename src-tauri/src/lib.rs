@@ -299,6 +299,7 @@ pub fn run() {
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_close,
+            terminal::terminal_open_external,
             dictation::dictation_model_status,
             dictation::dictation_download_model,
             dictation::dictation_cancel_download,

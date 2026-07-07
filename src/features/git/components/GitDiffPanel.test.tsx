@@ -83,6 +83,26 @@ describe("GitDiffPanel", () => {
     expect(onInitGitRepo).toHaveBeenCalledTimes(1);
   });
 
+  it("shows missing repository as setup state instead of a sidebar error", () => {
+    const error =
+      "could not find repository at '/Users/racky'; class=Repository (6); code=NotFound (-3)";
+
+    const { container } = render(
+      <GitDiffPanel
+        {...baseProps}
+        branchName="unknown"
+        fileStatus="Git status unavailable"
+        error={error}
+        onInitGitRepo={vi.fn()}
+      />,
+    );
+
+    expect(within(container).getAllByText("未初始化 Git").length).toBeGreaterThan(0);
+    expect(within(container).getByText("这个项目还不是 Git 仓库。")).toBeTruthy();
+    expect(within(container).queryByText(error)).toBeNull();
+    expect(within(container).queryByRole("button", { name: "获取远端" })).toBeNull();
+  });
+
   it("does not show initialize git when the git root path is invalid", () => {
     const { container } = render(
       <GitDiffPanel

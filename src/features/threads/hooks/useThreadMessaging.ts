@@ -22,6 +22,7 @@ import {
   listMcpServerStatus as listMcpServerStatusService,
 } from "@services/tauri";
 import { expandCustomPromptText } from "@utils/customPrompts";
+import { splitImageAndFileAttachments } from "@utils/attachments";
 import {
   asString,
   extractReviewThreadId,
@@ -193,6 +194,7 @@ export function useThreadMessaging({
       });
       const timestamp = Date.now();
       const customThreadName = getCustomName(workspace.id, threadId) ?? null;
+      const displayAttachments = splitImageAndFileAttachments(images);
       dispatch({
         type: "upsertItem",
         workspaceId: workspace.id,
@@ -202,7 +204,9 @@ export function useThreadMessaging({
           kind: "message",
           role: "user",
           text: finalText,
-          images,
+          createdAt: timestamp,
+          images: displayAttachments.images,
+          attachments: displayAttachments.attachments,
         },
         replaceExisting: Boolean(options?.replaceMessageId),
         hasCustomName: Boolean(customThreadName),

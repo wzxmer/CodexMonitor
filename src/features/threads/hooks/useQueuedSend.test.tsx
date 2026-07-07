@@ -483,6 +483,63 @@ describe("useQueuedSend", () => {
     expect(options.startReview).not.toHaveBeenCalled();
   });
 
+  it("routes @mcp in swapped trigger mode and leaves /mcp as text", async () => {
+    const startMcp = vi.fn().mockResolvedValue(undefined);
+    const options = makeOptions({
+      composerTriggerMode: "swap-slash-at",
+      startMcp,
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("@mcp now", ["img-1"]);
+    });
+
+    expect(startMcp).toHaveBeenCalledWith("@mcp now");
+    expect(options.sendUserMessage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.handleSend("/mcp now", ["img-2"]);
+    });
+
+    expect(startMcp).toHaveBeenCalledTimes(1);
+    expect(options.sendUserMessage).toHaveBeenCalledWith(
+      "/mcp now",
+      ["img-2"],
+      undefined,
+      { sendIntent: "default" },
+    );
+  });
+
+  it("flushes queued @ commands in swapped trigger mode", async () => {
+    const startMcp = vi.fn().mockResolvedValue(undefined);
+    const options = makeOptions({
+      composerTriggerMode: "swap-slash-at",
+      isProcessing: true,
+      startMcp,
+    });
+    const { result, rerender } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.queueMessage("@mcp now", ["img-1"]);
+    });
+    expect(result.current.activeQueue).toHaveLength(1);
+
+    await act(async () => {
+      rerender({ ...options, isProcessing: false });
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(startMcp).toHaveBeenCalledWith("@mcp now");
+    expect(options.sendUserMessage).not.toHaveBeenCalled();
+  });
+
   it("routes /apps to the apps handler", async () => {
     const startApps = vi.fn().mockResolvedValue(undefined);
     const options = makeOptions({ startApps });
@@ -628,6 +685,67 @@ describe("useQueuedSend", () => {
 
     expect(options.sendUserMessage).toHaveBeenCalledTimes(1);
     expect(options.sendUserMessage).toHaveBeenCalledWith("Held", []);
+  });
+
+  it("clears queued messages for a stopped thread before they flush", async () => {
+    const options = makeOptions({ isProcessing: true });
+    const { result, rerender } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.queueMessage("Do not continue");
+    });
+    expect(result.current.activeQueue).toHaveLength(1);
+
+    act(() => {
+      result.current.clearQueuedMessages("thread-1");
+    });
+    expect(result.current.activeQueue).toHaveLength(0);
+
+    await act(async () => {
+      rerender({ ...options, isProcessing: false });
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(options.sendUserMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not restore a stopped in-flight queued message when send fails", async () => {
+    let rejectSend: (reason?: unknown) => void = () => {};
+    const sendUserMessage = vi.fn(
+      () =>
+        new Promise<never>((_, reject) => {
+          rejectSend = reject;
+        }),
+    );
+    const options = makeOptions({ sendUserMessage });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.queueMessage("Do not restore");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(sendUserMessage).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.clearQueuedMessages("thread-1");
+    });
+
+    await act(async () => {
+      rejectSend(new Error("stopped"));
+      await Promise.resolve();
+    });
+
+    expect(result.current.activeQueue).toHaveLength(0);
+    expect(sendUserMessage).toHaveBeenCalledTimes(1);
   });
 
 });

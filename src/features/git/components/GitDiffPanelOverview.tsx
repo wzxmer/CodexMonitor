@@ -84,11 +84,18 @@ export function GitPanelModeStatus({
 type GitBranchRowProps = {
   mode: GitMode;
   branchName: string;
+  repositoryMissing: boolean;
   onFetch?: () => void | Promise<void>;
   fetchLoading: boolean;
 };
 
-export function GitBranchRow({ mode, branchName, onFetch, fetchLoading }: GitBranchRowProps) {
+export function GitBranchRow({
+  mode,
+  branchName,
+  repositoryMissing,
+  onFetch,
+  fetchLoading,
+}: GitBranchRowProps) {
   if (mode !== "diff" && mode !== "perFile" && mode !== "log") {
     return null;
   }
@@ -96,23 +103,25 @@ export function GitBranchRow({ mode, branchName, onFetch, fetchLoading }: GitBra
   return (
     <div className="diff-branch-row">
       <div className="diff-branch-meta">
-        <span className="diff-branch-label">分支</span>
-        <div className="diff-branch">{branchName || "未知"}</div>
+        <span className="diff-branch-label">{repositoryMissing ? "状态" : "分支"}</span>
+        <div className="diff-branch">{repositoryMissing ? "未初始化 Git" : branchName || "未知"}</div>
       </div>
-      <button
-        type="button"
-        className="diff-branch-refresh"
-        onClick={() => void onFetch?.()}
-        disabled={!onFetch || fetchLoading}
-        title={fetchLoading ? "正在获取远端..." : "获取远端"}
-        aria-label={fetchLoading ? "正在获取远端" : "获取远端"}
-      >
-        {fetchLoading ? (
-          <span className="git-panel-spinner" aria-hidden />
-        ) : (
-          <RotateCw size={12} aria-hidden />
-        )}
-      </button>
+      {!repositoryMissing && (
+        <button
+          type="button"
+          className="diff-branch-refresh"
+          onClick={() => void onFetch?.()}
+          disabled={!onFetch || fetchLoading}
+          title={fetchLoading ? "正在获取远端..." : "获取远端"}
+          aria-label={fetchLoading ? "正在获取远端" : "获取远端"}
+        >
+          {fetchLoading ? (
+            <span className="git-panel-spinner" aria-hidden />
+          ) : (
+            <RotateCw size={12} aria-hidden />
+          )}
+        </button>
+      )}
     </div>
   );
 }

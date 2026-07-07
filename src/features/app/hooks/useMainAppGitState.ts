@@ -61,6 +61,9 @@ type GitStatusSummary = {
 
 function buildGitStatusText(gitStatus: GitStatusSummary) {
   if (gitStatus.error) {
+    if (isMissingGitRepositoryError(gitStatus.error)) {
+      return "未初始化 Git";
+    }
     return "Git status unavailable";
   }
   return gitStatus.files.length > 0

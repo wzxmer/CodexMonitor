@@ -2,6 +2,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import Image from "lucide-react/dist/esm/icons/image";
 import X from "lucide-react/dist/esm/icons/x";
+import { attachmentDisplayName, isImageAttachment } from "../../../utils/attachments";
 
 type ComposerAttachmentsProps = {
   attachments: string[];
@@ -10,18 +11,7 @@ type ComposerAttachmentsProps = {
 };
 
 function fileTitle(path: string) {
-  if (path.startsWith("data:image/")) {
-    return "粘贴的图片";
-  }
-  if (path.startsWith("data:")) {
-    return "粘贴的附件";
-  }
-  if (path.startsWith("http://") || path.startsWith("https://")) {
-    return "图片";
-  }
-  const normalized = path.replace(/\\/g, "/");
-  const parts = normalized.split("/").filter(Boolean);
-  return parts.length ? parts[parts.length - 1] : path;
+  return attachmentDisplayName(path);
 }
 
 function attachmentPreviewSrc(path: string) {
@@ -39,16 +29,6 @@ function attachmentPreviewSrc(path: string) {
   } catch {
     return "";
   }
-}
-
-function isImageAttachment(path: string) {
-  if (path.startsWith("data:image/")) {
-    return true;
-  }
-  if (path.startsWith("http://") || path.startsWith("https://")) {
-    return true;
-  }
-  return /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|heif)$/i.test(path);
 }
 
 export function ComposerAttachments({

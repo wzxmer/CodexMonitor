@@ -39,6 +39,12 @@ type SettingsCodexSectionProps = {
     result: CodexStatus | null;
     error: string | null;
   };
+  mcpStatusState: {
+    status: "idle" | "loading" | "done";
+    result: unknown | null;
+    error: string | null;
+    workspaceName: string | null;
+  };
   globalAgentsMeta: string;
   globalAgentsError: string | null;
   globalAgentsContent: string;
@@ -62,6 +68,7 @@ type SettingsCodexSectionProps = {
   onRunDoctor: () => Promise<void>;
   onRunCodexUpdate: () => Promise<void>;
   onRefreshCodexStatus: () => void;
+  onRefreshMcpStatus: () => void;
   onRefreshGlobalAgents: () => void;
   onSaveGlobalAgents: () => void;
   onRefreshGlobalConfig: () => void;
@@ -127,6 +134,7 @@ export function SettingsCodexSection({
   doctorState,
   codexUpdateState,
   codexStatusState,
+  mcpStatusState,
   globalAgentsMeta,
   globalAgentsError,
   globalAgentsContent,
@@ -150,6 +158,7 @@ export function SettingsCodexSection({
   onRunDoctor,
   onRunCodexUpdate,
   onRefreshCodexStatus,
+  onRefreshMcpStatus,
   onRefreshGlobalAgents,
   onSaveGlobalAgents,
   onRefreshGlobalConfig,
@@ -626,6 +635,58 @@ export function SettingsCodexSection({
           help: "settings-help",
         }}
       />
+
+      <div className="settings-field">
+        <div className="settings-field-label settings-field-label--section">
+          MCP
+        </div>
+        <div className="settings-help">
+          CodexMonitor 使用 Codex 原生 MCP 配置，不维护第二份配置。
+          在下方 <code>Global config.toml</code> 添加{" "}
+          <code>[mcp_servers.&lt;name&gt;]</code>；项目级配置使用项目内{" "}
+          <code>.codex/config.toml</code>。
+        </div>
+        <div className="settings-help">
+          会话内输入 <code>/mcp</code> 查看当前 Codex MCP 状态；OAuth 登录使用{" "}
+          <code>codex mcp login &lt;server&gt;</code>。
+        </div>
+        <div className="settings-field-actions">
+          <button
+            type="button"
+            className="ghost settings-button-compact"
+            onClick={onRefreshMcpStatus}
+            disabled={mcpStatusState.status === "loading"}
+          >
+            {mcpStatusState.status === "loading" ? "刷新中..." : "刷新 MCP 状态"}
+          </button>
+        </div>
+        {mcpStatusState.error && (
+          <div className="settings-help settings-help-error">
+            MCP 状态读取失败：{mcpStatusState.error}
+          </div>
+        )}
+        {mcpStatusState.result !== null && (
+          <div className="settings-doctor ok">
+            <div className="settings-doctor-title">
+              MCP 状态
+              {mcpStatusState.workspaceName ? `（${mcpStatusState.workspaceName}）` : ""}
+            </div>
+            <div className="settings-doctor-body">
+              <pre>{JSON.stringify(mcpStatusState.result, null, 2)}</pre>
+            </div>
+          </div>
+        )}
+        <details className="settings-code-details">
+          <summary>配置片段</summary>
+          <pre>{`[mcp_servers.docs]
+url = "https://example.com/mcp"
+
+[mcp_servers.local]
+command = "node"
+args = ["server.mjs"]
+# env = { API_KEY = "$MY_API_KEY" }`}</pre>
+        </details>
+      </div>
 
       <FileEditorCard
         title="Global config.toml"

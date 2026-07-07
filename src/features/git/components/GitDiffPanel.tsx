@@ -542,14 +542,17 @@ export function GitDiffPanel({
   );
   const perFileDiffStatusLabel = `${perFileDiffGroups.length} 个文件 · ${perFileEditCount} 次编辑`;
   const diffTotalsLabel = `+${totalAdditions} / -${totalDeletions}`;
-  const diffStatusLabel = hasDiffTotals
+  const missingRepo = isMissingRepo(error);
+  const diffStatusLabel = missingRepo
+    ? "未初始化 Git"
+    : hasDiffTotals
     ? [logUpstream ? logSyncLabel : null, diffTotalsLabel].filter(Boolean).join(" · ")
     : logUpstream
       ? `${logSyncLabel} · ${fileStatus}`
       : fileStatus;
   const hasGitRoot = Boolean(gitRoot && gitRoot.trim());
   const showGitRootPanel =
-    isMissingRepo(error) ||
+    missingRepo ||
     gitRootScanLoading ||
     gitRootScanHasScanned ||
     Boolean(gitRootScanError) ||
@@ -576,7 +579,7 @@ export function GitDiffPanel({
             { key: "commit", message: commitError },
             { key: "sync", message: syncError },
             { key: "commitMessage", message: commitMessageError },
-            { key: "git", message: error },
+            { key: "git", message: missingRepo ? null : error },
             { key: "worktreeApply", message: worktreeApplyError },
             { key: "gitRootScan", message: gitRootScanError },
           ]
@@ -608,6 +611,7 @@ export function GitDiffPanel({
     syncError,
     worktreeApplyError,
     errorScope,
+    missingRepo,
     mode,
   ]);
 
@@ -682,6 +686,7 @@ export function GitDiffPanel({
         <GitBranchRow
           mode={mode}
           branchName={branchName}
+          repositoryMissing={missingRepo}
           onFetch={onFetch}
           fetchLoading={fetchLoading}
         />

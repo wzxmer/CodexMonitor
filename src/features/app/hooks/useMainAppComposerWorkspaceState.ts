@@ -53,6 +53,7 @@ type UseMainAppComposerWorkspaceStateArgs = {
     AppSettings,
     | "steerEnabled"
     | "followUpMessageBehavior"
+    | "composerTriggerMode"
     | "experimentalAppsEnabled"
     | "pauseQueuedMessagesWhenResponseRequired"
   >;
@@ -235,6 +236,7 @@ export function useMainAppComposerWorkspaceState({
     queueFlushPaused,
     steerEnabled: settings.steerEnabled,
     followUpMessageBehavior: settings.followUpMessageBehavior,
+    composerTriggerMode: settings.composerTriggerMode,
     appsEnabled: settings.experimentalAppsEnabled,
     connectWorkspace,
     startThreadForWorkspace,

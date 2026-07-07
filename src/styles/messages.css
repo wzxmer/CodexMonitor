@@ -713,7 +713,7 @@
 }
 
 .messages-reading-cli .message.assistant .bubble::before {
-  content: "$ codex-monitor final";
+  content: attr(data-cli-timestamp);
   position: absolute;
   top: 0;
   left: 0;
@@ -958,6 +958,35 @@
   margin-bottom: 12px;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+.message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.message-attachment {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: 8px;
+  background: var(--ds-surface-muted);
+  color: var(--ds-text-primary);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.message-attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .message-image-thumb {

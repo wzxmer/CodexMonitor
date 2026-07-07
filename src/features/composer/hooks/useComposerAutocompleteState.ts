@@ -1,7 +1,11 @@
 import { useCallback, useMemo } from "react";
 import type { AutocompleteItem } from "./useComposerAutocomplete";
 import { useComposerAutocomplete } from "./useComposerAutocomplete";
-import type { AppOption, CustomPromptOption } from "../../../types";
+import type {
+  AppOption,
+  ComposerTriggerMode,
+  CustomPromptOption,
+} from "../../../types";
 import { connectorMentionSlug } from "../../apps/utils/appMentions";
 import {
   buildPromptInsertText,
@@ -21,6 +25,7 @@ type UseComposerAutocompleteStateArgs = {
   apps: AppOption[];
   prompts: CustomPromptOption[];
   files: string[];
+  composerTriggerMode?: ComposerTriggerMode;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   setText: (next: string) => void;
   setSelectionStart: (next: number | null) => void;
@@ -33,12 +38,16 @@ type UseComposerAutocompleteStateArgs = {
 const MAX_FILE_SUGGESTIONS = 500;
 const FILE_TRIGGER_PREFIX = new RegExp("^(?:\\s|[\"'`]|\\(|\\[|\\{)$");
 
-function isFileTriggerActive(text: string, cursor: number | null) {
+function isFileTriggerActive(
+  text: string,
+  cursor: number | null,
+  triggerChar: string,
+) {
   if (!text || cursor === null) {
     return false;
   }
   const beforeCursor = text.slice(0, cursor);
-  const atIndex = beforeCursor.lastIndexOf("@");
+  const atIndex = beforeCursor.lastIndexOf(triggerChar);
   if (atIndex < 0) {
     return false;
   }
@@ -50,12 +59,16 @@ function isFileTriggerActive(text: string, cursor: number | null) {
   return afterAt.length === 0 || !/\s/.test(afterAt);
 }
 
-function getFileTriggerQuery(text: string, cursor: number | null) {
+function getFileTriggerQuery(
+  text: string,
+  cursor: number | null,
+  triggerChar: string,
+) {
   if (!text || cursor === null) {
     return null;
   }
   const beforeCursor = text.slice(0, cursor);
-  const atIndex = beforeCursor.lastIndexOf("@");
+  const atIndex = beforeCursor.lastIndexOf(triggerChar);
   if (atIndex < 0) {
     return null;
   }
@@ -79,6 +92,7 @@ export function useComposerAutocompleteState({
   apps,
   prompts,
   files,
+  composerTriggerMode = "default",
   textareaRef,
   setText,
   setSelectionStart,
@@ -107,15 +121,17 @@ export function useComposerAutocompleteState({
     [apps, skills],
   );
 
+  const slashTriggerChar = composerTriggerMode === "swap-slash-at" ? "@" : "/";
+  const fileTriggerChar = composerTriggerMode === "swap-slash-at" ? "/" : "@";
   const fileTriggerActive = useMemo(
-    () => isFileTriggerActive(text, selectionStart),
-    [selectionStart, text],
+    () => isFileTriggerActive(text, selectionStart, fileTriggerChar),
+    [fileTriggerChar, selectionStart, text],
   );
   const fileItems = useMemo<AutocompleteItem[]>(
     () =>
       fileTriggerActive
         ? (() => {
-            const query = getFileTriggerQuery(text, selectionStart) ?? "";
+            const query = getFileTriggerQuery(text, selectionStart, fileTriggerChar) ?? "";
             const limited = query ? files : files.slice(0, MAX_FILE_SUGGESTIONS);
             return limited.map((path) => ({
               id: path,
@@ -125,7 +141,7 @@ export function useComposerAutocompleteState({
             }));
           })()
         : [],
-    [fileTriggerActive, files, selectionStart, text],
+    [fileTriggerActive, fileTriggerChar, files, selectionStart, text],
   );
 
   const promptItems = useMemo<AutocompleteItem[]>(
@@ -225,11 +241,11 @@ export function useComposerAutocompleteState({
 
   const triggers = useMemo(
     () => [
-      { trigger: "/", items: slashItems },
+      { trigger: slashTriggerChar, items: slashItems },
       { trigger: "$", items: skillItems },
-      { trigger: "@", items: fileItems },
+      { trigger: fileTriggerChar, items: fileItems },
     ],
-    [fileItems, skillItems, slashItems],
+    [fileItems, fileTriggerChar, skillItems, slashItems, slashTriggerChar],
   );
 
   const {
@@ -258,16 +274,17 @@ export function useComposerAutocompleteState({
       }
       const triggerIndex = Math.max(0, autocompleteRange.start - 1);
       const triggerChar = text[triggerIndex] ?? "";
+      const isFileCompletion = item.group === "Files";
       const cursor = selectionStart ?? autocompleteRange.end;
       const promptRange =
-        triggerChar === "@" ? findPromptArgRangeAtCursor(text, cursor) : null;
+        isFileCompletion ? findPromptArgRangeAtCursor(text, cursor) : null;
       const before =
-        triggerChar === "@"
+        isFileCompletion
           ? text.slice(0, triggerIndex)
           : text.slice(0, autocompleteRange.start);
       const after = text.slice(autocompleteRange.end);
       const insert = item.insertText ?? item.label;
-      const actualInsert = triggerChar === "@"
+      const actualInsert = isFileCompletion
         ? insert.replace(/^@+/, "")
         : insert;
       const needsSpace = promptRange
@@ -347,7 +364,7 @@ export function useComposerAutocompleteState({
           const selected =
             autocompleteMatches[highlightIndex] ?? autocompleteMatches[0];
           if (
-            autocompleteTrigger === "/" &&
+            autocompleteTrigger === slashTriggerChar &&
             selected?.group === "Prompts" &&
             !autocompleteQuery.toLowerCase().startsWith("prompts:")
           ) {
@@ -404,6 +421,7 @@ export function useComposerAutocompleteState({
       moveHighlight,
       selectionStart,
       setSelectionStart,
+      slashTriggerChar,
       text,
       textareaRef,
     ],

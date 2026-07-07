@@ -103,7 +103,9 @@ export type ConversationItem =
       kind: "message";
       role: "user" | "assistant";
       text: string;
+      createdAt?: number;
       images?: string[];
+      attachments?: string[];
     }
   | {
       id: string;
@@ -212,6 +214,7 @@ export type MessageReadingStyle = "bubble" | "cli" | "codex";
 export type PersonalityPreference = "friendly" | "pragmatic";
 export type FollowUpMessageBehavior = "queue" | "steer";
 export type ComposerSendShortcut = "enter" | "ctrl-enter" | "enter-and-ctrl-enter";
+export type ComposerTriggerMode = "default" | "swap-slash-at";
 export type ComposerSendIntent = "default" | "queue" | "steer";
 export type SendMessageResult = {
   status: "sent" | "blocked" | "steer_failed";
@@ -300,6 +303,7 @@ export type AppSettings = {
   notificationSoundsEnabled: boolean;
   systemNotificationsEnabled: boolean;
   subagentSystemNotificationsEnabled: boolean;
+  codexPetEnabled?: boolean;
   splitChatDiffView: boolean;
   preloadGitDiffs: boolean;
   gitDiffIgnoreWhitespaceChanges: boolean;
@@ -309,6 +313,7 @@ export type AppSettings = {
   steerEnabled: boolean;
   followUpMessageBehavior: FollowUpMessageBehavior;
   composerSendShortcut: ComposerSendShortcut;
+  composerTriggerMode?: ComposerTriggerMode;
   composerFollowUpHintEnabled: boolean;
   pauseQueuedMessagesWhenResponseRequired: boolean;
   unifiedExecEnabled: boolean;

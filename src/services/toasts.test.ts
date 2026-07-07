@@ -41,5 +41,19 @@ describe("error toasts", () => {
 
     unsubscribe();
   });
+
+  it("suppresses libgit2 notfound repository toasts", () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeErrorToasts(listener);
+
+    pushErrorToast({
+      title: "Git error",
+      message: "class=Repository (6); code=NotFound (-3)",
+    });
+
+    expect(listener).not.toHaveBeenCalled();
+
+    unsubscribe();
+  });
 });
 

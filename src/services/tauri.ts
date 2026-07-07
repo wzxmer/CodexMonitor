@@ -1067,6 +1067,10 @@ export async function closeTerminalSession(
   return invoke("terminal_close", { workspaceId, terminalId });
 }
 
+export async function openExternalTerminal(workspaceId: string): Promise<void> {
+  return invoke("terminal_open_external", { workspaceId });
+}
+
 export async function listThreads(
   workspaceId: string,
   cursor?: string | null,

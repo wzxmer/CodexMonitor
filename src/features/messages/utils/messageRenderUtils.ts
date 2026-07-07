@@ -229,6 +229,9 @@ export function normalizeMessageImageSrc(path: string) {
   if (!path) {
     return "";
   }
+  if (path.startsWith("data:") && !path.startsWith("data:image/")) {
+    return "";
+  }
   if (path.startsWith("data:") || path.startsWith("http://") || path.startsWith("https://")) {
     return path;
   }

@@ -140,7 +140,7 @@ describe("useComposerImageDrop", () => {
     });
 
     expect(onAttachImages).toHaveBeenCalledWith([
-      "data:text/plain;base64,MOCK",
+      'data:text/plain;name="notes.txt";base64,MOCK',
     ]);
 
     hook.unmount();
@@ -168,7 +168,7 @@ describe("useComposerImageDrop", () => {
 
     expect(preventDefault).toHaveBeenCalled();
     expect(onAttachImages).toHaveBeenCalledWith([
-      "data:image/png;base64,MOCK",
+      'data:image/png;name="paste.png";base64,MOCK',
     ]);
 
     hook.unmount();
@@ -197,7 +197,7 @@ describe("useComposerImageDrop", () => {
 
     expect(preventDefault).toHaveBeenCalled();
     expect(onAttachImages).toHaveBeenCalledWith([
-      "data:text/plain;base64,MOCK",
+      'data:text/plain;name="notes.txt";base64,MOCK',
     ]);
 
     hook.unmount();
