@@ -34,11 +34,12 @@ jobs:
               src-tauri/target/release/bundle/dmg/*.dmg
           - name: Linux installers
             os: ubuntu-24.04
-            command: npm run tauri -- build --config src-tauri/tauri.linux.conf.json --bundles deb
+            command: NO_STRIP=1 npm run tauri -- build --config src-tauri/tauri.linux.conf.json --bundles appimage,rpm
             artifact: linux-installers
             optional: false
             paths: |
-              src-tauri/target/release/bundle/deb/*.deb
+              src-tauri/target/release/bundle/appimage/*.AppImage*
+              src-tauri/target/release/bundle/rpm/*.rpm
 
     steps:
       - name: Checkout
