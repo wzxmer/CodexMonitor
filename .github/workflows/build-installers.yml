@@ -34,7 +34,9 @@ jobs:
               src-tauri/target/release/bundle/dmg/*.dmg
           - name: Linux installers
             os: ubuntu-24.04
-            command: NO_STRIP=1 npm run tauri -- build --config src-tauri/tauri.linux.conf.json --bundles appimage,rpm
+            command: |
+              set -o pipefail
+              NO_STRIP=1 npm run tauri -- build --config src-tauri/tauri.linux.conf.json --bundles appimage,rpm 2>&1 | tee tauri-linux-build.log
             artifact: linux-installers
             optional: false
             paths: |
@@ -115,10 +117,18 @@ jobs:
           path: ${{ matrix.paths }}
           if-no-files-found: error
 
+      - name: Upload Linux build log
+        if: failure() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build-log
+          path: tauri-linux-build.log
+          if-no-files-found: ignore
+
   release:
     name: Publish GitHub Release
     needs: build
-    if: always() && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     steps:
       - name: Download installers
