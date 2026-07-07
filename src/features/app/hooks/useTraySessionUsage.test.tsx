@@ -9,6 +9,8 @@ import {
 
 const isTauriMock = vi.hoisted(() => vi.fn(() => true));
 const setTraySessionUsageMock = vi.fn();
+const primaryResetAt = Date.parse("2026-01-01T12:00:00Z");
+const secondaryResetAt = Date.parse("2026-01-03T10:00:00Z");
 
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: isTauriMock,
@@ -18,6 +20,11 @@ vi.mock("@services/tauri", () => ({
   setTraySessionUsage: (...args: unknown[]) => setTraySessionUsageMock(...args),
 }));
 
+vi.mock("../../../utils/time", () => ({
+  formatRelativeTime: (value: number) =>
+    value === secondaryResetAt ? "in 2 days" : "in 2 hours",
+}));
+
 function makeRateLimits(
   overrides: Partial<RateLimitSnapshot> = {},
 ): RateLimitSnapshot {
@@ -25,7 +32,7 @@ function makeRateLimits(
     primary: {
       usedPercent: 12,
       windowDurationMins: 300,
-      resetsAt: Date.parse("2026-01-01T12:00:00Z"),
+      resetsAt: primaryResetAt,
     },
     secondary: null,
     credits: null,
@@ -49,7 +56,7 @@ describe("useTraySessionUsage", () => {
 
   it("builds the current session usage summary from workspace rate limits", () => {
     expect(buildTraySessionUsage(makeRateLimits(), false)).toEqual({
-      sessionLabel: "12% used · 2小时后 后重置",
+      sessionLabel: "12% used · 2 hours 后重置",
       weeklyLabel: null,
     });
   });
@@ -61,13 +68,13 @@ describe("useTraySessionUsage", () => {
           primary: {
             usedPercent: 42,
             windowDurationMins: 300,
-            resetsAt: Date.parse("2026-01-01T12:00:00Z"),
+            resetsAt: primaryResetAt,
           },
         }),
         true,
       ),
     ).toEqual({
-      sessionLabel: "58% remaining · 2小时后 后重置",
+      sessionLabel: "58% remaining · 2 hours 后重置",
       weeklyLabel: null,
     });
   });
@@ -79,14 +86,14 @@ describe("useTraySessionUsage", () => {
           secondary: {
             usedPercent: 67,
             windowDurationMins: 10_080,
-            resetsAt: Date.parse("2026-01-03T10:00:00Z"),
+            resetsAt: secondaryResetAt,
           },
         }),
         false,
       ),
     ).toEqual({
-      sessionLabel: "12% used · 2小时后 后重置",
-      weeklyLabel: "67% used · 后天 后重置",
+      sessionLabel: "12% used · 2 hours 后重置",
+      weeklyLabel: "67% used · 2 days 后重置",
     });
   });
 
@@ -111,7 +118,7 @@ describe("useTraySessionUsage", () => {
     await vi.runAllTimersAsync();
     expect(setTraySessionUsageMock).toHaveBeenCalledTimes(1);
     expect(setTraySessionUsageMock).toHaveBeenLastCalledWith({
-      sessionLabel: "12% used · 2小时后 后重置",
+      sessionLabel: "12% used · 2 hours 后重置",
       weeklyLabel: null,
     });
 
@@ -143,7 +150,7 @@ describe("useTraySessionUsage", () => {
     await vi.advanceTimersByTimeAsync(150);
     expect(setTraySessionUsageMock).toHaveBeenCalledTimes(2);
     expect(setTraySessionUsageMock).toHaveBeenLastCalledWith({
-      sessionLabel: "12% used · 2小时后 后重置",
+      sessionLabel: "12% used · 2 hours 后重置",
       weeklyLabel: null,
     });
   });
