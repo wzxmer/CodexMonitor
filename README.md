@@ -4,6 +4,30 @@
 
 ![CodexMonitor](screenshot.png)
 
+## 中文说明
+
+这是基于原版 CodexMonitor 的中文增强版，主要面向 Windows、macOS、Linux 桌面端使用。它用于管理多个 Codex Agent、工作区、会话、Git 变更和常用提示词。
+
+本 fork 主要改动：
+
+- 界面中文化：侧边栏、设置页、消息区、按钮提示等常用操作改为中文。
+- 视觉风格优化：新增原生亮色、原生纯白、原生暗色、CLI 暗黑等对话风格，并支持我的消息配色自定义。
+- 消息体验修复：编辑后重新发送会覆盖原消息，避免失败重试时重复堆积；暗黑模式下我的消息文字颜色更清晰。
+- 附件与图片体验：粘贴/发送图片支持预览，附件按内容类型处理。
+- 桌面端打包：新增 GitHub Actions 自动构建 Windows、macOS、Linux 安装包。
+
+### 自动打包
+
+Actions 中的 `Build Installers` 会生成：
+
+- Windows: `.exe`、`.msi`
+- macOS: `.dmg`
+- Linux: `.deb`、`.rpm`、`.AppImage`
+
+推送到 `main`、手动运行 workflow，或推送 `v*` tag 都会触发打包。构建完成后可在对应 Actions run 的 Artifacts 中下载安装包。
+
+## Original README
+
 CodexMonitor is a Tauri app for orchestrating multiple Codex agents across local workspaces. It provides a sidebar to manage projects, a home screen for quick actions, and a conversation view backed by the Codex app-server protocol.
 
 ## Features
