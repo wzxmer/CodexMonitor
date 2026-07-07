@@ -1,0 +1,85 @@
+.ds-rounded-select {
+  position: relative;
+  min-width: 0;
+}
+
+.composer-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.composer-select-trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-rounded-select-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 50;
+  min-width: max(100%, 150px);
+  max-width: min(360px, calc(100vw - 32px));
+  max-height: 280px;
+  overflow: auto;
+  padding: 5px;
+  border-radius: 12px;
+}
+
+.ds-rounded-select-option {
+  width: 100%;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ds-rounded-select-option:hover:not(:disabled),
+.ds-rounded-select-option:focus-visible,
+.ds-rounded-select-option.is-active {
+  outline: none;
+  background: var(--surface-hover);
+  color: var(--text-stronger);
+}
+
+.ds-rounded-select-option.is-selected {
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--surface-active) 72%, transparent);
+}
+
+.ds-rounded-select-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ds-rounded-select-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-rounded-select-check {
+  flex: 0 0 auto;
+  color: var(--message-link-color);
+}
+
+.ds-rounded-select-empty {
+  padding: 8px;
+  color: var(--text-faint);
+  font-size: 12px;
+}

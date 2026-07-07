@@ -125,7 +125,7 @@ export function BranchSwitcherPrompt({
         selectedItemClassName="selected"
         itemLabelClassName="branch-switcher-modal-item-name"
         emptyClassName="branch-switcher-modal-empty"
-        emptyText="No branches found"
+        emptyText="未找到分支"
         onSelect={handleSelect}
         onMouseEnter={setSelectedIndex}
         renderMeta={(branch) => {

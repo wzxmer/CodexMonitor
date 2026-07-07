@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import type { ThreadListSortKey, WorkspaceInfo } from "../../../types";
+import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 
 type ListThreadsOptions = {
   sortKey?: ThreadListSortKey;
@@ -41,7 +42,13 @@ export function useThreadListActions({
 
   const handleRefreshAllWorkspaceThreads = useCallback(async () => {
     const refreshed = await refreshWorkspaces();
-    const source = refreshed ?? workspaces;
+    const localCodexWorkspace = workspaces.find(
+      (workspace) => workspace.id === LOCAL_CODEX_WORKSPACE_ID,
+    );
+    const source =
+      refreshed && localCodexWorkspace
+        ? [...refreshed, localCodexWorkspace]
+        : refreshed ?? workspaces;
     const connectedWorkspaces = source.filter((workspace) => workspace.connected);
     connectedWorkspaces.forEach((workspace) => {
       resetWorkspaceThreads(workspace.id);

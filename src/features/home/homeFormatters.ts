@@ -85,7 +85,7 @@ export function formatWeekRange(days: LocalUsageDay[]) {
   const last = days[days.length - 1];
   const firstLabel = formatDayLabel(first?.day);
   const lastLabel = formatDayLabel(last?.day);
-  return first?.day === last?.day ? firstLabel : `${firstLabel} to ${lastLabel}`;
+  return first?.day === last?.day ? firstLabel : `${firstLabel} 至 ${lastLabel}`;
 }
 
 export function isUsageDayActive(day: LocalUsageDay) {
@@ -108,12 +108,12 @@ export function formatAccountTypeLabel(
   value: AccountSnapshot["type"] | null | undefined,
 ) {
   if (value === "chatgpt") {
-    return "ChatGPT account";
+    return "ChatGPT 账号";
   }
   if (value === "apikey") {
-    return "API key";
+    return "API Key";
   }
-  return "Connected account";
+  return "已连接账号";
 }
 
 export function formatWindowDuration(valueMins: number | null | undefined) {
@@ -122,13 +122,13 @@ export function formatWindowDuration(valueMins: number | null | undefined) {
   }
   if (valueMins >= 60 * 24) {
     const days = Math.round(valueMins / (60 * 24));
-    return `${days} day${days === 1 ? "" : "s"} window`;
+    return `${days} 天窗口`;
   }
   if (valueMins >= 60) {
     const hours = Math.round(valueMins / 60);
-    return `${hours}h window`;
+    return `${hours} 小时窗口`;
   }
-  return `${Math.round(valueMins)}m window`;
+  return `${Math.round(valueMins)} 分钟窗口`;
 }
 
 export function buildWindowCaption(
@@ -158,5 +158,5 @@ export function formatDayCount(value: number | null | undefined) {
   if (value === null || value === undefined) {
     return "--";
   }
-  return `${value} day${value === 1 ? "" : "s"}`;
+  return `${value} 天`;
 }

@@ -114,12 +114,11 @@ export function useComposerImageDrop({
         if (!isInside) {
           return;
         }
-        const imagePaths = (event.payload.paths ?? [])
+        const filePaths = (event.payload.paths ?? [])
           .map((path) => path.trim())
-          .filter(Boolean)
-          .filter(isImagePath);
-        if (imagePaths.length > 0) {
-          onAttachImages?.(imagePaths);
+          .filter(Boolean);
+        if (filePaths.length > 0) {
+          onAttachImages?.(filePaths);
         }
       }
     });
@@ -168,18 +167,15 @@ export function useComposerImageDrop({
     const filePaths = [...files, ...itemFiles]
       .map((file) => (file as File & { path?: string }).path ?? "")
       .filter(Boolean);
-    const imagePaths = filePaths.filter(isImagePath);
-    if (imagePaths.length > 0) {
-      onAttachImages?.(imagePaths);
+    if (filePaths.length > 0) {
+      onAttachImages?.(filePaths);
       return;
     }
-    const fileImages = [...files, ...itemFiles].filter((file) =>
-      file.type.startsWith("image/"),
-    );
-    if (fileImages.length === 0) {
+    const droppedFiles = [...files, ...itemFiles];
+    if (droppedFiles.length === 0) {
       return;
     }
-    const dataUrls = await readFilesAsDataUrls(fileImages);
+    const dataUrls = await readFilesAsDataUrls(droppedFiles);
     if (dataUrls.length > 0) {
       onAttachImages?.(dataUrls);
     }
@@ -190,19 +186,27 @@ export function useComposerImageDrop({
       return;
     }
     const items = Array.from(event.clipboardData?.items ?? []);
-    const imageItems = items.filter((item) => item.type.startsWith("image/"));
-    if (imageItems.length === 0) {
+    const files = items
+      .filter((item) => item.kind === "file" || item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+    const filePaths = files
+      .map((file) => (file as File & { path?: string }).path ?? "")
+      .filter(Boolean)
+      .filter((path) => isImagePath(path) || path.length > 0);
+    const inlineFiles = files.filter((file) => {
+      const path = (file as File & { path?: string }).path ?? "";
+      return !path;
+    });
+    if (filePaths.length === 0 && inlineFiles.length === 0) {
       return;
     }
     event.preventDefault();
-    const files = imageItems
-      .map((item) => item.getAsFile())
-      .filter((file): file is File => Boolean(file));
-    if (!files.length) {
-      return;
+    if (filePaths.length > 0) {
+      onAttachImages?.(filePaths);
     }
     const dataUrls = await Promise.all(
-      files.map(
+      inlineFiles.map(
         (file) =>
           new Promise<string>((resolve) => {
             const reader = new FileReader();

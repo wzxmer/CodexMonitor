@@ -207,14 +207,13 @@ export function useGitActions({
 
       if (response.status === "needs_confirmation") {
         const entryCount = response.entryCount ?? 0;
-        const plural = entryCount === 1 ? "" : "s";
         const confirmed = await ask(
-          `Initialize Git in this folder?\n\nThis will create a .git directory, set the initial branch to "${branch}", and create an initial commit.\n\nThis folder contains ${entryCount} existing item${plural}.`,
+          `在这个文件夹初始化 Git？\n\n这会创建 .git 目录，将初始分支设为 "${branch}"，并创建初始提交。\n\n这个文件夹包含 ${entryCount} 个现有项目。`,
           {
-            title: "Initialize Git",
+            title: "初始化 Git",
             kind: "warning",
-            okLabel: "Initialize",
-            cancelLabel: "Cancel",
+            okLabel: "初始化",
+            cancelLabel: "取消",
           },
         );
         if (!confirmed) {
@@ -242,7 +241,7 @@ export function useGitActions({
       if (commitError) {
         onError?.(
           new Error(
-            `Git was initialized, but the initial commit failed.\n\n${commitError}\n\nYou may need to set git user.name and user.email, then commit manually.`,
+            `Git 已初始化，但初始提交失败。\n\n${commitError}\n\n你可能需要先设置 git user.name 和 user.email，然后手动提交。`,
           ),
         );
       }
@@ -268,7 +267,7 @@ export function useGitActions({
       branch: string,
     ): Promise<{ ok: true } | { ok: false; error: string }> => {
       if (!workspaceId) {
-        return { ok: false, error: "No active workspace." };
+        return { ok: false, error: "没有活动项目。" };
       }
 
       const actionWorkspaceId = workspaceId;
@@ -281,7 +280,7 @@ export function useGitActions({
           branch,
         );
         if (workspaceIdRef.current !== actionWorkspaceId) {
-          return { ok: false, error: "Workspace changed." };
+          return { ok: false, error: "项目已切换。" };
         }
 
         if (response.status === "ok") {
@@ -292,17 +291,17 @@ export function useGitActions({
         const defaultBranchError = response.defaultBranchError?.trim() ?? "";
         const parts = [];
         if (pushError) {
-          parts.push(`Push failed:\n${pushError}`);
+          parts.push(`推送失败：\n${pushError}`);
         }
         if (defaultBranchError) {
-          parts.push(`Failed to set default branch:\n${defaultBranchError}`);
+          parts.push(`设置默认分支失败：\n${defaultBranchError}`);
         }
         const errorMessage =
-          parts.length > 0 ? parts.join("\n\n") : "Remote repo was created, but setup was incomplete.";
+          parts.length > 0 ? parts.join("\n\n") : "远程仓库已创建，但设置未完成。";
         return { ok: false, error: errorMessage };
       } catch (error) {
         if (workspaceIdRef.current !== actionWorkspaceId) {
-          return { ok: false, error: "Workspace changed." };
+          return { ok: false, error: "项目已切换。" };
         }
         return {
           ok: false,

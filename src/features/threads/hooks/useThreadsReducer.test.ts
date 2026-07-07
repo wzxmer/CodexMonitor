@@ -721,6 +721,69 @@ describe("threadReducer", () => {
     expect(next.activeThreadIdByWorkspace["ws-1"]).toBe("thread-fresh");
   });
 
+  it("dedupes repeated thread summaries on complete setThreads payloads", () => {
+    const next = threadReducer(initialState, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      sortKey: "updated_at",
+      threads: [
+        { id: "thread-1", name: "Older name", updatedAt: 100 },
+        { id: "thread-2", name: "Second", updatedAt: 90 },
+        { id: "thread-1", name: "", updatedAt: 120 },
+      ],
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]).toEqual([
+      { id: "thread-1", name: "Older name", updatedAt: 120 },
+      { id: "thread-2", name: "Second", updatedAt: 90 },
+    ]);
+  });
+
+  it("dedupes incoming threads before preserving local anchors", () => {
+    const base: ThreadState = {
+      ...initialState,
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "thread-active", name: "Active", updatedAt: 10 },
+          { id: "thread-processing", name: "Processing", updatedAt: 11 },
+        ],
+      },
+      activeThreadIdByWorkspace: { "ws-1": "thread-active" },
+      threadStatusById: {
+        "thread-processing": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 300,
+          lastDurationMs: null,
+        },
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      sortKey: "updated_at",
+      preserveAnchors: true,
+      threads: [
+        { id: "thread-fresh", name: "Fresh", updatedAt: 200 },
+        { id: "thread-fresh", name: "Fresh duplicate", updatedAt: 180 },
+      ],
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "thread-fresh",
+      "thread-active",
+      "thread-processing",
+    ]);
+    expect(next.threadsByWorkspace["ws-1"]?.[0]).toEqual({
+      id: "thread-fresh",
+      name: "Fresh",
+      updatedAt: 200,
+    });
+    expect(next.threadsByWorkspace["ws-1"]?.filter((thread) => thread.id === "thread-fresh")).toHaveLength(1);
+  });
+
   it("trims existing items when maxItemsPerThread is reduced", () => {
     const items: ConversationItem[] = Array.from({ length: 5 }, (_, index) => ({
       id: `msg-${index}`,
@@ -742,6 +805,62 @@ describe("threadReducer", () => {
     });
     expect(trimmed.itemsByThread["thread-1"]).toHaveLength(3);
     expect(trimmed.itemsByThread["thread-1"]?.[0]?.id).toBe("msg-2");
+  });
+
+  it("replaces the edited user message when the server echoes the resent message", () => {
+    const base = threadReducer(
+      {
+        ...initialState,
+        itemsByThread: {
+          "thread-1": [
+            {
+              id: "msg-user-1",
+              kind: "message",
+              role: "user",
+              text: "old text",
+              images: ["data:image/png;base64,AAA"],
+            },
+          ],
+        },
+      },
+      {
+        type: "upsertItem",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        replaceExisting: true,
+        item: {
+          id: "msg-user-1",
+          kind: "message",
+          role: "user",
+          text: "edited text",
+          images: ["data:image/png;base64,AAA"],
+        },
+      },
+    );
+
+    const echoed = threadReducer(base, {
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      item: {
+        id: "server-user-2",
+        kind: "message",
+        role: "user",
+        text: "edited text",
+        images: ["data:image/png;base64,AAA"],
+      },
+    });
+
+    expect(echoed.itemsByThread["thread-1"]).toEqual([
+      {
+        id: "server-user-2",
+        kind: "message",
+        role: "user",
+        text: "edited text",
+        images: ["data:image/png;base64,AAA"],
+      },
+    ]);
+    expect(echoed.pendingUserMessageReplacementByThread["thread-1"]).toBeUndefined();
   });
 
 });

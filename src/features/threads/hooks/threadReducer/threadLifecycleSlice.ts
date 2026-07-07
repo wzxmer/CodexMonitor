@@ -14,6 +14,39 @@ function statusEquals(previous: ThreadStatus, nextStatus: ThreadStatus) {
   );
 }
 
+function mergeThreadSummary(base: ThreadSummary, next: ThreadSummary): ThreadSummary {
+  const baseUpdatedAt = base.updatedAt ?? 0;
+  const nextUpdatedAt = next.updatedAt ?? 0;
+  const preferred = nextUpdatedAt >= baseUpdatedAt ? next : base;
+  const fallback = preferred === next ? base : next;
+  return {
+    ...fallback,
+    ...preferred,
+    name: preferred.name || fallback.name,
+    updatedAt: Math.max(baseUpdatedAt, nextUpdatedAt),
+  };
+}
+
+function dedupeThreadSummaries(threads: ThreadSummary[]) {
+  const byId = new Map<string, ThreadSummary>();
+  const orderedIds: string[] = [];
+  threads.forEach((thread) => {
+    if (!thread.id) {
+      return;
+    }
+    const existing = byId.get(thread.id);
+    if (!existing) {
+      byId.set(thread.id, thread);
+      orderedIds.push(thread.id);
+      return;
+    }
+    byId.set(thread.id, mergeThreadSummary(existing, thread));
+  });
+  return orderedIds
+    .map((id) => byId.get(id))
+    .filter((thread): thread is ThreadSummary => Boolean(thread));
+}
+
 export function reduceThreadLifecycle(
   state: ThreadState,
   action: ThreadAction,
@@ -131,6 +164,10 @@ export function reduceThreadLifecycle(
       const { [action.threadId]: ____, ...restDiffs } = state.turnDiffByThread;
       const { [action.threadId]: _____, ...restPlans } = state.planByThread;
       const { [action.threadId]: ______, ...restParents } = state.threadParentById;
+      const {
+        [action.threadId]: _______,
+        ...restPendingUserMessageReplacement
+      } = state.pendingUserMessageReplacementByThread;
       return {
         ...state,
         threadsByWorkspace: {
@@ -143,6 +180,7 @@ export function reduceThreadLifecycle(
         turnDiffByThread: restDiffs,
         planByThread: restPlans,
         threadParentById: restParents,
+        pendingUserMessageReplacementByThread: restPendingUserMessageReplacement,
         activeThreadIdByWorkspace: {
           ...state.activeThreadIdByWorkspace,
           [action.workspaceId]: nextActive,
@@ -362,7 +400,9 @@ export function reduceThreadLifecycle(
     }
     case "setThreads": {
       const hidden = state.hiddenThreadIdsByWorkspace[action.workspaceId] ?? {};
-      const visibleThreads = action.threads.filter((thread) => !hidden[thread.id]);
+      const visibleThreads = dedupeThreadSummaries(
+        action.threads.filter((thread) => !hidden[thread.id]),
+      );
       const preserveAnchors = action.preserveAnchors === true;
       if (!preserveAnchors) {
         const currentActiveThreadId =

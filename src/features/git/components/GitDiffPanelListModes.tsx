@@ -61,7 +61,7 @@ export function GitPerFileModeContent({
   }, []);
 
   if (groups.length === 0) {
-    return <div className="diff-empty">No agent edits in this thread yet.</div>;
+    return <div className="diff-empty">这个会话还没有 Agent 编辑。</div>;
   }
 
   return (
@@ -83,7 +83,7 @@ export function GitPerFileModeContent({
                 {fileName || group.path}
               </span>
               <span className="per-file-group-count">
-                {group.edits.length} edit{group.edits.length === 1 ? "" : "s"}
+                {group.edits.length} 次编辑
               </span>
             </button>
             {isExpanded && (
@@ -156,16 +156,16 @@ export function GitLogModeContent({
   return (
     <div className="git-log-list">
       {!logError && logLoading && (
-        <div className="diff-viewer-loading">Loading commits...</div>
+        <div className="diff-viewer-loading">正在加载提交...</div>
       )}
       {!logError &&
         !logLoading &&
         !logEntries.length &&
         !showAheadSection &&
-        !showBehindSection && <div className="diff-empty">No commits yet.</div>}
+        !showBehindSection && <div className="diff-empty">还没有提交。</div>}
       {showAheadSection && (
         <div className="git-log-section">
-          <div className="git-log-section-title">To push</div>
+          <div className="git-log-section-title">待推送</div>
           <div className="git-log-section-list">
             {logAheadEntries.map((entry) => {
               const isSelected = selectedCommitSha === entry.sha;
@@ -185,7 +185,7 @@ export function GitLogModeContent({
       )}
       {showBehindSection && (
         <div className="git-log-section">
-          <div className="git-log-section-title">To pull</div>
+          <div className="git-log-section-title">待拉取</div>
           <div className="git-log-section-list">
             {logBehindEntries.map((entry) => {
               const isSelected = selectedCommitSha === entry.sha;
@@ -205,7 +205,7 @@ export function GitLogModeContent({
       )}
       {(logEntries.length > 0 || logLoading) && (
         <div className="git-log-section">
-          <div className="git-log-section-title">Recent commits</div>
+          <div className="git-log-section-title">最近提交</div>
           <div className="git-log-section-list">
             {logEntries.map((entry) => {
               const isSelected = selectedCommitSha === entry.sha;
@@ -240,7 +240,7 @@ export function GitIssuesModeContent({
   return (
     <div className="git-issues-list">
       {!issuesError && !issuesLoading && !issues.length && (
-        <div className="diff-empty">No open issues.</div>
+        <div className="diff-empty">没有打开的 Issue。</div>
       )}
       {issues.map((issue) => {
         const relativeTime = formatRelativeTime(new Date(issue.updatedAt).getTime());
@@ -289,11 +289,11 @@ export function GitPullRequestsModeContent({
   return (
     <div className="git-pr-list">
       {!pullRequestsError && !pullRequestsLoading && !pullRequests.length && (
-        <div className="diff-empty">No open pull requests.</div>
+        <div className="diff-empty">没有打开的 Pull Request。</div>
       )}
       {pullRequests.map((pullRequest) => {
         const relativeTime = formatRelativeTime(new Date(pullRequest.updatedAt).getTime());
-        const author = pullRequest.author?.login ?? "unknown";
+        const author = pullRequest.author?.login ?? "未知";
         const isSelected = selectedPullRequest === pullRequest.number;
 
         return (
@@ -321,7 +321,7 @@ export function GitPullRequestsModeContent({
             <div className="git-pr-meta">
               <span className="git-pr-author-inline">@{author}</span>
               {pullRequest.isDraft && (
-                <span className="git-pr-pill git-pr-draft">Draft</span>
+                  <span className="git-pr-pill git-pr-draft">草稿</span>
               )}
             </div>
           </div>

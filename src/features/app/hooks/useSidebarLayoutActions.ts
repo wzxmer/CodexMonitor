@@ -13,6 +13,8 @@ type UseSidebarLayoutActionsOptions = {
   exitDiffView: () => void;
   selectWorkspace: (workspaceId: string) => void;
   setActiveThreadId: (threadId: string | null, workspaceId?: string) => void;
+  activeWorkspaceId: string | null;
+  activeThreadId: string | null;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   isCompact: boolean;
   setActiveTab: (tab: AppTab) => void;
@@ -41,6 +43,8 @@ export function useSidebarLayoutActions({
   exitDiffView,
   selectWorkspace,
   setActiveThreadId,
+  activeWorkspaceId,
+  activeThreadId,
   connectWorkspace,
   isCompact,
   setActiveTab,
@@ -108,6 +112,9 @@ export function useSidebarLayoutActions({
 
   const onSelectThread = useCallback(
     (workspaceId: string, threadId: string) => {
+      if (workspaceId === activeWorkspaceId && threadId === activeThreadId) {
+        return;
+      }
       exitDiffView();
       resetPullRequestSelection();
       clearDraftState();
@@ -115,6 +122,8 @@ export function useSidebarLayoutActions({
       setActiveThreadId(threadId, workspaceId);
     },
     [
+      activeThreadId,
+      activeWorkspaceId,
       clearDraftState,
       exitDiffView,
       resetPullRequestSelection,

@@ -110,7 +110,7 @@ export function useFileLinkOpener(
         },
       );
       pushErrorToast({
-        title: "Couldn’t open file",
+        title: "无法打开文件",
         message,
       });
       console.warn("Failed to open file link", { message, ...context });
@@ -193,11 +193,11 @@ export function useFileLinkOpener(
           ? revealInFileManagerLabel()
           : target.kind === "command"
             ? command
-              ? `Open in ${target.label}`
-              : "Set command in Settings"
+              ? `用 ${target.label} 打开`
+              : "请先在设置中配置命令"
             : appName
-              ? `Open in ${appName}`
-              : "Set app name in Settings";
+              ? `用 ${appName} 打开`
+              : "请先在设置中配置应用名";
       const items = [
         await MenuItem.new({
           text: openLabel,
@@ -229,11 +229,11 @@ export function useFileLinkOpener(
               }),
             ]),
         await MenuItem.new({
-          text: "Download Linked File",
+          text: "下载链接文件",
           enabled: false,
         }),
         await MenuItem.new({
-          text: "Copy Link",
+          text: "复制链接",
           action: async () => {
             const link = toFileUrl(resolvedPath, fileLocation.line, fileLocation.column);
             try {

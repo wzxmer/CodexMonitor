@@ -5,10 +5,20 @@ import { clampUiScale, UI_SCALE_DEFAULT } from "@utils/uiScale";
 import { CHAT_SCROLLBACK_DEFAULT, normalizeChatHistoryScrollbackItems } from "@utils/chatScrollback";
 import {
   DEFAULT_CODE_FONT_FAMILY,
+  DEFAULT_UI_CJK_FONT_FAMILY,
   DEFAULT_UI_FONT_FAMILY,
+  DEFAULT_UI_LATIN_FONT_FAMILY,
   CODE_FONT_SIZE_DEFAULT,
   clampCodeFontSize,
+  clampMessageFontSize,
+  clampMessageFontWeight,
+  clampUiFontSize,
+  clampUiFontWeight,
+  MESSAGE_FONT_SIZE_DEFAULT,
+  MESSAGE_FONT_WEIGHT_DEFAULT,
   normalizeFontFamily,
+  UI_FONT_SIZE_DEFAULT,
+  UI_FONT_WEIGHT_DEFAULT,
 } from "@utils/fonts";
 import {
   DEFAULT_OPEN_APP_ID,
@@ -21,12 +31,35 @@ import { isMobilePlatform } from "@utils/platformPaths";
 import { DEFAULT_COMMIT_MESSAGE_PROMPT } from "@utils/commitMessagePrompt";
 
 const allowedThemes = new Set(["system", "light", "dark", "dim"]);
+const allowedThemeAccents = new Set(["codex", "blue", "green", "pink", "orange"]);
+const allowedMessageReadingStyles = new Set(["bubble", "cli", "codex"]);
 const allowedPersonality = new Set(["friendly", "pragmatic"]);
 const allowedFollowUpMessageBehavior = new Set(["queue", "steer"]);
+const allowedComposerSendShortcut = new Set([
+  "enter",
+  "ctrl-enter",
+]);
 const DEFAULT_REMOTE_BACKEND_HOST = "127.0.0.1:4732";
 const DEFAULT_REMOTE_BACKEND_ID = "remote-default";
 const DEFAULT_REMOTE_BACKEND_NAME = "Primary remote";
 const DEFAULT_REMOTE_PROVIDER: AppSettings["remoteBackendProvider"] = "tcp";
+const DEFAULT_MESSAGE_USER_BUBBLE_COLOR = "#d9ebff";
+const DEFAULT_MESSAGE_USER_TEXT_COLOR = "#102033";
+const DEFAULT_MESSAGE_CANVAS_COLOR = "#eef1f6";
+const DEFAULT_MESSAGE_ASSISTANT_BUBBLE_COLOR = "#f7f9fc";
+const DEFAULT_MESSAGE_ASSISTANT_ACCENT_COLOR = "#8aa8d8";
+const DEFAULT_MESSAGE_ASSISTANT_TEXT_COLOR = "#263040";
+
+function normalizeCssColor(value: string | null | undefined, fallback: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed) || /^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+    return trimmed;
+  }
+  return fallback;
+}
 
 type RemoteBackendTarget = AppSettings["remoteBackends"][number];
 
@@ -167,13 +200,29 @@ function buildDefaultSettings(): AppSettings {
     lastComposerReasoningEffort: null,
     uiScale: UI_SCALE_DEFAULT,
     theme: "system",
+    themeAccent: "codex",
     usageShowRemaining: false,
     showMessageFilePath: true,
+    messageToolGroupsCollapsedByDefault: false,
+    messageReadingStyle: "bubble",
+    messageCanvasColor: DEFAULT_MESSAGE_CANVAS_COLOR,
+    messageUserBubbleColor: DEFAULT_MESSAGE_USER_BUBBLE_COLOR,
+    messageUserTextColor: DEFAULT_MESSAGE_USER_TEXT_COLOR,
+    messageAssistantBubbleColor: DEFAULT_MESSAGE_ASSISTANT_BUBBLE_COLOR,
+    messageAssistantAccentColor: DEFAULT_MESSAGE_ASSISTANT_ACCENT_COLOR,
+    messageAssistantTextColor: DEFAULT_MESSAGE_ASSISTANT_TEXT_COLOR,
+    messageFontFamily: "",
     chatHistoryScrollbackItems: CHAT_SCROLLBACK_DEFAULT,
     threadTitleAutogenerationEnabled: false,
     automaticAppUpdateChecksEnabled: true,
     uiFontFamily: DEFAULT_UI_FONT_FAMILY,
+    uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
+    uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
+    uiFontSize: UI_FONT_SIZE_DEFAULT,
+    uiFontWeight: UI_FONT_WEIGHT_DEFAULT,
     codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
+    messageFontSize: MESSAGE_FONT_SIZE_DEFAULT,
+    messageFontWeight: MESSAGE_FONT_WEIGHT_DEFAULT,
     codeFontSize: CODE_FONT_SIZE_DEFAULT,
     notificationSoundsEnabled: true,
     systemNotificationsEnabled: true,
@@ -186,6 +235,7 @@ function buildDefaultSettings(): AppSettings {
     collaborationModesEnabled: true,
     steerEnabled: true,
     followUpMessageBehavior: "queue",
+    composerSendShortcut: "enter",
     composerFollowUpHintEnabled: true,
     pauseQueuedMessagesWhenResponseRequired: true,
     unifiedExecEnabled: true,
@@ -247,13 +297,63 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     codexArgs: settings.codexArgs?.trim() ? settings.codexArgs.trim() : null,
     uiScale: clampUiScale(settings.uiScale),
     theme: allowedThemes.has(settings.theme) ? settings.theme : "system",
+    themeAccent: allowedThemeAccents.has(settings.themeAccent)
+      ? settings.themeAccent
+      : "codex",
+    messageToolGroupsCollapsedByDefault:
+      typeof settings.messageToolGroupsCollapsedByDefault === "boolean"
+        ? settings.messageToolGroupsCollapsedByDefault
+        : false,
+    messageReadingStyle: allowedMessageReadingStyles.has(settings.messageReadingStyle)
+      ? settings.messageReadingStyle
+      : "bubble",
+    messageCanvasColor: normalizeCssColor(
+      settings.messageCanvasColor,
+      DEFAULT_MESSAGE_CANVAS_COLOR,
+    ),
+    messageUserBubbleColor: normalizeCssColor(
+      settings.messageUserBubbleColor,
+      DEFAULT_MESSAGE_USER_BUBBLE_COLOR,
+    ),
+    messageUserTextColor: normalizeCssColor(
+      settings.messageUserTextColor,
+      DEFAULT_MESSAGE_USER_TEXT_COLOR,
+    ),
+    messageAssistantBubbleColor: normalizeCssColor(
+      settings.messageAssistantBubbleColor,
+      DEFAULT_MESSAGE_ASSISTANT_BUBBLE_COLOR,
+    ),
+    messageAssistantAccentColor: normalizeCssColor(
+      settings.messageAssistantAccentColor,
+      DEFAULT_MESSAGE_ASSISTANT_ACCENT_COLOR,
+    ),
+    messageAssistantTextColor: normalizeCssColor(
+      settings.messageAssistantTextColor,
+      DEFAULT_MESSAGE_ASSISTANT_TEXT_COLOR,
+    ),
     uiFontFamily: normalizeFontFamily(
       settings.uiFontFamily,
       DEFAULT_UI_FONT_FAMILY,
     ),
+    uiLatinFontFamily: normalizeFontFamily(
+      settings.uiLatinFontFamily,
+      DEFAULT_UI_LATIN_FONT_FAMILY,
+    ),
+    uiCjkFontFamily: normalizeFontFamily(
+      settings.uiCjkFontFamily,
+      DEFAULT_UI_CJK_FONT_FAMILY,
+    ),
+    uiFontSize: clampUiFontSize(settings.uiFontSize),
+    uiFontWeight: clampUiFontWeight(settings.uiFontWeight),
     codeFontFamily: normalizeFontFamily(
       settings.codeFontFamily,
       DEFAULT_CODE_FONT_FAMILY,
+    ),
+    messageFontSize: clampMessageFontSize(settings.messageFontSize),
+    messageFontWeight: clampMessageFontWeight(settings.messageFontWeight),
+    messageFontFamily: normalizeFontFamily(
+      settings.messageFontFamily,
+      `${settings.uiLatinFontFamily}, ${settings.uiCjkFontFamily}, ${settings.uiFontFamily}`,
     ),
     codeFontSize: clampCodeFontSize(settings.codeFontSize),
     personality: allowedPersonality.has(settings.personality)
@@ -270,6 +370,9 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
       typeof settings.composerFollowUpHintEnabled === "boolean"
         ? settings.composerFollowUpHintEnabled
         : true,
+    composerSendShortcut: allowedComposerSendShortcut.has(settings.composerSendShortcut)
+      ? settings.composerSendShortcut
+      : "enter",
     reviewDeliveryMode:
       settings.reviewDeliveryMode === "detached" ? "detached" : "inline",
     chatHistoryScrollbackItems,

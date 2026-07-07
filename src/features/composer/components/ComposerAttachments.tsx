@@ -1,4 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
+import FileText from "lucide-react/dist/esm/icons/file-text";
 import Image from "lucide-react/dist/esm/icons/image";
 import X from "lucide-react/dist/esm/icons/x";
 
@@ -9,11 +10,14 @@ type ComposerAttachmentsProps = {
 };
 
 function fileTitle(path: string) {
+  if (path.startsWith("data:image/")) {
+    return "粘贴的图片";
+  }
   if (path.startsWith("data:")) {
-    return "Pasted image";
+    return "粘贴的附件";
   }
   if (path.startsWith("http://") || path.startsWith("https://")) {
-    return "Image";
+    return "图片";
   }
   const normalized = path.replace(/\\/g, "/");
   const parts = normalized.split("/").filter(Boolean);
@@ -21,6 +25,9 @@ function fileTitle(path: string) {
 }
 
 function attachmentPreviewSrc(path: string) {
+  if (!isImageAttachment(path)) {
+    return "";
+  }
   if (path.startsWith("data:")) {
     return path;
   }
@@ -32,6 +39,16 @@ function attachmentPreviewSrc(path: string) {
   } catch {
     return "";
   }
+}
+
+function isImageAttachment(path: string) {
+  if (path.startsWith("data:image/")) {
+    return true;
+  }
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return true;
+  }
+  return /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|heif)$/i.test(path);
 }
 
 export function ComposerAttachments({
@@ -47,7 +64,11 @@ export function ComposerAttachments({
     <div className="composer-attachments">
       {attachments.map((path) => {
         const title = fileTitle(path);
-        const titleAttr = path.startsWith("data:") ? "Pasted image" : path;
+        const titleAttr = path.startsWith("data:image/")
+          ? "粘贴的图片"
+          : path.startsWith("data:")
+            ? "粘贴的附件"
+            : path;
         const previewSrc = attachmentPreviewSrc(path);
         return (
           <div
@@ -66,7 +87,7 @@ export function ComposerAttachments({
               </span>
             ) : (
               <span className="composer-icon" aria-hidden>
-                <Image size={14} />
+                {isImageAttachment(path) ? <Image size={14} /> : <FileText size={14} />}
               </span>
             )}
             <span className="composer-attachment-name">{title}</span>
@@ -74,7 +95,7 @@ export function ComposerAttachments({
               type="button"
               className="composer-attachment-remove"
               onClick={() => onRemoveAttachment?.(path)}
-              aria-label={`Remove ${title}`}
+              aria-label={`移除 ${title}`}
               disabled={disabled}
             >
               <X size={12} aria-hidden />

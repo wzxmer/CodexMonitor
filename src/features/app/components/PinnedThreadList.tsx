@@ -28,6 +28,7 @@ type PinnedThreadListProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
+  onToggleThreadPin?: (workspaceId: string, threadId: string, pinned: boolean) => void;
 };
 
 export function PinnedThreadList({
@@ -42,6 +43,7 @@ export function PinnedThreadList({
   isThreadPinned,
   onSelectThread,
   onShowThreadMenu,
+  onToggleThreadPin,
 }: PinnedThreadListProps) {
   const [collapsedThreadKeys, setCollapsedThreadKeys] = useState<Set<string>>(new Set());
   const visibility = useMemo(
@@ -88,6 +90,7 @@ export function PinnedThreadList({
             isThreadPinned={isThreadPinned}
             onSelectThread={onSelectThread}
             onShowThreadMenu={onShowThreadMenu}
+            onToggleThreadPin={onToggleThreadPin}
             hasSubagentChildren={visibility.rowsWithChildren.has(row)}
             subagentsExpanded={!collapsedThreadKeys.has(threadKey)}
             onToggleSubagents={toggleThreadSubagents}

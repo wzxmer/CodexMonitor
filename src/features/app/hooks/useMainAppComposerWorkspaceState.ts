@@ -15,6 +15,7 @@ import { useComposerInsert } from "@app/hooks/useComposerInsert";
 import { useWorkspaceFileListing } from "@app/hooks/useWorkspaceFileListing";
 import { useWorkspaceAgentMd } from "@/features/workspaces/hooks/useWorkspaceAgentMd";
 import { useWorkspaceHome } from "@/features/workspaces/hooks/useWorkspaceHome";
+import { isLocalCodexWorkspaceId } from "@/features/workspaces/domain/localCodexWorkspace";
 
 const RECENT_THREAD_LIMIT = 8;
 
@@ -149,8 +150,10 @@ export function useMainAppComposerWorkspaceState({
     handleWorktreeCreated,
     addDebugEntry,
   } = actions;
+  const isLocalCodexWorkspace = isLocalCodexWorkspaceId(activeWorkspaceId);
+  const projectActiveWorkspace = isLocalCodexWorkspace ? null : activeWorkspace;
   const showWorkspaceHome = Boolean(
-    activeWorkspace && !activeThreadId && !isNewAgentDraftMode,
+    projectActiveWorkspace && !activeThreadId && !isNewAgentDraftMode,
   );
   const showComposer =
     (!isCompact
@@ -159,7 +162,7 @@ export function useMainAppComposerWorkspaceState({
 
   const { files, isLoading: isFilesLoading, setFileAutocompleteActive } =
     useWorkspaceFileListing({
-      activeWorkspace,
+      activeWorkspace: projectActiveWorkspace,
       activeWorkspaceId,
       filePanelMode,
       isCompact,
@@ -248,7 +251,7 @@ export function useMainAppComposerWorkspaceState({
   });
 
   const workspaceHomeState = useWorkspaceHome({
-    activeWorkspace,
+    activeWorkspace: projectActiveWorkspace,
     models: modelOptions,
     selectedModelId,
     effort: resolvedEffort,
@@ -303,7 +306,7 @@ export function useMainAppComposerWorkspaceState({
   }, [activeWorkspaceId, threadsByWorkspace]);
 
   const agentMdState = useWorkspaceAgentMd({
-    activeWorkspace,
+    activeWorkspace: projectActiveWorkspace,
     onDebug: addDebugEntry,
   });
 

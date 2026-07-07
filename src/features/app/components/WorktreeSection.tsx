@@ -6,7 +6,10 @@ import type { ThreadStatusById } from "../../../utils/threadStatus";
 import { ThreadList } from "./ThreadList";
 import { ThreadLoading } from "./ThreadLoading";
 import { WorktreeCard } from "./WorktreeCard";
-import { getVisibleThreadListState } from "./threadSearchUtils";
+import {
+  countRootRows,
+  getVisibleThreadListState,
+} from "./threadSearchUtils";
 
 type ThreadRowsResult = {
   pinnedRows: Array<{ thread: ThreadSummary; depth: number }>;
@@ -39,7 +42,6 @@ type WorktreeSectionProps = {
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
   pinnedThreadsVersion: number;
-  onSelectWorkspace: (id: string) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
@@ -49,6 +51,7 @@ type WorktreeSectionProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
+  onToggleThreadPin?: (workspaceId: string, threadId: string, pinned: boolean) => void;
   onShowWorktreeMenu: (event: MouseEvent, worktree: WorkspaceInfo) => void;
   onToggleExpanded: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
@@ -77,17 +80,17 @@ export function WorktreeSection({
   isThreadPinned,
   getPinTimestamp,
   pinnedThreadsVersion,
-  onSelectWorkspace,
   onConnectWorkspace,
   onToggleWorkspaceCollapse,
   onSelectThread,
   onShowThreadMenu,
+  onToggleThreadPin,
   onShowWorktreeMenu,
   onToggleExpanded,
   onLoadOlderThreads,
   searchQuery = "",
   isSearchActive = false,
-  sectionLabel = "Worktrees",
+  sectionLabel = "工作树 Agents",
   sectionIcon,
   className,
 }: WorktreeSectionProps) {
@@ -120,6 +123,7 @@ export function WorktreeSection({
           const isWorktreeExpanded = expandedWorkspaces.has(worktree.id);
           const searchExpanded = isWorktreeExpanded || isSearchActive;
           const {
+            pinnedRows,
             unpinnedRows,
             totalRoots: totalWorktreeRoots,
           } = getThreadRows(
@@ -129,6 +133,16 @@ export function WorktreeSection({
             getPinTimestamp,
             pinnedThreadsVersion,
           );
+          const {
+            visibleRows: filteredPinnedWorktreeThreadRows,
+            displayRootCount: displayPinnedWorktreeRootCount,
+          } = getVisibleThreadListState({
+            rows: pinnedRows,
+            totalRoots: countRootRows(pinnedRows),
+            workspaceName: worktree.name,
+            query: searchQuery,
+            isSearchActive,
+          });
           const {
             visibleRows: filteredWorktreeThreadRows,
             displayRootCount: displayWorktreeRootCount,
@@ -140,7 +154,9 @@ export function WorktreeSection({
             isSearchActive,
           });
           const showWorktreeThreadList =
-            filteredWorktreeThreadRows.length > 0 || Boolean(worktreeNextCursor);
+            filteredPinnedWorktreeThreadRows.length > 0 ||
+            filteredWorktreeThreadRows.length > 0 ||
+            Boolean(worktreeNextCursor);
 
           return (
             <WorktreeCard
@@ -148,7 +164,6 @@ export function WorktreeSection({
               worktree={worktree}
               isActive={worktree.id === activeWorkspaceId}
               isDeleting={deletingWorktreeIds.has(worktree.id)}
-              onSelectWorkspace={onSelectWorkspace}
               onShowWorktreeMenu={onShowWorktreeMenu}
               onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
               onConnectWorkspace={onConnectWorkspace}
@@ -156,9 +171,11 @@ export function WorktreeSection({
               {showWorktreeThreadList && (
                 <ThreadList
                   workspaceId={worktree.id}
-                  pinnedRows={[]}
+                  pinnedRows={filteredPinnedWorktreeThreadRows}
                   unpinnedRows={filteredWorktreeThreadRows}
-                  totalThreadRoots={displayWorktreeRootCount}
+                  totalThreadRoots={
+                    displayPinnedWorktreeRootCount + displayWorktreeRootCount
+                  }
                   isExpanded={searchExpanded}
                   showExpandToggle={!isSearchActive}
                   nextCursor={worktreeNextCursor}
@@ -176,6 +193,7 @@ export function WorktreeSection({
                   onLoadOlderThreads={onLoadOlderThreads}
                   onSelectThread={onSelectThread}
                   onShowThreadMenu={onShowThreadMenu}
+                  onToggleThreadPin={onToggleThreadPin}
                 />
               )}
               {showWorktreeLoader && <ThreadLoading nested />}

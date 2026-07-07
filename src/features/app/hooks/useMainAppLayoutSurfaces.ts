@@ -1,5 +1,10 @@
 import type { RefObject } from "react";
-import type { AppSettings, ComposerEditorSettings, WorkspaceInfo } from "@/types";
+import type {
+  AppSettings,
+  ComposerEditorSettings,
+  ComposerSendShortcut,
+  WorkspaceInfo,
+} from "@/types";
 import type { ThreadState } from "@/features/threads/hooks/useThreadsReducer";
 import type { WorkspaceLaunchScriptsState } from "@app/hooks/useWorkspaceLaunchScripts";
 import { REMOTE_THREAD_POLL_INTERVAL_MS } from "@app/hooks/useRemoteThreadRefreshOnFocus";
@@ -17,20 +22,8 @@ type MainHeaderProps = NonNullable<LayoutNodesOptions["primary"]["mainHeaderProp
 type GitDiffPanelProps = LayoutNodesOptions["git"]["gitDiffPanelProps"];
 
 type UseMainAppLayoutSurfacesArgs = {
-  appSettings: Pick<
-    AppSettings,
-    | "usageShowRemaining"
-    | "composerCodeBlockCopyUseModifier"
-    | "showMessageFilePath"
-    | "openAppTargets"
-    | "selectedOpenAppId"
-    | "experimentalAppsEnabled"
-    | "followUpMessageBehavior"
-    | "composerFollowUpHintEnabled"
-    | "dictationEnabled"
-    | "splitChatDiffView"
-    | "gitDiffIgnoreWhitespaceChanges"
-  >;
+  appSettings: AppSettings;
+  onUpdateAppSettings: (next: AppSettings) => Promise<unknown>;
   workspaces: WorkspaceInfo[];
   groupedWorkspaces: Array<{ id: string | null; name: string; workspaces: WorkspaceInfo[] }>;
   workspaceGroupsCount: number;
@@ -126,6 +119,7 @@ type UseMainAppLayoutSurfacesArgs = {
   handleAddAgent: SidebarProps["onAddAgent"];
   handleAddWorktreeAgent: SidebarProps["onAddWorktreeAgent"];
   handleAddCloneAgent: SidebarProps["onAddCloneAgent"];
+  handleSelectLocalCodexThread: SidebarProps["onSelectLocalCodexThread"];
   handleOpenThreadLink: LayoutNodesOptions["primary"]["messagesProps"]["onOpenThreadLink"];
   handleSelectOpenAppId: MainHeaderProps["onSelectOpenAppId"];
   handleCopyThread: MainHeaderProps["onCopyThread"];
@@ -234,6 +228,7 @@ type MainAppLayoutSurfacesContext = UseMainAppLayoutSurfacesArgs & {
 
 function buildPrimarySurface({
   appSettings,
+  onUpdateAppSettings,
   workspaces,
   groupedWorkspaces,
   workspaceGroupsCount,
@@ -299,6 +294,7 @@ function buildPrimarySurface({
   handleAddAgent,
   handleAddWorktreeAgent,
   handleAddCloneAgent,
+  handleSelectLocalCodexThread,
   handleOpenThreadLink,
   handleSelectOpenAppId,
   handleCopyThread,
@@ -416,6 +412,7 @@ function buildPrimarySurface({
       onAddCloneAgent: handleAddCloneAgent,
       onToggleWorkspaceCollapse: sidebarHandlers.onToggleWorkspaceCollapse,
       onSelectThread: sidebarHandlers.onSelectThread,
+      onSelectLocalCodexThread: handleSelectLocalCodexThread,
       onDeleteThread: sidebarHandlers.onDeleteThread,
       onSyncThread: sidebarHandlers.onSyncThread,
       pinThread: threadPinning.pinThread,
@@ -445,6 +442,24 @@ function buildPrimarySurface({
       selectedOpenAppId: appSettings.selectedOpenAppId,
       codeBlockCopyUseModifier: appSettings.composerCodeBlockCopyUseModifier,
       showMessageFilePath: appSettings.showMessageFilePath,
+      defaultToolGroupsCollapsed:
+        appSettings.messageToolGroupsCollapsedByDefault,
+      messageReadingStyle: appSettings.messageReadingStyle,
+      messageCanvasColor: appSettings.messageCanvasColor,
+      messageUserBubbleColor: appSettings.messageUserBubbleColor,
+      messageUserTextColor: appSettings.messageUserTextColor,
+      messageAssistantBubbleColor: appSettings.messageAssistantBubbleColor,
+      messageAssistantAccentColor: appSettings.messageAssistantAccentColor,
+      messageAssistantTextColor: appSettings.messageAssistantTextColor,
+      messageFontFamily: appSettings.messageFontFamily,
+      messageFontSize: appSettings.messageFontSize,
+      messageFontWeight: appSettings.messageFontWeight,
+      onUpdateConversationStyle: (next) => {
+        void onUpdateAppSettings({
+          ...appSettings,
+          ...next,
+        });
+      },
       userInputRequests,
       onUserInputSubmit,
       onPlanAccept,
@@ -453,6 +468,9 @@ function buildPrimarySurface({
       onQuoteMessage: composerWorkspaceState.canInsertComposerText
         ? composerWorkspaceState.handleInsertComposerText
         : undefined,
+      onResendUserMessage: (text, images, options) => {
+        void composerWorkspaceState.handleSend(text, images, [], "default", options);
+      },
       isThinking: composerWorkspaceState.isProcessing,
       isLoadingMessages: activeThreadId
         ? threadResumeLoadingById[activeThreadId] ?? false
@@ -469,17 +487,29 @@ function buildPrimarySurface({
     composerProps: composerWorkspaceState.showComposer
       ? {
           onSend: handleComposerSendWithDraftStart,
-          onStop: interruptTurn,
+          onStop: () => {
+            interruptTurn();
+          },
           canStop: composerWorkspaceState.canInterrupt,
           disabled: composerWorkspaceState.isReviewing,
           onFileAutocompleteActiveChange: composerWorkspaceState.setFileAutocompleteActive,
           contextUsage: activeTokenUsage,
           queuedMessages: composerWorkspaceState.activeQueue,
           queuePausedReason: composerWorkspaceState.queuePausedReason,
+          canSteerQueued: composerWorkspaceState.steerAvailable,
+          onSteerQueued: (id) => {
+            void composerWorkspaceState.steerQueuedMessage(id);
+          },
           sendLabel: pullRequestComposer.composerSendLabel ?? "Send",
           steerAvailable: composerWorkspaceState.steerAvailable,
           followUpMessageBehavior: appSettings.followUpMessageBehavior,
-          composerFollowUpHintEnabled: appSettings.composerFollowUpHintEnabled,
+          composerSendShortcut: appSettings.composerSendShortcut,
+          onSelectComposerSendShortcut: (shortcut: ComposerSendShortcut) => {
+            void onUpdateAppSettings({
+              ...appSettings,
+              composerSendShortcut: shortcut,
+            });
+          },
           isProcessing: composerWorkspaceState.isProcessing,
           draftText: composerWorkspaceState.activeDraft,
           onDraftChange: composerWorkspaceState.handleDraftChange,
@@ -1010,6 +1040,7 @@ export function useMainAppLayoutSurfaces({
   handleAddAgent,
   handleAddWorktreeAgent,
   handleAddCloneAgent,
+  handleSelectLocalCodexThread,
   handleOpenThreadLink,
   handleSelectOpenAppId,
   handleCopyThread,
@@ -1098,11 +1129,13 @@ export function useMainAppLayoutSurfaces({
   dismissErrorToast,
   showDebugButton,
   handleDebugClick,
+  onUpdateAppSettings,
 }: UseMainAppLayoutSurfacesArgs): LayoutNodesOptions {
   const sidebarRateLimits = activeWorkspace ? activeRateLimits : homeRateLimits;
   const sidebarAccount = activeWorkspace ? activeAccount : homeAccount;
   const context: MainAppLayoutSurfacesContext = {
     appSettings,
+    onUpdateAppSettings,
     workspaces,
     groupedWorkspaces,
     workspaceGroupsCount,
@@ -1172,6 +1205,7 @@ export function useMainAppLayoutSurfaces({
     handleAddAgent,
     handleAddWorktreeAgent,
     handleAddCloneAgent,
+    handleSelectLocalCodexThread,
     handleOpenThreadLink,
     handleSelectOpenAppId,
     handleCopyThread,

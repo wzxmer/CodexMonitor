@@ -22,6 +22,7 @@ import {
   threadMatchesQuery,
   workspaceMatchesQuery,
 } from "./threadSearchUtils";
+import { isLocalCodexWorkspaceId } from "@/features/workspaces/domain/localCodexWorkspace";
 import type {
   FlatThreadRootGroup,
   FlatThreadRow,
@@ -42,6 +43,36 @@ import type { ThreadStatusById } from "../../../utils/threadStatus";
 
 const COLLAPSED_GROUPS_STORAGE_KEY = "codexmonitor.collapsedGroups";
 const UNGROUPED_COLLAPSE_ID = "__ungrouped__";
+
+function normalizeLocalCodexSearchPath(path: string | null | undefined) {
+  return (path ?? "").trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+}
+
+function getLocalCodexSearchProjectLabel(path: string) {
+  if (!path) {
+    return "";
+  }
+  const parts = path.split("/").filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : path;
+}
+
+function localCodexThreadMatchesQuery(
+  thread: ThreadSummary,
+  workspaceName: string,
+  query: string,
+) {
+  if (threadMatchesQuery(thread, workspaceName, query)) {
+    return true;
+  }
+  const path = normalizeLocalCodexSearchPath(thread.cwd);
+  if (!path) {
+    return false;
+  }
+  return (
+    path.toLowerCase().includes(query) ||
+    getLocalCodexSearchProjectLabel(path).toLowerCase().includes(query)
+  );
+}
 const ADD_MENU_WIDTH = 200;
 const ALL_THREADS_ADD_MENU_WIDTH = 220;
 
@@ -136,6 +167,7 @@ type SidebarProps = {
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
+  onSelectLocalCodexThread: (cwd: string, threadId: string) => void;
   onDeleteThread: (workspaceId: string, threadId: string) => void;
   onSyncThread: (workspaceId: string, threadId: string) => void;
   pinThread: (workspaceId: string, threadId: string) => boolean;
@@ -197,6 +229,7 @@ export const Sidebar = memo(function Sidebar({
   onAddCloneAgent,
   onToggleWorkspaceCollapse,
   onSelectThread,
+  onSelectLocalCodexThread,
   onDeleteThread,
   onSyncThread,
   pinThread,
@@ -253,6 +286,16 @@ export const Sidebar = memo(function Sidebar({
       onDeleteWorkspace,
       onDeleteWorktree,
     });
+  const toggleThreadPin = useCallback(
+    (workspaceId: string, threadId: string, pinned: boolean) => {
+      if (pinned) {
+        unpinThread(workspaceId, threadId);
+        return;
+      }
+      pinThread(workspaceId, threadId);
+    },
+    [pinThread, unpinThread],
+  );
   const {
     sessionPercent,
     weeklyPercent,
@@ -292,9 +335,14 @@ export const Sidebar = memo(function Sidebar({
     const result = new Map<string, boolean>();
     workspaces.forEach((workspace) => {
       const threads = threadsByWorkspace[workspace.id] ?? [];
+      const matchesThread = isLocalCodexWorkspaceId(workspace.id)
+        ? (thread: ThreadSummary) =>
+            localCodexThreadMatchesQuery(thread, workspace.name, normalizedQuery)
+        : (thread: ThreadSummary) =>
+            threadMatchesQuery(thread, workspace.name, normalizedQuery);
       result.set(
         workspace.id,
-        threads.some((thread) => threadMatchesQuery(thread, workspace.name, normalizedQuery)),
+        threads.some(matchesThread),
       );
     });
     return result;
@@ -359,8 +407,8 @@ export const Sidebar = memo(function Sidebar({
     ? accountEmail
     : accountInfo?.type === "apikey"
       ? "API key"
-      : "Sign in to Codex";
-  const accountActionLabel = accountEmail ? "Switch account" : "Sign in";
+      : "登录 Codex";
+  const accountActionLabel = accountEmail ? "切换账号" : "登录";
   const showAccountSwitcher = Boolean(activeWorkspaceId);
   const accountSwitchDisabled = accountSwitching || !activeWorkspaceId;
   const accountCancelDisabled = !accountSwitching || !activeWorkspaceId;
@@ -906,7 +954,11 @@ export const Sidebar = memo(function Sidebar({
           {workspaceDropText === "Drop Project Here" && (
             <FolderOpen className="workspace-drop-overlay-icon" aria-hidden />
           )}
-          {workspaceDropText}
+          {workspaceDropText === "Drop Project Here"
+            ? "把项目拖到这里"
+            : workspaceDropText === "Adding Project..."
+              ? "正在添加项目..."
+              : workspaceDropText}
         </div>
       </div>
       <div
@@ -920,7 +972,7 @@ export const Sidebar = memo(function Sidebar({
           {pinnedThreadRows.length > 0 && (
             <div className="pinned-section">
               <div className="sidebar-section-header">
-                <div className="sidebar-section-title">Pinned conversations</div>
+                <div className="sidebar-section-title">置顶会话</div>
                 <div className="sidebar-section-count">{pinnedRootCount}</div>
               </div>
               <PinnedThreadList
@@ -934,6 +986,7 @@ export const Sidebar = memo(function Sidebar({
                 isThreadPinned={isThreadPinned}
                 onSelectThread={onSelectThread}
                 onShowThreadMenu={showThreadMenu}
+                onToggleThreadPin={toggleThreadPin}
                 getWorkspaceLabel={getWorkspaceLabel}
               />
             </div>
@@ -951,6 +1004,7 @@ export const Sidebar = memo(function Sidebar({
                   isThreadPinned={isThreadPinned}
                   onSelectThread={onSelectThread}
                   onShowThreadMenu={showThreadMenu}
+                  onToggleThreadPin={toggleThreadPin}
                   getWorkspaceLabel={getWorkspaceLabel}
                   addMenuOpen={allThreadsAddMenuOpen}
                   addMenuAnchor={allThreadsAddMenuAnchor}
@@ -989,6 +1043,7 @@ export const Sidebar = memo(function Sidebar({
                   getThreadTime={getThreadTime}
                   getThreadArgsBadge={getThreadArgsBadge}
                   isThreadPinned={isThreadPinned}
+                  onToggleThreadPin={toggleThreadPin}
                   getPinTimestamp={getPinTimestamp}
                   pinnedThreadsVersion={pinnedThreadsVersion}
                   addMenuAnchor={addMenuAnchor}
@@ -1003,6 +1058,7 @@ export const Sidebar = memo(function Sidebar({
                   onAddCloneAgent={onAddCloneAgent}
                   onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
                   onSelectThread={onSelectThread}
+                  onSelectLocalCodexThread={onSelectLocalCodexThread}
                   onShowThreadMenu={showThreadMenu}
                   onShowWorkspaceMenu={showWorkspaceMenu}
                   onShowWorktreeMenu={showWorktreeMenu}
@@ -1015,15 +1071,15 @@ export const Sidebar = memo(function Sidebar({
           {!groupedWorkspacesForRender.length && (
             <div className="empty">
               {isSearchActive
-                ? "No conversations match your search."
-                : "Add a workspace to start."}
+                ? "没有匹配的会话。"
+                : "添加项目后开始。"}
             </div>
           )}
           {isThreadsOnlyMode &&
             groupedWorkspacesForRender.length > 0 &&
             flatThreadRows.length === 0 &&
             pinnedThreadRows.length === 0 && (
-              <div className="empty">No conversations yet.</div>
+              <div className="empty">暂无会话。</div>
             )}
         </div>
       </div>

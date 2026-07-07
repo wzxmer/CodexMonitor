@@ -14,6 +14,7 @@ import { useGitRepoScan } from "@/features/git/hooks/useGitRepoScan";
 import { usePullRequestReviewActions } from "@/features/git/hooks/usePullRequestReviewActions";
 import { useGitActions } from "@/features/git/hooks/useGitActions";
 import { useGitBranches } from "@/features/git/hooks/useGitBranches";
+import { isMissingGitRepositoryError } from "@/features/git/utils/gitErrors";
 import { useSyncSelectedDiffPath } from "@app/hooks/useSyncSelectedDiffPath";
 
 type UseMainAppGitStateOptions = {
@@ -102,6 +103,9 @@ function useMainAppGitBranchActions({
   });
 
   const alertError = useCallback((error: unknown) => {
+    if (isMissingGitRepositoryError(error)) {
+      return;
+    }
     alert(error instanceof Error ? error.message : String(error));
   }, []);
 
@@ -205,6 +209,9 @@ export function useMainAppGitState({
   sendUserMessageToThread,
 }: UseMainAppGitStateOptions) {
   const alertError = useCallback((error: unknown) => {
+    if (isMissingGitRepositoryError(error)) {
+      return;
+    }
     alert(error instanceof Error ? error.message : String(error));
   }, []);
 

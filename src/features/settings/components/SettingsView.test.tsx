@@ -15,6 +15,7 @@ import {
   connectWorkspace,
   getAppBuildType,
   getAgentsSettings,
+  getCodexStatus,
   getConfigModel,
   getExperimentalFeatureList,
   isMobileRuntime,
@@ -41,6 +42,7 @@ vi.mock("@services/tauri", async () => {
     getConfigModel: vi.fn(),
     getExperimentalFeatureList: vi.fn(),
     getAgentsSettings: vi.fn(),
+    getCodexStatus: vi.fn(),
     isMobileRuntime: vi.fn(),
     listWorkspaces: vi.fn(),
   };
@@ -52,6 +54,7 @@ const getConfigModelMock = vi.mocked(getConfigModel);
 const getModelListMock = vi.mocked(getModelList);
 const getExperimentalFeatureListMock = vi.mocked(getExperimentalFeatureList);
 const getAgentsSettingsMock = vi.mocked(getAgentsSettings);
+const getCodexStatusMock = vi.mocked(getCodexStatus);
 const isMobileRuntimeMock = vi.mocked(isMobileRuntime);
 const listWorkspacesMock = vi.mocked(listWorkspaces);
 connectWorkspaceMock.mockResolvedValue(undefined);
@@ -65,6 +68,20 @@ getAgentsSettingsMock.mockResolvedValue({
   maxThreads: 6,
   maxDepth: 1,
   agents: [],
+});
+getCodexStatusMock.mockResolvedValue({
+  codexHomePath: "/Users/me/.codex",
+  codexHomeSource: "默认路径",
+  configPath: "/Users/me/.codex/config.toml",
+  configExists: true,
+  globalAgentsPath: "/Users/me/.codex/AGENTS.md",
+  globalAgentsExists: true,
+  codexSkillsPath: "/Users/me/.codex/skills",
+  codexSkillsCount: 2,
+  agentsSkillsPath: "/Users/me/.agents/skills",
+  agentsSkillsCount: 3,
+  model: "gpt-5-codex",
+  modelError: null,
 });
 
 const baseSettings: AppSettings = {
@@ -109,15 +126,34 @@ const baseSettings: AppSettings = {
   lastComposerReasoningEffort: null,
   uiScale: 1,
   theme: "system",
+  themeAccent: "codex",
   usageShowRemaining: false,
   showMessageFilePath: true,
+  messageToolGroupsCollapsedByDefault: false,
+  messageReadingStyle: "bubble",
+  messageCanvasColor: "#eef1f6",
+  messageUserBubbleColor: "#d9ebff",
+  messageUserTextColor: "#102033",
+  messageAssistantBubbleColor: "#f7f9fc",
+  messageAssistantAccentColor: "#8aa8d8",
+  messageAssistantTextColor: "#263040",
   chatHistoryScrollbackItems: 200,
   threadTitleAutogenerationEnabled: false,
   automaticAppUpdateChecksEnabled: true,
   uiFontFamily:
     'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  uiLatinFontFamily:
+    '"Segoe UI", Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+  uiCjkFontFamily:
+    '"Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif',
+  uiFontSize: 13,
+  uiFontWeight: 500,
   codeFontFamily:
     'ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+  messageFontSize: 13,
+  messageFontWeight: 500,
+  messageFontFamily:
+    '"Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif',
   codeFontSize: 11,
   notificationSoundsEnabled: true,
   systemNotificationsEnabled: true,
@@ -130,6 +166,7 @@ const baseSettings: AppSettings = {
   collaborationModesEnabled: true,
   steerEnabled: true,
   followUpMessageBehavior: "queue",
+  composerSendShortcut: "enter-and-ctrl-enter",
   composerFollowUpHintEnabled: true,
   pauseQueuedMessagesWhenResponseRequired: true,
   unifiedExecEnabled: true,
@@ -228,7 +265,7 @@ const renderDisplaySection = (
   };
 
   render(<SettingsView {...props} />);
-  fireEvent.click(screen.getByRole("button", { name: "Display & Sound" }));
+  fireEvent.click(screen.getByRole("button", { name: "显示与声音" }));
 
   return { onUpdateAppSettings, onToggleTransparency };
 };
@@ -321,7 +358,7 @@ const renderAboutSection = (
   };
 
   render(<SettingsView {...props} />);
-  fireEvent.click(screen.getByRole("button", { name: "About" }));
+  fireEvent.click(screen.getByRole("button", { name: "关于" }));
 
   return { onUpdateAppSettings, onToggleAutomaticAppUpdateChecks };
 };
@@ -512,7 +549,7 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const select = screen.getByLabelText("Theme");
+    const select = screen.getByLabelText("主题");
     fireEvent.change(select, { target: { value: "dark" } });
 
     await waitFor(() => {
@@ -527,7 +564,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onUpdateAppSettings });
 
     const row = screen
-      .getByText("Show remaining Codex limits")
+      .getByText("显示 Codex 剩余额度")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected remaining limits row");
@@ -552,7 +589,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onUpdateAppSettings });
 
     const row = screen
-      .getByText("Show file path in messages")
+      .getByText("在消息中显示文件路径")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected file path visibility row");
@@ -577,7 +614,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onUpdateAppSettings });
 
     const row = screen
-      .getByText("Split chat and diff center panes")
+      .getByText("聊天和 Diff 分栏显示")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected split center panes row");
@@ -600,7 +637,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onToggleTransparency, reduceTransparency: false });
 
     const row = screen
-      .getByText("Reduce transparency")
+      .getByText("降低透明度")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected reduce transparency row");
@@ -622,7 +659,7 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const scaleInput = screen.getByLabelText("Interface scale");
+    const scaleInput = screen.getByLabelText("界面缩放");
 
     fireEvent.change(scaleInput, { target: { value: "500%" } });
     fireEvent.blur(scaleInput);
@@ -647,17 +684,33 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const uiFontInput = screen.getByLabelText("UI font family");
-    fireEvent.change(uiFontInput, { target: { value: "Avenir, sans-serif" } });
-    fireEvent.blur(uiFontInput);
+    const uiLatinFontInput = screen.getByLabelText("自定义界面英文字体");
+    fireEvent.change(uiLatinFontInput, {
+      target: { value: "Avenir, sans-serif" },
+    });
+    fireEvent.blur(uiLatinFontInput);
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ uiFontFamily: "Avenir, sans-serif" }),
+        expect.objectContaining({ uiLatinFontFamily: "Avenir, sans-serif" }),
       );
     });
 
-    const codeFontInput = screen.getByLabelText("Code font family");
+    const uiCjkFontInput = screen.getByLabelText("自定义界面中文字体");
+    fireEvent.change(uiCjkFontInput, {
+      target: { value: '"Microsoft YaHei", sans-serif' },
+    });
+    fireEvent.keyDown(uiCjkFontInput, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uiCjkFontFamily: '"Microsoft YaHei", sans-serif',
+        }),
+      );
+    });
+
+    const codeFontInput = screen.getByLabelText("自定义代码字体");
     fireEvent.change(codeFontInput, {
       target: { value: "JetBrains Mono, monospace" },
     });
@@ -674,14 +727,20 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const resetButtons = screen.getAllByRole("button", { name: "Reset" });
+    const resetButtons = screen.getAllByRole("button", { name: "重置" });
     fireEvent.click(resetButtons[1]);
     fireEvent.click(resetButtons[2]);
+    fireEvent.click(resetButtons[5]);
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
         expect.objectContaining({
-          uiFontFamily: expect.stringContaining("system-ui"),
+          uiLatinFontFamily: expect.stringContaining("Segoe UI"),
+        }),
+      );
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uiCjkFontFamily: expect.stringContaining("Microsoft YaHei UI"),
         }),
       );
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -696,7 +755,7 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const slider = screen.getByLabelText("Code font size");
+    const slider = screen.getByLabelText("代码字号");
     fireEvent.change(slider, { target: { value: "14" } });
 
     await waitFor(() => {
@@ -714,7 +773,7 @@ describe("SettingsView Display", () => {
     });
 
     const row = screen
-      .getByText("Notification sounds")
+      .getByText("通知声音")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected notification sounds row");
@@ -736,7 +795,7 @@ describe("SettingsView Display", () => {
     });
 
     const row = screen
-      .getByText("Sub-agent notifications")
+      .getByText("子 agent 通知")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected sub-agent notifications row");
@@ -760,7 +819,7 @@ describe("SettingsView About", () => {
     });
 
     const row = screen
-      .getByText("Automatically check for app updates")
+      .getByText("自动检查应用更新")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected automatic app update checks row");
@@ -779,7 +838,7 @@ describe("SettingsView Environments", () => {
       appSettings: { globalWorktreesFolder: "I:/existing-worktrees" },
     });
 
-    const input = screen.getByLabelText("Global worktrees root");
+    const input = screen.getByLabelText("全局 worktree 根目录");
     expect(input).toBeTruthy();
     expect((input as HTMLInputElement).value).toBe("I:/existing-worktrees");
     expect((input as HTMLInputElement).placeholder).toBe("/path/to/worktrees-root");
@@ -793,9 +852,9 @@ describe("SettingsView Environments", () => {
       onUpdateWorkspaceSettings,
     });
 
-    const input = screen.getByLabelText("Global worktrees root");
+    const input = screen.getByLabelText("全局 worktree 根目录");
     fireEvent.change(input, { target: { value: "I:/cm-worktrees" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -818,7 +877,7 @@ describe("SettingsView Environments", () => {
 
     const textarea = screen.getByPlaceholderText("pnpm install");
     fireEvent.change(textarea, { target: { value: "echo updated" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateWorkspaceSettings).toHaveBeenCalledWith("w1", {
@@ -841,13 +900,13 @@ describe("SettingsView Environments", () => {
       onUpdateWorkspaceSettings,
     });
 
-    fireEvent.change(screen.getByLabelText("Global worktrees root"), {
+    fireEvent.change(screen.getByLabelText("全局 worktree 根目录"), {
       target: { value: "I:/cm-worktrees" },
     });
     fireEvent.change(screen.getByPlaceholderText("pnpm install"), {
       target: { value: "echo updated" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     expect(
       await screen.findByText("Failed to save workspace settings"),
@@ -855,7 +914,7 @@ describe("SettingsView Environments", () => {
     expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
     expect(onUpdateWorkspaceSettings).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateWorkspaceSettings).toHaveBeenCalledTimes(2);
@@ -870,10 +929,10 @@ describe("SettingsView Environments", () => {
       onUpdateAppSettings,
     });
 
-    expect(screen.getByText("No projects yet.")).toBeTruthy();
-    const input = screen.getByLabelText("Global worktrees root");
+    expect(screen.getByText("暂无项目。")).toBeTruthy();
+    const input = screen.getByLabelText("全局 worktree 根目录");
     fireEvent.change(input, { target: { value: "I:/cm-worktrees" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -895,22 +954,22 @@ describe("SettingsView Environments", () => {
       onUpdateAppSettings,
     });
 
-    fireEvent.change(screen.getByLabelText("Global worktrees root"), {
+    fireEvent.change(screen.getByLabelText("全局 worktree 根目录"), {
       target: { value: "I:/cm-worktrees" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(
-        (screen.getByRole("button", { name: "Saving..." }) as HTMLButtonElement).disabled,
+        (screen.getByRole("button", { name: "保存中..." }) as HTMLButtonElement).disabled,
       ).toBe(true);
     });
-    expect((screen.getByLabelText("Global worktrees root") as HTMLInputElement).disabled).toBe(
+    expect((screen.getByLabelText("全局 worktree 根目录") as HTMLInputElement).disabled).toBe(
       true,
     );
     expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "Saving..." }));
+    fireEvent.click(screen.getByRole("button", { name: "保存中..." }));
     expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -919,7 +978,7 @@ describe("SettingsView Environments", () => {
     });
 
     await waitFor(() => {
-      expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(
+      expect((screen.getByRole("button", { name: "保存" }) as HTMLButtonElement).disabled).toBe(
         true,
       );
     });
@@ -931,7 +990,7 @@ describe("SettingsView Environments", () => {
       appSettings: { globalWorktreesFolder: null },
     });
 
-    const input = screen.getByLabelText("Global worktrees root");
+    const input = screen.getByLabelText("全局 worktree 根目录");
     fireEvent.change(input, { target: { value: "I:/typing" } });
 
     rerender({
@@ -939,14 +998,14 @@ describe("SettingsView Environments", () => {
       appSettings: { globalWorktreesFolder: "I:/loaded-from-settings" },
     });
 
-    expect((screen.getByLabelText("Global worktrees root") as HTMLInputElement).value).toBe(
+    expect((screen.getByLabelText("全局 worktree 根目录") as HTMLInputElement).value).toBe(
       "I:/typing",
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    fireEvent.click(screen.getByRole("button", { name: "重置" }));
 
     await waitFor(() => {
-      expect((screen.getByLabelText("Global worktrees root") as HTMLInputElement).value).toBe(
+      expect((screen.getByLabelText("全局 worktree 根目录") as HTMLInputElement).value).toBe(
         "I:/loaded-from-settings",
       );
     });
@@ -961,9 +1020,9 @@ describe("SettingsView Environments", () => {
       onUpdateAppSettings,
     });
 
-    const input = screen.getByLabelText("Global worktrees root");
+    const input = screen.getByLabelText("全局 worktree 根目录");
     fireEvent.change(input, { target: { value: "I:/cm-worktrees" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     expect(
       await screen.findByText("Failed to save global worktrees root"),
@@ -981,11 +1040,11 @@ describe("SettingsView Environments", () => {
       onUpdateWorkspaceSettings,
     });
 
-    const input = screen.getByLabelText("Global worktrees root");
+    const input = screen.getByLabelText("全局 worktree 根目录");
     const textarea = screen.getByPlaceholderText("pnpm install");
     fireEvent.change(input, { target: { value: "I:/cm-worktrees" } });
     fireEvent.change(textarea, { target: { value: "echo updated" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     expect(
       await screen.findByText("Failed to save workspace settings"),
@@ -1006,7 +1065,7 @@ describe("SettingsView Environments", () => {
     expect((input as HTMLInputElement).value).toBe("I:/cm-worktrees");
 
     onUpdateWorkspaceSettings.mockResolvedValueOnce(undefined);
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateWorkspaceSettings).toHaveBeenCalledTimes(2);
@@ -1019,13 +1078,13 @@ describe("SettingsView Environments", () => {
     renderEnvironmentsSection({ onUpdateWorkspaceSettings });
 
     expect(
-      screen.getByText("Environments", { selector: ".settings-section-title" }),
+      screen.getByText("环境", { selector: ".settings-section-title" }),
     ).toBeTruthy();
     const textarea = screen.getByPlaceholderText("pnpm install");
     expect((textarea as HTMLTextAreaElement).value).toBe("echo one");
 
     fireEvent.change(textarea, { target: { value: "echo updated" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateWorkspaceSettings).toHaveBeenCalledWith("w1", {
@@ -1041,7 +1100,7 @@ describe("SettingsView Environments", () => {
 
     const textarea = screen.getByPlaceholderText("pnpm install");
     fireEvent.change(textarea, { target: { value: "   \n\t" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
       expect(onUpdateWorkspaceSettings).toHaveBeenCalledWith("w1", {
@@ -1062,7 +1121,7 @@ describe("SettingsView Environments", () => {
     try {
       renderEnvironmentsSection();
 
-      fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+      fireEvent.click(screen.getByRole("button", { name: "复制" }));
 
       await waitFor(() => {
         expect(writeText).toHaveBeenCalledWith("echo one");
@@ -1115,7 +1174,7 @@ describe("SettingsView Codex section", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Review mode"), {
+    fireEvent.change(screen.getByLabelText("Review 模式"), {
       target: { value: "detached" },
     });
 
@@ -1123,6 +1182,12 @@ describe("SettingsView Codex section", () => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
         expect.objectContaining({ reviewDeliveryMode: "detached" }),
       );
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Codex 配置已关联/)).toBeTruthy();
+      expect(screen.getByText(/默认模型：gpt-5-codex/)).toBeTruthy();
+      expect(screen.getByText(/Codex 2 个/)).toBeTruthy();
+      expect(screen.getByText(/Agents 3 个/)).toBeTruthy();
     });
   });
 
@@ -1165,11 +1230,11 @@ describe("SettingsView Codex section", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Start daemon" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Stop daemon" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Refresh status" })).toBeTruthy();
-      expect(screen.getByLabelText("Remote backend host")).toBeTruthy();
-      expect(screen.getByLabelText("Remote backend token")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "启动守护进程" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "停止守护进程" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "刷新状态" })).toBeTruthy();
+      expect(screen.getByLabelText("远程后端地址")).toBeTruthy();
+      expect(screen.getByLabelText("远程后端令牌")).toBeTruthy();
     });
   });
 
@@ -1240,18 +1305,16 @@ describe("SettingsView Codex section", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByLabelText("Remote backend host")).toBeTruthy();
-        expect(screen.getByLabelText("Remote backend token")).toBeTruthy();
-        expect(screen.getByRole("button", { name: "Connect & test" })).toBeTruthy();
+        expect(screen.getByLabelText("远程后端地址")).toBeTruthy();
+        expect(screen.getByLabelText("远程后端令牌")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "连接并测试" })).toBeTruthy();
       });
 
-      expect(screen.queryByLabelText("Backend mode")).toBeNull();
-      expect(screen.queryByRole("button", { name: "Start daemon" })).toBeNull();
-      expect(screen.queryByRole("button", { name: "Detect Tailscale" })).toBeNull();
+      expect(screen.queryByLabelText("后端模式")).toBeNull();
+      expect(screen.queryByRole("button", { name: "启动守护进程" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "检测 Tailscale" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Start Runner" })).toBeNull();
-      expect(
-        screen.getByText(/get the tailscale hostname and token from your desktop/i),
-      ).toBeTruthy();
+      expect(screen.getByText(/从桌面端 CodexMonitor 获取 Tailscale 主机名和令牌/)).toBeTruthy();
     } finally {
       if (originalPlatformDescriptor) {
         Object.defineProperty(window.navigator, "platform", originalPlatformDescriptor);
@@ -1361,12 +1424,12 @@ describe("SettingsView Codex section", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByRole("list", { name: "Saved remotes" })).toBeTruthy();
-        expect(screen.getByLabelText("Remote name")).toBeTruthy();
+        expect(screen.getByRole("list", { name: "已保存远程端" })).toBeTruthy();
+        expect(screen.getByLabelText("远程端名称")).toBeTruthy();
       });
-      expect(screen.getAllByText(/Last connected: Never/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/上次连接：\s*从未/).length).toBeGreaterThan(0);
 
-      fireEvent.click(screen.getByRole("button", { name: "Use Office Mac remote" }));
+      fireEvent.click(screen.getByRole("button", { name: "使用 Office Mac 远程端" }));
 
       await waitFor(() => {
         expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -1380,10 +1443,10 @@ describe("SettingsView Codex section", () => {
       });
 
       onUpdateAppSettings.mockClear();
-      fireEvent.change(screen.getByLabelText("Remote name"), {
+      fireEvent.change(screen.getByLabelText("远程端名称"), {
         target: { value: "Home Mac" },
       });
-      fireEvent.blur(screen.getByLabelText("Remote name"));
+      fireEvent.blur(screen.getByLabelText("远程端名称"));
 
       await waitFor(() => {
         expect(
@@ -1392,24 +1455,24 @@ describe("SettingsView Codex section", () => {
       });
 
       onUpdateAppSettings.mockClear();
-      fireEvent.click(screen.getByRole("button", { name: "Add remote" }));
-      expect(screen.getByRole("dialog", { name: "Add remote" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "添加远程端" }));
+      expect(screen.getByRole("dialog", { name: "添加远程端" })).toBeTruthy();
       expect(onUpdateAppSettings).toHaveBeenCalledTimes(0);
 
-      fireEvent.click(screen.getByRole("button", { name: "Close add remote modal" }));
-      expect(screen.queryByRole("dialog", { name: "Add remote" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "关闭添加远程端弹窗" }));
+      expect(screen.queryByRole("dialog", { name: "添加远程端" })).toBeNull();
 
-      fireEvent.click(screen.getByRole("button", { name: "Add remote" }));
-      fireEvent.change(screen.getByLabelText("New remote name"), {
+      fireEvent.click(screen.getByRole("button", { name: "添加远程端" }));
+      fireEvent.change(screen.getByLabelText("新远程端名称"), {
         target: { value: "Travel Mac" },
       });
-      fireEvent.change(screen.getByLabelText("New remote host"), {
+      fireEvent.change(screen.getByLabelText("新远程端地址"), {
         target: { value: "travel-mac.tailnet.ts.net:4732" },
       });
-      fireEvent.change(screen.getByLabelText("New remote token"), {
+      fireEvent.change(screen.getByLabelText("新远程端令牌"), {
         target: { value: "token-travel" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Connect & add" }));
+      fireEvent.click(screen.getByRole("button", { name: "连接并添加" }));
 
       await waitFor(() => {
         expect(onUpdateAppSettings).toHaveBeenCalledTimes(2);
@@ -1425,22 +1488,22 @@ describe("SettingsView Codex section", () => {
         (entry) => entry.id === connectedSettings.activeRemoteBackendId,
       );
       expect(connectedEntry?.lastConnectedAtMs).toEqual(expect.any(Number));
-      expect(screen.queryByRole("dialog", { name: "Add remote" })).toBeNull();
+      expect(screen.queryByRole("dialog", { name: "添加远程端" })).toBeNull();
       expect(listWorkspacesMock).toHaveBeenCalled();
 
       onUpdateAppSettings.mockClear();
-      fireEvent.click(screen.getByRole("button", { name: "Add remote" }));
-      fireEvent.change(screen.getByLabelText("New remote token"), {
+      fireEvent.click(screen.getByRole("button", { name: "添加远程端" }));
+      fireEvent.change(screen.getByLabelText("新远程端令牌"), {
         target: { value: "" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Connect & add" }));
+      fireEvent.click(screen.getByRole("button", { name: "连接并添加" }));
 
       await waitFor(() => {
         expect(screen.getByText("Remote backend token is required.")).toBeTruthy();
       });
 
       onUpdateAppSettings.mockClear();
-      fireEvent.click(screen.getByRole("button", { name: "Move Home Mac down" }));
+      fireEvent.click(screen.getByRole("button", { name: "下移 Home Mac" }));
 
       await waitFor(() => {
         expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
@@ -1449,8 +1512,8 @@ describe("SettingsView Codex section", () => {
       });
 
       onUpdateAppSettings.mockClear();
-      fireEvent.click(screen.getByRole("button", { name: "Delete Office Mac" }));
-      fireEvent.click(screen.getByRole("button", { name: "Delete remote" }));
+      fireEvent.click(screen.getByRole("button", { name: "删除 Office Mac" }));
+      fireEvent.click(screen.getByRole("button", { name: "删除远程端" }));
 
       await waitFor(() => {
         expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
@@ -1560,9 +1623,9 @@ describe("SettingsView Codex defaults", () => {
       />,
     );
 
-    const modelSelect = screen.getByLabelText("Model") as HTMLSelectElement;
+    const modelSelect = screen.getByLabelText("模型") as HTMLSelectElement;
     const effortSelect = screen.getByLabelText(
-      "Reasoning effort",
+      "推理强度",
     ) as HTMLSelectElement;
 
     await waitFor(() => {
@@ -1657,9 +1720,9 @@ describe("SettingsView Codex defaults", () => {
       />,
     );
 
-    const modelSelect = screen.getByLabelText("Model") as HTMLSelectElement;
+    const modelSelect = screen.getByLabelText("模型") as HTMLSelectElement;
     const effortSelect = screen.getByLabelText(
-      "Reasoning effort",
+      "推理强度",
     ) as HTMLSelectElement;
 
     await waitFor(() => {
@@ -1695,7 +1758,7 @@ describe("SettingsView Features", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderFeaturesSection({ onUpdateAppSettings });
 
-    fireEvent.change(screen.getByLabelText("Personality"), {
+    fireEvent.change(screen.getByLabelText("个性"), {
       target: { value: "pragmatic" },
     });
 
@@ -1711,7 +1774,7 @@ describe("SettingsView Features", () => {
       appSettings: { steerEnabled: true },
     });
 
-    await screen.findByText("Background terminal");
+    await screen.findByText("统一执行工具");
     expect(screen.queryByText("Steer mode")).toBeNull();
   });
 
@@ -1743,9 +1806,7 @@ describe("SettingsView Features", () => {
       },
     });
 
-    await screen.findByText(
-      "Use Responses API WebSocket transport for OpenAI by default.",
-    );
+    await screen.findByText("默认使用 Responses API WebSocket 传输。");
     expect(screen.queryByText("Steer mode")).toBeNull();
   });
 
@@ -1756,7 +1817,7 @@ describe("SettingsView Features", () => {
       appSettings: { unifiedExecEnabled: true },
     });
 
-    const terminalTitle = await screen.findByText("Background terminal");
+    const terminalTitle = await screen.findByText("统一执行工具");
     const terminalRow = terminalTitle.closest(".settings-toggle-row");
     expect(terminalRow).not.toBeNull();
 
@@ -1768,6 +1829,42 @@ describe("SettingsView Features", () => {
         expect.objectContaining({ unifiedExecEnabled: false }),
       );
     });
+  });
+
+  it("localizes dynamic feature labels and descriptions", async () => {
+    renderFeaturesSection({
+      experimentalFeaturesResponse: {
+        data: [
+          {
+            name: "unified_exec",
+            stage: "stable",
+            enabled: true,
+            defaultEnabled: true,
+            displayName: "Background terminal",
+            description: "Run long-running terminal commands in the background.",
+            announcement: null,
+          },
+          {
+            name: "unknown_preview_flag",
+            stage: "underDevelopment",
+            enabled: false,
+            defaultEnabled: false,
+            displayName: "Unknown preview",
+            description: "Remote English description.",
+            announcement: null,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+
+    expect(await screen.findByText("统一执行工具")).toBeTruthy();
+    expect(screen.getByText("使用单一 PTY 执行工具。")).toBeTruthy();
+    expect(screen.getByText("功能键：unknown / preview / flag")).toBeTruthy();
+    expect(screen.getByText("功能键：features.unknown_preview_flag")).toBeTruthy();
+    expect(screen.queryByText("Background terminal")).toBeNull();
+    expect(screen.queryByText("Run long-running terminal commands in the background.")).toBeNull();
+    expect(screen.queryByText("Remote English description.")).toBeNull();
   });
 
   it("shows fallback description when Codex omits feature description", async () => {
@@ -1788,9 +1885,7 @@ describe("SettingsView Features", () => {
       },
     });
 
-    await screen.findByText(
-      "Use Responses API WebSocket transport for OpenAI by default.",
-    );
+    await screen.findByText("默认使用 Responses API WebSocket 传输。");
   });
 });
 
@@ -1804,7 +1899,7 @@ describe("SettingsView Composer", () => {
       },
     });
 
-    const hintTitle = await screen.findByText("Show follow-up hint while processing");
+    const hintTitle = await screen.findByText("处理中显示追问提示");
     const hintRow = hintTitle.closest(".settings-toggle-row");
     expect(hintRow).not.toBeNull();
     fireEvent.click(within(hintRow as HTMLElement).getByRole("button"));
@@ -1816,48 +1911,6 @@ describe("SettingsView Composer", () => {
     });
   });
 
-  it("updates follow-up behavior from queue to steer", async () => {
-    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
-    renderComposerSection({
-      onUpdateAppSettings,
-      appSettings: {
-        steerEnabled: true,
-        followUpMessageBehavior: "queue",
-      },
-    });
-
-    fireEvent.click(screen.getByRole("radio", { name: "Steer" }));
-
-    await waitFor(() => {
-      expect(onUpdateAppSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ followUpMessageBehavior: "steer" }),
-      );
-    });
-  });
-
-  it("disables steer follow-up behavior when steer is unavailable", async () => {
-    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
-    renderComposerSection({
-      onUpdateAppSettings,
-      appSettings: {
-        steerEnabled: false,
-        followUpMessageBehavior: "queue",
-      },
-    });
-
-    const steerOption = screen.getByRole("radio", { name: "Steer" });
-    expect(steerOption.hasAttribute("disabled")).toBe(true);
-    expect(
-      screen.getByText(
-        "Steer is unavailable in the current Codex config. Follow-ups will queue.",
-      ),
-    ).not.toBeNull();
-
-    fireEvent.click(steerOption);
-    await waitFor(() => {
-      expect(onUpdateAppSettings).not.toHaveBeenCalled();
-    });
-  });
 });
 
 describe("SettingsView mobile layout", () => {
@@ -1947,18 +2000,18 @@ describe("SettingsView mobile layout", () => {
 
       fireEvent.click(
         within(rendered.container).getByRole("button", {
-          name: "Display & Sound",
+          name: "显示与声音",
         }),
       );
 
       await waitFor(() => {
         expect(
           within(rendered.container).getByRole("button", {
-            name: "Back to settings sections",
+            name: "返回设置分类",
           }),
         ).toBeTruthy();
         expect(
-          within(rendered.container).getByText("Display & Sound", {
+          within(rendered.container).getByText("显示与声音", {
             selector: ".settings-mobile-detail-title",
           }),
         ).toBeTruthy();
@@ -1966,7 +2019,7 @@ describe("SettingsView mobile layout", () => {
 
       fireEvent.click(
         within(rendered.container).getByRole("button", {
-          name: "Back to settings sections",
+          name: "返回设置分类",
         }),
       );
 
@@ -2173,47 +2226,47 @@ describe("SettingsView Shortcuts", () => {
       />,
     );
 
-    const searchInput = screen.getByLabelText("Search shortcuts");
-    expect(screen.getByText("Toggle terminal panel")).toBeTruthy();
-    expect(screen.getByText("Cycle model")).toBeTruthy();
+    const searchInput = screen.getByLabelText("搜索快捷键");
+    expect(screen.getByText("切换终端面板")).toBeTruthy();
+    expect(screen.getByText("切换模型")).toBeTruthy();
 
     await act(async () => {
-      fireEvent.change(searchInput, { target: { value: "navigation" } });
+      fireEvent.change(searchInput, { target: { value: "导航" } });
     });
     await waitFor(() => {
-      expect(screen.getByText("Next workspace")).toBeTruthy();
-      expect(screen.queryByText("Toggle terminal panel")).toBeNull();
-    });
-
-    await act(async () => {
-      fireEvent.change(searchInput, { target: { value: "sidebars" } });
-    });
-    await waitFor(() => {
-      expect(screen.getByText("Toggle projects sidebar")).toBeTruthy();
-      expect(screen.queryByText("Next workspace")).toBeNull();
+      expect(screen.getByText("下一个项目")).toBeTruthy();
+      expect(screen.queryByText("切换终端面板")).toBeNull();
     });
 
     await act(async () => {
-      fireEvent.change(searchInput, { target: { value: "new shortcut while focused" } });
+      fireEvent.change(searchInput, { target: { value: "侧栏" } });
     });
     await waitFor(() => {
-      expect(screen.getByText("Cycle model")).toBeTruthy();
-      expect(screen.queryByText("Toggle terminal panel")).toBeNull();
+      expect(screen.getByText("切换项目侧栏")).toBeTruthy();
+      expect(screen.queryByText("下一个项目")).toBeNull();
+    });
+
+    await act(async () => {
+      fireEvent.change(searchInput, { target: { value: "新快捷键" } });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("切换模型")).toBeTruthy();
+      expect(screen.queryByText("切换终端面板")).toBeNull();
     });
 
     await act(async () => {
       fireEvent.change(searchInput, { target: { value: "no-such-shortcut" } });
     });
     await waitFor(() => {
-      expect(screen.getByText('No shortcuts match "no-such-shortcut".')).toBeTruthy();
+      expect(screen.getByText("没有匹配的快捷键：“no-such-shortcut”")).toBeTruthy();
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+      fireEvent.click(screen.getByRole("button", { name: "清除" }));
     });
     await waitFor(() => {
-      expect(screen.getByText("Toggle terminal panel")).toBeTruthy();
-      expect(screen.queryByText('No shortcuts match "no-such-shortcut".')).toBeNull();
+      expect(screen.getByText("切换终端面板")).toBeTruthy();
+      expect(screen.queryByText("没有匹配的快捷键：“no-such-shortcut”")).toBeNull();
     });
   });
 });

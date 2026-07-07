@@ -3,11 +3,14 @@ import type { MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import Check from "lucide-react/dist/esm/icons/check";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Diff from "lucide-react/dist/esm/icons/diff";
 import FileDiffIcon from "lucide-react/dist/esm/icons/file-diff";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import Image from "lucide-react/dist/esm/icons/image";
+import Pencil from "lucide-react/dist/esm/icons/pencil";
 import Quote from "lucide-react/dist/esm/icons/quote";
 import Search from "lucide-react/dist/esm/icons/search";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
@@ -27,6 +30,7 @@ import {
   formatDurationMs,
   formatToolStatusLabel,
   normalizeMessageImageSrc,
+  stripAnsiControlCodes,
   toolNameFromTitle,
   toolStatusTone,
   type MessageImage,
@@ -60,6 +64,10 @@ type MessageRowProps = MarkdownFileLinkProps & {
   isCopied: boolean;
   onCopy: (item: Extract<ConversationItem, { kind: "message" }>) => void;
   onQuote?: (item: Extract<ConversationItem, { kind: "message" }>, selectedText?: string) => void;
+  onResendUserMessage?: (
+    item: Extract<ConversationItem, { kind: "message" }>,
+    text: string,
+  ) => void;
   codeBlockCopyUseModifier?: boolean;
 };
 
@@ -77,6 +85,15 @@ type ReviewRowProps = MarkdownFileLinkProps & {
 type DiffRowProps = {
   item: Extract<ConversationItem, { kind: "diff" }>;
 };
+
+function InlineExpandIcon({ expanded }: { expanded: boolean }) {
+  const Icon = expanded ? ChevronDown : ChevronRight;
+  return (
+    <span className="tool-inline-bar-toggle-icon" aria-hidden>
+      <Icon size={14} strokeWidth={1.8} />
+    </span>
+  );
+}
 
 type UserInputRowProps = {
   item: Extract<ConversationItem, { kind: "userInput" }>;
@@ -192,12 +209,13 @@ const ImageLightbox = memo(function ImageLightbox({
 const CommandOutput = memo(function CommandOutput({ output }: CommandOutputProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isPinned, setIsPinned] = useState(true);
+  const displayOutput = useMemo(() => stripAnsiControlCodes(output), [output]);
   const lines = useMemo(() => {
-    if (!output) {
+    if (!displayOutput) {
       return [];
     }
-    return output.split(/\r?\n/);
-  }, [output]);
+    return displayOutput.split(/\r?\n/);
+  }, [displayOutput]);
   const lineWindow = useMemo(() => {
     if (lines.length <= MAX_COMMAND_OUTPUT_LINES) {
       return { offset: 0, lines };
@@ -371,6 +389,7 @@ export const MessageRow = memo(function MessageRow({
   isCopied,
   onCopy,
   onQuote,
+  onResendUserMessage,
   codeBlockCopyUseModifier,
   showMessageFilePath,
   workspacePath,
@@ -379,7 +398,10 @@ export const MessageRow = memo(function MessageRow({
   onOpenThreadLink,
 }: MessageRowProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(item.text);
   const bubbleRef = useRef<HTMLDivElement | null>(null);
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectionSnapshotRef = useRef<string | null>(null);
   const hasText = item.text.trim().length > 0;
   const imageItems = useMemo(() => {
@@ -401,6 +423,14 @@ export const MessageRow = memo(function MessageRow({
     hasText &&
     imageItems.length === 0 &&
     isStandaloneMarkdownTable(item.text);
+  const isLongUserMessage =
+    item.role === "user" && (item.text.trim().length > 180 || imageItems.length > 0);
+  const canEditUserMessage = item.role === "user" && Boolean(onResendUserMessage);
+
+  useEffect(() => {
+    setIsEditing(false);
+    setEditText(item.text);
+  }, [item.id, item.text]);
 
   const getSelectedMessageText = useCallback(() => {
     const bubble = bubbleRef.current;
@@ -422,7 +452,11 @@ export const MessageRow = memo(function MessageRow({
         return false;
       }
       const element = node instanceof Element ? node : node.parentElement;
-      return Boolean(element?.closest(".message-quote-button, .message-copy-button"));
+      return Boolean(
+        element?.closest(
+          ".message-quote-button, .message-copy-button, .message-edit-button",
+        ),
+      );
     };
 
     if (isWithinMessageControls(selection.anchorNode) || isWithinMessageControls(selection.focusNode)) {
@@ -440,8 +474,35 @@ export const MessageRow = memo(function MessageRow({
     onQuote(item, selectedText);
   }, [getSelectedMessageText, item, onQuote]);
 
+  const startEdit = useCallback(() => {
+    setEditText(item.text);
+    setIsEditing(true);
+    requestAnimationFrame(() => {
+      const textarea = editTextareaRef.current;
+      if (!textarea) {
+        return;
+      }
+      textarea.focus();
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    });
+  }, [item.text]);
+
+  const cancelEdit = useCallback(() => {
+    setEditText(item.text);
+    setIsEditing(false);
+  }, [item.text]);
+
+  const submitEdit = useCallback(() => {
+    const trimmed = editText.trim();
+    if (!trimmed || !onResendUserMessage) {
+      return;
+    }
+    onResendUserMessage(item, trimmed);
+    setIsEditing(false);
+  }, [editText, item, onResendUserMessage]);
+
   return (
-    <div className={`message ${item.role}`}>
+    <div className={`message ${item.role}${isLongUserMessage ? " message-long" : ""}`}>
       <div
         ref={bubbleRef}
         className={`bubble message-bubble${isTableOnlyAssistantMessage ? " message-bubble-table-only" : ""}`}
@@ -453,7 +514,42 @@ export const MessageRow = memo(function MessageRow({
             hasText={hasText}
           />
         )}
-        {hasText && (
+        {isEditing ? (
+          <div className="message-edit-form">
+            <textarea
+              ref={editTextareaRef}
+              className="message-edit-textarea"
+              value={editText}
+              rows={Math.min(8, Math.max(2, editText.split(/\r?\n/).length))}
+              onChange={(event) => setEditText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelEdit();
+                  return;
+                }
+                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  submitEdit();
+                }
+              }}
+              aria-label="编辑消息"
+            />
+            <div className="message-edit-actions">
+              <button type="button" className="ghost" onClick={cancelEdit}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={submitEdit}
+                disabled={!editText.trim()}
+              >
+                重新发送
+              </button>
+            </div>
+          </div>
+        ) : hasText ? (
           <Markdown
             value={item.text}
             className="markdown"
@@ -465,7 +561,7 @@ export const MessageRow = memo(function MessageRow({
             onOpenFileLinkMenu={onOpenFileLinkMenu}
             onOpenThreadLink={onOpenThreadLink}
           />
-        )}
+        ) : null}
         {lightboxIndex !== null && imageItems.length > 0 && (
           <ImageLightbox
             images={imageItems}
@@ -488,6 +584,17 @@ export const MessageRow = memo(function MessageRow({
             title="Quote message"
           >
             <Quote size={14} aria-hidden />
+          </button>
+        )}
+        {canEditUserMessage && hasText && !isEditing && (
+          <button
+            type="button"
+            className="ghost message-edit-button"
+            onClick={startEdit}
+            aria-label="编辑并重新发送"
+            title="编辑并重新发送"
+          >
+            <Pencil size={14} aria-hidden />
           </button>
         )}
         <button
@@ -521,14 +628,16 @@ export const ReasoningRow = memo(function ReasoningRow({
   const { summaryTitle, bodyText, hasBody } = parsed;
   const reasoningTone: StatusTone = hasBody ? "completed" : "processing";
   return (
-    <div className="tool-inline reasoning-inline">
+    <div className={`tool-inline reasoning-inline ${isExpanded ? "tool-inline-expanded" : ""}`}>
       <button
         type="button"
         className="tool-inline-bar-toggle"
         onClick={() => onToggle(item.id)}
         aria-expanded={isExpanded}
         aria-label="Toggle reasoning details"
-      />
+      >
+        <InlineExpandIcon expanded={isExpanded} />
+      </button>
       <div className="tool-inline-content">
         <button
           type="button"
@@ -632,7 +741,9 @@ export const UserInputRow = memo(function UserInputRow({
         onClick={() => onToggle(item.id)}
         aria-expanded={isExpanded}
         aria-label="Toggle answered input details"
-      />
+      >
+        <InlineExpandIcon expanded={isExpanded} />
+      </button>
       <div className="tool-inline-content">
         <button
           type="button"
@@ -725,9 +836,6 @@ export const ToolRow = memo(function ToolRow({
   const showToolOutput = isExpanded && (!isFileChange || !hasChanges);
   const normalizedStatus = (item.status ?? "").toLowerCase();
   const isCommandRunning = isCommand && /in[_\s-]*progress|running|started/.test(normalizedStatus);
-  const commandDurationMs =
-    typeof item.durationMs === "number" ? item.durationMs : null;
-  const isLongRunning = commandDurationMs !== null && commandDurationMs >= 1200;
   const [showLiveOutput, setShowLiveOutput] = useState(false);
   const [isExportingPlan, setIsExportingPlan] = useState(false);
 
@@ -747,7 +855,7 @@ export const ToolRow = memo(function ToolRow({
   const showCommandOutput =
     isCommand &&
     summary.output &&
-    (isExpanded || (isCommandRunning && showLiveOutput) || isLongRunning);
+    (isExpanded || (isCommandRunning && showLiveOutput));
 
   useEffect(() => {
     if (showCommandOutput && isCommandRunning && showLiveOutput) {
@@ -787,7 +895,9 @@ export const ToolRow = memo(function ToolRow({
         onClick={() => onToggle(item.id)}
         aria-expanded={isExpanded}
         aria-label="Toggle tool details"
-      />
+      >
+        <InlineExpandIcon expanded={isExpanded} />
+      </button>
       <div className="tool-inline-content">
         <button
           type="button"
@@ -870,7 +980,7 @@ export const ToolRow = memo(function ToolRow({
         {showCommandOutput && <CommandOutput output={summary.output ?? ""} />}
         {showToolOutput && summary.output && !isCommand && (
           <Markdown
-            value={summary.output}
+            value={stripAnsiControlCodes(summary.output)}
             className="tool-inline-output markdown"
             codeBlock={item.toolType !== "plan"}
             showFilePath={showMessageFilePath}

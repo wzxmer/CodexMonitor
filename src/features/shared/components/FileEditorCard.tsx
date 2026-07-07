@@ -47,6 +47,7 @@ export function FileEditorCard({
   onSave,
   classNames,
 }: FileEditorCardProps) {
+  const isCreateAction = saveLabel === "创建" || saveLabel === "Create";
   return (
     <div className={classNames.container}>
       <div className={classNames.header}>
@@ -58,8 +59,8 @@ export function FileEditorCard({
             className={classNames.iconButton}
             onClick={onRefresh}
             disabled={refreshDisabled}
-            aria-label={`Refresh ${title}`}
-            title="Refresh"
+            aria-label={`刷新 ${title}`}
+            title="刷新"
           >
             <RefreshCw aria-hidden />
           </button>
@@ -68,7 +69,7 @@ export function FileEditorCard({
             className={classNames.iconButton}
             onClick={onSave}
             disabled={saveDisabled}
-            aria-label={saveLabel === "Create" ? `Create ${title}` : `Save ${title}`}
+            aria-label={isCreateAction ? `创建 ${title}` : `保存 ${title}`}
             title={saveLabel}
           >
             <Save aria-hidden />

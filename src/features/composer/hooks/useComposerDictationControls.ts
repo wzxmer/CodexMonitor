@@ -30,19 +30,19 @@ export function useComposerDictationControls({
     (!allowOpenDictationSettings &&
       (isDictationProcessing ? !onCancelDictation : !dictationEnabled || !onToggleDictation));
   const micAriaLabel = allowOpenDictationSettings
-    ? "Open dictation settings"
+    ? "打开听写设置"
     : isDictationProcessing
-      ? "Cancel transcription"
+      ? "取消转写"
       : isDictating
-        ? "Stop dictation"
-        : "Start dictation";
+        ? "停止听写"
+        : "开始听写";
   const micTitle = allowOpenDictationSettings
-    ? "Dictation disabled. Open settings"
+    ? "听写未启用，打开设置"
     : isDictationProcessing
-      ? "Cancel transcription"
+      ? "取消转写"
       : isDictating
-        ? "Stop dictation"
-        : "Start dictation";
+        ? "停止听写"
+        : "开始听写";
 
   const handleMicClick = useCallback(() => {
     if (isDictationProcessing) {

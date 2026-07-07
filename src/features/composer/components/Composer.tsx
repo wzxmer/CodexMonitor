@@ -9,6 +9,7 @@ import {
 import type {
   AppMention,
   AppOption,
+  ComposerSendShortcut,
   ComposerSendIntent,
   ComposerEditorSettings,
   CustomPromptOption,
@@ -59,7 +60,8 @@ type ComposerProps = {
   isProcessing: boolean;
   steerAvailable: boolean;
   followUpMessageBehavior: FollowUpMessageBehavior;
-  composerFollowUpHintEnabled: boolean;
+  composerSendShortcut: ComposerSendShortcut;
+  onSelectComposerSendShortcut?: (shortcut: ComposerSendShortcut) => void;
   collaborationModes: { id: string; label: string }[];
   selectedCollaborationModeId: string | null;
   onSelectCollaborationMode: (id: string | null) => void;
@@ -83,6 +85,8 @@ type ComposerProps = {
   contextUsage?: ThreadTokenUsage | null;
   queuedMessages?: QueuedMessage[];
   queuePausedReason?: string | null;
+  canSteerQueued?: boolean;
+  onSteerQueued?: (id: string) => void;
   onEditQueued?: (item: QueuedMessage) => void;
   onDeleteQueued?: (id: string) => void;
   sendLabel?: string;
@@ -168,7 +172,8 @@ export const Composer = memo(function Composer({
   isProcessing,
   steerAvailable,
   followUpMessageBehavior,
-  composerFollowUpHintEnabled,
+  composerSendShortcut,
+  onSelectComposerSendShortcut,
   collaborationModes,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
@@ -192,9 +197,11 @@ export const Composer = memo(function Composer({
   contextUsage = null,
   queuedMessages = [],
   queuePausedReason = null,
+  canSteerQueued = false,
+  onSteerQueued,
   onEditQueued,
   onDeleteQueued,
-  sendLabel = "Send",
+  sendLabel = "发送",
   draftText = "",
   onDraftChange,
   historyKey = null,
@@ -253,13 +260,10 @@ export const Composer = memo(function Composer({
   const isDictationBusy = dictationState !== "idle";
   const canSend = text.trim().length > 0 || attachedImages.length > 0;
   const isMac = isMacPlatform();
-  const followUpShortcutLabel = isMac ? "Shift+Cmd+Enter" : "Shift+Ctrl+Enter";
   const effectiveFollowUpBehavior: FollowUpMessageBehavior =
     followUpMessageBehavior === "steer" && steerAvailable ? "steer" : "queue";
   const oppositeFollowUpIntent: ComposerSendIntent =
     effectiveFollowUpBehavior === "queue" ? "steer" : "queue";
-  const oppositeFallsBackToQueue =
-    oppositeFollowUpIntent === "steer" && !steerAvailable;
   const defaultSubmitIntent: ComposerSendIntent = isProcessing
     ? effectiveFollowUpBehavior
     : "default";
@@ -268,8 +272,8 @@ export const Composer = memo(function Composer({
     : "default";
   const effectiveSendLabel = isProcessing
     ? effectiveFollowUpBehavior === "steer"
-      ? "Steer"
-      : "Queue"
+      ? "追加指令"
+      : "排队"
     : sendLabel;
   const {
     expandFenceOnSpace,
@@ -555,6 +559,7 @@ export const Composer = memo(function Composer({
   const handleKeyDown = useComposerKeyDown({
     applyTextInsertion,
     canSend,
+    composerSendShortcut,
     continueListOnShiftEnter,
     defaultSubmitIntent,
     expandFenceOnEnter,
@@ -579,30 +584,13 @@ export const Composer = memo(function Composer({
       <ComposerQueue
         queuedMessages={queuedMessages}
         pausedReason={queuePausedReason}
+        canSteerQueued={canSteerQueued}
+        onSteerQueued={onSteerQueued}
         onEditQueued={onEditQueued}
         onDeleteQueued={onDeleteQueued}
       />
-      {isProcessing && composerFollowUpHintEnabled && (
-        <div className="composer-followup-hint" role="status" aria-live="polite">
-          <div className="composer-followup-title">Follow-up behavior</div>
-          <div className="composer-followup-copy">
-            {oppositeFallsBackToQueue ? (
-              <>
-                Default: Queue (Steer unavailable). Both Enter and {followUpShortcutLabel} will
-                queue this message.
-              </>
-            ) : (
-              <>
-                Default: {effectiveFollowUpBehavior === "steer" ? "Steer" : "Queue"}. Press{" "}
-                {followUpShortcutLabel} to{" "}
-                {oppositeFollowUpIntent === "steer" ? "steer" : "queue"} this message.
-              </>
-            )}
-          </div>
-        </div>
-      )}
       {contextActions.length > 0 ? (
-        <div className="composer-context-actions" role="toolbar" aria-label="Review tools">
+        <div className="composer-context-actions" role="toolbar" aria-label="审查工具">
           {contextActions.map((action) => (
             <button
               key={action.id}
@@ -692,6 +680,8 @@ export const Composer = memo(function Composer({
         onSelectCodexArgsOverride={onSelectCodexArgsOverride}
         accessMode={accessMode}
         onSelectAccessMode={onSelectAccessMode}
+        composerSendShortcut={composerSendShortcut}
+        onSelectComposerSendShortcut={onSelectComposerSendShortcut}
         contextUsage={contextUsage}
       />
     </footer>

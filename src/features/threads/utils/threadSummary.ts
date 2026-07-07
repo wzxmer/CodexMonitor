@@ -12,6 +12,7 @@ import {
   shouldHideSubagentThreadFromSidebar,
 } from "@threads/utils/threadRpc";
 import { clampThreadName } from "@threads/utils/threadNaming";
+import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 
 type BuildThreadSummaryFromThreadOptions = {
   workspaceId: string;
@@ -53,6 +54,7 @@ export function buildThreadSummaryFromThread({
     ? customName
     : clampThreadName(preview) ?? fallbackName;
   const metadata = extractThreadCodexMetadata(thread);
+  const cwd = asString(thread.cwd ?? "").trim();
   if (shouldHideSubagentThreadFromSidebar(thread.source)) {
     return null;
   }
@@ -66,6 +68,7 @@ export function buildThreadSummaryFromThread({
     name,
     updatedAt: getThreadTimestamp(thread),
     createdAt: getThreadCreatedTimestamp(thread),
+    ...(workspaceId === LOCAL_CODEX_WORKSPACE_ID && cwd ? { cwd } : {}),
     ...(metadata.modelId ? { modelId: metadata.modelId } : {}),
     ...(metadata.effort ? { effort: metadata.effort } : {}),
     ...(isSubagent ? { isSubagent: true } : {}),

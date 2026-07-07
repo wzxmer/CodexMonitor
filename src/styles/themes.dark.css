@@ -8,8 +8,12 @@
   color-scheme: light dark;
   --ui-font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
+  --ui-font-size: 13px;
+  --ui-font-weight: 400;
   --code-font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo,
     Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --message-font-size: 13px;
+  --message-font-weight: 450;
   --code-font-size: 11px;
   --code-font-weight: 400;
   --code-line-height: 1.28;
@@ -37,13 +41,13 @@
   --surface-control-hover: rgba(255, 255, 255, 0.14);
   --surface-control-disabled: rgba(255, 255, 255, 0.05);
   --surface-hover: rgba(255, 255, 255, 0.05);
-  --surface-active: rgba(100, 200, 255, 0.14);
+  --surface-active: rgba(242, 139, 60, 0.14);
   --surface-approval: rgba(12, 16, 26, 0.6);
   --surface-debug: rgba(10, 14, 20, 0.55);
   --surface-command: rgba(10, 12, 18, 0.7);
   --surface-diff-card: rgba(10, 14, 20, 0.32);
   --surface-bubble: rgba(255, 255, 255, 0.12);
-  --surface-bubble-user: rgba(77, 153, 255, 0.45);
+  --surface-bubble-user: rgba(220, 132, 58, 0.42);
   --surface-context-core: rgba(10, 14, 20, 0.9);
   --surface-popover: rgba(10, 14, 20, 0.995);
   --surface-review: rgba(255, 144, 200, 0.1);
@@ -57,11 +61,11 @@
   --border-strong: rgba(255, 255, 255, 0.14);
   --border-stronger: rgba(255, 255, 255, 0.18);
   --border-quiet: rgba(255, 255, 255, 0.2);
-  --border-accent: rgba(100, 200, 255, 0.6);
-  --border-accent-soft: rgba(100, 200, 255, 0.3);
-  --text-accent: rgba(164, 195, 255, 0.7);
-  --message-link-color: rgba(196, 154, 255, 0.96);
-  --shadow-accent: rgba(92, 168, 255, 0.28);
+  --border-accent: rgba(242, 139, 60, 0.62);
+  --border-accent-soft: rgba(242, 139, 60, 0.3);
+  --text-accent: rgba(255, 184, 122, 0.82);
+  --message-link-color: rgba(255, 167, 92, 0.96);
+  --shadow-accent: rgba(242, 139, 60, 0.26);
   --titlebar-inset-left: 72px;
   --titlebar-height: 24px;
   --titlebar-toggle-size: 28px;

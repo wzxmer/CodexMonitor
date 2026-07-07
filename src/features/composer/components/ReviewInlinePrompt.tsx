@@ -126,9 +126,9 @@ const BaseBranchStep = memo(function BaseBranchStep({
       <div className="review-inline-hint">Pick a recent local branch:</div>
       <div className="review-inline-list" role="listbox" aria-label="Base branches">
         {reviewPrompt.isLoadingBranches ? (
-          <div className="review-inline-empty">Loading branches…</div>
+          <div className="review-inline-empty">正在加载分支…</div>
         ) : branches.length === 0 ? (
-          <div className="review-inline-empty">No branches found.</div>
+          <div className="review-inline-empty">未找到分支。</div>
         ) : (
           branches.map((branch, index) => {
             const selected = index === highlightedBranchIndex;
@@ -197,9 +197,9 @@ const CommitStep = memo(function CommitStep({
       <div className="review-inline-hint">Select a recent commit:</div>
       <div className="review-inline-list" role="listbox" aria-label="Commits">
         {reviewPrompt.isLoadingCommits ? (
-          <div className="review-inline-empty">Loading commits…</div>
+          <div className="review-inline-empty">正在加载提交…</div>
         ) : commits.length === 0 ? (
-          <div className="review-inline-empty">No commits found.</div>
+          <div className="review-inline-empty">未找到提交。</div>
         ) : (
           commits.map((commit, index) => {
             const title = commit.summary || commit.sha;

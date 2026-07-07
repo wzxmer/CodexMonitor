@@ -158,6 +158,208 @@ describe("useThreadMessaging telemetry", () => {
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", "thread-1");
   });
 
+  it("optimistically inserts the user message before turn/start resolves", async () => {
+    let resolveSend: (value: Awaited<ReturnType<typeof sendUserMessageService>>) => void =
+      () => {};
+    vi.mocked(sendUserMessageService).mockReturnValue(
+      new Promise((resolve) => {
+        resolveSend = resolve;
+      }) as ReturnType<typeof sendUserMessageService>,
+    );
+    const dispatch = vi.fn();
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    const sendPromise = result.current.sendUserMessageToThread(
+      workspace,
+      "thread-1",
+      "show immediately",
+      [],
+    );
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upsertItem",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        item: expect.objectContaining({
+          kind: "message",
+          role: "user",
+          text: "show immediately",
+        }),
+      }),
+    );
+
+    resolveSend({
+      result: {
+        turn: { id: "turn-1" },
+      },
+    } as Awaited<ReturnType<typeof sendUserMessageService>>);
+    await act(async () => {
+      await sendPromise;
+    });
+  });
+
+  it("reuses the original message id when resending an edited message", async () => {
+    const dispatch = vi.fn();
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.sendUserMessage("edited text", [], [], {
+        replaceMessageId: "msg-edit-user-1",
+      });
+    });
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upsertItem",
+        item: expect.objectContaining({
+          id: "msg-edit-user-1",
+          text: "edited text",
+        }),
+        replaceExisting: true,
+      }),
+    );
+  });
+
+  it("optimistically inserts steer messages while a turn is processing", async () => {
+    let resolveSteer: (value: Awaited<ReturnType<typeof steerTurnService>>) => void =
+      () => {};
+    vi.mocked(steerTurnService).mockReturnValue(
+      new Promise((resolve) => {
+        resolveSteer = resolve;
+      }) as ReturnType<typeof steerTurnService>,
+    );
+    const dispatch = vi.fn();
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: true,
+        customPrompts: [],
+        threadStatusById: {
+          "thread-1": {
+            isProcessing: true,
+            isReviewing: false,
+            hasUnread: false,
+            processingStartedAt: null,
+            lastDurationMs: null,
+          },
+        },
+        activeTurnIdByThread: { "thread-1": "turn-active" },
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    const sendPromise = result.current.sendUserMessageToThread(
+      workspace,
+      "thread-1",
+      "guide while running",
+      [],
+    );
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upsertItem",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        item: expect.objectContaining({
+          kind: "message",
+          role: "user",
+          text: "guide while running",
+        }),
+      }),
+    );
+
+    resolveSteer({
+      result: {
+        turnId: "turn-active",
+      },
+    } as Awaited<ReturnType<typeof steerTurnService>>);
+    await act(async () => {
+      await sendPromise;
+    });
+  });
+
   it("forwards explicit app mentions to turn/start", async () => {
     const { result } = renderHook(() =>
       useThreadMessaging({
@@ -462,8 +664,15 @@ describe("useThreadMessaging telemetry", () => {
     );
     expect(sendUserMessageService).not.toHaveBeenCalled();
     expect(ensureWorkspaceRuntimeCodexArgs).not.toHaveBeenCalled();
-    expect(dispatch).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "upsertItem" }),
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upsertItem",
+        item: expect.objectContaining({
+          kind: "message",
+          role: "user",
+          text: "steer this",
+        }),
+      }),
     );
   });
 

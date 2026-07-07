@@ -1,5 +1,55 @@
 @import "./themes.css";
 
+:root[data-theme-accent="blue"] {
+  --border-accent: rgba(92, 168, 255, 0.62);
+  --border-accent-soft: rgba(92, 168, 255, 0.32);
+  --text-accent: rgba(164, 205, 255, 0.78);
+  --message-link-color: rgba(142, 186, 255, 0.96);
+  --surface-active: rgba(92, 168, 255, 0.16);
+  --surface-bubble-user: rgba(70, 145, 245, 0.5);
+  --shadow-accent: rgba(92, 168, 255, 0.3);
+}
+
+:root[data-theme-accent="green"] {
+  --border-accent: rgba(92, 210, 166, 0.62);
+  --border-accent-soft: rgba(92, 210, 166, 0.32);
+  --text-accent: rgba(158, 235, 204, 0.78);
+  --message-link-color: rgba(128, 224, 190, 0.96);
+  --surface-active: rgba(92, 210, 166, 0.15);
+  --surface-bubble-user: rgba(54, 170, 128, 0.5);
+  --shadow-accent: rgba(92, 210, 166, 0.28);
+}
+
+:root[data-theme-accent="pink"] {
+  --border-accent: rgba(235, 126, 190, 0.62);
+  --border-accent-soft: rgba(235, 126, 190, 0.32);
+  --text-accent: rgba(255, 184, 222, 0.78);
+  --message-link-color: rgba(255, 154, 213, 0.96);
+  --surface-active: rgba(235, 126, 190, 0.15);
+  --surface-bubble-user: rgba(210, 90, 160, 0.48);
+  --shadow-accent: rgba(235, 126, 190, 0.28);
+}
+
+:root[data-theme-accent="orange"] {
+  --border-accent: rgba(245, 166, 92, 0.62);
+  --border-accent-soft: rgba(245, 166, 92, 0.32);
+  --text-accent: rgba(255, 204, 154, 0.78);
+  --message-link-color: rgba(255, 178, 105, 0.96);
+  --surface-active: rgba(245, 166, 92, 0.15);
+  --surface-bubble-user: rgba(220, 132, 58, 0.48);
+  --shadow-accent: rgba(245, 166, 92, 0.28);
+}
+
+:root[data-theme-accent="codex"] {
+  --border-accent: rgba(242, 139, 60, 0.62);
+  --border-accent-soft: rgba(242, 139, 60, 0.3);
+  --text-accent: rgba(255, 184, 122, 0.82);
+  --message-link-color: rgba(226, 111, 22, 0.96);
+  --surface-active: rgba(242, 139, 60, 0.15);
+  --surface-bubble-user: rgba(220, 132, 58, 0.42);
+  --shadow-accent: rgba(242, 139, 60, 0.26);
+}
+
 .app.reduced-transparency {
   --surface-sidebar: rgba(18, 18, 18, 0.92);
   --surface-sidebar-opaque: rgb(18, 18, 18);
@@ -82,6 +132,8 @@ body {
   --cm-border-accent-strong: color-mix(in srgb, var(--border-accent) 46%, transparent);
   transition: grid-template-columns 220ms ease;
   font-family: var(--ui-font-family);
+  font-size: var(--ui-font-size, 13px);
+  font-weight: var(--ui-font-weight, 400);
 }
 
 .app.is-resizing,
@@ -142,6 +194,14 @@ body {
   right: calc(14px + var(--window-caption-width, 0px) + var(--window-caption-gap, 0px));
 }
 
+.app.is-windows .titlebar-toggle-right {
+  right: calc(
+    8px
+    + var(--window-caption-width, 138px)
+    + var(--window-caption-gap, 8px)
+  );
+}
+
 .window-caption-controls {
   position: absolute;
   top: 0;
@@ -151,6 +211,7 @@ body {
   align-items: stretch;
   height: var(--main-topbar-height, 44px);
   -webkit-app-region: no-drag;
+  min-width: var(--window-caption-width, 138px);
 }
 
 .window-caption-control {

@@ -154,6 +154,46 @@ describe("useRemoteThreadLiveConnection", () => {
     expect(refreshThread.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
+  it("reattaches without resume hydration when a processing thread already has a local snapshot", async () => {
+    const refreshThread = vi.fn().mockResolvedValue(undefined);
+
+    renderHook(() =>
+      useRemoteThreadLiveConnection({
+        backendMode: "remote",
+        activeWorkspace: {
+          id: "ws-1",
+          name: "Workspace",
+          path: "/tmp/ws-1",
+          connected: true,
+          settings: { sidebarCollapsed: false },
+        },
+        activeThreadId: "thread-1",
+        activeThreadHasLocalSnapshot: true,
+        activeThreadIsProcessing: true,
+        refreshThread,
+      }),
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(threadLiveSubscribeMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      for (const listener of appServerListeners) {
+        listener({
+          workspace_id: "ws-1",
+          method: "thread/live_detached",
+          params: { threadId: "thread-1" },
+        });
+      }
+      await Promise.resolve();
+    });
+
+    expect(threadLiveSubscribeMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(refreshThread).toHaveBeenCalledTimes(0);
+  });
+
   it("does not reconnect detached stream when window is not focused", async () => {
     const refreshThread = vi.fn().mockResolvedValue(undefined);
 

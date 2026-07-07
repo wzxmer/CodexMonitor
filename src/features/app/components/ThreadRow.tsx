@@ -1,4 +1,6 @@
 import type { CSSProperties, MouseEvent } from "react";
+import Pin from "lucide-react/dist/esm/icons/pin";
+import PinOff from "lucide-react/dist/esm/icons/pin-off";
 
 import type { ThreadSummary } from "../../../types";
 import { getThreadStatusClass, type ThreadStatusById } from "../../../utils/threadStatus";
@@ -60,6 +62,7 @@ type ThreadRowProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
+  onToggleThreadPin?: (workspaceId: string, threadId: string, pinned: boolean) => void;
   hasSubagentChildren?: boolean;
   subagentsExpanded?: boolean;
   onToggleSubagents?: (workspaceId: string, threadId: string) => void;
@@ -81,6 +84,7 @@ export function ThreadRow({
   isThreadPinned,
   onSelectThread,
   onShowThreadMenu,
+  onToggleThreadPin,
   hasSubagentChildren = false,
   subagentsExpanded = true,
   onToggleSubagents,
@@ -202,6 +206,26 @@ export function ThreadRow({
         )}
       </div>
       <div className="thread-meta">
+        {canPin && onToggleThreadPin && (
+          <button
+            type="button"
+            className={`thread-pin-button${isPinned ? " is-pinned" : ""}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleThreadPin(workspaceId, thread.id, isPinned);
+            }}
+            data-tauri-drag-region="false"
+            aria-label={isPinned ? "取消置顶会话" : "置顶会话"}
+            title={isPinned ? "取消置顶" : "置顶"}
+            aria-pressed={isPinned}
+          >
+            {isPinned ? (
+              <PinOff size={13} aria-hidden />
+            ) : (
+              <Pin size={13} aria-hidden />
+            )}
+          </button>
+        )}
         {canToggleSubagents ? (
           <button
             type="button"

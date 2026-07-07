@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AppSettings,
   CodexDoctorResult,
+  CodexStatus,
   CodexUpdateResult,
   WorkspaceInfo,
 } from "@/types";
+import { getCodexStatus } from "@services/tauri";
 import { useGlobalAgentsMd } from "./useGlobalAgentsMd";
 import { useGlobalCodexConfigToml } from "./useGlobalCodexConfigToml";
 import { useSettingsDefaultModels } from "./useSettingsDefaultModels";
@@ -47,6 +49,11 @@ export type SettingsCodexSectionProps = {
     status: "idle" | "running" | "done";
     result: CodexUpdateResult | null;
   };
+  codexStatusState: {
+    status: "idle" | "loading" | "done";
+    result: CodexStatus | null;
+    error: string | null;
+  };
   globalAgentsMeta: string;
   globalAgentsError: string | null;
   globalAgentsContent: string;
@@ -69,6 +76,7 @@ export type SettingsCodexSectionProps = {
   onSaveCodexSettings: () => Promise<void>;
   onRunDoctor: () => Promise<void>;
   onRunCodexUpdate: () => Promise<void>;
+  onRefreshCodexStatus: () => void;
   onRefreshGlobalAgents: () => void;
   onSaveGlobalAgents: () => void;
   onRefreshGlobalConfig: () => void;
@@ -93,6 +101,11 @@ export const useSettingsCodexSection = ({
     status: "idle" | "running" | "done";
     result: CodexUpdateResult | null;
   }>({ status: "idle", result: null });
+  const [codexStatusState, setCodexStatusState] = useState<{
+    status: "idle" | "loading" | "done";
+    result: CodexStatus | null;
+    error: string | null;
+  }>({ status: "idle", result: null, error: null });
 
   const {
     models: defaultModels,
@@ -143,6 +156,29 @@ export const useSettingsCodexSection = ({
     truncated: globalConfigTruncated,
     isDirty: globalConfigDirty,
   });
+
+  const refreshCodexStatus = useCallback(() => {
+    setCodexStatusState((current) => ({
+      status: "loading",
+      result: current.result,
+      error: null,
+    }));
+    getCodexStatus()
+      .then((result) => {
+        setCodexStatusState({ status: "done", result, error: null });
+      })
+      .catch((error) => {
+        setCodexStatusState({
+          status: "done",
+          result: null,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+  }, []);
+
+  useEffect(() => {
+    refreshCodexStatus();
+  }, [refreshCodexStatus]);
 
   useEffect(() => {
     setCodexPathDraft(appSettings.codexBin ?? "");
@@ -257,6 +293,7 @@ export const useSettingsCodexSection = ({
     isSavingSettings,
     doctorState,
     codexUpdateState,
+    codexStatusState,
     globalAgentsMeta: globalAgentsEditorMeta.meta,
     globalAgentsError,
     globalAgentsContent,
@@ -279,6 +316,7 @@ export const useSettingsCodexSection = ({
     onSaveCodexSettings: handleSaveCodexSettings,
     onRunDoctor: handleRunDoctor,
     onRunCodexUpdate: handleRunCodexUpdate,
+    onRefreshCodexStatus: refreshCodexStatus,
     onRefreshGlobalAgents: () => {
       void refreshGlobalAgents();
     },

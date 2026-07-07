@@ -11,7 +11,7 @@ describe("useThreadCodexOrchestration", () => {
     localStorage.clear();
   });
 
-  it("mirrors active-thread fast mode changes into the workspace no-thread scope", () => {
+  it("mirrors active-thread composer option changes into the workspace no-thread scope", () => {
     const { result } = renderHook(() => {
       const activeWorkspaceIdForParamsRef = useRef<string | null>("ws-1");
       return useThreadCodexOrchestration({ activeWorkspaceIdForParamsRef });
@@ -19,15 +19,35 @@ describe("useThreadCodexOrchestration", () => {
 
     act(() => {
       result.current.activeThreadIdRef.current = "thread-1";
-      result.current.persistThreadCodexParams({ serviceTier: "fast" });
+      result.current.persistThreadCodexParams({
+        modelId: "gpt-5",
+        effort: "medium",
+        serviceTier: "fast",
+        accessMode: "full-access",
+        collaborationModeId: "plan",
+      });
     });
 
     expect(result.current.getThreadCodexParams("ws-1", "thread-1")).toEqual(
-      expect.objectContaining({ serviceTier: "fast" }),
+      expect.objectContaining({
+        modelId: "gpt-5",
+        effort: "medium",
+        serviceTier: "fast",
+        accessMode: "full-access",
+        collaborationModeId: "plan",
+      }),
     );
     expect(
       result.current.getThreadCodexParams("ws-1", "__no_thread__"),
-    ).toEqual(expect.objectContaining({ serviceTier: "fast" }));
+    ).toEqual(
+      expect.objectContaining({
+        modelId: "gpt-5",
+        effort: "medium",
+        serviceTier: "fast",
+        accessMode: "full-access",
+        collaborationModeId: "plan",
+      }),
+    );
   });
 
   it("keeps workspace-home fast mode changes scoped to the no-thread selection", () => {

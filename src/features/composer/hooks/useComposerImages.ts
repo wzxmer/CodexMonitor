@@ -1,10 +1,20 @@
 import { useCallback, useMemo, useState } from "react";
-import { pickImageFiles } from "../../../services/tauri";
+import { pickAttachmentFiles, saveComposerImages } from "../../../services/tauri";
 
 type UseComposerImagesArgs = {
   activeThreadId: string | null;
   activeWorkspaceId: string | null;
 };
+
+function isImageAttachment(path: string) {
+  if (path.startsWith("data:image/")) {
+    return true;
+  }
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return true;
+  }
+  return /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|heif)$/i.test(path);
+}
 
 export function useComposerImages({
   activeThreadId,
@@ -24,17 +34,48 @@ export function useComposerImages({
       if (paths.length === 0) {
         return;
       }
-      setImagesByThread((prev) => {
-        const existing = prev[draftKey] ?? [];
-        const merged = Array.from(new Set([...existing, ...paths]));
-        return { ...prev, [draftKey]: merged };
-      });
+      const attachImages = (nextPaths: string[]) => {
+        setImagesByThread((prev) => {
+          const existing = prev[draftKey] ?? [];
+          const merged = Array.from(new Set([...existing, ...nextPaths]));
+          return { ...prev, [draftKey]: merged };
+        });
+      };
+      const replaceImages = (sourcePaths: string[], savedPaths: string[]) => {
+        setImagesByThread((prev) => {
+          const existing = prev[draftKey] ?? [];
+          const savedBySource = new Map(
+            sourcePaths.map((sourcePath, index) => [sourcePath, savedPaths[index]]),
+          );
+          const merged = Array.from(
+            new Set(existing.map((path) => savedBySource.get(path) ?? path)),
+          );
+          return { ...prev, [draftKey]: merged };
+        });
+      };
+      attachImages(paths);
+      if (!activeWorkspaceId) {
+        return;
+      }
+      const imagePaths = paths.filter(isImageAttachment);
+      if (imagePaths.length === 0) {
+        return;
+      }
+      void saveComposerImages(activeWorkspaceId, imagePaths)
+        .then((savedPaths) => {
+          if (savedPaths.length > 0) {
+            replaceImages(imagePaths, savedPaths);
+          }
+        })
+        .catch((error) => {
+          console.warn("Failed to save composer image attachments.", error);
+        });
     },
-    [draftKey],
+    [activeWorkspaceId, draftKey],
   );
 
   const pickImages = useCallback(async () => {
-    const picked = await pickImageFiles();
+    const picked = await pickAttachmentFiles();
     if (picked.length === 0) {
       return;
     }

@@ -24,6 +24,8 @@ describe("useSidebarLayoutActions", () => {
       exitDiffView: vi.fn(),
       selectWorkspace: vi.fn(),
       setActiveThreadId: vi.fn(),
+      activeWorkspaceId: null,
+      activeThreadId: null,
       connectWorkspace: vi.fn(async () => {}),
       isCompact: false,
       setActiveTab: vi.fn(),
@@ -81,6 +83,8 @@ describe("useSidebarLayoutActions", () => {
         exitDiffView,
         selectWorkspace,
         setActiveThreadId,
+        activeWorkspaceId: null,
+        activeThreadId: null,
         connectWorkspace: vi.fn(async () => {}),
         isCompact: false,
         setActiveTab: vi.fn(),
@@ -109,6 +113,52 @@ describe("useSidebarLayoutActions", () => {
     expect(setActiveThreadId).toHaveBeenCalledWith(null, "ws-1");
   });
 
+  it("keeps the active thread resident when it is selected again", () => {
+    const exitDiffView = vi.fn();
+    const resetPullRequestSelection = vi.fn();
+    const clearDraftState = vi.fn();
+    const selectWorkspace = vi.fn();
+    const setActiveThreadId = vi.fn();
+    const { result } = renderHook(() =>
+      useSidebarLayoutActions({
+        openSettings: vi.fn(),
+        resetPullRequestSelection,
+        clearDraftState,
+        clearDraftStateIfDifferentWorkspace: vi.fn(),
+        selectHome: vi.fn(),
+        exitDiffView,
+        selectWorkspace,
+        setActiveThreadId,
+        activeWorkspaceId: "ws-1",
+        activeThreadId: "thread-1",
+        connectWorkspace: vi.fn(async () => {}),
+        isCompact: false,
+        setActiveTab: vi.fn(),
+        workspacesById: new Map([[workspace.id, workspace]]),
+        updateWorkspaceSettings: vi.fn(async () => workspace),
+        removeThread: vi.fn(),
+        clearDraftForThread: vi.fn(),
+        removeImagesForThread: vi.fn(),
+        refreshThread: vi.fn(async () => {}),
+        handleRenameThread: vi.fn(),
+        removeWorkspace: vi.fn(async () => {}),
+        removeWorktree: vi.fn(async () => {}),
+        loadOlderThreadsForWorkspace: vi.fn(async () => {}),
+        listThreadsForWorkspace: vi.fn(async () => {}),
+      }),
+    );
+
+    act(() => {
+      result.current.onSelectThread("ws-1", "thread-1");
+    });
+
+    expect(exitDiffView).not.toHaveBeenCalled();
+    expect(resetPullRequestSelection).not.toHaveBeenCalled();
+    expect(clearDraftState).not.toHaveBeenCalled();
+    expect(selectWorkspace).not.toHaveBeenCalled();
+    expect(setActiveThreadId).not.toHaveBeenCalled();
+  });
+
   it("switches to codex tab after connecting in compact mode", async () => {
     const connectWorkspace = vi.fn(async () => {});
     const setActiveTab = vi.fn();
@@ -122,6 +172,8 @@ describe("useSidebarLayoutActions", () => {
         exitDiffView: vi.fn(),
         selectWorkspace: vi.fn(),
         setActiveThreadId: vi.fn(),
+        activeWorkspaceId: null,
+        activeThreadId: null,
         connectWorkspace,
         isCompact: true,
         setActiveTab,

@@ -14,6 +14,7 @@ import {
   resumeThread as resumeThreadService,
   startThread as startThreadService,
 } from "@services/tauri";
+import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 import {
   getThreadTimestamp,
 } from "@utils/threadItems";
@@ -496,12 +497,13 @@ export function useThreadActions({
         },
       });
       try {
-        const requester = targets.find((workspace) => workspace.connected) ?? targets[0];
         const matchingThreadsByWorkspace: Record<string, Record<string, unknown>[]> = {};
         let workspacePathLookup = buildWorkspacePathLookup(targets);
         const targetWorkspaceIds = new Set(targets.map((workspace) => workspace.id));
+        const includeLocalCodexSessions = targetWorkspaceIds.has(LOCAL_CODEX_WORKSPACE_ID);
+        let knownWorkspaces: WorkspaceInfo[] = [];
         try {
-          const knownWorkspaces = await listWorkspacesService();
+          knownWorkspaces = await listWorkspacesService();
           if (knownWorkspaces.length > 0) {
             workspacePathLookup = buildWorkspacePathLookup([
               ...targets,
@@ -518,6 +520,11 @@ export function useThreadActions({
           uniqueThreadIdsByWorkspace[workspace.id] = new Set<string>();
           resumeCursorByWorkspace[workspace.id] = null;
         });
+        const requestWorkspace =
+          targets.find((workspace) => workspace.connected && workspace.id !== LOCAL_CODEX_WORKSPACE_ID) ??
+          knownWorkspaces.find((workspace) => workspace.connected && workspace.id !== LOCAL_CODEX_WORKSPACE_ID) ??
+          targets.find((workspace) => workspace.connected) ??
+          targets[0];
         let pagesFetched = 0;
         let cursor: string | null = null;
         do {
@@ -525,7 +532,7 @@ export function useThreadActions({
           pagesFetched += 1;
           const response =
             (await listThreadsService(
-              requester.id,
+              requestWorkspace.id,
               cursor,
               THREAD_LIST_PAGE_SIZE,
               requestedSortKey,
@@ -548,30 +555,38 @@ export function useThreadActions({
               workspacePathLookup,
               targetWorkspaceIds,
             );
-            if (!workspaceId) {
+            const targetWorkspaceIdsForThread = [
+              ...(workspaceId ? [workspaceId] : []),
+              ...(includeLocalCodexSessions ? [LOCAL_CODEX_WORKSPACE_ID] : []),
+            ];
+            if (targetWorkspaceIdsForThread.length === 0) {
               return;
             }
             const threadId = String(thread?.id ?? "");
             if (threadId && shouldHideSubagentThreadFromSidebar(thread.source)) {
-              dispatch({ type: "hideThread", workspaceId, threadId });
+              targetWorkspaceIdsForThread.forEach((targetWorkspaceId) => {
+                dispatch({ type: "hideThread", workspaceId: targetWorkspaceId, threadId });
+              });
               return;
             }
-            matchingThreadsByWorkspace[workspaceId]?.push(thread);
-            if (!threadId) {
-              return;
-            }
-            const uniqueThreadIds = uniqueThreadIdsByWorkspace[workspaceId];
-            if (!uniqueThreadIds || uniqueThreadIds.has(threadId)) {
-              return;
-            }
-            uniqueThreadIds.add(threadId);
-            if (
-              uniqueThreadIds.size > THREAD_LIST_TARGET_COUNT &&
-              resumeCursorByWorkspace[workspaceId] === null
-            ) {
-              resumeCursorByWorkspace[workspaceId] =
-                pageCursor ?? THREAD_LIST_CURSOR_PAGE_START;
-            }
+            targetWorkspaceIdsForThread.forEach((targetWorkspaceId) => {
+              matchingThreadsByWorkspace[targetWorkspaceId]?.push(thread);
+              if (!threadId) {
+                return;
+              }
+              const uniqueThreadIds = uniqueThreadIdsByWorkspace[targetWorkspaceId];
+              if (!uniqueThreadIds || uniqueThreadIds.has(threadId)) {
+                return;
+              }
+              uniqueThreadIds.add(threadId);
+              if (
+                uniqueThreadIds.size > THREAD_LIST_TARGET_COUNT &&
+                resumeCursorByWorkspace[targetWorkspaceId] === null
+              ) {
+                resumeCursorByWorkspace[targetWorkspaceId] =
+                  pageCursor ?? THREAD_LIST_CURSOR_PAGE_START;
+              }
+            });
           });
           cursor = nextCursor;
           if (pagesFetched >= maxPages) {
@@ -705,6 +720,7 @@ export function useThreadActions({
         payload: { workspaceId: workspace.id, cursor: cursorValue },
       });
       try {
+        let requestWorkspaceId = workspace.id;
         try {
           const knownWorkspaces = await listWorkspacesService();
           if (knownWorkspaces.length > 0) {
@@ -712,6 +728,12 @@ export function useThreadActions({
               workspace,
               ...knownWorkspaces,
             ]);
+            if (workspace.id === LOCAL_CODEX_WORKSPACE_ID) {
+              requestWorkspaceId =
+                knownWorkspaces.find(
+                  (entry) => entry.connected && entry.id !== LOCAL_CODEX_WORKSPACE_ID,
+                )?.id ?? requestWorkspaceId;
+            }
           }
         } catch {
           workspacePathLookup = buildWorkspacePathLookup([workspace]);
@@ -724,7 +746,7 @@ export function useThreadActions({
           pagesFetched += 1;
           const response =
             (await listThreadsService(
-              workspace.id,
+              requestWorkspaceId,
               cursor,
               THREAD_LIST_PAGE_SIZE,
               requestedSortKey,
@@ -744,17 +766,28 @@ export function useThreadActions({
           matchingThreads.push(
             ...data.filter(
               (thread) => {
+                if (workspace.id === LOCAL_CODEX_WORKSPACE_ID) {
+                  const threadId = String(thread?.id ?? "");
+                  if (threadId && shouldHideSubagentThreadFromSidebar(thread.source)) {
+                    dispatch({ type: "hideThread", workspaceId: workspace.id, threadId });
+                    return false;
+                  }
+                  return true;
+                }
                 const workspaceId = resolveWorkspaceIdForThreadPath(
                   String(thread?.cwd ?? ""),
                   workspacePathLookup,
                   allowedWorkspaceIds,
                 );
-                if (workspaceId !== workspace.id) {
+                if (
+                  workspaceId !== workspace.id &&
+                  !(workspace.id === LOCAL_CODEX_WORKSPACE_ID && !workspaceId)
+                ) {
                   return false;
                 }
                 const threadId = String(thread?.id ?? "");
                 if (threadId && shouldHideSubagentThreadFromSidebar(thread.source)) {
-                  dispatch({ type: "hideThread", workspaceId, threadId });
+                  dispatch({ type: "hideThread", workspaceId: workspace.id, threadId });
                   return false;
                 }
                 return true;

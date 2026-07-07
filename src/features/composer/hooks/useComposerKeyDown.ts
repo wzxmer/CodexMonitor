@@ -1,5 +1,5 @@
 import { useCallback, type KeyboardEvent, type RefObject } from "react";
-import type { ComposerSendIntent } from "../../../types";
+import type { ComposerSendIntent, ComposerSendShortcut } from "../../../types";
 import { getListContinuation } from "../../../utils/composerText";
 import { isComposingEvent } from "../../../utils/keys";
 import { isMobilePlatform } from "../../../utils/platformPaths";
@@ -13,6 +13,7 @@ type ReviewPromptKeyEvent = {
 type UseComposerKeyDownArgs = {
   applyTextInsertion: (nextText: string, nextCursor: number) => void;
   canSend: boolean;
+  composerSendShortcut: ComposerSendShortcut;
   continueListOnShiftEnter: boolean;
   defaultSubmitIntent: ComposerSendIntent;
   expandFenceOnEnter: boolean;
@@ -34,6 +35,7 @@ type UseComposerKeyDownArgs = {
 export function useComposerKeyDown({
   applyTextInsertion,
   canSend,
+  composerSendShortcut,
   continueListOnShiftEnter,
   defaultSubmitIntent,
   expandFenceOnEnter,
@@ -144,8 +146,37 @@ export function useComposerKeyDown({
       if (event.defaultPrevented) {
         return;
       }
-      if (event.key === "Enter" && !event.shiftKey) {
-        if (expandFenceOnEnter) {
+      const isPlainEnter =
+        event.key === "Enter" &&
+        !event.shiftKey &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey;
+      const isCtrlEnter =
+        event.key === "Enter" &&
+        !event.shiftKey &&
+        !event.altKey &&
+        (event.ctrlKey || (isMac && event.metaKey));
+      const shouldSend =
+        composerSendShortcut === "enter-and-ctrl-enter"
+          ? isPlainEnter || isCtrlEnter
+          : composerSendShortcut === "ctrl-enter"
+            ? isCtrlEnter
+            : isPlainEnter;
+      if (isCtrlEnter && composerSendShortcut === "enter") {
+        event.preventDefault();
+        const textarea = textareaRef.current;
+        if (!textarea) {
+          return;
+        }
+        const start = textarea.selectionStart ?? text.length;
+        const end = textarea.selectionEnd ?? start;
+        const nextText = `${text.slice(0, start)}\n${text.slice(end)}`;
+        applyTextInsertion(nextText, start + 1);
+        return;
+      }
+      if (shouldSend) {
+        if (expandFenceOnEnter && isPlainEnter) {
           const textarea = textareaRef.current;
           if (textarea) {
             const start = textarea.selectionStart ?? text.length;
@@ -171,6 +202,7 @@ export function useComposerKeyDown({
     [
       applyTextInsertion,
       canSend,
+      composerSendShortcut,
       continueListOnShiftEnter,
       defaultSubmitIntent,
       expandFenceOnEnter,

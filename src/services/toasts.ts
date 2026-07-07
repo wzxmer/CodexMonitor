@@ -17,7 +17,19 @@ function makeToastId() {
   return `error-toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function isMissingGitRepositoryToast(input: ErrorToastInput) {
+  const message = `${input.title}\n${input.message}`.toLowerCase();
+  return (
+    message.includes("could not find repository") ||
+    message.includes("not a git repository")
+  );
+}
+
 export function pushErrorToast(input: ErrorToastInput) {
+  if (isMissingGitRepositoryToast(input)) {
+    return input.id ?? makeToastId();
+  }
+
   const toast: ErrorToast = {
     id: input.id ?? makeToastId(),
     title: input.title,

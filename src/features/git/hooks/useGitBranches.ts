@@ -6,6 +6,10 @@ import {
   createGitBranch,
   listGitBranches,
 } from "../../../services/tauri";
+import {
+  getErrorMessage,
+  isMissingGitRepositoryError,
+} from "../utils/gitErrors";
 
 type UseGitBranchesOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -57,13 +61,14 @@ export function useGitBranches({ activeWorkspace, onDebug }: UseGitBranchesOptio
       lastFetchedWorkspaceId.current = workspaceId;
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const missingRepo = isMissingGitRepositoryError(err);
+      setError(missingRepo ? null : getErrorMessage(err));
       onDebug?.({
         id: `${Date.now()}-client-branches-list-error`,
         timestamp: Date.now(),
-        source: "error",
+        source: missingRepo ? "client" : "error",
         label: "git/branches/list error",
-        payload: err instanceof Error ? err.message : String(err),
+        payload: getErrorMessage(err),
       });
     } finally {
       inFlight.current = false;

@@ -25,9 +25,36 @@ function mergeUserInputQuestions(
   return [...merged, ...missingExisting];
 }
 
+function sameMessageImages(
+  left: Extract<ConversationItem, { kind: "message" }>["images"],
+  right: Extract<ConversationItem, { kind: "message" }>["images"],
+) {
+  const leftImages = left ?? [];
+  const rightImages = right ?? [];
+  return (
+    leftImages.length === rightImages.length &&
+    leftImages.every((image, index) => image === rightImages[index])
+  );
+}
+
 export function upsertItem(list: ConversationItem[], item: ConversationItem) {
   const index = list.findIndex((entry) => entry.id === item.id);
   if (index === -1) {
+    if (item.kind === "message" && item.role === "user") {
+      const localIndex = list.findIndex(
+        (entry) =>
+          entry.kind === "message" &&
+          entry.role === "user" &&
+          entry.id.startsWith("local-user-") &&
+          entry.text === item.text &&
+          sameMessageImages(entry.images, item.images),
+      );
+      if (localIndex >= 0) {
+        const next = [...list];
+        next[localIndex] = item;
+        return next;
+      }
+    }
     return [...list, item];
   }
   const existing = list[index];

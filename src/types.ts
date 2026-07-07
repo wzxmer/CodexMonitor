@@ -146,6 +146,7 @@ export type ThreadSummary = {
   name: string;
   updatedAt: number;
   createdAt?: number;
+  cwd?: string | null;
   modelId?: string | null;
   effort?: string | null;
   isSubagent?: boolean;
@@ -206,8 +207,11 @@ export type RemoteBackendTarget = {
   lastConnectedAtMs?: number | null;
 };
 export type ThemePreference = "system" | "light" | "dark" | "dim";
+export type ThemeAccentPreference = "codex" | "blue" | "green" | "pink" | "orange";
+export type MessageReadingStyle = "bubble" | "cli" | "codex";
 export type PersonalityPreference = "friendly" | "pragmatic";
 export type FollowUpMessageBehavior = "queue" | "steer";
+export type ComposerSendShortcut = "enter" | "ctrl-enter" | "enter-and-ctrl-enter";
 export type ComposerSendIntent = "default" | "queue" | "steer";
 export type SendMessageResult = {
   status: "sent" | "blocked" | "steer_failed";
@@ -269,13 +273,29 @@ export type AppSettings = {
   lastComposerReasoningEffort: string | null;
   uiScale: number;
   theme: ThemePreference;
+  themeAccent: ThemeAccentPreference;
   usageShowRemaining: boolean;
   showMessageFilePath: boolean;
+  messageToolGroupsCollapsedByDefault: boolean;
+  messageReadingStyle: MessageReadingStyle;
+  messageCanvasColor: string;
+  messageUserBubbleColor: string;
+  messageUserTextColor: string;
+  messageAssistantBubbleColor: string;
+  messageAssistantAccentColor: string;
+  messageAssistantTextColor: string;
+  messageFontFamily: string;
   chatHistoryScrollbackItems: number | null;
   threadTitleAutogenerationEnabled: boolean;
   automaticAppUpdateChecksEnabled: boolean;
   uiFontFamily: string;
+  uiLatinFontFamily: string;
+  uiCjkFontFamily: string;
+  uiFontSize: number;
+  uiFontWeight: number;
   codeFontFamily: string;
+  messageFontSize: number;
+  messageFontWeight: number;
   codeFontSize: number;
   notificationSoundsEnabled: boolean;
   systemNotificationsEnabled: boolean;
@@ -288,6 +308,7 @@ export type AppSettings = {
   collaborationModesEnabled: boolean;
   steerEnabled: boolean;
   followUpMessageBehavior: FollowUpMessageBehavior;
+  composerSendShortcut: ComposerSendShortcut;
   composerFollowUpHintEnabled: boolean;
   pauseQueuedMessagesWhenResponseRequired: boolean;
   unifiedExecEnabled: boolean;
@@ -369,6 +390,21 @@ export type CodexDoctorResult = {
   nodeOk: boolean;
   nodeVersion: string | null;
   nodeDetails: string | null;
+};
+
+export type CodexStatus = {
+  codexHomePath: string | null;
+  codexHomeSource: string;
+  configPath: string | null;
+  configExists: boolean;
+  globalAgentsPath: string | null;
+  globalAgentsExists: boolean;
+  codexSkillsPath: string | null;
+  codexSkillsCount: number;
+  agentsSkillsPath: string | null;
+  agentsSkillsCount: number;
+  model: string | null;
+  modelError: string | null;
 };
 
 export type CodexUpdateMethod = "brew_formula" | "brew_cask" | "npm" | "unknown";

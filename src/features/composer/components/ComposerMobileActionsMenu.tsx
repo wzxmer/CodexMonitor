@@ -1,7 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
-import ImagePlus from "lucide-react/dist/esm/icons/image-plus";
+import Paperclip from "lucide-react/dist/esm/icons/paperclip";
 import Mic from "lucide-react/dist/esm/icons/mic";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import Square from "lucide-react/dist/esm/icons/square";
@@ -58,8 +58,8 @@ export function ComposerMobileActionsMenu({
         disabled={disabled}
         aria-expanded={mobileActionsOpen}
         aria-haspopup="menu"
-        aria-label="More actions"
-        title="More actions"
+        aria-label="更多操作"
+        title="更多操作"
       >
         <Plus size={14} aria-hidden />
       </button>
@@ -68,9 +68,9 @@ export function ComposerMobileActionsMenu({
           <PopoverMenuItem
             onClick={handleMobileAttachClick}
             disabled={disabled || !onAddAttachment}
-            icon={<ImagePlus size={14} />}
+            icon={<Paperclip size={14} />}
           >
-            Add image
+            添加附件
           </PopoverMenuItem>
           {onToggleExpand && (
             <PopoverMenuItem
@@ -80,7 +80,7 @@ export function ComposerMobileActionsMenu({
                 isExpanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />
               }
             >
-              {isExpanded ? "Collapse input" : "Expand input"}
+              {isExpanded ? "收起输入框" : "展开输入框"}
             </PopoverMenuItem>
           )}
           {showDictationAction && (

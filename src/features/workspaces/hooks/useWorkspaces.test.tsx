@@ -12,6 +12,7 @@ import {
   renameWorktreeUpstream,
   updateWorkspaceSettings,
 } from "../../../services/tauri";
+import { LOCAL_CODEX_WORKSPACE_ID } from "../domain/localCodexWorkspace";
 import { useWorkspaces } from "./useWorkspaces";
 
 vi.mock("../../../services/tauri", () => ({
@@ -253,6 +254,29 @@ describe("useWorkspaces.addWorkspaceFromPath", () => {
     expect(addWorkspaceMock).toHaveBeenCalledWith("/tmp/repo");
     expect(result.current.workspaces).toHaveLength(1);
     expect(result.current.activeWorkspaceId).toBe("workspace-1");
+  });
+});
+
+describe("useWorkspaces.refreshWorkspaces", () => {
+  it("keeps the local Codex history workspace selected after backend workspace refresh", async () => {
+    const listWorkspacesMock = vi.mocked(listWorkspaces);
+    listWorkspacesMock.mockResolvedValue([workspaceOne]);
+
+    const { result } = renderHook(() => useWorkspaces());
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    act(() => {
+      result.current.setActiveWorkspaceId(LOCAL_CODEX_WORKSPACE_ID);
+    });
+
+    await act(async () => {
+      await result.current.refreshWorkspaces();
+    });
+
+    expect(result.current.activeWorkspaceId).toBe(LOCAL_CODEX_WORKSPACE_ID);
   });
 });
 

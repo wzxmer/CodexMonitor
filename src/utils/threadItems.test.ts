@@ -611,6 +611,27 @@ describe("threadItems", () => {
     }
   });
 
+  it("replaces matching local user messages with server user messages", () => {
+    const local: ConversationItem = {
+      id: "local-user-123",
+      kind: "message",
+      role: "user",
+      text: "show immediately",
+      images: ["C:/tmp/image.png"],
+    };
+    const incoming: ConversationItem = {
+      id: "server-user-1",
+      kind: "message",
+      role: "user",
+      text: "show immediately",
+      images: ["C:/tmp/image.png"],
+    };
+
+    const next = upsertItem([local], incoming);
+    expect(next).toHaveLength(1);
+    expect(next[0]).toEqual(incoming);
+  });
+
   it("preserves streamed reasoning content when completion item is empty", () => {
     const existing: ConversationItem = {
       id: "reasoning-1",

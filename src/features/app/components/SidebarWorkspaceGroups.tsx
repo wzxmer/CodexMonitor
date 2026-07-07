@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import type { MouseEvent, MutableRefObject, ReactNode } from "react";
+import { useState, type MouseEvent, type MutableRefObject, type ReactNode } from "react";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import Plus from "lucide-react/dist/esm/icons/plus";
@@ -15,7 +15,16 @@ import { ThreadLoading } from "./ThreadLoading";
 import { WorkspaceCard } from "./WorkspaceCard";
 import { WorkspaceGroup } from "./WorkspaceGroup";
 import { WorktreeSection } from "./WorktreeSection";
-import { getVisibleThreadListState } from "./threadSearchUtils";
+import {
+  countRootRows,
+  splitRowsByRoot,
+  threadMatchesQuery,
+  workspaceMatchesQuery,
+} from "./threadSearchUtils";
+import {
+  isLocalCodexWorkspaceId,
+  LOCAL_CODEX_WORKSPACE_NAME,
+} from "@/features/workspaces/domain/localCodexWorkspace";
 import type {
   SidebarWorkspaceAddMenuAnchor,
   ThreadRowsResult,
@@ -56,6 +65,7 @@ type SidebarWorkspaceGroupsProps = {
   getThreadTime: (thread: ThreadSummary) => string | null;
   getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  onToggleThreadPin?: (workspaceId: string, threadId: string, pinned: boolean) => void;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
   pinnedThreadsVersion: number;
   addMenuAnchor: SidebarWorkspaceAddMenuAnchor | null;
@@ -70,6 +80,7 @@ type SidebarWorkspaceGroupsProps = {
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
+  onSelectLocalCodexThread: (cwd: string, threadId: string) => void;
   onShowThreadMenu: (
     event: MouseEvent,
     workspaceId: string,
@@ -93,10 +104,437 @@ type SidebarWorkspaceEntryProps = Omit<
   | "toggleGroupCollapse"
 > & {
   workspace: WorkspaceInfo;
+  allWorkspaceGroups: WorkspaceGroupSection[];
 };
+
+type ThreadRowEntry = {
+  thread: ThreadSummary;
+  depth: number;
+};
+
+function normalizeLocalCodexProjectPath(path: string | null | undefined) {
+  return (path ?? "").trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+}
+
+function getLocalCodexProjectLabel(path: string) {
+  if (!path) {
+    return "未知项目";
+  }
+  const parts = path.split("/").filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : path;
+}
+
+function localCodexProjectMatchesQuery(path: string, label: string, query: string) {
+  if (!query) {
+    return true;
+  }
+  return path.toLowerCase().includes(query) || label.toLowerCase().includes(query);
+}
+
+function getVisibleLocalCodexThreadListState({
+  rows,
+  totalRoots,
+  query,
+  isSearchActive,
+}: {
+  rows: ThreadRowEntry[];
+  totalRoots: number;
+  query: string;
+  isSearchActive: boolean;
+}) {
+  if (!isSearchActive) {
+    return {
+      visibleRows: rows,
+      displayRootCount: totalRoots,
+    };
+  }
+
+  const visibleRows = splitRowsByRoot(rows)
+    .filter((group) => {
+      const path = normalizeLocalCodexProjectPath(group.root.thread.cwd);
+      const label = getLocalCodexProjectLabel(path);
+      return (
+        localCodexProjectMatchesQuery(path, label, query) ||
+        group.rows.some((row) => threadMatchesQuery(row.thread, label, query))
+      );
+    })
+    .flatMap((group) => group.rows);
+
+  return {
+    visibleRows,
+    displayRootCount: countRootRows(visibleRows),
+  };
+}
+
+function getVisibleThreadSections({
+  pinnedRows,
+  unpinnedRows,
+  totalUnpinnedRoots,
+  workspaceName,
+  query,
+  isSearchActive,
+}: {
+  pinnedRows: ThreadRowEntry[];
+  unpinnedRows: ThreadRowEntry[];
+  totalUnpinnedRoots: number;
+  workspaceName: string;
+  query: string;
+  isSearchActive: boolean;
+}) {
+  const pinnedRootCount = countRootRows(pinnedRows);
+  if (!isSearchActive || workspaceMatchesQuery(workspaceName, query)) {
+    return {
+      visiblePinnedRows: pinnedRows,
+      visibleUnpinnedRows: unpinnedRows,
+      displayRootCount: pinnedRootCount + totalUnpinnedRoots,
+    };
+  }
+
+  const visiblePinnedRows = splitRowsByRoot(pinnedRows)
+    .filter((group) =>
+      group.rows.some((row) => threadMatchesQuery(row.thread, workspaceName, query)),
+    )
+    .flatMap((group) => group.rows);
+  const visibleUnpinnedRows = splitRowsByRoot(unpinnedRows)
+    .filter((group) =>
+      group.rows.some((row) => threadMatchesQuery(row.thread, workspaceName, query)),
+    )
+    .flatMap((group) => group.rows);
+
+  return {
+    visiblePinnedRows,
+    visibleUnpinnedRows,
+    displayRootCount:
+      countRootRows(visiblePinnedRows) + countRootRows(visibleUnpinnedRows),
+  };
+}
+
+function groupLocalCodexRowsByProject(rows: ThreadRowEntry[]) {
+  const groups = new Map<
+    string,
+    {
+      key: string;
+      label: string;
+      path: string;
+      rows: ThreadRowEntry[];
+    }
+  >();
+
+  splitRowsByRoot(rows).forEach((rootGroup) => {
+    const path = normalizeLocalCodexProjectPath(rootGroup.root.thread.cwd);
+    const key = path || "__unknown__";
+    const existing =
+      groups.get(key) ??
+      {
+        key,
+        label: getLocalCodexProjectLabel(path),
+        path,
+        rows: [] as ThreadRowEntry[],
+      };
+    existing.rows.push(...rootGroup.rows);
+    groups.set(key, existing);
+  });
+
+  return [...groups.values()];
+}
+
+function resolveLocalCodexProjectWorkspaceId(
+  path: string,
+  groups: WorkspaceGroupSection[],
+) {
+  const normalizedPath = normalizeLocalCodexProjectPath(path).toLowerCase();
+  if (!normalizedPath) {
+    return null;
+  }
+
+  const candidates = groups
+    .flatMap((group) => group.workspaces)
+    .filter((workspace) => !isLocalCodexWorkspaceId(workspace.id))
+    .map((workspace) => ({
+      id: workspace.id,
+      path: normalizeLocalCodexProjectPath(workspace.path).toLowerCase(),
+    }))
+    .filter((workspace) => workspace.path.length > 0)
+    .sort((a, b) => b.path.length - a.path.length);
+
+  return (
+    candidates.find(
+      (workspace) =>
+        normalizedPath === workspace.path ||
+        normalizedPath.startsWith(`${workspace.path}/`),
+    )?.id ?? null
+  );
+}
+
+function LocalCodexProjectThreadGroups({
+  workspaceId,
+  rows,
+  nextCursor,
+  isPaging,
+  activeWorkspaceId,
+  activeThreadId,
+  threadStatusById,
+  pendingUserInputKeys,
+  getThreadTime,
+  getThreadArgsBadge,
+  isThreadPinned,
+  onToggleThreadPin,
+  isSearchActive,
+  resolveProjectWorkspaceId,
+  onToggleExpanded,
+  onLoadOlderThreads,
+  onSelectLocalCodexThread,
+  onShowThreadMenu,
+}: {
+  workspaceId: string;
+  rows: ThreadRowEntry[];
+  nextCursor: string | null;
+  isPaging: boolean;
+  activeWorkspaceId: string | null;
+  activeThreadId: string | null;
+  threadStatusById: ThreadStatusById;
+  pendingUserInputKeys?: Set<string>;
+  getThreadTime: (thread: ThreadSummary) => string | null;
+  getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
+  isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  onToggleThreadPin?: (workspaceId: string, threadId: string, pinned: boolean) => void;
+  isSearchActive: boolean;
+  resolveProjectWorkspaceId: (path: string) => string | null;
+  onToggleExpanded: (workspaceId: string) => void;
+  onLoadOlderThreads: (workspaceId: string) => void;
+  onSelectLocalCodexThread: (cwd: string, threadId: string) => void;
+  onShowThreadMenu: (
+    event: MouseEvent,
+    workspaceId: string,
+    threadId: string,
+    canPin: boolean,
+  ) => void;
+}) {
+  const groups = groupLocalCodexRowsByProject(rows);
+  const [collapsedProjectKeys, setCollapsedProjectKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const toggleProjectCollapse = (projectKey: string) => {
+    setCollapsedProjectKeys((current) => {
+      const next = new Set(current);
+      if (next.has(projectKey)) {
+        next.delete(projectKey);
+      } else {
+        next.add(projectKey);
+      }
+      return next;
+    });
+  };
+
+  if (groups.length === 0 && nextCursor) {
+    return (
+      <button
+        className="thread-more"
+        onClick={(event) => {
+          event.stopPropagation();
+          onLoadOlderThreads(workspaceId);
+        }}
+        disabled={isPaging}
+      >
+        {isPaging
+          ? "加载中..."
+          : isSearchActive
+            ? "搜索更早会话..."
+            : "加载更早会话..."}
+      </button>
+    );
+  }
+
+  return (
+    <>
+      {groups.map((group) => {
+        const rootCount = countRootRows(group.rows);
+        const projectWorkspaceId = resolveProjectWorkspaceId(group.path);
+        const isProjectCollapsed =
+          !isSearchActive && collapsedProjectKeys.has(group.key);
+
+        return (
+          <div className="local-codex-project-group" key={group.key}>
+            <button
+              type="button"
+              className={`sidebar-section-header local-codex-project-header local-codex-project-toggle${
+                isProjectCollapsed ? "" : " expanded"
+              }`}
+              aria-expanded={!isProjectCollapsed}
+              aria-label={`${isProjectCollapsed ? "展开" : "折叠"} ${group.label}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleProjectCollapse(group.key);
+              }}
+            >
+              <span className="workspace-toggle-icon" aria-hidden>
+                ›
+              </span>
+              <div className="sidebar-section-title" title={group.path || undefined}>
+                {group.label}
+              </div>
+              <div className="sidebar-section-count">{rootCount}</div>
+            </button>
+            {!isProjectCollapsed && (
+              <ThreadList
+                workspaceId={projectWorkspaceId ?? workspaceId}
+                pinnedRows={[]}
+                unpinnedRows={group.rows}
+                totalThreadRoots={rootCount}
+                isExpanded
+                showExpandToggle={false}
+                nextCursor={null}
+                isPaging={isPaging}
+                showLoadOlder={false}
+                activeWorkspaceId={activeWorkspaceId}
+                activeThreadId={activeThreadId}
+                threadStatusById={threadStatusById}
+                pendingUserInputKeys={pendingUserInputKeys}
+                getThreadTime={getThreadTime}
+                getThreadArgsBadge={getThreadArgsBadge}
+                isThreadPinned={isThreadPinned}
+                onToggleThreadPin={onToggleThreadPin}
+                onToggleExpanded={onToggleExpanded}
+                onLoadOlderThreads={onLoadOlderThreads}
+                onSelectThread={(_workspaceId, threadId) =>
+                  onSelectLocalCodexThread(group.path, threadId)
+                }
+                onShowThreadMenu={onShowThreadMenu}
+              />
+            )}
+          </div>
+        );
+      })}
+      {nextCursor && (
+        <button
+          className="thread-more"
+          onClick={(event) => {
+            event.stopPropagation();
+            onLoadOlderThreads(workspaceId);
+          }}
+          disabled={isPaging}
+        >
+          {isPaging ? "加载中..." : "加载更早会话..."}
+        </button>
+      )}
+    </>
+  );
+}
+
+function LocalCodexWorkspaceEntry({
+  workspace,
+  allWorkspaceGroups,
+  isSearchActive,
+  normalizedQuery,
+  threadsByWorkspace,
+  threadStatusById,
+  threadListLoadingByWorkspace,
+  threadListPagingByWorkspace,
+  threadListCursorByWorkspace,
+  expandedWorkspaces,
+  activeWorkspaceId,
+  activeThreadId,
+  pendingUserInputKeys,
+  getThreadRows,
+  getThreadTime,
+  getThreadArgsBadge,
+  isThreadPinned,
+  onToggleThreadPin,
+  getPinTimestamp,
+  pinnedThreadsVersion,
+  onSelectLocalCodexThread,
+  onShowThreadMenu,
+  onToggleExpanded,
+  onLoadOlderThreads,
+}: SidebarWorkspaceEntryProps) {
+  const threads = threadsByWorkspace[workspace.id] ?? [];
+  const isExpanded = isSearchActive || expandedWorkspaces.has(workspace.id);
+  const { pinnedRows, unpinnedRows, totalRoots } = getThreadRows(
+    threads,
+    true,
+    workspace.id,
+    getPinTimestamp,
+    pinnedThreadsVersion,
+  );
+  const nextCursor = threadListCursorByWorkspace[workspace.id] ?? null;
+  const { visibleRows, displayRootCount } = getVisibleLocalCodexThreadListState({
+    rows: [...pinnedRows, ...unpinnedRows],
+    totalRoots: countRootRows(pinnedRows) + totalRoots,
+    query: normalizedQuery,
+    isSearchActive,
+  });
+  const isLoadingThreads = threadListLoadingByWorkspace[workspace.id] ?? false;
+  const isPaging = threadListPagingByWorkspace[workspace.id] ?? false;
+  const showThreadLoader = isLoadingThreads && threads.length === 0;
+  const showThreadList = visibleRows.length > 0 || Boolean(nextCursor);
+  const hasLoadedRows = displayRootCount > 0;
+
+  return (
+    <div className="local-codex-history">
+      <button
+        type="button"
+        className={`local-codex-history-header${isExpanded ? " expanded" : ""}`}
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? "折叠" : "展开"} ${LOCAL_CODEX_WORKSPACE_NAME}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleExpanded(workspace.id);
+        }}
+      >
+        <span className="workspace-toggle-icon" aria-hidden>
+          ›
+        </span>
+        <span className="local-codex-history-title">{LOCAL_CODEX_WORKSPACE_NAME}</span>
+        <span className="local-codex-history-count">{displayRootCount}</span>
+      </button>
+
+      {isExpanded && (
+        <div className="local-codex-history-content">
+          <div className="local-codex-history-content-inner">
+            {!workspace.connected && (
+              <div className="workspace-local-empty">
+                添加或连接一个项目后，这里会同步显示本机 Codex 历史会话。
+              </div>
+            )}
+            {workspace.connected && !hasLoadedRows && !nextCursor && !showThreadLoader && (
+              <div className="workspace-local-empty">暂无本机 Codex 历史会话。</div>
+            )}
+            {showThreadList && (
+              <LocalCodexProjectThreadGroups
+                workspaceId={workspace.id}
+                rows={visibleRows}
+                nextCursor={nextCursor}
+                isPaging={isPaging}
+                activeWorkspaceId={activeWorkspaceId}
+                activeThreadId={activeThreadId}
+                threadStatusById={threadStatusById}
+                pendingUserInputKeys={pendingUserInputKeys}
+                getThreadTime={getThreadTime}
+                getThreadArgsBadge={getThreadArgsBadge}
+                isThreadPinned={isThreadPinned}
+                onToggleThreadPin={onToggleThreadPin}
+                isSearchActive={isSearchActive}
+                resolveProjectWorkspaceId={(path) =>
+                  resolveLocalCodexProjectWorkspaceId(path, allWorkspaceGroups)
+                }
+                onToggleExpanded={onToggleExpanded}
+                onLoadOlderThreads={onLoadOlderThreads}
+                onSelectLocalCodexThread={onSelectLocalCodexThread}
+                onShowThreadMenu={onShowThreadMenu}
+              />
+            )}
+            {showThreadLoader && <ThreadLoading />}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SidebarWorkspaceEntry({
   workspace,
+  allWorkspaceGroups,
   cloneChildIds,
   clonesBySource,
   worktreesByParent,
@@ -119,6 +557,7 @@ function SidebarWorkspaceEntry({
   getThreadTime,
   getThreadArgsBadge,
   isThreadPinned,
+  onToggleThreadPin,
   getPinTimestamp,
   pinnedThreadsVersion,
   addMenuAnchor,
@@ -133,6 +572,7 @@ function SidebarWorkspaceEntry({
   onAddCloneAgent,
   onToggleWorkspaceCollapse,
   onSelectThread,
+  onSelectLocalCodexThread,
   onShowThreadMenu,
   onShowWorkspaceMenu,
   onShowWorktreeMenu,
@@ -146,11 +586,67 @@ function SidebarWorkspaceEntry({
   }
 
   const threads = threadsByWorkspace[workspace.id] ?? [];
+  const isLocalCodexWorkspace = isLocalCodexWorkspaceId(workspace.id);
+  if (isLocalCodexWorkspace) {
+    return (
+      <LocalCodexWorkspaceEntry
+        workspace={workspace}
+        allWorkspaceGroups={allWorkspaceGroups}
+        cloneChildIds={cloneChildIds}
+        clonesBySource={clonesBySource}
+        worktreesByParent={worktreesByParent}
+        workspaceVisibleDuringSearchById={workspaceVisibleDuringSearchById}
+        isSearchActive={isSearchActive}
+        normalizedQuery={normalizedQuery}
+        renderHighlightedName={renderHighlightedName}
+        isWorkspaceMatch={isWorkspaceMatch}
+        deletingWorktreeIds={deletingWorktreeIds}
+        threadsByWorkspace={threadsByWorkspace}
+        threadStatusById={threadStatusById}
+        threadListLoadingByWorkspace={threadListLoadingByWorkspace}
+        threadListPagingByWorkspace={threadListPagingByWorkspace}
+        threadListCursorByWorkspace={threadListCursorByWorkspace}
+        expandedWorkspaces={expandedWorkspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        activeThreadId={activeThreadId}
+        pendingUserInputKeys={pendingUserInputKeys}
+        getThreadRows={getThreadRows}
+        getThreadTime={getThreadTime}
+        getThreadArgsBadge={getThreadArgsBadge}
+        isThreadPinned={isThreadPinned}
+        onToggleThreadPin={onToggleThreadPin}
+        getPinTimestamp={getPinTimestamp}
+        pinnedThreadsVersion={pinnedThreadsVersion}
+        addMenuAnchor={addMenuAnchor}
+        addMenuRef={addMenuRef}
+        addMenuWidth={addMenuWidth}
+        newAgentDraftWorkspaceId={newAgentDraftWorkspaceId}
+        startingDraftThreadWorkspaceId={startingDraftThreadWorkspaceId}
+        onSelectWorkspace={onSelectWorkspace}
+        onConnectWorkspace={onConnectWorkspace}
+        onAddAgent={onAddAgent}
+        onAddWorktreeAgent={onAddWorktreeAgent}
+        onAddCloneAgent={onAddCloneAgent}
+        onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
+        onSelectThread={onSelectThread}
+        onSelectLocalCodexThread={onSelectLocalCodexThread}
+        onShowThreadMenu={onShowThreadMenu}
+        onShowWorkspaceMenu={onShowWorkspaceMenu}
+        onShowWorktreeMenu={onShowWorktreeMenu}
+        onShowCloneMenu={onShowCloneMenu}
+        onToggleExpanded={onToggleExpanded}
+        onLoadOlderThreads={onLoadOlderThreads}
+        onToggleAddMenu={onToggleAddMenu}
+      />
+    );
+  }
+
   const isCollapsed = workspace.settings.sidebarCollapsed;
   const isExpanded = expandedWorkspaces.has(workspace.id);
   const workspaceMatchesSearch = isWorkspaceMatch(workspace);
   const searchExpanded = isExpanded || isSearchActive;
   const {
+    pinnedRows,
     unpinnedRows,
     totalRoots: totalThreadRoots,
   } = getThreadRows(
@@ -162,16 +658,21 @@ function SidebarWorkspaceEntry({
   );
   const nextCursor = threadListCursorByWorkspace[workspace.id] ?? null;
   const {
-    visibleRows: filteredThreadRows,
+    visiblePinnedRows: filteredPinnedThreadRows,
+    visibleUnpinnedRows: filteredThreadRows,
     displayRootCount: displayThreadRootCount,
-  } = getVisibleThreadListState({
-    rows: unpinnedRows,
-    totalRoots: totalThreadRoots,
+  } = getVisibleThreadSections({
+    pinnedRows,
+    unpinnedRows,
+    totalUnpinnedRoots: totalThreadRoots,
     workspaceName: workspace.name,
     query: normalizedQuery,
     isSearchActive,
   });
-  const showThreadList = filteredThreadRows.length > 0 || Boolean(nextCursor);
+  const showThreadList =
+    filteredPinnedThreadRows.length > 0 ||
+    filteredThreadRows.length > 0 ||
+    Boolean(nextCursor);
   const isLoadingThreads = threadListLoadingByWorkspace[workspace.id] ?? false;
   const showThreadLoader = isLoadingThreads && threads.length === 0;
   const isPaging = threadListPagingByWorkspace[workspace.id] ?? false;
@@ -201,16 +702,16 @@ function SidebarWorkspaceEntry({
       workspaceName={renderHighlightedName(workspace.name)}
       summary={
         displayThreadRootCount > 0
-          ? `${displayThreadRootCount} conversation${
-              displayThreadRootCount === 1 ? "" : "s"
-            }${threads[0] ? ` · Updated ${getThreadTime(threads[0])}` : ""}`
-          : "No conversations yet"
+          ? `${displayThreadRootCount} 个会话${
+              threads[0] ? ` · 更新于 ${getThreadTime(threads[0])}` : ""
+            }`
+          : "暂无会话"
       }
       isActive={workspace.id === activeWorkspaceId}
       isCollapsed={isCollapsed}
       addMenuOpen={addMenuOpen}
       addMenuWidth={addMenuWidth}
-      onSelectWorkspace={onSelectWorkspace}
+      onAddAgent={onAddAgent}
       onShowWorkspaceMenu={onShowWorkspaceMenu}
       onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
       onConnectWorkspace={onConnectWorkspace}
@@ -236,7 +737,7 @@ function SidebarWorkspaceEntry({
               }}
               icon={<Plus aria-hidden />}
             >
-              New agent
+              新建 Agent
             </PopoverMenuItem>
             <PopoverMenuItem
               className="workspace-add-option"
@@ -247,7 +748,7 @@ function SidebarWorkspaceEntry({
               }}
               icon={<GitBranch aria-hidden />}
             >
-              New worktree agent
+              新建 worktree Agent
             </PopoverMenuItem>
             <PopoverMenuItem
               className="workspace-add-option"
@@ -258,7 +759,7 @@ function SidebarWorkspaceEntry({
               }}
               icon={<Copy aria-hidden />}
             >
-              New clone agent
+              新建副本 Agent
             </PopoverMenuItem>
           </PopoverSurface>,
           document.body,
@@ -279,7 +780,7 @@ function SidebarWorkspaceEntry({
           <span className={`thread-status ${draftStatusClass}`} aria-hidden />
           <div className="thread-content">
             <div className="thread-headline">
-              <span className="thread-name">New Agent</span>
+              <span className="thread-name">新建 Agent</span>
             </div>
           </div>
         </div>
@@ -301,9 +802,9 @@ function SidebarWorkspaceEntry({
           getThreadTime={getThreadTime}
           getThreadArgsBadge={getThreadArgsBadge}
           isThreadPinned={isThreadPinned}
+          onToggleThreadPin={onToggleThreadPin}
           getPinTimestamp={getPinTimestamp}
           pinnedThreadsVersion={pinnedThreadsVersion}
-          onSelectWorkspace={onSelectWorkspace}
           onConnectWorkspace={onConnectWorkspace}
           onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
           onSelectThread={onSelectThread}
@@ -313,7 +814,7 @@ function SidebarWorkspaceEntry({
           onLoadOlderThreads={onLoadOlderThreads}
           searchQuery={normalizedQuery}
           isSearchActive={isSearchActive}
-          sectionLabel="Clone agents"
+          sectionLabel="副本 Agents"
           sectionIcon={<Copy className="worktree-header-icon" aria-hidden />}
           className="clone-section"
         />
@@ -335,9 +836,9 @@ function SidebarWorkspaceEntry({
           getThreadTime={getThreadTime}
           getThreadArgsBadge={getThreadArgsBadge}
           isThreadPinned={isThreadPinned}
+          onToggleThreadPin={onToggleThreadPin}
           getPinTimestamp={getPinTimestamp}
           pinnedThreadsVersion={pinnedThreadsVersion}
-          onSelectWorkspace={onSelectWorkspace}
           onConnectWorkspace={onConnectWorkspace}
           onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
           onSelectThread={onSelectThread}
@@ -352,7 +853,7 @@ function SidebarWorkspaceEntry({
       {showThreadList && (
         <ThreadList
           workspaceId={workspace.id}
-          pinnedRows={[]}
+          pinnedRows={filteredPinnedThreadRows}
           unpinnedRows={filteredThreadRows}
           totalThreadRoots={displayThreadRootCount}
           isExpanded={searchExpanded}
@@ -366,6 +867,7 @@ function SidebarWorkspaceEntry({
           getThreadTime={getThreadTime}
           getThreadArgsBadge={getThreadArgsBadge}
           isThreadPinned={isThreadPinned}
+          onToggleThreadPin={onToggleThreadPin}
           onToggleExpanded={onToggleExpanded}
           onLoadOlderThreads={onLoadOlderThreads}
           onSelectThread={onSelectThread}
@@ -403,6 +905,7 @@ export function SidebarWorkspaceGroups({
           <SidebarWorkspaceEntry
             key={workspace.id}
             workspace={workspace}
+            allWorkspaceGroups={groups}
             {...entryProps}
           />
         ))}

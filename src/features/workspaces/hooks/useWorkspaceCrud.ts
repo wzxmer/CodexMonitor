@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import * as Sentry from "@sentry/react";
 import type { DebugEntry, WorkspaceInfo, WorkspaceSettings } from "../../../types";
+import { isLocalCodexWorkspaceId } from "../domain/localCodexWorkspace";
 import { normalizeRootPath } from "../../threads/utils/threadNormalize";
 import {
   addWorkspace as addWorkspaceService,
@@ -102,6 +103,9 @@ export function useWorkspaceCrud({
       setWorkspaces(entries);
       setActiveWorkspaceId((prev) => {
         if (!prev) {
+          return prev;
+        }
+        if (isLocalCodexWorkspaceId(prev)) {
           return prev;
         }
         return entries.some((entry) => entry.id === prev) ? prev : null;

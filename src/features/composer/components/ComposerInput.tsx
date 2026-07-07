@@ -7,7 +7,7 @@ import type {
   SyntheticEvent,
 } from "react";
 import type { AutocompleteItem } from "../hooks/useComposerAutocomplete";
-import ImagePlus from "lucide-react/dist/esm/icons/image-plus";
+import Paperclip from "lucide-react/dist/esm/icons/paperclip";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import Mic from "lucide-react/dist/esm/icons/mic";
@@ -247,10 +247,10 @@ export function ComposerInput({
             className="composer-attach"
             onClick={onAddAttachment}
             disabled={disabled || !onAddAttachment}
-            aria-label="Add image"
-            title="Add image"
+            aria-label="添加附件"
+            title="添加附件"
           >
-            <ImagePlus size={14} aria-hidden />
+            <Paperclip size={14} aria-hidden />
           </button>
           <ComposerMobileActionsMenu
             disabled={disabled}
@@ -275,8 +275,8 @@ export function ComposerInput({
             ref={textareaRef}
             placeholder={
               disabled
-                ? "Review in progress. Chat will re-enable when it completes."
-                : "Ask Codex to do something..."
+                ? "正在审查，完成后可继续对话。"
+                : "让 Codex 做点什么..."
             }
             value={text}
             onChange={handleTextareaChange}
@@ -297,8 +297,8 @@ export function ComposerInput({
                 }`}
                 onClick={onToggleExpand}
                 disabled={disabled}
-                aria-label={isExpanded ? "Collapse input" : "Expand input"}
-                title={isExpanded ? "Collapse input" : "Expand input"}
+                aria-label={isExpanded ? "收起输入框" : "展开输入框"}
+                title={isExpanded ? "收起输入框" : "展开输入框"}
               >
                 {isExpanded ? <ChevronDown aria-hidden /> : <ChevronUp aria-hidden />}
               </button>
@@ -328,8 +328,8 @@ export function ComposerInput({
               }`}
               onClick={handleActionClick}
               disabled={(disabled && !canStop) || isDictationBusy || (!canStop && !canSend)}
-              aria-label={canStop ? "Stop" : sendLabel}
-              title={canStop ? "Stop" : sendLabel}
+              aria-label={canStop ? "停止" : sendLabel}
+              title={canStop ? "停止" : sendLabel}
             >
               {canStop ? (
                 <>
@@ -367,7 +367,7 @@ export function ComposerInput({
               className="ghost composer-dictation-error-dismiss"
               onClick={onDismissDictationError}
             >
-              Dismiss
+              关闭
             </button>
           </div>
         )}
@@ -380,7 +380,7 @@ export function ComposerInput({
                 className="ghost composer-dictation-error-dismiss"
                 onClick={onDismissDictationHint}
               >
-                Dismiss
+                关闭
               </button>
             )}
           </div>

@@ -34,12 +34,35 @@ export type ToolGroup = {
   messageCount: number;
 };
 
-export type MessageListEntry =
+export type MessageListBaseEntry =
   | { kind: "item"; item: ConversationItem }
   | { kind: "toolGroup"; group: ToolGroup };
 
+export type ProcessGroup = {
+  id: string;
+  entries: MessageListBaseEntry[];
+  toolCount: number;
+  messageCount: number;
+};
+
+export type MessageListEntry =
+  | MessageListBaseEntry
+  | { kind: "processGroup"; group: ProcessGroup };
+
 export const SCROLL_THRESHOLD_PX = 120;
 export const MAX_COMMAND_OUTPUT_LINES = 200;
+
+const ANSI_ESCAPE_PATTERN = new RegExp(
+  String.raw`[\u001B\u009B](?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001B]*(?:\u0007|\u001B\\))`,
+  "g",
+);
+
+export function stripAnsiControlCodes(value: string) {
+  if (!value) {
+    return "";
+  }
+  return value.replace(ANSI_ESCAPE_PATTERN, "");
+}
 
 export function basename(path: string) {
   if (!path) {
@@ -271,8 +294,8 @@ function mergeConsecutiveExploreRuns(items: ToolGroupItem[]): ToolGroupItem[] {
   return result;
 }
 
-export function buildToolGroups(items: ConversationItem[]): MessageListEntry[] {
-  const entries: MessageListEntry[] = [];
+export function buildToolGroups(items: ConversationItem[]): MessageListBaseEntry[] {
+  const entries: MessageListBaseEntry[] = [];
   let buffer: ToolGroupItem[] = [];
 
   const flush = () => {
@@ -292,19 +315,15 @@ export function buildToolGroups(items: ConversationItem[]): MessageListEntry[] {
     const messageCount = normalizedBuffer.filter(
       (item) => item.kind !== "tool" && item.kind !== "explore",
     ).length;
-    if (toolCount === 0 || normalizedBuffer.length === 1) {
-      normalizedBuffer.forEach((item) => entries.push({ kind: "item", item }));
-    } else {
-      entries.push({
-        kind: "toolGroup",
-        group: {
-          id: normalizedBuffer[0].id,
-          items: normalizedBuffer,
-          toolCount,
-          messageCount,
-        },
-      });
-    }
+    entries.push({
+      kind: "toolGroup",
+      group: {
+        id: normalizedBuffer[0].id,
+        items: normalizedBuffer,
+        toolCount,
+        messageCount,
+      },
+    });
     buffer = [];
   };
 

@@ -193,6 +193,20 @@ export function useThreadMessaging({
       });
       const timestamp = Date.now();
       const customThreadName = getCustomName(workspace.id, threadId) ?? null;
+      dispatch({
+        type: "upsertItem",
+        workspaceId: workspace.id,
+        threadId,
+        item: {
+          id: options?.replaceMessageId ?? `local-user-${timestamp}`,
+          kind: "message",
+          role: "user",
+          text: finalText,
+          images,
+        },
+        replaceExisting: Boolean(options?.replaceMessageId),
+        hasCustomName: Boolean(customThreadName),
+      });
       recordThreadActivity(workspace.id, threadId, timestamp);
       dispatch({
         type: "setThreadTimestamp",
@@ -367,7 +381,7 @@ export function useThreadMessaging({
       text: string,
       images: string[] = [],
       appMentions: AppMention[] = [],
-      options?: { sendIntent?: ComposerSendIntent },
+      options?: { sendIntent?: ComposerSendIntent; replaceMessageId?: string },
     ): Promise<SendMessageResult> => {
       if (!activeWorkspace) {
         return { status: "blocked" };
@@ -401,6 +415,7 @@ export function useThreadMessaging({
         skipPromptExpansion: true,
         appMentions,
         sendIntent: options?.sendIntent,
+        replaceMessageId: options?.replaceMessageId,
       });
     },
     [

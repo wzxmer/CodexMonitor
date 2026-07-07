@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkspaceInfo } from "../../../types";
 import { listGitRoots } from "../../../services/tauri";
+import {
+  getErrorMessage,
+  isMissingGitRepositoryError,
+} from "../utils/gitErrors";
 
 type GitRepoScanState = {
   repos: string[];
@@ -62,7 +66,7 @@ export function useGitRepoScan(activeWorkspace: WorkspaceInfo | null) {
         ...prev,
         repos: [],
         isLoading: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: isMissingGitRepositoryError(error) ? null : getErrorMessage(error),
       }));
     }
   }, [activeWorkspace, state.depth]);

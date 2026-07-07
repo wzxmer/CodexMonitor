@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: 10px;
   -webkit-app-region: no-drag;
-  padding: 10px var(--main-panel-padding) 20px;
+  padding: 10px calc(var(--main-panel-padding) + 14px) 20px var(--main-panel-padding);
   border-top: 1px solid var(--cm-border-default);
   background: var(--cm-surface-composer);
   backdrop-filter: blur(18px) saturate(1.1);
@@ -59,7 +59,7 @@
   border-radius: 8px;
   background: var(--surface-item);
   color: var(--text-quiet);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .composer-queue-text {
@@ -339,6 +339,8 @@
   color: inherit;
   padding: 6px 4px 4px;
   font-size: 14px;
+  font-family: var(--message-font-family, var(--ui-font-family));
+  font-weight: var(--message-font-weight, 500);
   line-height: 1.5;
   -webkit-app-region: no-drag;
   overflow-y: hidden;
@@ -674,8 +676,26 @@
   display: flex;
   align-items: center;
   padding-top: 10px;
+  padding-right: 2px;
   border-top: 1px solid var(--cm-border-strong);
   gap: 12px;
+}
+
+.composer-queue-steer {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--border-accent) 42%, var(--cm-border-soft));
+  background: color-mix(in srgb, var(--surface-accent-soft) 70%, var(--cm-surface-panel));
+  color: var(--text-stronger);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.composer-queue-steer:hover {
+  border-color: var(--border-accent);
+  background: color-mix(in srgb, var(--surface-accent-soft) 88%, var(--cm-surface-panel));
 }
 
 .composer-meta {
@@ -901,6 +921,11 @@
 .composer-select--approval {
   width: 90px;
   max-width: 90px;
+}
+
+.composer-select--shortcut {
+  width: 128px;
+  max-width: 128px;
 }
 
 .composer-select:focus {

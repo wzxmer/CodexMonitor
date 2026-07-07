@@ -27,6 +27,7 @@ type SidebarThreadsOnlySectionProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
+  onToggleThreadPin?: (workspaceId: string, threadId: string, pinned: boolean) => void;
   getWorkspaceLabel: (workspaceId: string) => string | null;
   addMenuOpen: boolean;
   addMenuAnchor: SidebarOverlayMenuAnchor | null;
@@ -47,6 +48,7 @@ export function SidebarThreadsOnlySection({
   isThreadPinned,
   onSelectThread,
   onShowThreadMenu,
+  onToggleThreadPin,
   getWorkspaceLabel,
   addMenuOpen,
   addMenuAnchor,
@@ -58,13 +60,13 @@ export function SidebarThreadsOnlySection({
   return (
     <div className="workspace-group">
       <div className="sidebar-section-header workspace-group-header-all-threads">
-        <div className="sidebar-section-title">Recent conversations</div>
+        <div className="sidebar-section-title">最近会话</div>
         <button
           className="ghost all-threads-add"
           onClick={onToggleAddMenu}
           data-tauri-drag-region="false"
-          aria-label="New thread in project"
-          title="New thread in project"
+          aria-label="在项目中新建会话"
+          title="在项目中新建会话"
           aria-expanded={addMenuOpen}
           disabled={projectOptionsForNewThread.length === 0}
         >
@@ -87,6 +89,7 @@ export function SidebarThreadsOnlySection({
             isThreadPinned={isThreadPinned}
             onSelectThread={onSelectThread}
             onShowThreadMenu={onShowThreadMenu}
+            onToggleThreadPin={onToggleThreadPin}
             getWorkspaceLabel={getWorkspaceLabel}
           />
         </div>

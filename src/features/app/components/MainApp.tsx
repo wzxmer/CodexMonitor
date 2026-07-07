@@ -26,8 +26,16 @@ import { useMainAppGitState } from "@app/hooks/useMainAppGitState";
 import { useMainAppLayoutSurfaces } from "@app/hooks/useMainAppLayoutSurfaces";
 import { useMainAppLayoutNodes } from "@app/hooks/useMainAppLayoutNodes";
 import { useWorkspaceFromUrlPrompt } from "@/features/workspaces/hooks/useWorkspaceFromUrlPrompt";
+import {
+  appendLocalCodexWorkspaceGroup,
+  isLocalCodexWorkspaceId,
+  LOCAL_CODEX_GROUP_NAME,
+  LOCAL_CODEX_WORKSPACE_NAME,
+  LOCAL_CODEX_WORKSPACE_ID,
+} from "@/features/workspaces/domain/localCodexWorkspace";
 import { useWorkspaceController } from "@app/hooks/useWorkspaceController";
 import { useWorkspaceSelection } from "@/features/workspaces/hooks/useWorkspaceSelection";
+import { normalizeRootPath } from "@/features/threads/utils/threadNormalize";
 import { usePlanReadyActions } from "@app/hooks/usePlanReadyActions";
 import { useThreadRows } from "@app/hooks/useThreadRows";
 import { useInterruptShortcut } from "@app/hooks/useInterruptShortcut";
@@ -87,6 +95,33 @@ const SettingsView = lazy(() =>
   })),
 );
 
+function resolveWorkspaceIdForLocalCodexPath(
+  path: string,
+  workspaces: WorkspaceInfo[],
+) {
+  const normalizedPath = normalizeRootPath(path);
+  if (!normalizedPath) {
+    return null;
+  }
+
+  const candidates = workspaces
+    .filter((workspace) => !isLocalCodexWorkspaceId(workspace.id))
+    .map((workspace) => ({
+      id: workspace.id,
+      path: normalizeRootPath(workspace.path),
+    }))
+    .filter((workspace) => workspace.path.length > 0)
+    .sort((a, b) => b.path.length - a.path.length);
+
+  return (
+    candidates.find(
+      (workspace) =>
+        normalizedPath === workspace.path ||
+        normalizedPath.startsWith(`${workspace.path}/`),
+    )?.id ?? null
+  );
+}
+
 export default function MainApp() {
   const {
     appSettings,
@@ -132,12 +167,12 @@ export default function MainApp() {
   const tabletTab =
     activeTab === "projects" || activeTab === "home" ? "codex" : activeTab;
   const {
-    workspaces,
+    workspaces: storedWorkspaces,
     workspaceGroups,
-    groupedWorkspaces,
-    getWorkspaceGroupName,
+    groupedWorkspaces: storedGroupedWorkspaces,
+    getWorkspaceGroupName: getStoredWorkspaceGroupName,
     ungroupedLabel,
-    activeWorkspace,
+    activeWorkspace: storedActiveWorkspace,
     activeWorkspaceId,
     setActiveWorkspaceId,
     addWorkspace,
@@ -184,6 +219,42 @@ export default function MainApp() {
   });
   const updaterEnabled = !isMobileRuntime;
 
+  const localCodexWorkspace = useMemo<WorkspaceInfo>(
+    () => ({
+      id: LOCAL_CODEX_WORKSPACE_ID,
+      name: LOCAL_CODEX_WORKSPACE_NAME,
+      path: "",
+      connected: true,
+      settings: {
+        sidebarCollapsed: false,
+        groupId: null,
+        sortOrder: Number.MAX_SAFE_INTEGER,
+      },
+    }),
+    [],
+  );
+  const workspaces = useMemo(
+    () => [...storedWorkspaces, localCodexWorkspace],
+    [localCodexWorkspace, storedWorkspaces],
+  );
+  const groupedWorkspaces = useMemo(
+    () =>
+      appendLocalCodexWorkspaceGroup(storedGroupedWorkspaces, workspaceGroups),
+    [storedGroupedWorkspaces, workspaceGroups],
+  );
+  const activeWorkspace = isLocalCodexWorkspaceId(activeWorkspaceId)
+    ? localCodexWorkspace
+    : storedActiveWorkspace;
+  const projectActiveWorkspace = isLocalCodexWorkspaceId(activeWorkspaceId)
+    ? null
+    : activeWorkspace;
+  const getWorkspaceGroupName = useCallback(
+    (workspaceId: string) =>
+      isLocalCodexWorkspaceId(workspaceId)
+        ? LOCAL_CODEX_GROUP_NAME
+        : getStoredWorkspaceGroupName(workspaceId),
+    [getStoredWorkspaceGroupName],
+  );
   const workspacesById = useMemo(
     () => new Map(workspaces.map((workspace) => [workspace.id, workspace])),
     [workspaces],
@@ -392,7 +463,7 @@ export default function MainApp() {
     reasoningSupported,
     onFocusComposer: () => composerInputRef.current?.focus(),
   });
-  const { skills } = useSkills({ activeWorkspace, onDebug: addDebugEntry });
+  const { skills } = useSkills({ activeWorkspace: projectActiveWorkspace, onDebug: addDebugEntry });
   const {
     prompts,
     createPrompt,
@@ -401,7 +472,7 @@ export default function MainApp() {
     movePrompt,
     getWorkspacePromptsDir,
     getGlobalPromptsDir,
-  } = useCustomPrompts({ activeWorkspace, onDebug: addDebugEntry });
+  } = useCustomPrompts({ activeWorkspace: projectActiveWorkspace, onDebug: addDebugEntry });
   const resolvedModel = selectedModel?.model ?? null;
   const resolvedEffort = reasoningSupported ? selectedEffort : null;
 
@@ -562,7 +633,7 @@ export default function MainApp() {
     errorSoundUrl,
   });
   const gitState = useMainAppGitState({
-    activeWorkspace,
+    activeWorkspace: projectActiveWorkspace,
     activeWorkspaceId,
     activeItems,
     activeThreadId,
@@ -657,7 +728,7 @@ export default function MainApp() {
   );
 
   const { apps } = useApps({
-    activeWorkspace,
+    activeWorkspace: projectActiveWorkspace,
     activeThreadId,
     enabled: appSettings.experimentalAppsEnabled,
     onDebug: addDebugEntry,
@@ -700,7 +771,6 @@ export default function MainApp() {
       listThreadsForWorkspaces,
       resetWorkspaceThreads,
     });
-
   useResponseRequiredNotificationsController({
     systemNotificationsEnabled: appSettings.systemNotificationsEnabled,
     subagentSystemNotificationsEnabled:
@@ -889,7 +959,6 @@ export default function MainApp() {
     setCenterMode,
     setSelectedDiffPath,
   });
-
   const resolveCloneProjectContext = useCallback(
     (workspace: WorkspaceInfo) => {
       const groupId = workspace.settings.groupId ?? null;
@@ -940,11 +1009,11 @@ export default function MainApp() {
 
   const { appModalsProps, modalActions } = useMainAppModals({
     settingsViewComponent: SettingsView,
-    workspaces,
+    workspaces: storedWorkspaces,
     workspaceGroups,
-    groupedWorkspaces,
+    groupedWorkspaces: storedGroupedWorkspaces,
     ungroupedLabel,
-    activeWorkspace,
+    activeWorkspace: storedActiveWorkspace,
     setActiveWorkspaceId,
     branches,
     currentBranch,
@@ -1345,6 +1414,87 @@ export default function MainApp() {
     removeImagesForThread,
   });
 
+  const handleRefreshAllWorkspaceThreadsFromSidebar = useCallback(() => {
+    selectHome();
+    void handleRefreshAllWorkspaceThreads();
+  }, [handleRefreshAllWorkspaceThreads, selectHome]);
+
+  const handleSelectLocalCodexThread = useCallback(
+    async (cwd: string, threadId: string) => {
+      const path = cwd.trim();
+      if (!path || !threadId) {
+        return;
+      }
+
+      let workspaceId = resolveWorkspaceIdForLocalCodexPath(path, storedWorkspaces);
+      if (!workspaceId) {
+        try {
+          const workspace = await addWorkspaceFromPath(path, { activate: false });
+          workspaceId = workspace?.id ?? null;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          addDebugEntry({
+            id: `${Date.now()}-client-local-codex-workspace-add-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "local-codex/workspace-add error",
+            payload: { cwd: path, message },
+          });
+          alert(`无法继续这个本机 Codex 会话。\n\n${message}`);
+          return;
+        }
+      }
+
+      if (!workspaceId) {
+        alert(`无法继续这个本机 Codex 会话。\n\n找不到项目：${path}`);
+        return;
+      }
+
+      const matchedWorkspace =
+        storedWorkspaces.find((workspace) => workspace.id === workspaceId) ?? null;
+      if (matchedWorkspace && !matchedWorkspace.connected) {
+        try {
+          await connectWorkspace(matchedWorkspace);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          addDebugEntry({
+            id: `${Date.now()}-client-local-codex-workspace-connect-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "local-codex/workspace-connect error",
+            payload: { cwd: path, workspaceId, message },
+          });
+          alert(`无法继续这个本机 Codex 会话。\n\n${message}`);
+          return;
+        }
+      }
+
+      exitDiffView();
+      resetPullRequestSelection();
+      clearDraftState();
+      selectWorkspace(workspaceId);
+      setActiveThreadId(threadId, workspaceId);
+      if (isCompact) {
+        setActiveTab("codex");
+      }
+      setTimeout(() => composerInputRef.current?.focus(), 0);
+    },
+    [
+      addDebugEntry,
+      addWorkspaceFromPath,
+      clearDraftState,
+      connectWorkspace,
+      composerInputRef,
+      exitDiffView,
+      isCompact,
+      resetPullRequestSelection,
+      selectWorkspace,
+      setActiveTab,
+      setActiveThreadId,
+      storedWorkspaces,
+    ],
+  );
+
   const handleOpenThreadLinkFromExternal = useCallback(
     (workspaceId: string, threadId: string) => {
       setActiveTab("codex");
@@ -1426,6 +1576,8 @@ export default function MainApp() {
       exitDiffView,
       selectWorkspace,
       setActiveThreadId,
+      activeWorkspaceId,
+      activeThreadId,
       connectWorkspace,
       isCompact,
       setActiveTab,
@@ -1575,21 +1727,8 @@ export default function MainApp() {
   });
   const { workspaceHomeNode } = displayNodes;
   const layoutSurfaces = useMainAppLayoutSurfaces({
-    appSettings: {
-      usageShowRemaining: appSettings.usageShowRemaining,
-      composerCodeBlockCopyUseModifier:
-        appSettings.composerCodeBlockCopyUseModifier,
-      showMessageFilePath: appSettings.showMessageFilePath,
-      openAppTargets: appSettings.openAppTargets,
-      selectedOpenAppId: appSettings.selectedOpenAppId,
-      experimentalAppsEnabled: appSettings.experimentalAppsEnabled,
-      followUpMessageBehavior: appSettings.followUpMessageBehavior,
-      composerFollowUpHintEnabled: appSettings.composerFollowUpHintEnabled,
-      dictationEnabled: appSettings.dictationEnabled,
-      splitChatDiffView: appSettings.splitChatDiffView,
-      gitDiffIgnoreWhitespaceChanges:
-        appSettings.gitDiffIgnoreWhitespaceChanges,
-    },
+    appSettings,
+    onUpdateAppSettings: queueSaveSettings,
     workspaces,
     groupedWorkspaces,
     workspaceGroupsCount: workspaceGroups.length,
@@ -1608,7 +1747,7 @@ export default function MainApp() {
     onSetThreadListSortKey: handleSetThreadListSortKey,
     threadListOrganizeMode,
     onSetThreadListOrganizeMode: setThreadListOrganizeMode,
-    onRefreshAllThreads: handleRefreshAllWorkspaceThreads,
+    onRefreshAllThreads: handleRefreshAllWorkspaceThreadsFromSidebar,
     activeWorkspace,
     activeWorkspaceId,
     activeThreadId,
@@ -1691,6 +1830,7 @@ export default function MainApp() {
     handleAddAgent,
     handleAddWorktreeAgent,
     handleAddCloneAgent,
+    handleSelectLocalCodexThread,
     handleOpenThreadLink,
     handleSelectOpenAppId,
     handleCopyThread,

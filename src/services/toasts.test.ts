@@ -25,5 +25,21 @@ describe("error toasts", () => {
 
     unsubscribe();
   });
+
+  it("suppresses missing git repository toasts", () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeErrorToasts(listener);
+
+    const id = pushErrorToast({
+      title: "Git error",
+      message:
+        "could not find repository at 'C:/Codex'; class=Repository (6); code=NotFound (-3)",
+    });
+
+    expect(id).toMatch(/^error-toast-/);
+    expect(listener).not.toHaveBeenCalled();
+
+    unsubscribe();
+  });
 });
 

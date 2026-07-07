@@ -106,12 +106,12 @@ describe("useComposerImageDrop", () => {
     hook.unmount();
   });
 
-  it("uses file paths on drop when available", async () => {
+  it("uses attachment file paths on drop when available", async () => {
     const onAttachImages = vi.fn();
     const hook = renderImageDropHook({ disabled: false, onAttachImages });
 
-    const file = new File(["data"], "photo.png", { type: "image/png" });
-    (file as File & { path?: string }).path = "/tmp/photo.png";
+    const file = new File(["data"], "notes.md", { type: "text/markdown" });
+    (file as File & { path?: string }).path = "/tmp/notes.md";
 
     await act(async () => {
       await hook.result.handleDrop({
@@ -120,17 +120,17 @@ describe("useComposerImageDrop", () => {
       } as unknown as React.DragEvent<HTMLElement>);
     });
 
-    expect(onAttachImages).toHaveBeenCalledWith(["/tmp/photo.png"]);
+    expect(onAttachImages).toHaveBeenCalledWith(["/tmp/notes.md"]);
 
     hook.unmount();
   });
 
-  it("reads image data URLs when paths are missing", async () => {
+  it("reads inline non-image attachments as non-preview data URLs when paths are missing", async () => {
     const restoreFileReader = setMockFileReader();
     const onAttachImages = vi.fn();
     const hook = renderImageDropHook({ disabled: false, onAttachImages });
 
-    const file = new File(["data"], "photo.jpg", { type: "image/jpeg" });
+    const file = new File(["data"], "notes.txt", { type: "text/plain" });
 
     await act(async () => {
       await hook.result.handleDrop({
@@ -140,7 +140,7 @@ describe("useComposerImageDrop", () => {
     });
 
     expect(onAttachImages).toHaveBeenCalledWith([
-      "data:image/jpeg;base64,MOCK",
+      "data:text/plain;base64,MOCK",
     ]);
 
     hook.unmount();
@@ -170,6 +170,66 @@ describe("useComposerImageDrop", () => {
     expect(onAttachImages).toHaveBeenCalledWith([
       "data:image/png;base64,MOCK",
     ]);
+
+    hook.unmount();
+    restoreFileReader();
+  });
+
+  it("handles pasted inline non-image files without treating them as images", async () => {
+    const restoreFileReader = setMockFileReader();
+    const onAttachImages = vi.fn();
+    const hook = renderImageDropHook({ disabled: false, onAttachImages });
+    const preventDefault = vi.fn();
+
+    const file = new File(["data"], "notes.txt", { type: "text/plain" });
+    const item = {
+      kind: "file",
+      type: "text/plain",
+      getAsFile: () => file,
+    };
+
+    await act(async () => {
+      await hook.result.handlePaste({
+        clipboardData: { items: [item] },
+        preventDefault,
+      } as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
+    });
+
+    expect(preventDefault).toHaveBeenCalled();
+    expect(onAttachImages).toHaveBeenCalledWith([
+      "data:text/plain;base64,MOCK",
+    ]);
+
+    hook.unmount();
+    restoreFileReader();
+  });
+
+  it("attaches pasted image file paths from the clipboard", async () => {
+    const restoreFileReader = setMockFileReader();
+    const onAttachImages = vi.fn();
+    const hook = renderImageDropHook({ disabled: false, onAttachImages });
+    const preventDefault = vi.fn();
+
+    const file = new File(["data"], "paste.png", { type: "image/png" });
+    Object.defineProperty(file, "path", {
+      value: "D:\\Pictures\\paste.png",
+      configurable: true,
+    });
+    const item = {
+      kind: "file",
+      type: "image/png",
+      getAsFile: () => file,
+    };
+
+    await act(async () => {
+      await hook.result.handlePaste({
+        clipboardData: { items: [item] },
+        preventDefault,
+      } as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
+    });
+
+    expect(preventDefault).toHaveBeenCalled();
+    expect(onAttachImages).toHaveBeenCalledWith(["D:\\Pictures\\paste.png"]);
 
     hook.unmount();
     restoreFileReader();
@@ -219,7 +279,7 @@ describe("useComposerImageDrop", () => {
       });
     });
 
-    expect(onAttachImages).toHaveBeenCalledWith(["/tmp/photo.png"]);
+    expect(onAttachImages).toHaveBeenCalledWith(["/tmp/photo.png", "/tmp/note.txt"]);
 
     hook.unmount();
   });

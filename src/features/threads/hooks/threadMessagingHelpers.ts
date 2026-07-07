@@ -18,6 +18,7 @@ export type SendMessageOptions = {
   accessMode?: AccessMode;
   appMentions?: AppMention[];
   sendIntent?: ComposerSendIntent;
+  replaceMessageId?: string;
 };
 
 type FastCommandAction = "toggle" | "on" | "off" | "status" | "invalid";

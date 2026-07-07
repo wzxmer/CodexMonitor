@@ -2,12 +2,135 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings } from "@/types";
+import {
+  DEFAULT_UI_CJK_FONT_FAMILY,
+  DEFAULT_UI_LATIN_FONT_FAMILY,
+} from "@utils/fonts";
 import { SettingsDisplaySection } from "./SettingsDisplaySection";
 
 describe("SettingsDisplaySection", () => {
   afterEach(() => {
     cleanup();
   });
+
+  it("applies a style preset to theme, accent, and message style", () => {
+    const onUpdateAppSettings = vi.fn(async () => {});
+
+    render(
+      <SettingsDisplaySection
+        appSettings={
+          ({
+            theme: "system",
+            themeAccent: "codex",
+            messageReadingStyle: "codex",
+            messageCanvasColor: "#ffffff",
+            messageUserBubbleColor: "#ffffff",
+            messageUserTextColor: "#102033",
+            messageAssistantBubbleColor: "#ffffff",
+            messageAssistantAccentColor: "#7dadff",
+            messageAssistantTextColor: "#263040",
+            usageShowRemaining: false,
+            showMessageFilePath: true,
+            threadTitleAutogenerationEnabled: false,
+            uiFontFamily: "",
+            codeFontFamily: "",
+            codeFontSize: 11,
+            notificationSoundsEnabled: true,
+            systemNotificationsEnabled: true,
+          } as unknown) as AppSettings
+        }
+        reduceTransparency={false}
+        scaleShortcutTitle=""
+        scaleShortcutText=""
+        scaleDraft="100%"
+        codeFontDraft=""
+        codeFontSizeDraft={11}
+        onUpdateAppSettings={onUpdateAppSettings}
+        onToggleTransparency={vi.fn()}
+        onSetScaleDraft={vi.fn() as any}
+        onCommitScale={vi.fn(async () => {})}
+        onResetScale={vi.fn(async () => {})}
+        onSetCodeFontDraft={vi.fn() as any}
+        onCommitCodeFont={vi.fn(async () => {})}
+        onSetCodeFontSizeDraft={vi.fn() as any}
+        onCommitCodeFontSize={vi.fn(async () => {})}
+        onTestNotificationSound={vi.fn()}
+        onTestSystemNotification={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /CLI 暗黑/ }));
+
+    expect(onUpdateAppSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: "dark",
+        themeAccent: "orange",
+        messageReadingStyle: "cli",
+        messageCanvasColor: "#070604",
+        messageUserBubbleColor: "#3a210c",
+        messageUserTextColor: "#fff3df",
+        messageAssistantAccentColor: "#ff9f43",
+      }),
+    );
+  });
+
+  it("applies a pure white canvas preset", () => {
+    const onUpdateAppSettings = vi.fn(async () => {});
+
+    render(
+      <SettingsDisplaySection
+        appSettings={
+          ({
+            theme: "system",
+            themeAccent: "codex",
+            messageReadingStyle: "codex",
+            messageCanvasColor: "#fffaf5",
+            messageUserBubbleColor: "#fff4e8",
+            messageUserTextColor: "#332519",
+            messageAssistantBubbleColor: "#fffaf5",
+            messageAssistantAccentColor: "#f28b3c",
+            messageAssistantTextColor: "#2d241d",
+            usageShowRemaining: false,
+            showMessageFilePath: true,
+            threadTitleAutogenerationEnabled: false,
+            uiFontFamily: "",
+            codeFontFamily: "",
+            codeFontSize: 11,
+            notificationSoundsEnabled: true,
+            systemNotificationsEnabled: true,
+          } as unknown) as AppSettings
+        }
+        reduceTransparency={false}
+        scaleShortcutTitle=""
+        scaleShortcutText=""
+        scaleDraft="100%"
+        codeFontDraft=""
+        codeFontSizeDraft={11}
+        onUpdateAppSettings={onUpdateAppSettings}
+        onToggleTransparency={vi.fn()}
+        onSetScaleDraft={vi.fn() as any}
+        onCommitScale={vi.fn(async () => {})}
+        onResetScale={vi.fn(async () => {})}
+        onSetCodeFontDraft={vi.fn() as any}
+        onCommitCodeFont={vi.fn(async () => {})}
+        onSetCodeFontSizeDraft={vi.fn() as any}
+        onCommitCodeFontSize={vi.fn(async () => {})}
+        onTestNotificationSound={vi.fn()}
+        onTestSystemNotification={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /原生纯白/ }));
+
+    expect(onUpdateAppSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: "light",
+        messageCanvasColor: "#ffffff",
+        messageAssistantBubbleColor: "#ffffff",
+      }),
+    );
+  });
+
   it("toggles auto-generated thread titles", () => {
     const onUpdateAppSettings = vi.fn(async () => {});
 
@@ -30,7 +153,6 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutTitle=""
         scaleShortcutText=""
         scaleDraft="100%"
-        uiFontDraft=""
         codeFontDraft=""
         codeFontSizeDraft={11}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -38,8 +160,6 @@ describe("SettingsDisplaySection", () => {
         onSetScaleDraft={vi.fn() as any}
         onCommitScale={vi.fn(async () => {})}
         onResetScale={vi.fn(async () => {})}
-        onSetUiFontDraft={vi.fn() as any}
-        onCommitUiFont={vi.fn(async () => {})}
         onSetCodeFontDraft={vi.fn() as any}
         onCommitCodeFont={vi.fn(async () => {})}
         onSetCodeFontSizeDraft={vi.fn() as any}
@@ -50,7 +170,7 @@ describe("SettingsDisplaySection", () => {
     );
 
     const row = screen
-      .getByText("Auto-generate new thread titles")
+      .getByText("自动生成新会话标题")
       .closest(".settings-toggle-row");
     expect(row).toBeTruthy();
     const button = within(row as HTMLElement).getByRole("button");
@@ -84,7 +204,6 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutTitle=""
         scaleShortcutText=""
         scaleDraft="100%"
-        uiFontDraft=""
         codeFontDraft=""
         codeFontSizeDraft={11}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -92,8 +211,6 @@ describe("SettingsDisplaySection", () => {
         onSetScaleDraft={vi.fn() as any}
         onCommitScale={vi.fn(async () => {})}
         onResetScale={vi.fn(async () => {})}
-        onSetUiFontDraft={vi.fn() as any}
-        onCommitUiFont={vi.fn(async () => {})}
         onSetCodeFontDraft={vi.fn() as any}
         onCommitCodeFont={vi.fn(async () => {})}
         onSetCodeFontSizeDraft={vi.fn() as any}
@@ -103,7 +220,7 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    const row = screen.getByText("Unlimited chat history").closest(".settings-toggle-row");
+    const row = screen.getByText("无限聊天历史").closest(".settings-toggle-row");
     expect(row).toBeTruthy();
     const button = within(row as HTMLElement).getByRole("button");
 
@@ -137,7 +254,6 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutTitle=""
         scaleShortcutText=""
         scaleDraft="100%"
-        uiFontDraft=""
         codeFontDraft=""
         codeFontSizeDraft={11}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -145,8 +261,6 @@ describe("SettingsDisplaySection", () => {
         onSetScaleDraft={vi.fn() as any}
         onCommitScale={vi.fn(async () => {})}
         onResetScale={vi.fn(async () => {})}
-        onSetUiFontDraft={vi.fn() as any}
-        onCommitUiFont={vi.fn(async () => {})}
         onSetCodeFontDraft={vi.fn() as any}
         onCommitCodeFont={vi.fn(async () => {})}
         onSetCodeFontSizeDraft={vi.fn() as any}
@@ -156,16 +270,16 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    const presetSelect = screen.getByLabelText("Scrollback preset");
+    const presetSelect = screen.getByLabelText("历史保留预设");
     expect((presetSelect as HTMLSelectElement).disabled).toBe(true);
 
-    const maxItemsInput = screen.getByLabelText("Max items per thread");
+    const maxItemsInput = screen.getByLabelText("每个会话最多条目数");
     expect((maxItemsInput as HTMLInputElement).disabled).toBe(true);
 
     const maxItemsRow = maxItemsInput.closest(".settings-field-row");
     expect(maxItemsRow).toBeTruthy();
     const resetButton = within(maxItemsRow as HTMLElement).getByRole("button", {
-      name: "Reset",
+      name: "重置",
     });
     expect((resetButton as HTMLButtonElement).disabled).toBe(true);
 
@@ -196,7 +310,6 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutTitle=""
         scaleShortcutText=""
         scaleDraft="100%"
-        uiFontDraft=""
         codeFontDraft=""
         codeFontSizeDraft={11}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -204,8 +317,6 @@ describe("SettingsDisplaySection", () => {
         onSetScaleDraft={vi.fn() as any}
         onCommitScale={vi.fn(async () => {})}
         onResetScale={vi.fn(async () => {})}
-        onSetUiFontDraft={vi.fn() as any}
-        onCommitUiFont={vi.fn(async () => {})}
         onSetCodeFontDraft={vi.fn() as any}
         onCommitCodeFont={vi.fn(async () => {})}
         onSetCodeFontSizeDraft={vi.fn() as any}
@@ -215,11 +326,87 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    const select = screen.getByLabelText("Scrollback preset");
+    const select = screen.getByLabelText("历史保留预设");
     fireEvent.change(select, { target: { value: "1000" } });
 
     expect(onUpdateAppSettings).toHaveBeenCalledWith(
       expect.objectContaining({ chatHistoryScrollbackItems: 1000 }),
+    );
+  });
+
+  it("applies font clarity presets", () => {
+    const onUpdateAppSettings = vi.fn(async () => {});
+    const onSetUiLatinFontDraft = vi.fn();
+    const onSetUiCjkFontDraft = vi.fn();
+    const onSetUiFontWeightDraft = vi.fn();
+    const onSetMessageFontWeightDraft = vi.fn();
+
+    render(
+      <SettingsDisplaySection
+        appSettings={
+          ({
+            theme: "system",
+            usageShowRemaining: false,
+            showMessageFilePath: true,
+            chatHistoryScrollbackItems: 200,
+            threadTitleAutogenerationEnabled: false,
+            uiLatinFontFamily: "Arial, sans-serif",
+            uiCjkFontFamily: "SimSun, serif",
+            uiFontWeight: 400,
+            messageFontWeight: 450,
+            codeFontFamily: "",
+            codeFontSize: 11,
+            notificationSoundsEnabled: true,
+            systemNotificationsEnabled: true,
+          } as unknown) as AppSettings
+        }
+        reduceTransparency={false}
+        scaleShortcutTitle=""
+        scaleShortcutText=""
+        scaleDraft="100%"
+        uiLatinFontDraft="Arial, sans-serif"
+        uiCjkFontDraft="SimSun, serif"
+        uiFontWeightDraft={400}
+        messageFontWeightDraft={450}
+        codeFontDraft=""
+        codeFontSizeDraft={11}
+        onUpdateAppSettings={onUpdateAppSettings}
+        onToggleTransparency={vi.fn()}
+        onSetScaleDraft={vi.fn() as any}
+        onCommitScale={vi.fn(async () => {})}
+        onResetScale={vi.fn(async () => {})}
+        onSetUiLatinFontDraft={onSetUiLatinFontDraft as any}
+        onCommitUiLatinFont={vi.fn(async () => {})}
+        onSetUiCjkFontDraft={onSetUiCjkFontDraft as any}
+        onCommitUiCjkFont={vi.fn(async () => {})}
+        onSetUiFontWeightDraft={onSetUiFontWeightDraft as any}
+        onCommitUiFontWeight={vi.fn(async () => {})}
+        onSetCodeFontDraft={vi.fn() as any}
+        onCommitCodeFont={vi.fn(async () => {})}
+        onSetMessageFontWeightDraft={onSetMessageFontWeightDraft as any}
+        onCommitMessageFontWeight={vi.fn(async () => {})}
+        onSetCodeFontSizeDraft={vi.fn() as any}
+        onCommitCodeFontSize={vi.fn(async () => {})}
+        onTestNotificationSound={vi.fn()}
+        onTestSystemNotification={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /Windows 清晰/ }));
+
+    expect(onSetUiLatinFontDraft).toHaveBeenCalledWith(
+      DEFAULT_UI_LATIN_FONT_FAMILY,
+    );
+    expect(onSetUiCjkFontDraft).toHaveBeenCalledWith(DEFAULT_UI_CJK_FONT_FAMILY);
+    expect(onSetUiFontWeightDraft).toHaveBeenCalledWith(500);
+    expect(onSetMessageFontWeightDraft).toHaveBeenCalledWith(500);
+    expect(onUpdateAppSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
+        uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
+        uiFontWeight: 500,
+        messageFontWeight: 500,
+      }),
     );
   });
 
@@ -246,7 +433,6 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutTitle=""
         scaleShortcutText=""
         scaleDraft="100%"
-        uiFontDraft=""
         codeFontDraft=""
         codeFontSizeDraft={11}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -254,8 +440,6 @@ describe("SettingsDisplaySection", () => {
         onSetScaleDraft={vi.fn() as any}
         onCommitScale={vi.fn(async () => {})}
         onResetScale={vi.fn(async () => {})}
-        onSetUiFontDraft={vi.fn() as any}
-        onCommitUiFont={vi.fn(async () => {})}
         onSetCodeFontDraft={vi.fn() as any}
         onCommitCodeFont={vi.fn(async () => {})}
         onSetCodeFontSizeDraft={vi.fn() as any}
@@ -265,11 +449,11 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    const maxItemsInput = screen.getByLabelText("Max items per thread");
+    const maxItemsInput = screen.getByLabelText("每个会话最多条目数");
     fireEvent.change(maxItemsInput, { target: { value: "50" } });
 
     const unlimitedRow = screen
-      .getByText("Unlimited chat history")
+      .getByText("无限聊天历史")
       .closest(".settings-toggle-row");
     expect(unlimitedRow).toBeTruthy();
     const unlimitedButton = within(unlimitedRow as HTMLElement).getByRole("button");
@@ -306,7 +490,6 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutTitle=""
         scaleShortcutText=""
         scaleDraft="100%"
-        uiFontDraft=""
         codeFontDraft=""
         codeFontSizeDraft={11}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -314,8 +497,6 @@ describe("SettingsDisplaySection", () => {
         onSetScaleDraft={vi.fn() as any}
         onCommitScale={vi.fn(async () => {})}
         onResetScale={vi.fn(async () => {})}
-        onSetUiFontDraft={vi.fn() as any}
-        onCommitUiFont={vi.fn(async () => {})}
         onSetCodeFontDraft={vi.fn() as any}
         onCommitCodeFont={vi.fn(async () => {})}
         onSetCodeFontSizeDraft={vi.fn() as any}
@@ -325,13 +506,13 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    const maxItemsInput = screen.getByLabelText("Max items per thread");
+    const maxItemsInput = screen.getByLabelText("每个会话最多条目数");
     fireEvent.change(maxItemsInput, { target: { value: "50" } });
 
     const maxItemsRow = maxItemsInput.closest(".settings-field-row");
     expect(maxItemsRow).toBeTruthy();
     const resetButton = within(maxItemsRow as HTMLElement).getByRole("button", {
-      name: "Reset",
+      name: "重置",
     });
 
     fireEvent.blur(maxItemsInput, { relatedTarget: resetButton });

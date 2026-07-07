@@ -243,6 +243,51 @@ describe("Messages", () => {
     selection?.removeAllRanges();
   });
 
+  it("edits a user message in place and resends it", () => {
+    const onResendUserMessage = vi.fn();
+    const items: ConversationItem[] = [
+      {
+        id: "msg-edit-user-1",
+        kind: "message",
+        role: "user",
+        text: "重新打包后的没有问题了",
+        images: ["data:image/png;base64,AAA"],
+      },
+      {
+        id: "msg-edit-assistant-1",
+        kind: "message",
+        role: "assistant",
+        text: "收到。",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        onResendUserMessage={onResendUserMessage}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑并重新发送" }));
+    const textarea = screen.getByLabelText("编辑消息");
+    fireEvent.change(textarea, {
+      target: { value: "重新打包后的现在还有问题吗？" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "重新发送" }));
+
+    expect(onResendUserMessage).toHaveBeenCalledWith(
+      "重新打包后的现在还有问题吗？",
+      ["data:image/png;base64,AAA"],
+      { replaceMessageId: "msg-edit-user-1" },
+    );
+    expect(screen.queryByLabelText("编辑消息")).toBeNull();
+  });
+
   it("opens linked review thread when clicking thread link", () => {
     const onOpenThreadLink = vi.fn();
     const items: ConversationItem[] = [
@@ -1129,6 +1174,10 @@ describe("Messages", () => {
     );
 
     await waitFor(() => {
+      const groupHeaders = container.querySelectorAll(".tool-group-header");
+      expect(groupHeaders.length).toBe(1);
+    });
+    await waitFor(() => {
       const exploreBlocks = container.querySelectorAll(".explore-inline");
       expect(exploreBlocks.length).toBe(2);
     });
@@ -1222,10 +1271,17 @@ describe("Messages", () => {
     );
 
     await waitFor(() => {
+      const groupHeaders = container.querySelectorAll(".tool-group-header");
+      expect(groupHeaders.length).toBe(2);
+    });
+    expect(screen.getByText("A message between explore blocks")).toBeTruthy();
+    screen.getAllByLabelText(/展开(?:工具调用|过程消息)/).forEach((button) => {
+      fireEvent.click(button);
+    });
+    await waitFor(() => {
       const exploreBlocks = container.querySelectorAll(".explore-inline");
       expect(exploreBlocks.length).toBe(2);
     });
-    expect(screen.getByText("A message between explore blocks")).toBeTruthy();
   });
 
   it("counts explore entry steps in the tool group summary", async () => {
@@ -1277,8 +1333,685 @@ describe("Messages", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("5 tool calls")).toBeTruthy();
+      expect(screen.getByText("5 次工具调用")).toBeTruthy();
     });
+  });
+
+  it("keeps future tool groups collapsed after collapse-all is selected", async () => {
+    const firstItems: ConversationItem[] = [
+      {
+        id: "tool-collapse-1",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: git status",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "tool-collapse-1b",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: git log",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+    ];
+    const nextItems: ConversationItem[] = [
+      ...firstItems,
+      {
+        id: "message-between-tools",
+        kind: "message",
+        role: "assistant",
+        text: "Done with first command.",
+      },
+      {
+        id: "tool-collapse-2",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: git diff",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "tool-collapse-2b",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: git branch",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+    ];
+
+    const { rerender } = render(
+      <Messages
+        items={firstItems}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "工具调用自动收起：关" }));
+    await waitFor(() => {
+      expect(screen.queryByText("git status")).toBeNull();
+    });
+
+    rerender(
+      <Messages
+        items={nextItems}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("git diff")).toBeNull();
+    });
+    expect(screen.getByText("Done with first command.")).toBeTruthy();
+  });
+
+  it("collapses tool groups before a final assistant message", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "tool-final-collapse-1",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: git status",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "tool-final-collapse-2",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: git diff",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "assistant-final-collapse",
+        kind: "message",
+        role: "assistant",
+        text: "Final result is ready.",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("git status")).toBeNull();
+    });
+
+    expect(screen.getByText("2 次工具调用")).toBeTruthy();
+    expect(screen.getByText("Final result is ready.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "展开过程消息" }));
+    expect(screen.getByText("git status")).toBeTruthy();
+  });
+
+  it("collapses late process rows inserted before an existing final assistant message", async () => {
+    const firstItems: ConversationItem[] = [
+      {
+        id: "tool-final-late-1",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: git status",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "assistant-final-late",
+        kind: "message",
+        role: "assistant",
+        text: "Final result is ready.",
+      },
+    ];
+    const { rerender } = render(
+      <Messages
+        items={firstItems}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("git status")).toBeNull();
+    });
+
+    rerender(
+      <Messages
+        items={[
+          firstItems[0],
+          {
+            id: "tool-final-late-2",
+            kind: "tool",
+            toolType: "commandExecution",
+            title: "Command: git diff",
+            detail: "/repo",
+            status: "completed",
+            output: "",
+          },
+          firstItems[1],
+        ]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("git diff")).toBeNull();
+    });
+    expect(screen.getByText("Final result is ready.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "展开过程消息" }));
+    expect(screen.getByText("git diff")).toBeTruthy();
+  });
+
+  it("collapses late process rows inserted after an existing final assistant message", async () => {
+    const firstItems: ConversationItem[] = [
+      {
+        id: "assistant-final-before-late-process",
+        kind: "message",
+        role: "assistant",
+        text: "Final result is ready.",
+      },
+    ];
+    const { rerender } = render(
+      <Messages
+        items={firstItems}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByText("Final result is ready.")).toBeTruthy();
+
+    rerender(
+      <Messages
+        items={[
+          firstItems[0],
+          {
+            id: "tool-after-final-late",
+            kind: "tool",
+            toolType: "commandExecution",
+            title: "Command: npm run typecheck",
+            detail: "/repo",
+            status: "completed",
+            output: "",
+          },
+        ]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("npm run typecheck")).toBeNull();
+    });
+    expect(screen.getByText("Final result is ready.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "展开过程消息" }));
+    expect(screen.getByText("npm run typecheck")).toBeTruthy();
+  });
+
+  it("collapses assistant process messages before a final assistant message", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-final-process-collapse",
+        kind: "message",
+        role: "user",
+        text: "检查最终折叠",
+      },
+      {
+        id: "assistant-process-collapse-1",
+        kind: "message",
+        role: "assistant",
+        text: "Interim process answer should collapse.",
+      },
+      {
+        id: "tool-process-collapse-1",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: git status",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "assistant-final-process-collapse",
+        kind: "message",
+        role: "assistant",
+        text: "Final result is ready.",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("Interim process answer should collapse.")).toBeNull();
+    });
+    expect(screen.queryByText("git status")).toBeNull();
+    expect(screen.getByText("1 次工具调用, 1 条过程消息")).toBeTruthy();
+    expect(screen.getByText("Final result is ready.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "展开过程消息" }));
+    expect(screen.getByText("Interim process answer should collapse.")).toBeTruthy();
+    expect(screen.getByText("git status")).toBeTruthy();
+  });
+
+  it("collapses assistant process messages before a final message without a visible user anchor", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "assistant-process-no-user-1",
+        kind: "message",
+        role: "assistant",
+        text: "跑消息和设置测试，抓 UI 交互回归。",
+      },
+      {
+        id: "tool-process-no-user-1",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: npm run test",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "assistant-process-no-user-2",
+        kind: "message",
+        role: "assistant",
+        text: "测试过。再补一条回归。",
+      },
+      {
+        id: "tool-process-no-user-2",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: npm run typecheck",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "assistant-final-no-user",
+        kind: "message",
+        role: "assistant",
+        text: "最终结果已完成。",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("跑消息和设置测试，抓 UI 交互回归。")).toBeNull();
+    });
+    expect(screen.queryByText("测试过。再补一条回归。")).toBeNull();
+    expect(screen.queryByText("npm run test")).toBeNull();
+    expect(screen.getByText("2 次工具调用, 2 条过程消息")).toBeTruthy();
+    expect(screen.getByText("最终结果已完成。")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "展开过程消息" }));
+    expect(screen.getByText("跑消息和设置测试，抓 UI 交互回归。")).toBeTruthy();
+    expect(screen.getByText("npm run test")).toBeTruthy();
+  });
+
+  it("collapses process messages in every completed turn", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-turn-collapse-1",
+        kind: "message",
+        role: "user",
+        text: "第一轮",
+      },
+      {
+        id: "assistant-turn-process-1",
+        kind: "message",
+        role: "assistant",
+        text: "第一轮过程消息",
+      },
+      {
+        id: "tool-turn-process-1",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: npm run test",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "assistant-turn-final-1",
+        kind: "message",
+        role: "assistant",
+        text: "第一轮最终结果",
+      },
+      {
+        id: "user-turn-collapse-2",
+        kind: "message",
+        role: "user",
+        text: "第二轮",
+      },
+      {
+        id: "assistant-turn-process-2",
+        kind: "message",
+        role: "assistant",
+        text: "第二轮过程消息",
+      },
+      {
+        id: "tool-turn-process-2",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: npm run typecheck",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "assistant-turn-final-2",
+        kind: "message",
+        role: "assistant",
+        text: "第二轮最终结果",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("第一轮过程消息")).toBeNull();
+    });
+    expect(screen.queryByText("第二轮过程消息")).toBeNull();
+    expect(screen.queryByText("npm run test")).toBeNull();
+    expect(screen.queryByText("npm run typecheck")).toBeNull();
+    expect(screen.getByText("第一轮最终结果")).toBeTruthy();
+    expect(screen.getByText("第二轮最终结果")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "展开过程消息" })).toHaveLength(2);
+  });
+
+  it("collapses standalone process rows before a final assistant message", async () => {
+    const planItem: ConversationItem = {
+      id: "plan-final-collapse",
+      kind: "tool",
+      toolType: "plan",
+      title: "Plan",
+      detail: "completed",
+      status: "completed",
+      output: "Standalone plan output",
+    };
+    const { rerender } = render(
+      <Messages
+        items={[planItem]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Standalone plan output")).toBeTruthy();
+    });
+
+    rerender(
+      <Messages
+        items={[
+          planItem,
+          {
+            id: "assistant-final-after-plan",
+            kind: "message",
+            role: "assistant",
+            text: "Final result is ready.",
+          },
+        ]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("Standalone plan output")).toBeNull();
+    });
+    expect(screen.getByText("Final result is ready.")).toBeTruthy();
+  });
+
+  it("switches message reading styles from the conversation toolbar", () => {
+    const onUpdateConversationStyle = vi.fn();
+    const items: ConversationItem[] = [
+      {
+        id: "msg-style",
+        kind: "message",
+        role: "assistant",
+        text: "Readable output",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        onUpdateConversationStyle={onUpdateConversationStyle}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "舒适" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "原生" }));
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
+      messageReadingStyle: "codex",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "CLI" }));
+
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
+      messageReadingStyle: "cli",
+    });
+  });
+
+  it("updates conversation colors and font from the style popover", () => {
+    const onUpdateConversationStyle = vi.fn();
+    const items: ConversationItem[] = [
+      {
+        id: "msg-style-popover",
+        kind: "message",
+        role: "assistant",
+        text: "Readable output",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        messageCanvasColor="#eef1f6"
+        messageUserBubbleColor="#d9ebff"
+        messageUserTextColor="#102033"
+        messageAssistantBubbleColor="#f7f9fc"
+        messageAssistantAccentColor="#8aa8d8"
+        messageAssistantTextColor="#263040"
+        messageFontFamily="Segoe UI"
+        messageFontSize={13}
+        messageFontWeight={500}
+        onUpdateConversationStyle={onUpdateConversationStyle}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "样式" }));
+    fireEvent.click(screen.getByRole("button", { name: /CLI 暗黑/ }));
+    fireEvent.click(screen.getByRole("button", { name: "青绿" }));
+    fireEvent.click(screen.getByRole("button", { name: "浅紫" }));
+    fireEvent.change(screen.getByDisplayValue("#d9ebff"), {
+      target: { value: "#cfe8ff" },
+    });
+    fireEvent.change(screen.getByDisplayValue("#102033"), {
+      target: { value: "#223044" },
+    });
+    fireEvent.change(screen.getByDisplayValue("#f7f9fc"), {
+      target: { value: "#eef8f4" },
+    });
+    fireEvent.change(screen.getByDisplayValue("#263040"), {
+      target: { value: "#334155" },
+    });
+    fireEvent.change(screen.getByDisplayValue("Segoe UI"), {
+      target: { value: "Microsoft YaHei UI" },
+    });
+
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: "dark",
+        themeAccent: "orange",
+        messageReadingStyle: "cli",
+        messageCanvasColor: "#070604",
+        messageUserBubbleColor: "#3a210c",
+        messageUserTextColor: "#fff3df",
+        messageAssistantAccentColor: "#ff9f43",
+      }),
+    );
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
+      messageAssistantBubbleColor: "#f0faf6",
+      messageAssistantAccentColor: "#4aa389",
+      messageAssistantTextColor: "#24332f",
+    });
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
+      messageUserBubbleColor: "#eadcf8",
+      messageUserTextColor: "#2e2140",
+    });
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
+      messageUserBubbleColor: "#cfe8ff",
+    });
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
+      messageUserTextColor: "#223044",
+    });
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
+      messageAssistantBubbleColor: "#eef8f4",
+    });
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
+      messageAssistantTextColor: "#334155",
+    });
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
+      messageFontFamily: "Microsoft YaHei UI",
+    });
+  });
+
+  it("applies pure white canvas from native white preset", () => {
+    const onUpdateConversationStyle = vi.fn();
+
+    render(
+      <Messages
+        items={[{ id: "msg-white", kind: "message", role: "assistant", text: "Output" }]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        onUpdateConversationStyle={onUpdateConversationStyle}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "样式" }));
+    fireEvent.click(screen.getByRole("button", { name: /原生纯白/ }));
+
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        theme: "light",
+        messageReadingStyle: "codex",
+        messageCanvasColor: "#ffffff",
+      }),
+    );
+  });
+
+  it("closes the conversation style popover when focus leaves it", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-style-blur",
+        kind: "message",
+        role: "assistant",
+        text: "Readable output",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const styleButton = screen.getByRole("button", { name: "样式" });
+    fireEvent.click(styleButton);
+    expect(screen.getByRole("dialog", { name: "对话样式" })).toBeTruthy();
+
+    fireEvent.blur(styleButton, { relatedTarget: document.body });
+
+    expect(screen.queryByRole("dialog", { name: "对话样式" })).toBeNull();
   });
 
   it("re-pins to bottom on thread switch even when previous thread was scrolled up", () => {
@@ -1364,9 +2097,9 @@ describe("Messages", () => {
       />,
     );
 
-    expect(screen.getByText("Plan ready")).toBeTruthy();
+    expect(screen.getByText("计划已就绪")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Implement this plan" }),
+      screen.getByRole("button", { name: "执行这个计划" }),
     ).toBeTruthy();
   });
 
@@ -1504,7 +2237,7 @@ describe("Messages", () => {
       />,
     );
 
-    expect(screen.getByText("Plan ready")).toBeTruthy();
+    expect(screen.getByText("计划已就绪")).toBeTruthy();
   });
 
   it("calls the plan follow-up callbacks", () => {
@@ -1535,18 +2268,18 @@ describe("Messages", () => {
       />,
     );
 
-    const sendChangesButton = screen.getByRole("button", { name: "Send changes" });
+    const sendChangesButton = screen.getByRole("button", { name: "发送修改意见" });
     expect((sendChangesButton as HTMLButtonElement).disabled).toBe(true);
 
     const textarea = screen.getByPlaceholderText(
-      "Describe what you want to change in the plan...",
+      "描述你想修改计划中的哪些内容...",
     );
     fireEvent.change(textarea, { target: { value: "Add error handling" } });
 
     expect((sendChangesButton as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(sendChangesButton);
     expect(onPlanSubmitChanges).toHaveBeenCalledWith("Add error handling");
-    expect(screen.queryByText("Plan ready")).toBeNull();
+    expect(screen.queryByText("计划已就绪")).toBeNull();
   });
 
   it("dismisses the plan-ready follow-up when the plan is accepted", () => {
@@ -1578,10 +2311,10 @@ describe("Messages", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Implement this plan" }),
+      screen.getByRole("button", { name: "执行这个计划" }),
     );
     expect(onPlanAccept).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText("Plan ready")).toBeNull();
+    expect(screen.queryByText("计划已就绪")).toBeNull();
   });
 
   it("does not render plan-ready tagged internal user messages", () => {

@@ -37,6 +37,7 @@ type ThreadListProps = {
     threadId: string,
     canPin: boolean,
   ) => void;
+  onToggleThreadPin?: (workspaceId: string, threadId: string, pinned: boolean) => void;
 };
 
 export function ThreadList({
@@ -61,6 +62,7 @@ export function ThreadList({
   onLoadOlderThreads,
   onSelectThread,
   onShowThreadMenu,
+  onToggleThreadPin,
 }: ThreadListProps) {
   const indentUnit = nested ? 10 : 14;
   const [collapsedThreadKeys, setCollapsedThreadKeys] = useState<Set<string>>(new Set());
@@ -113,6 +115,7 @@ export function ThreadList({
           isThreadPinned={isThreadPinned}
           onSelectThread={onSelectThread}
           onShowThreadMenu={onShowThreadMenu}
+          onToggleThreadPin={onToggleThreadPin}
           hasSubagentChildren={pinnedVisibility.rowsWithChildren.has(row)}
           subagentsExpanded={!collapsedThreadKeys.has(`${workspaceId}:${row.thread.id}`)}
           onToggleSubagents={(_, threadId) => toggleThreadSubagents(threadId)}
@@ -137,6 +140,7 @@ export function ThreadList({
           isThreadPinned={isThreadPinned}
           onSelectThread={onSelectThread}
           onShowThreadMenu={onShowThreadMenu}
+          onToggleThreadPin={onToggleThreadPin}
           hasSubagentChildren={unpinnedVisibility.rowsWithChildren.has(row)}
           subagentsExpanded={!collapsedThreadKeys.has(`${workspaceId}:${row.thread.id}`)}
           onToggleSubagents={(_, threadId) => toggleThreadSubagents(threadId)}
@@ -150,7 +154,7 @@ export function ThreadList({
             onToggleExpanded(workspaceId);
           }}
         >
-          {isExpanded ? "Show less" : "More..."}
+          {isExpanded ? "收起" : "更多..."}
         </button>
       )}
       {showLoadOlder && nextCursor && (isExpanded || totalThreadRoots <= 3) && (
@@ -163,10 +167,10 @@ export function ThreadList({
           disabled={isPaging}
         >
           {isPaging
-            ? "Loading..."
+            ? "加载中..."
             : totalThreadRoots === 0
-              ? "Search older..."
-              : "Load older..."}
+              ? "搜索更早会话..."
+              : "加载更早会话..."}
         </button>
       )}
     </div>

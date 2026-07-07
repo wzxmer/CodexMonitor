@@ -1,6 +1,12 @@
 import type { CSSProperties } from "react";
 import { BrainCog, SlidersHorizontal, Zap } from "lucide-react";
-import type { AccessMode, ServiceTier, ThreadTokenUsage } from "../../../types";
+import { RoundedSelect } from "@/features/design-system/components/select/RoundedSelect";
+import type {
+  AccessMode,
+  ComposerSendShortcut,
+  ServiceTier,
+  ThreadTokenUsage,
+} from "../../../types";
 import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
 
 type ComposerMetaBarProps = {
@@ -18,6 +24,8 @@ type ComposerMetaBarProps = {
   reasoningSupported: boolean;
   accessMode: AccessMode;
   onSelectAccessMode: (mode: AccessMode) => void;
+  composerSendShortcut: ComposerSendShortcut;
+  onSelectComposerSendShortcut?: (shortcut: ComposerSendShortcut) => void;
   codexArgsOptions?: CodexArgsOption[];
   selectedCodexArgsOverride?: string | null;
   onSelectCodexArgsOverride?: (value: string | null) => void;
@@ -39,6 +47,8 @@ export function ComposerMetaBar({
   reasoningSupported,
   accessMode,
   onSelectAccessMode,
+  composerSendShortcut,
+  onSelectComposerSendShortcut,
   codexArgsOptions = [],
   selectedCodexArgsOverride = null,
   onSelectCodexArgsOverride,
@@ -47,7 +57,7 @@ export function ComposerMetaBar({
   const selectedModel =
     models.find((model) => model.id === selectedModelId) ?? null;
   const selectedModelLabel =
-    selectedModel?.displayName || selectedModel?.model || "No models";
+    selectedModel?.displayName || selectedModel?.model || "无模型";
   const modelSelectStyle = {
     "--composer-model-select-width": `${Math.max(selectedModelLabel.length + 2, 8)}ch`,
   } as CSSProperties;
@@ -73,6 +83,34 @@ export function ComposerMetaBar({
       (mode) => mode.id === "default" || mode.id === "plan",
     );
   const planSelected = selectedCollaborationModeId === (planMode?.id ?? "");
+  const collaborationOptions = collaborationModes.map((mode) => ({
+    value: mode.id,
+    label: mode.label || mode.id,
+  }));
+  const modelOptions =
+    models.length > 0
+      ? models.map((model) => ({
+          value: model.id,
+          label: model.displayName || model.model,
+        }))
+      : [{ value: "", label: "无模型", disabled: true }];
+  const reasoningSelectOptions =
+    reasoningOptions.length > 0
+      ? reasoningOptions.map((effort) => ({ value: effort, label: effort }))
+      : [{ value: "", label: "默认", disabled: true }];
+  const codexArgsSelectOptions = codexArgsOptions.map((option) => ({
+    value: option.value,
+    label: option.label,
+  }));
+  const accessModeOptions: Array<{ value: AccessMode; label: string }> = [
+    { value: "read-only", label: "只读" },
+    { value: "current", label: "按需确认" },
+    { value: "full-access", label: "完全访问" },
+  ];
+  const sendShortcutOptions: Array<{ value: ComposerSendShortcut; label: string }> = [
+    { value: "ctrl-enter", label: "Enter 换行，Ctrl+Enter 发送" },
+    { value: "enter", label: "Enter 发送，Ctrl+Enter 换行" },
+  ];
 
   return (
     <div className="composer-bar">
@@ -80,7 +118,7 @@ export function ComposerMetaBar({
         {collaborationModes.length > 0 && (
           canUsePlanToggle ? (
             <div className="composer-select-wrap composer-plan-toggle-wrap">
-              <label className="composer-plan-toggle" aria-label="Plan mode">
+              <label className="composer-plan-toggle" aria-label="计划模式">
                 <input
                   className="composer-plan-toggle-input"
                   type="checkbox"
@@ -106,7 +144,7 @@ export function ComposerMetaBar({
                   </svg>
                 </span>
                 <span className="composer-plan-toggle-label">
-                  {planMode?.label || "Plan"}
+                  {planMode?.label || "计划"}
                 </span>
               </label>
             </div>
@@ -123,21 +161,14 @@ export function ComposerMetaBar({
                 />
               </svg>
             </span>
-              <select
+              <RoundedSelect
                 className="composer-select composer-select--model composer-select--collab"
-                aria-label="Collaboration mode"
+                ariaLabel="协作模式"
                 value={selectedCollaborationModeId ?? ""}
-                onChange={(event) =>
-                  onSelectCollaborationMode(event.target.value || null)
-                }
+                options={collaborationOptions}
+                onChange={(nextValue) => onSelectCollaborationMode(nextValue || null)}
                 disabled={disabled}
-              >
-                {collaborationModes.map((mode) => (
-                  <option key={mode.id} value={mode.id}>
-                    {mode.label || mode.id}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           )
         )}
@@ -172,27 +203,21 @@ export function ComposerMetaBar({
               />
             </svg>
           </span>
-          <select
+          <RoundedSelect
             className="composer-select composer-select--model"
-            aria-label="Model"
+            ariaLabel="模型"
             value={selectedModelId ?? ""}
-            onChange={(event) => onSelectModel(event.target.value)}
+            options={modelOptions}
+            onChange={onSelectModel}
             disabled={disabled}
             style={modelSelectStyle}
-          >
-            {models.length === 0 && <option value="">No models</option>}
-            {models.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.displayName || model.model}
-              </option>
-            ))}
-          </select>
+          />
           {selectedServiceTier === "fast" && (
             <span
               className="composer-fast-indicator"
               role="status"
-              aria-label="Fast mode enabled"
-              title="Fast mode enabled"
+              aria-label="快速模式已启用"
+              title="快速模式已启用"
             >
               <Zap size={12} strokeWidth={1.8} />
             </span>
@@ -202,41 +227,28 @@ export function ComposerMetaBar({
           <span className="composer-icon composer-icon--effort" aria-hidden>
             <BrainCog size={14} strokeWidth={1.8} />
           </span>
-          <select
+          <RoundedSelect
             className="composer-select composer-select--effort"
-            aria-label="Thinking mode"
+            ariaLabel="思考模式"
             value={selectedEffort ?? ""}
-            onChange={(event) => onSelectEffort(event.target.value)}
+            options={reasoningSelectOptions}
+            onChange={onSelectEffort}
             disabled={disabled || !reasoningSupported}
-          >
-            {reasoningOptions.length === 0 && <option value="">Default</option>}
-            {reasoningOptions.map((effort) => (
-              <option key={effort} value={effort}>
-                {effort}
-              </option>
-            ))}
-          </select>
+          />
         </div>
         {codexArgsOptions.length > 1 && onSelectCodexArgsOverride && (
           <div className="composer-select-wrap">
             <span className="composer-icon" aria-hidden>
               <SlidersHorizontal size={14} strokeWidth={1.8} />
             </span>
-            <select
+            <RoundedSelect
               className="composer-select composer-select--approval"
-              aria-label="Codex args profile"
+              ariaLabel="Codex 参数配置"
               disabled={disabled}
               value={selectedCodexArgsOverride ?? ""}
-              onChange={(event) =>
-                onSelectCodexArgsOverride(event.target.value || null)
-              }
-            >
-              {codexArgsOptions.map((option) => (
-                <option key={option.value || "default"} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              options={codexArgsSelectOptions}
+              onChange={(nextValue) => onSelectCodexArgsOverride(nextValue || null)}
+            />
           </div>
         )}
         <div className="composer-select-wrap">
@@ -257,33 +269,63 @@ export function ComposerMetaBar({
               />
             </svg>
           </span>
-          <select
+          <RoundedSelect
             className="composer-select composer-select--approval"
-            aria-label="Agent access"
+            ariaLabel="Agent 权限"
             disabled={disabled}
             value={accessMode}
-            onChange={(event) =>
-              onSelectAccessMode(event.target.value as AccessMode)
-            }
-          >
-            <option value="read-only">Read only</option>
-            <option value="current">On-Request</option>
-            <option value="full-access">Full access</option>
-          </select>
+            options={accessModeOptions}
+            onChange={(nextValue) => onSelectAccessMode(nextValue as AccessMode)}
+          />
         </div>
+        {onSelectComposerSendShortcut && (
+          <div className="composer-select-wrap composer-select-wrap--shortcut">
+            <span className="composer-icon" aria-hidden>
+              <svg viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M7 7h10M7 12h7M7 17h4"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M16 14l3 3-3 3"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+            <RoundedSelect
+              className="composer-select composer-select--shortcut"
+              ariaLabel="输入快捷键"
+              disabled={disabled}
+              value={
+                composerSendShortcut === "enter-and-ctrl-enter"
+                  ? "enter"
+                  : composerSendShortcut
+              }
+              options={sendShortcutOptions}
+              onChange={(nextValue) =>
+                onSelectComposerSendShortcut(nextValue as ComposerSendShortcut)
+              }
+            />
+          </div>
+        )}
       </div>
       <div className="composer-context">
         <div
           className="composer-context-ring"
           data-tooltip={
             contextFreePercent === null
-              ? "Context free --"
-              : `Context free ${Math.round(contextFreePercent)}%`
+              ? "上下文剩余 --"
+              : `上下文剩余 ${Math.round(contextFreePercent)}%`
           }
           aria-label={
             contextFreePercent === null
-              ? "Context free --"
-              : `Context free ${Math.round(contextFreePercent)}%`
+              ? "上下文剩余 --"
+              : `上下文剩余 ${Math.round(contextFreePercent)}%`
           }
           style={
             {

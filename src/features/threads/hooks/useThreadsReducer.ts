@@ -46,6 +46,10 @@ export type ThreadState = {
   accountByWorkspace: Record<string, AccountSnapshot | null>;
   planByThread: Record<string, TurnPlan | null>;
   lastAgentMessageByThread: Record<string, { text: string; timestamp: number }>;
+  pendingUserMessageReplacementByThread: Record<
+    string,
+    { messageId: string; text: string; images?: string[] }
+  >;
 };
 
 export type ThreadAction =
@@ -103,6 +107,7 @@ export type ThreadAction =
       workspaceId: string;
       threadId: string;
       item: ConversationItem;
+      replaceExisting?: boolean;
       hasCustomName?: boolean;
     }
   | { type: "setThreadItems"; threadId: string; items: ConversationItem[] }
@@ -201,6 +206,7 @@ export const initialState: ThreadState = {
   accountByWorkspace: {},
   planByThread: {},
   lastAgentMessageByThread: {},
+  pendingUserMessageReplacementByThread: {},
 };
 
 type ThreadSliceReducer = (state: ThreadState, action: ThreadAction) => ThreadState;

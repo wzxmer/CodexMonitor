@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { WorkspaceInfo } from "../../../types";
+import { isLocalCodexWorkspaceId } from "@/features/workspaces/domain/localCodexWorkspace";
 
 const INITIAL_THREAD_LIST_MAX_PAGES = 6;
 
@@ -38,8 +39,9 @@ export function useWorkspaceRestore({
       const connectedTargets: WorkspaceInfo[] = [];
       for (const workspace of pending) {
         const wasConnected = workspace.connected;
+        const isLocalCodexWorkspace = isLocalCodexWorkspaceId(workspace.id);
         try {
-          if (!wasConnected) {
+          if (!wasConnected || isLocalCodexWorkspace) {
             await connectWorkspace(workspace);
           }
           connectedTargets.push({ ...workspace, connected: true });

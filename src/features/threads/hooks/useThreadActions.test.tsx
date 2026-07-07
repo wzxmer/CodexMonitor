@@ -19,6 +19,7 @@ import {
   previewThreadName,
 } from "@utils/threadItems";
 import { saveThreadActivity } from "@threads/utils/threadStorage";
+import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 import { useThreadActions } from "./useThreadActions";
 
 vi.mock("@services/tauri", () => ({
@@ -55,6 +56,13 @@ describe("useThreadActions", () => {
     id: "ws-2",
     name: "Other",
     path: "/tmp/other",
+    connected: true,
+    settings: { sidebarCollapsed: false },
+  };
+  const localCodexWorkspace: WorkspaceInfo = {
+    id: LOCAL_CODEX_WORKSPACE_ID,
+    name: "历史会话总览",
+    path: "",
     connected: true,
     settings: { sidebarCollapsed: false },
   };
@@ -225,6 +233,31 @@ describe("useThreadActions", () => {
 
     expect(threadId).toBe("thread-1");
     expect(resumeThread).not.toHaveBeenCalled();
+  });
+
+  it("resumes a local Codex session through the virtual workspace", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: { thread: { id: "thread-local", preview: "Local session", updated_at: 123 } },
+    });
+    vi.mocked(previewThreadName).mockReturnValue("Local session");
+    vi.mocked(getThreadTimestamp).mockReturnValue(123);
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace(
+        LOCAL_CODEX_WORKSPACE_ID,
+        "thread-local",
+        true,
+      );
+    });
+
+    expect(resumeThread).toHaveBeenCalledWith(LOCAL_CODEX_WORKSPACE_ID, "thread-local");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: LOCAL_CODEX_WORKSPACE_ID,
+      threadId: "thread-local",
+    });
   });
 
   it("skips resume while processing unless forced", async () => {
@@ -918,6 +951,75 @@ describe("useThreadActions", () => {
     });
   });
 
+  it("mirrors every local Codex thread into the local sessions workspace", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-matched",
+            cwd: "/tmp/codex",
+            preview: "Matched workspace thread",
+            updated_at: 5000,
+          },
+          {
+            id: "thread-unmatched",
+            cwd: "/tmp/outside",
+            preview: "Unmatched local thread",
+            updated_at: 4500,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspaces([workspace, localCodexWorkspace]);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: "ws-1",
+      sortKey: "updated_at",
+      preserveAnchors: true,
+      threads: [
+        {
+          id: "thread-matched",
+          name: "Matched workspace thread",
+          updatedAt: 5000,
+          createdAt: 0,
+        },
+      ],
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: LOCAL_CODEX_WORKSPACE_ID,
+      sortKey: "updated_at",
+      preserveAnchors: true,
+      threads: [
+        {
+          id: "thread-matched",
+          name: "Matched workspace thread",
+          updatedAt: 5000,
+          createdAt: 0,
+          cwd: "/tmp/codex",
+        },
+        {
+          id: "thread-unmatched",
+          name: "Unmatched local thread",
+          updatedAt: 4500,
+          createdAt: 0,
+          cwd: "/tmp/outside",
+        },
+      ],
+    });
+  });
+
   it("fetches multiple pages by default", async () => {
     vi.mocked(listThreads)
       .mockResolvedValueOnce({
@@ -1536,6 +1638,67 @@ describe("useThreadActions", () => {
       type: "setThreadListCursor",
       workspaceId: "ws-1",
       cursor: "cursor-legacy-next",
+    });
+  });
+
+  it("appends older local Codex sessions into the virtual sessions workspace", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-local-older",
+            cwd: "D:/Project/CodexMonitor",
+            preview: "Older local Codex session",
+            updated_at: 4000,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        [LOCAL_CODEX_WORKSPACE_ID]: [
+          {
+            id: "thread-local-current",
+            name: "Current local Codex session",
+            updatedAt: 6000,
+            cwd: "D:/Project/CodexMonitor",
+          },
+        ],
+      },
+      threadListCursorByWorkspace: {
+        [LOCAL_CODEX_WORKSPACE_ID]: "cursor-1",
+      },
+    });
+
+    await act(async () => {
+      await result.current.loadOlderThreadsForWorkspace(localCodexWorkspace);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: LOCAL_CODEX_WORKSPACE_ID,
+      sortKey: "updated_at",
+      threads: [
+        {
+          id: "thread-local-current",
+          name: "Current local Codex session",
+          updatedAt: 6000,
+          cwd: "D:/Project/CodexMonitor",
+        },
+        {
+          id: "thread-local-older",
+          name: "Older local Codex session",
+          updatedAt: 4000,
+          createdAt: 0,
+          cwd: "D:/Project/CodexMonitor",
+        },
+      ],
     });
   });
 

@@ -182,4 +182,29 @@ describe("useGitStatus", () => {
 
     unmount();
   });
+
+  it("does not log missing repository errors as unexpected failures", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const getGitStatusMock = vi.mocked(getGitStatus);
+    getGitStatusMock.mockRejectedValueOnce(
+      new Error(
+        "could not find repository at 'D:/Project/rime'; class=Repository (6); code=NotFound (-3)",
+      ),
+    );
+
+    const { result, unmount } = renderHook(
+      ({ active }: { active: WorkspaceInfo | null }) => useGitStatus(active),
+      { initialProps: { active: workspace } },
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(result.current.status.error).toContain("could not find repository");
+
+    unmount();
+    consoleError.mockRestore();
+  });
 });

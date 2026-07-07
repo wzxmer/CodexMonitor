@@ -14,6 +14,8 @@ import {
   computePlanFollowupState,
   parseReasoning,
   scrollKeyForItems,
+  type MessageListBaseEntry,
+  type MessageListEntry,
 } from "../utils/messageRenderUtils";
 
 function toMarkdownQuote(text: string): string {
@@ -34,6 +36,7 @@ type UseMessagesViewStateArgs = {
   isThinking: boolean;
   activeUserInputRequestId: string | number | null;
   hasVisibleUserInputRequest: boolean;
+  defaultToolGroupsCollapsed?: boolean;
   onPlanAccept?: () => void;
   onPlanSubmitChanges?: (changes: string) => void;
   onQuoteMessage?: (text: string) => void;
@@ -45,6 +48,7 @@ export function useMessagesViewState({
   isThinking,
   activeUserInputRequestId,
   hasVisibleUserInputRequest,
+  defaultToolGroupsCollapsed = false,
   onPlanAccept,
   onPlanSubmitChanges,
   onQuoteMessage,
@@ -54,11 +58,14 @@ export function useMessagesViewState({
   const autoScrollRef = useRef(true);
   const copyTimeoutRef = useRef<number | null>(null);
   const manuallyToggledExpandedRef = useRef<Set<string>>(new Set());
+  const manuallyToggledToolGroupsRef = useRef<Set<string>>(new Set());
+  const finalMessageAutoCollapseRef = useRef<string | null>(null);
+  const [isToolGroupsAutoCollapsed, setIsToolGroupsAutoCollapsed] = useState(
+    defaultToolGroupsCollapsed,
+  );
 
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-  const [collapsedToolGroups, setCollapsedToolGroups] = useState<Set<string>>(
-    new Set(),
-  );
+  const [collapsedToolGroups, setCollapsedToolGroups] = useState<Set<string>>(new Set());
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [dismissedPlanFollowupByThread, setDismissedPlanFollowupByThread] =
     useState<Record<string, string>>({});
@@ -94,7 +101,14 @@ export function useMessagesViewState({
 
   useLayoutEffect(() => {
     autoScrollRef.current = true;
-  }, [threadId]);
+    manuallyToggledToolGroupsRef.current = new Set();
+    finalMessageAutoCollapseRef.current = null;
+    setIsToolGroupsAutoCollapsed(defaultToolGroupsCollapsed);
+  }, [defaultToolGroupsCollapsed, threadId]);
+
+  useEffect(() => {
+    setIsToolGroupsAutoCollapsed(defaultToolGroupsCollapsed);
+  }, [defaultToolGroupsCollapsed]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -132,6 +146,7 @@ export function useMessagesViewState({
   }, []);
 
   const toggleToolGroup = useCallback((id: string) => {
+    manuallyToggledToolGroupsRef.current.add(id);
     setCollapsedToolGroups((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -245,7 +260,263 @@ export function useMessagesViewState({
     }
   }, [visibleItems]);
 
-  const groupedItems = useMemo(() => buildToolGroups(visibleItems), [visibleItems]);
+  const baseGroupedItems = useMemo(() => buildToolGroups(visibleItems), [visibleItems]);
+
+  const groupedItems = useMemo<MessageListEntry[]>(() => {
+    const buildProcessGroup = (
+      processEntries: MessageListBaseEntry[],
+      finalEntry: MessageListBaseEntry,
+    ): MessageListEntry | null => {
+      if (processEntries.length === 0) {
+        return null;
+      }
+      const firstEntry = processEntries[0];
+      const firstId =
+        firstEntry.kind === "toolGroup" ? firstEntry.group.id : firstEntry.item.id;
+      const finalId = finalEntry.kind === "item" ? finalEntry.item.id : "final";
+      const toolCount = processEntries.reduce((total, entry) => {
+        if (entry.kind === "toolGroup") {
+          return total + entry.group.toolCount;
+        }
+        return entry.item.kind === "tool" ? total + 1 : total;
+      }, 0);
+      const messageCount = processEntries.reduce((total, entry) => {
+        if (entry.kind === "toolGroup") {
+          return total + entry.group.messageCount;
+        }
+        return entry.item.kind === "message" || entry.item.kind === "reasoning"
+          ? total + 1
+          : total;
+      }, 0);
+      return {
+        kind: "processGroup",
+        group: {
+          id: `process-${firstId}-${finalId}`,
+          entries: processEntries,
+          toolCount,
+          messageCount,
+        },
+      };
+    };
+
+    const result: MessageListEntry[] = [];
+    let turnEntries: MessageListBaseEntry[] = [];
+
+    const flushTurn = () => {
+      if (turnEntries.length === 0) {
+        return;
+      }
+      let finalAssistantIndex = -1;
+      for (let index = turnEntries.length - 1; index >= 0; index -= 1) {
+        const entry = turnEntries[index];
+        if (
+          entry.kind === "item" &&
+          entry.item.kind === "message" &&
+          entry.item.role === "assistant"
+        ) {
+          finalAssistantIndex = index;
+          break;
+        }
+      }
+      if (finalAssistantIndex < 0 || turnEntries.length <= 1) {
+        result.push(...turnEntries);
+        turnEntries = [];
+        return;
+      }
+      const finalEntry = turnEntries[finalAssistantIndex];
+      const processEntries =
+        finalAssistantIndex === 0
+          ? turnEntries.slice(1)
+          : turnEntries.slice(0, finalAssistantIndex);
+      const trailingEntries =
+        finalAssistantIndex === 0 ? [] : turnEntries.slice(finalAssistantIndex + 1);
+      const processGroup = buildProcessGroup(processEntries, finalEntry);
+      if (processGroup) {
+        result.push(processGroup, finalEntry, ...trailingEntries);
+      } else {
+        result.push(...turnEntries);
+      }
+      turnEntries = [];
+    };
+
+    baseGroupedItems.forEach((entry) => {
+      if (
+        entry.kind === "item" &&
+        entry.item.kind === "message" &&
+        entry.item.role === "user"
+      ) {
+        flushTurn();
+        result.push(entry);
+        return;
+      }
+      turnEntries.push(entry);
+    });
+    flushTurn();
+    return result;
+  }, [baseGroupedItems]);
+
+  const finalAssistantCollapseTarget = useMemo(() => {
+    let finalAssistantIndex = -1;
+    let finalAssistantId: string | null = null;
+
+    groupedItems.forEach((entry, index) => {
+      if (
+        entry.kind === "item" &&
+        entry.item.kind === "message" &&
+        entry.item.role === "assistant"
+      ) {
+        finalAssistantIndex = index;
+        finalAssistantId = entry.item.id;
+      }
+    });
+
+    if (finalAssistantIndex <= 0 || !finalAssistantId) {
+      return { finalAssistantId: null, groupIds: [] as string[], itemIds: [] as string[] };
+    }
+
+    const groupIds = groupedItems
+      .slice(0, finalAssistantIndex)
+      .filter((entry) => entry.kind === "toolGroup" || entry.kind === "processGroup")
+      .map((entry) => entry.group.id);
+
+    const itemIds = groupedItems
+      .slice(0, finalAssistantIndex)
+      .flatMap((entry) =>
+        entry.kind === "toolGroup"
+          ? entry.group.items.map((item) => item.id)
+          : entry.kind === "processGroup"
+            ? entry.group.entries.flatMap((processEntry) =>
+                processEntry.kind === "toolGroup"
+                  ? processEntry.group.items.map((item) => item.id)
+                  : processEntry.item.id,
+              )
+          : entry.item.kind === "tool" ||
+              entry.item.kind === "reasoning" ||
+              entry.item.kind === "userInput"
+            ? [entry.item.id]
+            : [],
+      );
+
+    return { finalAssistantId, groupIds, itemIds };
+  }, [groupedItems]);
+
+  const collapseAllToolGroups = useCallback(() => {
+    const groupIds = groupedItems
+      .filter((entry) => entry.kind === "toolGroup" || entry.kind === "processGroup")
+      .map((entry) => entry.group.id);
+    setIsToolGroupsAutoCollapsed(true);
+    manuallyToggledToolGroupsRef.current = new Set(groupIds);
+    setCollapsedToolGroups(new Set(groupIds));
+  }, [groupedItems]);
+
+  const expandAllToolGroups = useCallback(() => {
+    const groupIds = groupedItems
+      .filter((entry) => entry.kind === "toolGroup" || entry.kind === "processGroup")
+      .map((entry) => entry.group.id);
+    setIsToolGroupsAutoCollapsed(false);
+    groupIds.forEach((id) => manuallyToggledToolGroupsRef.current.add(id));
+    setCollapsedToolGroups((prev) => {
+      if (prev.size === 0) {
+        return prev;
+      }
+      const next = new Set(prev);
+      groupIds.forEach((id) => next.delete(id));
+      return next;
+    });
+  }, [groupedItems]);
+
+  const setToolGroupsAutoCollapsed = useCallback(
+    (collapsed: boolean) => {
+      if (collapsed) {
+        collapseAllToolGroups();
+        return;
+      }
+      expandAllToolGroups();
+    },
+    [collapseAllToolGroups, expandAllToolGroups],
+  );
+
+  useEffect(() => {
+    if (!isToolGroupsAutoCollapsed) {
+      return;
+    }
+    const groupIds = groupedItems
+      .filter((entry) => entry.kind === "toolGroup" || entry.kind === "processGroup")
+      .map((entry) => entry.group.id)
+      .filter((id) => !manuallyToggledToolGroupsRef.current.has(id));
+    if (groupIds.length === 0) {
+      return;
+    }
+    setCollapsedToolGroups((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      groupIds.forEach((id) => {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [defaultToolGroupsCollapsed, groupedItems, isToolGroupsAutoCollapsed]);
+
+  useEffect(() => {
+    const { finalAssistantId, groupIds, itemIds } = finalAssistantCollapseTarget;
+    if (!finalAssistantId || (groupIds.length === 0 && itemIds.length === 0) || isThinking) {
+      return;
+    }
+    const collapseKey = `${threadId ?? "no-thread"}:${finalAssistantId}:${[
+      ...groupIds,
+      ...itemIds,
+    ].join("|")}`;
+    if (finalMessageAutoCollapseRef.current === collapseKey) {
+      return;
+    }
+    finalMessageAutoCollapseRef.current = collapseKey;
+
+    const groupsToCollapse = groupIds;
+    if (groupsToCollapse.length === 0) {
+      setExpandedItems((prev) => {
+        if (prev.size === 0) {
+          return prev;
+        }
+        let changed = false;
+        const next = new Set(prev);
+        itemIds.forEach((id) => {
+          if (next.delete(id)) {
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+      return;
+    }
+
+    setCollapsedToolGroups((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      groupsToCollapse.forEach((id) => {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+    setExpandedItems((prev) => {
+      if (prev.size === 0) {
+        return prev;
+      }
+      let changed = false;
+      const next = new Set(prev);
+      itemIds.forEach((id) => {
+        if (next.delete(id)) {
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [finalAssistantCollapseTarget, isThinking, threadId]);
 
   const planFollowup = useMemo(() => {
     if (!onPlanAccept || !onPlanSubmitChanges) {
@@ -293,8 +564,21 @@ export function useMessagesViewState({
     requestAutoScroll,
     expandedItems,
     toggleExpanded,
-    collapsedToolGroups,
+    collapsedToolGroups: isToolGroupsAutoCollapsed
+      ? new Set(
+          groupedItems
+            .filter((entry) => entry.kind === "toolGroup" || entry.kind === "processGroup")
+            .map((entry) => entry.group.id)
+            .filter(
+              (id) =>
+                collapsedToolGroups.has(id) ||
+                !manuallyToggledToolGroupsRef.current.has(id),
+            ),
+        )
+      : collapsedToolGroups,
     toggleToolGroup,
+    isToolGroupsAutoCollapsed,
+    setToolGroupsAutoCollapsed,
     copiedMessageId,
     handleCopyMessage,
     handleQuoteMessage,

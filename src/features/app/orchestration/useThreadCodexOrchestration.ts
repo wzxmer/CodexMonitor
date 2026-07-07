@@ -82,13 +82,30 @@ export function useThreadCodexOrchestration({
         return;
       }
       patchThreadCodexParams(workspaceId, threadId, patch);
-      if (
-        activeThreadIdRef.current &&
-        Object.prototype.hasOwnProperty.call(patch, "serviceTier")
-      ) {
-        patchThreadCodexParams(workspaceId, NO_THREAD_SCOPE_SUFFIX, {
-          serviceTier: patch.serviceTier,
-        });
+      if (activeThreadIdRef.current) {
+        const workspaceDefaults: typeof patch = {};
+        if (Object.prototype.hasOwnProperty.call(patch, "modelId")) {
+          workspaceDefaults.modelId = patch.modelId;
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, "effort")) {
+          workspaceDefaults.effort = patch.effort;
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, "serviceTier")) {
+          workspaceDefaults.serviceTier = patch.serviceTier;
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, "accessMode")) {
+          workspaceDefaults.accessMode = patch.accessMode;
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, "collaborationModeId")) {
+          workspaceDefaults.collaborationModeId = patch.collaborationModeId;
+        }
+        if (Object.keys(workspaceDefaults).length > 0) {
+          patchThreadCodexParams(
+            workspaceId,
+            NO_THREAD_SCOPE_SUFFIX,
+            workspaceDefaults,
+          );
+        }
       }
     },
     [activeWorkspaceIdForParamsRef, patchThreadCodexParams],

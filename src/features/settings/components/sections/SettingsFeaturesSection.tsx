@@ -8,75 +8,102 @@ import {
 import type { SettingsFeaturesSectionProps } from "@settings/hooks/useSettingsFeaturesSection";
 import { fileManagerName, openInFileManagerLabel } from "@utils/platformPaths";
 
-const FEATURE_DESCRIPTION_FALLBACKS: Record<string, string> = {
-  undo: "Create a ghost commit at each turn.",
-  shell_tool: "Enable the default shell tool.",
-  unified_exec: "Use the single unified PTY-backed exec tool.",
-  shell_snapshot: "Enable shell snapshotting.",
-  js_repl: "Enable JavaScript REPL tools backed by a persistent Node kernel.",
-  js_repl_tools_only: "Only expose js_repl tools directly to the model.",
-  web_search_request: "Deprecated. Use top-level web_search instead.",
-  web_search_cached: "Deprecated. Use top-level web_search instead.",
-  search_tool: "Removed legacy search flag kept for backward compatibility.",
-  runtime_metrics: "Enable runtime metrics snapshots via a manual reader.",
-  sqlite: "Persist rollout metadata to a local SQLite database.",
-  memory_tool: "Enable startup memory extraction and memory consolidation.",
-  child_agents_md: "Append additional AGENTS.md guidance to user instructions.",
-  apply_patch_freeform: "Include the freeform apply_patch tool.",
-  use_linux_sandbox_bwrap: "Use the bubblewrap-based Linux sandbox pipeline.",
-  request_rule: "Allow approval requests and exec rule proposals.",
-  experimental_windows_sandbox:
-    "Removed Windows sandbox flag kept for backward compatibility.",
-  elevated_windows_sandbox:
-    "Removed elevated Windows sandbox flag kept for backward compatibility.",
-  remote_models: "Refresh remote models before AppReady.",
-  powershell_utf8: "Enforce UTF-8 output in PowerShell.",
-  enable_request_compression:
-    "Compress streaming request bodies sent to codex-backend.",
-  apps: "Enable ChatGPT Apps integration.",
-  apps_mcp_gateway: "Route Apps MCP calls through the configured gateway.",
-  skill_mcp_dependency_install:
-    "Allow prompting and installing missing MCP dependencies.",
-  skill_env_var_dependency_prompt:
-    "Prompt for missing skill environment variable dependencies.",
-  steer: "Enable turn steering capability when supported by Codex.",
-  collaboration_modes: "Enable collaboration mode presets.",
-  personality: "Enable personality selection.",
-  responses_websockets:
-    "Use Responses API WebSocket transport for OpenAI by default.",
-  responses_websockets_v2: "Enable Responses API WebSocket v2 mode.",
+const FEATURE_LABELS: Record<string, string> = {
+  undo: "回合快照",
+  shell_tool: "Shell 工具",
+  unified_exec: "统一执行工具",
+  background_terminal: "后台终端",
+  shell_snapshot: "Shell 快照",
+  js_repl: "JavaScript REPL",
+  js_repl_tools_only: "仅暴露 REPL 工具",
+  web_search_request: "旧版网页搜索请求",
+  web_search_cached: "旧版网页搜索缓存",
+  search_tool: "旧版搜索工具",
+  runtime_metrics: "运行指标",
+  sqlite: "本地 SQLite 存储",
+  memory_tool: "记忆工具",
+  child_agents_md: "附加 AGENTS.md",
+  apply_patch_freeform: "自由格式补丁",
+  use_linux_sandbox_bwrap: "Linux 沙盒",
+  request_rule: "请求审批规则",
+  experimental_windows_sandbox: "旧版 Windows 沙盒",
+  elevated_windows_sandbox: "旧版提权 Windows 沙盒",
+  remote_models: "远端模型刷新",
+  powershell_utf8: "PowerShell UTF-8",
+  enable_request_compression: "请求压缩",
+  apps: "ChatGPT Apps",
+  apps_mcp_gateway: "Apps MCP 网关",
+  skill_mcp_dependency_install: "Skill MCP 依赖安装",
+  skill_env_var_dependency_prompt: "Skill 环境变量提示",
+  steer: "运行中追加指令",
+  collaboration_modes: "协作模式",
+  personality: "个性",
+  responses_websockets: "Responses WebSocket",
+  responses_websockets_v2: "Responses WebSocket v2",
 };
 
-function formatFeatureLabel(feature: CodexFeature): string {
-  const displayName = feature.displayName?.trim();
-  if (displayName) {
-    return displayName;
-  }
-  return feature.name
+const FEATURE_DESCRIPTION_FALLBACKS: Record<string, string> = {
+  undo: "每个回合创建可回退快照。",
+  shell_tool: "启用默认 Shell 工具。",
+  unified_exec: "使用单一 PTY 执行工具。",
+  background_terminal: "允许长时间运行的终端命令在后台继续执行。",
+  shell_snapshot: "启用 Shell 状态快照。",
+  js_repl: "启用基于持久 Node 内核的 JavaScript REPL 工具。",
+  js_repl_tools_only: "只把 js_repl 工具直接暴露给模型。",
+  web_search_request: "已弃用。请使用顶层 web_search。",
+  web_search_cached: "已弃用。请使用顶层 web_search。",
+  search_tool: "已移除的旧搜索开关，仅用于兼容旧配置。",
+  runtime_metrics: "允许手动读取运行指标快照。",
+  sqlite: "把 rollout 元数据保存到本地 SQLite 数据库。",
+  memory_tool: "启用启动记忆提取和记忆整理。",
+  child_agents_md: "把额外 AGENTS.md 指引追加到用户指令。",
+  apply_patch_freeform: "启用自由格式 apply_patch 工具。",
+  use_linux_sandbox_bwrap: "使用基于 bubblewrap 的 Linux 沙盒流程。",
+  request_rule: "允许请求审批和执行规则建议。",
+  experimental_windows_sandbox: "已移除的 Windows 沙盒开关，仅用于兼容旧配置。",
+  elevated_windows_sandbox: "已移除的提权 Windows 沙盒开关，仅用于兼容旧配置。",
+  remote_models: "AppReady 前刷新远端模型列表。",
+  powershell_utf8: "强制 PowerShell 使用 UTF-8 输出。",
+  enable_request_compression: "压缩发送给 codex-backend 的流式请求体。",
+  apps: "启用 ChatGPT Apps 集成。",
+  apps_mcp_gateway: "通过配置的网关转发 Apps MCP 调用。",
+  skill_mcp_dependency_install: "允许提示并安装缺失的 MCP 依赖。",
+  skill_env_var_dependency_prompt: "缺少 Skill 环境变量依赖时给出提示。",
+  steer: "Codex 支持时启用运行中追加指令。",
+  collaboration_modes: "启用协作模式预设。",
+  personality: "启用个性选择。",
+  responses_websockets: "默认使用 Responses API WebSocket 传输。",
+  responses_websockets_v2: "启用 Responses API WebSocket v2 模式。",
+};
+
+function formatUnknownFeatureLabel(featureName: string): string {
+  const normalized = featureName
     .split("_")
     .filter((part) => part.length > 0)
-    .map((part) => part[0].toUpperCase() + part.slice(1))
-    .join(" ");
+    .join(" / ");
+  return normalized ? `功能键：${normalized}` : "未知功能";
+}
+
+function formatFeatureLabel(feature: CodexFeature): string {
+  const localized = FEATURE_LABELS[feature.name];
+  if (localized) {
+    return localized;
+  }
+  return formatUnknownFeatureLabel(feature.name);
 }
 
 function featureSubtitle(feature: CodexFeature): string {
-  if (feature.description?.trim()) {
-    return feature.description;
-  }
-  if (feature.announcement?.trim()) {
-    return feature.announcement;
-  }
   const fallbackDescription = FEATURE_DESCRIPTION_FALLBACKS[feature.name];
   if (fallbackDescription) {
     return fallbackDescription;
   }
   if (feature.stage === "deprecated") {
-    return "Deprecated feature flag.";
+    return "已弃用的功能开关。";
   }
   if (feature.stage === "removed") {
-    return "Legacy feature flag kept for backward compatibility.";
+    return "保留用于向后兼容的旧功能开关。";
   }
-  return `Feature key: features.${feature.name}`;
+  return `功能键：features.${feature.name}`;
 }
 
 export function SettingsFeaturesSection({
@@ -95,12 +122,12 @@ export function SettingsFeaturesSection({
 }: SettingsFeaturesSectionProps) {
   return (
     <SettingsSection
-      title="Features"
-      subtitle="Manage stable and experimental Codex features."
+      title="功能"
+      subtitle="管理 Codex 的稳定功能和实验功能。"
     >
       <SettingsToggleRow
-        title="Config file"
-        subtitle={`Open the Codex config in ${fileManagerName()}.`}
+        title="配置文件"
+        subtitle={`在 ${fileManagerName()} 中打开 Codex 配置。`}
       >
         <button type="button" className="ghost" onClick={onOpenConfig}>
           {openInFileManagerLabel()}
@@ -108,15 +135,14 @@ export function SettingsFeaturesSection({
       </SettingsToggleRow>
       {openConfigError && <div className="settings-help">{openConfigError}</div>}
       <SettingsSubsection
-        title="Stable Features"
-        subtitle="Production-ready features enabled by default."
+        title="稳定功能"
+        subtitle="默认启用的生产可用功能。"
       />
       <SettingsToggleRow
-        title="Personality"
+        title="个性"
         subtitle={
           <>
-            Choose Codex communication style (writes top-level <code>personality</code> in
-            config.toml).
+            选择 Codex 沟通风格（写入 config.toml 顶层 <code>personality</code>）。
           </>
         }
       >
@@ -130,15 +156,15 @@ export function SettingsFeaturesSection({
               personality: event.target.value as (typeof appSettings)["personality"],
             })
           }
-          aria-label="Personality"
+          aria-label="个性"
         >
-          <option value="friendly">Friendly</option>
-          <option value="pragmatic">Pragmatic</option>
+          <option value="friendly">友好</option>
+          <option value="pragmatic">务实</option>
         </select>
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="Pause queued messages when a response is required"
-        subtitle="Keep queued messages paused while Codex is waiting for plan accept/changes or your answers."
+        title="需要回应时暂停队列消息"
+        subtitle="当 Codex 等待计划确认、修改意见或你的回答时，暂停已排队消息。"
       >
         <SettingsToggleSwitch
           pressed={appSettings.pauseQueuedMessagesWhenResponseRequired}
@@ -168,11 +194,11 @@ export function SettingsFeaturesSection({
         !featuresLoading &&
         !featureError &&
         stableFeatures.length === 0 && (
-        <div className="settings-help">No stable feature flags returned by Codex.</div>
+        <div className="settings-help">Codex 未返回稳定功能开关。</div>
       )}
       <SettingsSubsection
-        title="Experimental Features"
-        subtitle="Preview and under-development features."
+        title="实验功能"
+        subtitle="预览中或开发中的功能。"
       />
       {experimentalFeatures.map((feature) => (
         <SettingsToggleRow
@@ -193,15 +219,15 @@ export function SettingsFeaturesSection({
         hasDynamicFeatureRows &&
         experimentalFeatures.length === 0 && (
           <div className="settings-help">
-            No preview or under-development feature flags returned by Codex.
+            Codex 未返回预览中或开发中的功能开关。
           </div>
         )}
       {featuresLoading && (
-        <div className="settings-help">Loading Codex feature flags...</div>
+        <div className="settings-help">正在加载 Codex 功能开关...</div>
       )}
       {!hasFeatureWorkspace && !featuresLoading && (
         <div className="settings-help">
-          Connect a workspace to load Codex feature flags.
+          连接项目后才能加载 Codex 功能开关。
         </div>
       )}
       {featureError && <div className="settings-help">{featureError}</div>}

@@ -2,10 +2,19 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
+import { saveComposerImages } from "../../../services/tauri";
 import { useComposerImages } from "./useComposerImages";
 
 vi.mock("../../../services/tauri", () => ({
-  pickImageFiles: vi.fn().mockResolvedValue([]),
+  pickAttachmentFiles: vi.fn().mockResolvedValue([]),
+  saveComposerImages: vi.fn(async (_workspaceId: string, images: string[]) =>
+    images.map(
+      (image) =>
+        `/workspace/.codex-monitor/attachments/${
+          image.split("/").pop() ?? "image.png"
+        }`,
+    ),
+  ),
 }));
 
 type HookResult = ReturnType<typeof useComposerImages>;
@@ -58,49 +67,74 @@ function renderComposerImages(
 }
 
 describe("useComposerImages", () => {
-  it("attaches images and deduplicates paths", () => {
+  it("keeps non-image attachments as original paths", async () => {
+    const hook = renderComposerImages({
+      activeThreadId: "thread-text",
+      activeWorkspaceId: "ws-1",
+    });
+
+    await act(async () => {
+      hook.result.attachImages(["/tmp/notes.md"]);
+      await Promise.resolve();
+    });
+
+    expect(saveComposerImages).not.toHaveBeenCalled();
+    expect(hook.result.activeImages).toEqual(["/tmp/notes.md"]);
+
+    hook.unmount();
+  });
+
+  it("attaches images and deduplicates paths", async () => {
     const hook = renderComposerImages({
       activeThreadId: "thread-1",
       activeWorkspaceId: "ws-1",
     });
 
-    act(() => {
+    await act(async () => {
       hook.result.attachImages(["/tmp/a.png", "/tmp/b.png"]);
-    });
-
-    expect(hook.result.activeImages).toEqual(["/tmp/a.png", "/tmp/b.png"]);
-
-    act(() => {
-      hook.result.attachImages(["/tmp/b.png", "/tmp/c.png"]);
+      await Promise.resolve();
     });
 
     expect(hook.result.activeImages).toEqual([
-      "/tmp/a.png",
-      "/tmp/b.png",
-      "/tmp/c.png",
+      "/workspace/.codex-monitor/attachments/a.png",
+      "/workspace/.codex-monitor/attachments/b.png",
+    ]);
+
+    await act(async () => {
+      hook.result.attachImages(["/tmp/b.png", "/tmp/c.png"]);
+      await Promise.resolve();
+    });
+
+    expect(hook.result.activeImages).toEqual([
+      "/workspace/.codex-monitor/attachments/a.png",
+      "/workspace/.codex-monitor/attachments/b.png",
+      "/workspace/.codex-monitor/attachments/c.png",
     ]);
 
     hook.unmount();
   });
 
-  it("removes images and clears empty drafts", () => {
+  it("removes images and clears empty drafts", async () => {
     const hook = renderComposerImages({
       activeThreadId: "thread-2",
       activeWorkspaceId: "ws-1",
     });
 
-    act(() => {
+    await act(async () => {
       hook.result.attachImages(["/tmp/a.png", "/tmp/b.png"]);
+      await Promise.resolve();
     });
 
     act(() => {
-      hook.result.removeImage("/tmp/a.png");
+      hook.result.removeImage("/workspace/.codex-monitor/attachments/a.png");
     });
 
-    expect(hook.result.activeImages).toEqual(["/tmp/b.png"]);
+    expect(hook.result.activeImages).toEqual([
+      "/workspace/.codex-monitor/attachments/b.png",
+    ]);
 
     act(() => {
-      hook.result.removeImage("/tmp/b.png");
+      hook.result.removeImage("/workspace/.codex-monitor/attachments/b.png");
     });
 
     expect(hook.result.activeImages).toEqual([]);
@@ -108,9 +142,15 @@ describe("useComposerImages", () => {
     hook.unmount();
   });
 
-  it("switches drafts between thread and workspace", () => {
+  it("does not restore an image removed before attachment saving finishes", async () => {
+    let resolveSave: (paths: string[]) => void = () => {};
+    vi.mocked(saveComposerImages).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
     const hook = renderComposerImages({
-      activeThreadId: "thread-1",
+      activeThreadId: "thread-2",
       activeWorkspaceId: "ws-1",
     });
 
@@ -119,16 +159,49 @@ describe("useComposerImages", () => {
     });
     expect(hook.result.activeImages).toEqual(["/tmp/a.png"]);
 
+    act(() => {
+      hook.result.removeImage("/tmp/a.png");
+    });
+    expect(hook.result.activeImages).toEqual([]);
+
+    await act(async () => {
+      resolveSave(["/workspace/.codex-monitor/attachments/a.png"]);
+      await Promise.resolve();
+    });
+    expect(hook.result.activeImages).toEqual([]);
+
+    hook.unmount();
+  });
+
+  it("switches drafts between thread and workspace", async () => {
+    const hook = renderComposerImages({
+      activeThreadId: "thread-1",
+      activeWorkspaceId: "ws-1",
+    });
+
+    await act(async () => {
+      hook.result.attachImages(["/tmp/a.png"]);
+      await Promise.resolve();
+    });
+    expect(hook.result.activeImages).toEqual([
+      "/workspace/.codex-monitor/attachments/a.png",
+    ]);
+
     hook.rerender({ activeThreadId: null, activeWorkspaceId: "ws-1" });
     expect(hook.result.activeImages).toEqual([]);
 
-    act(() => {
+    await act(async () => {
       hook.result.attachImages(["/tmp/b.png"]);
+      await Promise.resolve();
     });
-    expect(hook.result.activeImages).toEqual(["/tmp/b.png"]);
+    expect(hook.result.activeImages).toEqual([
+      "/workspace/.codex-monitor/attachments/b.png",
+    ]);
 
     hook.rerender({ activeThreadId: "thread-1", activeWorkspaceId: "ws-1" });
-    expect(hook.result.activeImages).toEqual(["/tmp/a.png"]);
+    expect(hook.result.activeImages).toEqual([
+      "/workspace/.codex-monitor/attachments/a.png",
+    ]);
 
     hook.unmount();
   });

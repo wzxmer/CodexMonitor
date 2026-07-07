@@ -11,6 +11,7 @@ vi.mock("../../../services/dragDrop", () => ({
 
 vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (path: string) => `tauri://${path}`,
+  invoke: vi.fn(async (_command: string, args: { images?: string[] }) => args.images ?? []),
 }));
 
 type HarnessProps = {
@@ -35,7 +36,7 @@ function ComposerHarness({
       <ComposerInput
         text={text}
         disabled={disabled}
-        sendLabel="Send"
+        sendLabel="发送"
         canStop={false}
         canSend={false}
         isProcessing={false}
@@ -163,7 +164,7 @@ function setMockFileReader() {
 }
 
 describe("Composer attachments integration", () => {
-  it("attaches dropped image files, filters non-images, and dedupes paths", async () => {
+  it("attaches dropped files and dedupes paths", async () => {
     const harness = renderComposerHarness({
       activeThreadId: "thread-1",
       activeWorkspaceId: "ws-1",
@@ -179,7 +180,7 @@ describe("Composer attachments integration", () => {
       dispatchDrop(textarea, [image, nonImage]);
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual(["photo.png"]);
+    expect(getAttachmentNames(harness.container)).toEqual(["photo.png", "notes.txt"]);
 
     const imageTwo = new File(["data"], "second.jpg", { type: "image/jpeg" });
     (imageTwo as File & { path?: string }).path = "/tmp/second.jpg";
@@ -190,13 +191,14 @@ describe("Composer attachments integration", () => {
 
     expect(getAttachmentNames(harness.container)).toEqual([
       "photo.png",
+      "notes.txt",
       "second.jpg",
     ]);
 
     harness.unmount();
   });
 
-  it("attaches pasted images as data URLs and ignores non-image items", async () => {
+  it("attaches pasted files as data URLs and ignores text-only clipboard items", async () => {
     const restoreFileReader = setMockFileReader();
     const harness = renderComposerHarness({
       activeThreadId: "thread-1",
@@ -212,7 +214,30 @@ describe("Composer attachments integration", () => {
       dispatchPaste(textarea, [textItem, imageItem]);
     });
 
-    expect(getAttachmentNames(harness.container)).toEqual(["Pasted image"]);
+    expect(getAttachmentNames(harness.container)).toEqual(["粘贴的图片"]);
+    expect(harness.container.querySelector(".composer-attachment-thumb img")).toBeTruthy();
+
+    harness.unmount();
+    restoreFileReader();
+  });
+
+  it("shows pasted non-image file data as an attachment without image preview", async () => {
+    const restoreFileReader = setMockFileReader();
+    const harness = renderComposerHarness({
+      activeThreadId: "thread-1",
+      activeWorkspaceId: "ws-1",
+    });
+    const textarea = getTextarea(harness.container);
+
+    const file = new File(["data"], "notes.txt", { type: "text/plain" });
+    const item = { kind: "file", type: "text/plain", getAsFile: () => file };
+
+    await act(async () => {
+      dispatchPaste(textarea, [item]);
+    });
+
+    expect(getAttachmentNames(harness.container)).toEqual(["粘贴的附件"]);
+    expect(harness.container.querySelector(".composer-attachment-thumb img")).toBeNull();
 
     harness.unmount();
     restoreFileReader();

@@ -218,6 +218,7 @@ export function useComposerAutocomplete({
 
   return {
     active: state.active && matches.length > 0 && !dismissed,
+    trigger: state.trigger,
     query: state.query,
     range: state.range,
     matches,

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ConversationItem } from "../../../types";
-import { buildToolSummary, statusToneFromText } from "./messageRenderUtils";
+import {
+  buildToolSummary,
+  statusToneFromText,
+  stripAnsiControlCodes,
+} from "./messageRenderUtils";
 
 function makeToolItem(
   overrides: Partial<Extract<ConversationItem, { kind: "tool" }>>,
@@ -63,5 +67,10 @@ describe("messageRenderUtils", () => {
     expect(summary.label).toBe("waited for");
     expect(summary.value).toBe("Robie [explorer]");
     expect(summary.output).toContain("Robie [explorer]: completed");
+  });
+
+  it("strips ansi control codes from terminal output", () => {
+    const value = "\u001b[31;1mError:\u001b[0m failed\n\u001b[36;1mLine |\u001b[0m";
+    expect(stripAnsiControlCodes(value)).toBe("Error: failed\nLine |");
   });
 });

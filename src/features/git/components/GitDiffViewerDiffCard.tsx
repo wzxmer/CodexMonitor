@@ -151,12 +151,12 @@ export const DiffCard = memo(function DiffCard({
 
   const placeholder = useMemo(() => {
     if (isLoading) {
-      return "Loading diff...";
+      return "正在加载 diff...";
     }
     if (ignoreWhitespaceChanges && !entry.diff.trim()) {
-      return "No non-whitespace changes.";
+      return "没有非空白字符改动。";
     }
-    return "Diff unavailable.";
+    return "Diff 不可用。";
   }, [entry.diff, ignoreWhitespaceChanges, isLoading]);
 
   const parsedLines = useMemo(() => {
@@ -211,8 +211,8 @@ export const DiffCard = memo(function DiffCard({
           <button
             type="button"
             className="diff-viewer-header-action diff-viewer-header-action--discard"
-            title="Discard changes in this file"
-            aria-label="Discard changes in this file"
+            title="丢弃此文件改动"
+            aria-label="丢弃此文件改动"
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -224,7 +224,7 @@ export const DiffCard = memo(function DiffCard({
         )}
       </div>
       {useInteractiveDiff && selectedLines && reviewActions.length > 0 ? (
-        <div className="diff-viewer-review-actions" role="toolbar" aria-label="PR selection actions">
+        <div className="diff-viewer-review-actions" role="toolbar" aria-label="PR 选择操作">
           {reviewActions.map((action) => (
             <button
               key={action.id}
@@ -246,11 +246,11 @@ export const DiffCard = memo(function DiffCard({
             className="ghost diff-viewer-review-action"
             onClick={onClearSelection}
           >
-            Clear
+            清除
           </button>
           {pullRequestReviewThreadId ? (
             <span className="diff-viewer-review-thread">
-              Last review thread: {pullRequestReviewThreadId}
+              上次审查会话：{pullRequestReviewThreadId}
             </span>
           ) : null}
         </div>
@@ -267,8 +267,8 @@ export const DiffCard = memo(function DiffCard({
                     <button
                       type="button"
                       className="diff-viewer-line-action-button"
-                      aria-label="Ask for changes on hovered line"
-                      title="Ask for changes on this line"
+                      aria-label="要求修改当前行"
+                      title="要求修改这一行"
                       onMouseDown={(event) => {
                         event.preventDefault();
                         event.stopPropagation();

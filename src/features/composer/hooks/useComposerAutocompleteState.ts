@@ -239,6 +239,8 @@ export function useComposerAutocompleteState({
     setHighlightIndex,
     moveHighlight,
     range: autocompleteRange,
+    trigger: autocompleteTrigger,
+    query: autocompleteQuery,
     close: closeAutocomplete,
   } = useComposerAutocomplete({
     text,
@@ -342,9 +344,17 @@ export function useComposerAutocompleteState({
           return;
         }
         if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault();
           const selected =
             autocompleteMatches[highlightIndex] ?? autocompleteMatches[0];
+          if (
+            autocompleteTrigger === "/" &&
+            selected?.group === "Prompts" &&
+            !autocompleteQuery.toLowerCase().startsWith("prompts:")
+          ) {
+            closeAutocomplete();
+            return;
+          }
+          event.preventDefault();
           if (selected) {
             applyAutocomplete(selected);
           }
@@ -385,6 +395,8 @@ export function useComposerAutocompleteState({
     [
       applyAutocomplete,
       autocompleteMatches,
+      autocompleteQuery,
+      autocompleteTrigger,
       closeAutocomplete,
       disabled,
       highlightIndex,

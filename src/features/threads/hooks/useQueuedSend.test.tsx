@@ -134,6 +134,26 @@ describe("useQueuedSend", () => {
     expect(result.current.activeQueue).toHaveLength(0);
   });
 
+  it("passes replace message id through direct sends", async () => {
+    const options = makeOptions();
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("Edited", [], [], "default", {
+        replaceMessageId: "msg-1",
+      });
+    });
+
+    expect(options.sendUserMessage).toHaveBeenCalledWith(
+      "Edited",
+      [],
+      undefined,
+      { sendIntent: "default", replaceMessageId: "msg-1" },
+    );
+  });
+
   it("queues send while processing when steer is enabled but turn id is unavailable", async () => {
     const options = makeOptions({
       isProcessing: true,
@@ -199,6 +219,58 @@ describe("useQueuedSend", () => {
       "Fallback to queue",
       [],
     );
+  });
+
+  it("steers a queued message into the active turn and removes it after success", async () => {
+    const options = makeOptions({
+      isProcessing: true,
+      steerEnabled: true,
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.queueMessage("Guide this turn");
+    });
+
+    const queuedId = result.current.activeQueue[0]?.id;
+    expect(queuedId).toBeTruthy();
+
+    await act(async () => {
+      await result.current.steerQueuedMessage(queuedId!);
+    });
+
+    expect(options.sendUserMessage).toHaveBeenCalledWith(
+      "Guide this turn",
+      [],
+      undefined,
+      { sendIntent: "steer" },
+    );
+    expect(result.current.activeQueue).toHaveLength(0);
+  });
+
+  it("keeps a queued message when manual steer fails", async () => {
+    const options = makeOptions({
+      isProcessing: true,
+      steerEnabled: true,
+      sendUserMessage: vi.fn().mockResolvedValue({ status: "steer_failed" }),
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.queueMessage("Keep queued");
+    });
+    const queuedId = result.current.activeQueue[0]?.id;
+
+    await act(async () => {
+      await result.current.steerQueuedMessage(queuedId!);
+    });
+
+    expect(result.current.activeQueue).toHaveLength(1);
+    expect(result.current.activeQueue[0]?.text).toBe("Keep queued");
   });
 
   it("retries queued send after failure", async () => {

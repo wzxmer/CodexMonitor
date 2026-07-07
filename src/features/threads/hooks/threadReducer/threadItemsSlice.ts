@@ -14,6 +14,15 @@ import {
   prefersUpdatedSort,
 } from "./common";
 
+function sameMessageImages(left?: string[], right?: string[]) {
+  const leftImages = left ?? [];
+  const rightImages = right ?? [];
+  return (
+    leftImages.length === rightImages.length &&
+    leftImages.every((image, index) => image === rightImages[index])
+  );
+}
+
 export function reduceThreadItems(state: ThreadState, action: ThreadAction): ThreadState {
   switch (action.type) {
     case "addAssistantMessage": {
@@ -127,7 +136,57 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         }
       }
       const nextItem = ensureUniqueReviewId(list, item);
-      const updatedItems = prepareThreadItems(upsertItem(list, nextItem), { maxItemsPerThread: state.maxItemsPerThread });
+      const userMessage =
+        nextItem.kind === "message" && nextItem.role === "user"
+          ? nextItem
+          : null;
+      const existingIndex = list.findIndex((entry) => entry.id === nextItem.id);
+      const pendingReplacement =
+        userMessage ? state.pendingUserMessageReplacementByThread[action.threadId] : null;
+      const pendingReplacementIndex = pendingReplacement
+        ? list.findIndex((entry) => entry.id === pendingReplacement.messageId)
+        : -1;
+      const shouldReplacePendingEcho =
+        userMessage &&
+        pendingReplacement &&
+        pendingReplacementIndex >= 0 &&
+        nextItem.id !== pendingReplacement.messageId &&
+        userMessage.text === pendingReplacement.text &&
+        sameMessageImages(userMessage.images, pendingReplacement.images);
+      const nextList =
+        action.replaceExisting && existingIndex >= 0
+          ? [
+              ...list.slice(0, existingIndex),
+              nextItem,
+              ...list.slice(existingIndex + 1),
+            ]
+          : shouldReplacePendingEcho
+            ? [
+                ...list.slice(0, pendingReplacementIndex),
+                nextItem,
+                ...list.slice(pendingReplacementIndex + 1),
+              ]
+          : upsertItem(list, nextItem);
+      const updatedItems = prepareThreadItems(nextList, { maxItemsPerThread: state.maxItemsPerThread });
+      const nextPendingUserMessageReplacementByThread =
+        action.replaceExisting && userMessage
+          ? {
+              ...state.pendingUserMessageReplacementByThread,
+              [action.threadId]: {
+                messageId: userMessage.id,
+                text: userMessage.text,
+                images: userMessage.images,
+              },
+            }
+          : shouldReplacePendingEcho
+            ? (() => {
+                const {
+                  [action.threadId]: _,
+                  ...rest
+                } = state.pendingUserMessageReplacementByThread;
+                return rest;
+              })()
+            : state.pendingUserMessageReplacementByThread;
       let nextThreadsByWorkspace = state.threadsByWorkspace;
       if (isUserMessage) {
         const threads = state.threadsByWorkspace[action.workspaceId] ?? [];
@@ -169,6 +228,8 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
           [action.threadId]: updatedItems,
         },
         threadsByWorkspace: nextThreadsByWorkspace,
+        pendingUserMessageReplacementByThread:
+          nextPendingUserMessageReplacementByThread,
       };
     }
     case "setThreadItems":

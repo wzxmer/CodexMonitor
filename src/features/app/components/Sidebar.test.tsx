@@ -2,6 +2,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRef } from "react";
+import {
+  LOCAL_CODEX_GROUP_ID,
+  LOCAL_CODEX_GROUP_NAME,
+  LOCAL_CODEX_WORKSPACE_NAME,
+  LOCAL_CODEX_WORKSPACE_ID,
+} from "@/features/workspaces/domain/localCodexWorkspace";
 import { Sidebar } from "./Sidebar";
 
 afterEach(() => {
@@ -49,6 +55,7 @@ const baseProps = {
   onAddCloneAgent: vi.fn(),
   onToggleWorkspaceCollapse: vi.fn(),
   onSelectThread: vi.fn(),
+  onSelectLocalCodexThread: vi.fn(),
   onDeleteThread: vi.fn(),
   onSyncThread: vi.fn(),
   pinThread: vi.fn(() => false),
@@ -73,21 +80,21 @@ describe("Sidebar", () => {
   it("toggles the search bar from the header icon", () => {
     render(<Sidebar {...baseProps} />);
 
-    const toggleButton = screen.getByRole("button", { name: "Toggle search" });
-    expect(screen.queryByLabelText("Search conversations")).toBeNull();
+    const toggleButton = screen.getByRole("button", { name: "切换搜索" });
+    expect(screen.queryByLabelText("搜索会话")).toBeNull();
 
     fireEvent.click(toggleButton);
-    const input = screen.getByLabelText("Search conversations") as HTMLInputElement;
+    const input = screen.getByLabelText("搜索会话") as HTMLInputElement;
     expect(input).toBeTruthy();
 
     fireEvent.change(input, { target: { value: "alpha" } });
     expect(input.value).toBe("alpha");
 
     fireEvent.click(toggleButton);
-    expect(screen.queryByLabelText("Search conversations")).toBeNull();
+    expect(screen.queryByLabelText("搜索会话")).toBeNull();
 
     fireEvent.click(toggleButton);
-    const reopened = screen.getByLabelText("Search conversations") as HTMLInputElement;
+    const reopened = screen.getByLabelText("搜索会话") as HTMLInputElement;
     expect(reopened.value).toBe("");
   });
 
@@ -101,11 +108,11 @@ describe("Sidebar", () => {
       />,
     );
 
-    const button = screen.getByRole("button", { name: "Organize and sort threads" });
+    const button = screen.getByRole("button", { name: "整理和排序会话" });
     expect(screen.queryByRole("menu")).toBeNull();
 
     fireEvent.click(button);
-    const option = screen.getByRole("menuitemradio", { name: "Created" });
+    const option = screen.getByRole("menuitemradio", { name: "创建时间" });
     fireEvent.click(option);
 
     expect(onSetThreadListSortKey).toHaveBeenCalledWith("created_at");
@@ -122,8 +129,8 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Organize and sort threads" }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "Thread list" }));
+    fireEvent.click(screen.getByRole("button", { name: "整理和排序会话" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "会话列表" }));
 
     expect(onSetThreadListOrganizeMode).toHaveBeenCalledWith("threads_only");
   });
@@ -149,7 +156,7 @@ describe("Sidebar", () => {
       />,
     );
 
-    const creditsLabel = screen.getByText(/^Available credits:/);
+    const creditsLabel = screen.getByText(/^可用额度：/);
     expect(creditsLabel.textContent ?? "").toContain("120");
   });
 
@@ -167,10 +174,10 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Account" }));
+    fireEvent.click(screen.getByRole("button", { name: "账号" }));
 
     expect(screen.getByText("dimillian@example.com")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Switch account" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "切换账号" })).toBeTruthy();
   });
 
   it("renders threads-only mode as a global chronological list", () => {
@@ -228,7 +235,7 @@ describe("Sidebar", () => {
     const renderedNames = Array.from(container.querySelectorAll(".thread-row .thread-name")).map(
       (node) => node.textContent?.trim(),
     );
-    expect(screen.getByText("Recent conversations")).toBeTruthy();
+    expect(screen.getByText("最近会话")).toBeTruthy();
     expect(renderedNames[0]).toBe("Newer thread");
     expect(renderedNames[1]).toBe("Older thread");
     expect(screen.getByText("Alpha Project")).toBeTruthy();
@@ -284,8 +291,8 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle search" }));
-    fireEvent.change(screen.getByLabelText("Search conversations"), {
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
       target: { value: "restore" },
     });
 
@@ -336,8 +343,8 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle search" }));
-    fireEvent.change(screen.getByLabelText("Search conversations"), {
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
       target: { value: "delta" },
     });
 
@@ -384,14 +391,14 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle search" }));
-    fireEvent.change(screen.getByLabelText("Search conversations"), {
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
       target: { value: "historical" },
     });
 
     await waitFor(() => {
       expect(screen.getByText("Alpha Project")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Search older..." })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "搜索更早会话..." })).toBeTruthy();
       expect(screen.queryByText("Current page thread")).toBeNull();
     });
   });
@@ -441,14 +448,14 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle search" }));
-    fireEvent.change(screen.getByLabelText("Search conversations"), {
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
       target: { value: "routing fix" },
     });
 
     await waitFor(() => {
       expect(screen.getByText("Main Project")).toBeTruthy();
-      expect(screen.getByText("Worktrees")).toBeTruthy();
+      expect(screen.getByText("工作树 Agents")).toBeTruthy();
       expect(screen.getByText("Feature Worktree")).toBeTruthy();
       expect(screen.getByText("Feature thread routing fix")).toBeTruthy();
     });
@@ -510,14 +517,14 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle search" }));
-    fireEvent.change(screen.getByLabelText("Search conversations"), {
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
       target: { value: "clone search bug" },
     });
 
     await waitFor(() => {
       expect(screen.getByText("Main Project")).toBeTruthy();
-      expect(screen.getByText("Clone agents")).toBeTruthy();
+      expect(screen.getByText("副本 Agents")).toBeTruthy();
       expect(screen.getByText("Clone Agent")).toBeTruthy();
       expect(screen.getByText("Investigate clone search bug")).toBeTruthy();
     });
@@ -571,11 +578,53 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "New thread in project" }));
+    fireEvent.click(screen.getByRole("button", { name: "在项目中新建会话" }));
     fireEvent.click(screen.getByRole("button", { name: "Alpha Project" }));
 
     expect(onAddAgent).toHaveBeenCalledTimes(1);
     expect(onAddAgent).toHaveBeenCalledWith(expect.objectContaining({ id: "ws-1" }));
+  });
+
+  it("uses the workspace plus for direct new Agent and ellipsis for Agent options", () => {
+    const onAddAgent = vi.fn();
+    render(
+      <Sidebar
+        {...baseProps}
+        onAddAgent={onAddAgent}
+        workspaces={[
+          {
+            id: "ws-1",
+            name: "Alpha Project",
+            path: "/tmp/alpha",
+            connected: true,
+            settings: { sidebarCollapsed: false },
+          },
+        ]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Workspaces",
+            workspaces: [
+              {
+                id: "ws-1",
+                name: "Alpha Project",
+                path: "/tmp/alpha",
+                connected: true,
+                settings: { sidebarCollapsed: false },
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "立即创建" }));
+    expect(onAddAgent).toHaveBeenCalledWith(expect.objectContaining({ id: "ws-1" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "更多 Agent 选项" }));
+    expect(screen.getByRole("button", { name: "新建 Agent" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "新建 worktree Agent" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "新建副本 Agent" })).toBeTruthy();
   });
 
   it("refreshes all workspace threads from the header button", () => {
@@ -611,8 +660,487 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh all workspace threads" }));
+    fireEvent.click(screen.getByRole("button", { name: "刷新所有项目会话" }));
     expect(onRefreshAllThreads).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the local Codex sessions entry without connect or add actions when no Codex session is available", () => {
+    const onConnectWorkspace = vi.fn();
+    const onAddAgent = vi.fn();
+
+    render(
+      <Sidebar
+        {...baseProps}
+        onConnectWorkspace={onConnectWorkspace}
+        onAddAgent={onAddAgent}
+        workspaces={[
+          {
+            id: LOCAL_CODEX_WORKSPACE_ID,
+            name: LOCAL_CODEX_WORKSPACE_NAME,
+            path: "",
+            connected: false,
+            settings: {
+              sidebarCollapsed: false,
+              groupId: LOCAL_CODEX_GROUP_ID,
+            },
+          },
+        ]}
+        groupedWorkspaces={[
+          {
+            id: LOCAL_CODEX_GROUP_ID,
+            name: LOCAL_CODEX_GROUP_NAME,
+            workspaces: [
+              {
+                id: LOCAL_CODEX_WORKSPACE_ID,
+                name: LOCAL_CODEX_WORKSPACE_NAME,
+                path: "",
+                connected: false,
+                settings: {
+                  sidebarCollapsed: false,
+                  groupId: LOCAL_CODEX_GROUP_ID,
+                },
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(LOCAL_CODEX_GROUP_NAME)).toBeTruthy();
+    expect(screen.getByText(LOCAL_CODEX_WORKSPACE_NAME)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", {
+      name: `展开 ${LOCAL_CODEX_WORKSPACE_NAME}`,
+    }));
+    expect(
+      screen.getByText("添加或连接一个项目后，这里会同步显示本机 Codex 历史会话。"),
+    ).toBeTruthy();
+    expect(screen.queryByText("连接")).toBeNull();
+    expect(screen.queryByRole("button", { name: "添加 Agent 选项" })).toBeNull();
+  });
+
+  it("shows all loaded local Codex sessions without opening an empty workspace", () => {
+    const onSelectWorkspace = vi.fn();
+    const onSelectThread = vi.fn();
+    const onSelectLocalCodexThread = vi.fn();
+    const projectWorkspace = {
+      id: "project-ws",
+      name: "CodexMonitor",
+      path: "D:/Project/CodexMonitor",
+      connected: true,
+      settings: {
+        sidebarCollapsed: false,
+      },
+    };
+    const localWorkspace = {
+      id: LOCAL_CODEX_WORKSPACE_ID,
+      name: LOCAL_CODEX_WORKSPACE_NAME,
+      path: "",
+      connected: true,
+      settings: {
+        sidebarCollapsed: false,
+        groupId: LOCAL_CODEX_GROUP_ID,
+      },
+    };
+    render(
+      <Sidebar
+        {...baseProps}
+        onSelectWorkspace={onSelectWorkspace}
+        onSelectThread={onSelectThread}
+        onSelectLocalCodexThread={onSelectLocalCodexThread}
+        workspaces={[projectWorkspace, localWorkspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Projects",
+            workspaces: [projectWorkspace],
+          },
+          {
+            id: LOCAL_CODEX_GROUP_ID,
+            name: LOCAL_CODEX_GROUP_NAME,
+            workspaces: [localWorkspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          [LOCAL_CODEX_WORKSPACE_ID]: [
+            {
+              id: "thread-1",
+              name: "Recent Codex thread",
+              cwd: "D:/Project/CodexMonitor",
+              updatedAt: 400,
+            },
+            {
+              id: "thread-2",
+              name: "Second Codex thread",
+              cwd: "D:/Project/CodexMonitor",
+              updatedAt: 300,
+            },
+            {
+              id: "thread-3",
+              name: "Third Codex thread",
+              cwd: "D:/Project/CodexMonitor",
+              updatedAt: 200,
+            },
+            {
+              id: "thread-4",
+              name: "Older Codex thread",
+              cwd: "D:/Project/CodexMonitor",
+              updatedAt: 100,
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Older Codex thread")).toBeNull();
+    fireEvent.click(screen.getByRole("button", {
+      name: `展开 ${LOCAL_CODEX_WORKSPACE_NAME}`,
+    }));
+    expect(screen.getByText("Older Codex thread")).toBeTruthy();
+    fireEvent.click(screen.getByText("Recent Codex thread").closest(".thread-row") as Element);
+    expect(onSelectThread).not.toHaveBeenCalled();
+    expect(onSelectLocalCodexThread).toHaveBeenCalledWith(
+      "D:/Project/CodexMonitor",
+      "thread-1",
+    );
+
+    const localWorkspaceRow = screen
+      .getByText(LOCAL_CODEX_WORKSPACE_NAME)
+      .closest(".local-codex-history-header");
+    expect(localWorkspaceRow).toBeTruthy();
+    fireEvent.click(localWorkspaceRow as Element);
+
+    expect(screen.queryByText("Older Codex thread")).toBeNull();
+    expect(onSelectWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("starts local Codex sessions from cwd when the project is not already in the sidebar", () => {
+    const onSelectThread = vi.fn();
+    const onSelectLocalCodexThread = vi.fn();
+    const localWorkspace = {
+      id: LOCAL_CODEX_WORKSPACE_ID,
+      name: LOCAL_CODEX_WORKSPACE_NAME,
+      path: "",
+      connected: true,
+      settings: {
+        sidebarCollapsed: false,
+        groupId: LOCAL_CODEX_GROUP_ID,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        onSelectThread={onSelectThread}
+        onSelectLocalCodexThread={onSelectLocalCodexThread}
+        workspaces={[localWorkspace]}
+        groupedWorkspaces={[
+          {
+            id: LOCAL_CODEX_GROUP_ID,
+            name: LOCAL_CODEX_GROUP_NAME,
+            workspaces: [localWorkspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          [LOCAL_CODEX_WORKSPACE_ID]: [
+            {
+              id: "thread-rime",
+              name: "Continue rime session",
+              cwd: "D:/Project/rime",
+              updatedAt: 100,
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `展开 ${LOCAL_CODEX_WORKSPACE_NAME}`,
+    }));
+    fireEvent.click(screen.getByText("Continue rime session").closest(".thread-row") as Element);
+
+    expect(onSelectThread).not.toHaveBeenCalled();
+    expect(onSelectLocalCodexThread).toHaveBeenCalledWith(
+      "D:/Project/rime",
+      "thread-rime",
+    );
+  });
+
+  it("collapses local Codex project groups and reveals matches during search", async () => {
+    const localWorkspace = {
+      id: LOCAL_CODEX_WORKSPACE_ID,
+      name: LOCAL_CODEX_WORKSPACE_NAME,
+      path: "",
+      connected: true,
+      settings: {
+        sidebarCollapsed: false,
+        groupId: LOCAL_CODEX_GROUP_ID,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[localWorkspace]}
+        groupedWorkspaces={[
+          {
+            id: LOCAL_CODEX_GROUP_ID,
+            name: LOCAL_CODEX_GROUP_NAME,
+            workspaces: [localWorkspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          [LOCAL_CODEX_WORKSPACE_ID]: [
+            {
+              id: "thread-codexmonitor",
+              name: "CodexMonitor collapsed session",
+              cwd: "D:/Project/CodexMonitor",
+              updatedAt: 200,
+            },
+            {
+              id: "thread-rime",
+              name: "Rime visible session",
+              cwd: "D:/Project/rime",
+              updatedAt: 100,
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `展开 ${LOCAL_CODEX_WORKSPACE_NAME}`,
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "折叠 CodexMonitor" }));
+
+    expect(screen.queryByText("CodexMonitor collapsed session")).toBeNull();
+    expect(screen.getByRole("button", { name: "展开 CodexMonitor" })).toBeTruthy();
+    expect(screen.getByText("Rime visible session")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
+      target: { value: "collapsed" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("CodexMonitor collapsed session")).toBeTruthy();
+    });
+  });
+
+  it("shows one workspace-level load older control for local Codex project groups", () => {
+    const onLoadOlderThreads = vi.fn();
+    const localWorkspace = {
+      id: LOCAL_CODEX_WORKSPACE_ID,
+      name: LOCAL_CODEX_WORKSPACE_NAME,
+      path: "",
+      connected: true,
+      settings: {
+        sidebarCollapsed: false,
+        groupId: LOCAL_CODEX_GROUP_ID,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        onLoadOlderThreads={onLoadOlderThreads}
+        workspaces={[localWorkspace]}
+        groupedWorkspaces={[
+          {
+            id: LOCAL_CODEX_GROUP_ID,
+            name: LOCAL_CODEX_GROUP_NAME,
+            workspaces: [localWorkspace],
+          },
+        ]}
+        threadListCursorByWorkspace={{
+          [LOCAL_CODEX_WORKSPACE_ID]: "next-page",
+        }}
+        threadsByWorkspace={{
+          [LOCAL_CODEX_WORKSPACE_ID]: [
+            {
+              id: "thread-codexmonitor",
+              name: "CodexMonitor session",
+              cwd: "D:/Project/CodexMonitor",
+              updatedAt: 200,
+            },
+            {
+              id: "thread-rime",
+              name: "Rime session",
+              cwd: "D:/Project/rime",
+              updatedAt: 100,
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", {
+      name: `展开 ${LOCAL_CODEX_WORKSPACE_NAME}`,
+    }));
+    const loadOlderButtons = screen.getAllByRole("button", {
+      name: "加载更早会话...",
+    });
+    expect(loadOlderButtons).toHaveLength(1);
+
+    fireEvent.click(loadOlderButtons[0]);
+    expect(onLoadOlderThreads).toHaveBeenCalledWith(LOCAL_CODEX_WORKSPACE_ID);
+  });
+
+  it("toggles local Codex sessions from the history row", () => {
+    const onSelectWorkspace = vi.fn();
+    const localWorkspace = {
+      id: LOCAL_CODEX_WORKSPACE_ID,
+      name: LOCAL_CODEX_WORKSPACE_NAME,
+      path: "",
+      connected: true,
+      settings: {
+        sidebarCollapsed: true,
+        groupId: LOCAL_CODEX_GROUP_ID,
+      },
+    };
+    const { container } = render(
+      <Sidebar
+        {...baseProps}
+        onSelectWorkspace={onSelectWorkspace}
+        workspaces={[localWorkspace]}
+        groupedWorkspaces={[
+          {
+            id: LOCAL_CODEX_GROUP_ID,
+            name: LOCAL_CODEX_GROUP_NAME,
+            workspaces: [localWorkspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          [LOCAL_CODEX_WORKSPACE_ID]: [
+            {
+              id: "thread-1",
+              name: "Recent Codex thread",
+              cwd: "D:/Project/CodexMonitor",
+              updatedAt: 400,
+            },
+            {
+              id: "thread-4",
+              name: "Older Codex thread",
+              cwd: "D:/Project/CodexMonitor",
+              updatedAt: 100,
+            },
+          ],
+        }}
+      />,
+    );
+
+    const localWorkspaceRow = container.querySelector(
+      ".local-codex-history-header",
+    ) as HTMLButtonElement | null;
+    expect(localWorkspaceRow).toBeTruthy();
+    expect(localWorkspaceRow?.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Recent Codex thread")).toBeNull();
+
+    fireEvent.click(localWorkspaceRow as Element);
+
+    expect(localWorkspaceRow?.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Recent Codex thread")).toBeTruthy();
+    expect(onSelectWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("matches local Codex sessions by cwd project path during search", async () => {
+    const localWorkspace = {
+      id: LOCAL_CODEX_WORKSPACE_ID,
+      name: LOCAL_CODEX_WORKSPACE_NAME,
+      path: "",
+      connected: true,
+      settings: {
+        sidebarCollapsed: false,
+        groupId: LOCAL_CODEX_GROUP_ID,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[localWorkspace]}
+        groupedWorkspaces={[
+          {
+            id: LOCAL_CODEX_GROUP_ID,
+            name: LOCAL_CODEX_GROUP_NAME,
+            workspaces: [localWorkspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          [LOCAL_CODEX_WORKSPACE_ID]: [
+            {
+              id: "thread-local-path",
+              name: "Unrelated title",
+              cwd: "D:/Project/CodexMonitor",
+              updatedAt: 100,
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
+      target: { value: "codexmonitor" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Unrelated title")).toBeTruthy();
+      expect(screen.getByText("CodexMonitor")).toBeTruthy();
+    });
+  });
+
+  it("lets local Codex search continue into older pages when the current page has no matches", async () => {
+    const onLoadOlderThreads = vi.fn();
+    const localWorkspace = {
+      id: LOCAL_CODEX_WORKSPACE_ID,
+      name: LOCAL_CODEX_WORKSPACE_NAME,
+      path: "",
+      connected: true,
+      settings: {
+        sidebarCollapsed: false,
+        groupId: LOCAL_CODEX_GROUP_ID,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        onLoadOlderThreads={onLoadOlderThreads}
+        workspaces={[localWorkspace]}
+        groupedWorkspaces={[
+          {
+            id: LOCAL_CODEX_GROUP_ID,
+            name: LOCAL_CODEX_GROUP_NAME,
+            workspaces: [localWorkspace],
+          },
+        ]}
+        threadListCursorByWorkspace={{
+          [LOCAL_CODEX_WORKSPACE_ID]: "next-page",
+        }}
+        threadsByWorkspace={{
+          [LOCAL_CODEX_WORKSPACE_ID]: [
+            {
+              id: "thread-current",
+              name: "Current unrelated title",
+              cwd: "D:/Project/CodexMonitor",
+              updatedAt: 100,
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), {
+      target: { value: "older-only-match" },
+    });
+
+    const searchOlderButton = await screen.findByRole("button", {
+      name: "搜索更早会话...",
+    });
+    fireEvent.click(searchOlderButton);
+
+    expect(onLoadOlderThreads).toHaveBeenCalledWith(LOCAL_CODEX_WORKSPACE_ID);
   });
 
   it("spins the refresh icon while workspace threads are refreshing", () => {
@@ -647,7 +1175,7 @@ describe("Sidebar", () => {
       />,
     );
 
-    const refreshButton = screen.getByRole("button", { name: "Refresh all workspace threads" });
+    const refreshButton = screen.getByRole("button", { name: "刷新所有项目会话" });
     expect(refreshButton.getAttribute("aria-busy")).toBe("true");
     const icon = refreshButton.querySelector("svg");
     expect(icon?.getAttribute("class") ?? "").toContain("spinning");
@@ -689,7 +1217,7 @@ describe("Sidebar", () => {
 
     render(<Sidebar {...props} />);
 
-    const draftRow = screen.getByRole("button", { name: /new agent/i });
+    const draftRow = screen.getByRole("button", { name: /新建 Agent/i });
     expect(draftRow).toBeTruthy();
     expect(draftRow.className).toContain("thread-row-draft");
     expect(draftRow.className).toContain("active");
@@ -749,7 +1277,7 @@ describe("Sidebar", () => {
       />,
     );
 
-    expect(screen.getByText("Clone agents")).toBeTruthy();
+    expect(screen.getByText("副本 Agents")).toBeTruthy();
     expect(screen.getByText("Clone Agent")).toBeTruthy();
     expect(container.querySelectorAll(".workspace-row")).toHaveLength(1);
     expect(container.querySelectorAll(".worktree-row")).toHaveLength(1);

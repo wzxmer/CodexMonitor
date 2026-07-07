@@ -53,7 +53,7 @@ export function useComposerController({
     text: string,
     images?: string[],
     appMentions?: AppMention[],
-    options?: { sendIntent?: ComposerSendIntent },
+    options?: { sendIntent?: ComposerSendIntent; replaceMessageId?: string },
   ) => Promise<{ status: "sent" | "blocked" | "steer_failed" }>;
   sendUserMessageToThread: (
     workspace: WorkspaceInfo,
@@ -77,7 +77,6 @@ export function useComposerController({
   const [composerInsert, setComposerInsert] = useState<QueuedMessage | null>(
     null,
   );
-
   const {
     activeImages,
     attachImages,
@@ -93,6 +92,7 @@ export function useComposerController({
     handleSend,
     queueMessage,
     removeQueuedMessage,
+    steerQueuedMessage,
   } = useQueuedSend({
     activeThreadId,
     activeTurnId,
@@ -191,6 +191,7 @@ export function useComposerController({
     handleSend,
     queueMessage,
     removeQueuedMessage,
+    steerQueuedMessage,
     prefillDraft,
     setPrefillDraft,
     composerInsert,

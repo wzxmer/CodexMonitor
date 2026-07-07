@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkspaceInfo } from "../../../types";
 import { getGitRemote } from "../../../services/tauri";
+import {
+  getErrorMessage,
+  isMissingGitRepositoryError,
+} from "../utils/gitErrors";
 
 type GitRemoteState = {
   remote: string | null;
@@ -46,7 +50,7 @@ export function useGitRemote(activeWorkspace: WorkspaceInfo | null) {
         }
         setState({
           remote: null,
-          error: error instanceof Error ? error.message : String(error),
+          error: isMissingGitRepositoryError(error) ? null : getErrorMessage(error),
         });
       });
   }, [workspaceId]);

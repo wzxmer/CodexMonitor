@@ -58,11 +58,11 @@ export function GitPanelModeStatus({
     return (
       <>
         <div className="diff-status diff-status-issues">
-          <span>GitHub issues</span>
+          <span>GitHub Issues</span>
           {issuesLoading && <span className="git-panel-spinner" aria-hidden />}
         </div>
         <div className="git-log-sync">
-          <span>{issuesTotal} open</span>
+          <span>{issuesTotal} 个打开</span>
         </div>
       </>
     );
@@ -71,11 +71,11 @@ export function GitPanelModeStatus({
   return (
     <>
       <div className="diff-status diff-status-issues">
-        <span>GitHub pull requests</span>
+        <span>GitHub Pull Requests</span>
         {pullRequestsLoading && <span className="git-panel-spinner" aria-hidden />}
       </div>
       <div className="git-log-sync">
-        <span>{pullRequestsTotal} open</span>
+        <span>{pullRequestsTotal} 个打开</span>
       </div>
     </>
   );
@@ -96,16 +96,16 @@ export function GitBranchRow({ mode, branchName, onFetch, fetchLoading }: GitBra
   return (
     <div className="diff-branch-row">
       <div className="diff-branch-meta">
-        <span className="diff-branch-label">Branch</span>
-        <div className="diff-branch">{branchName || "unknown"}</div>
+        <span className="diff-branch-label">分支</span>
+        <div className="diff-branch">{branchName || "未知"}</div>
       </div>
       <button
         type="button"
         className="diff-branch-refresh"
         onClick={() => void onFetch?.()}
         disabled={!onFetch || fetchLoading}
-        title={fetchLoading ? "Fetching remote..." : "Fetch remote"}
-        aria-label={fetchLoading ? "Fetching remote" : "Fetch remote"}
+        title={fetchLoading ? "正在获取远端..." : "获取远端"}
+        aria-label={fetchLoading ? "正在获取远端" : "获取远端"}
       >
         {fetchLoading ? (
           <span className="git-panel-spinner" aria-hidden />
@@ -139,7 +139,7 @@ export function GitRootCurrentPath({
   return (
     <div className="git-root-current">
       <div className="git-root-current-main">
-        <span className="git-root-label">Repository root</span>
+        <span className="git-root-label">仓库根目录</span>
         <span className="git-root-path" title={gitRoot ?? ""}>
           {gitRoot}
         </span>
@@ -152,7 +152,7 @@ export function GitRootCurrentPath({
           disabled={gitRootScanLoading}
         >
           <ArrowLeftRight className="git-root-button-icon" aria-hidden />
-          Change
+          更改
         </button>
       )}
     </div>

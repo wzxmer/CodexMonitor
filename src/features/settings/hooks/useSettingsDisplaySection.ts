@@ -4,8 +4,14 @@ import type { AppSettings } from "@/types";
 import { clampUiScale } from "@utils/uiScale";
 import {
   DEFAULT_CODE_FONT_FAMILY,
+  DEFAULT_UI_CJK_FONT_FAMILY,
   DEFAULT_UI_FONT_FAMILY,
+  DEFAULT_UI_LATIN_FONT_FAMILY,
   clampCodeFontSize,
+  clampMessageFontSize,
+  clampMessageFontWeight,
+  clampUiFontSize,
+  clampUiFontWeight,
   normalizeFontFamily,
 } from "@utils/fonts";
 
@@ -27,7 +33,13 @@ export type SettingsDisplaySectionProps = {
   scaleShortcutText: string;
   scaleDraft: string;
   uiFontDraft: string;
+  uiLatinFontDraft: string;
+  uiCjkFontDraft: string;
+  uiFontSizeDraft: number;
+  uiFontWeightDraft: number;
   codeFontDraft: string;
+  messageFontSizeDraft: number;
+  messageFontWeightDraft: number;
   codeFontSizeDraft: number;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
   onToggleTransparency: (value: boolean) => void;
@@ -36,8 +48,20 @@ export type SettingsDisplaySectionProps = {
   onResetScale: () => Promise<void>;
   onSetUiFontDraft: Dispatch<SetStateAction<string>>;
   onCommitUiFont: () => Promise<void>;
+  onSetUiLatinFontDraft: Dispatch<SetStateAction<string>>;
+  onCommitUiLatinFont: () => Promise<void>;
+  onSetUiCjkFontDraft: Dispatch<SetStateAction<string>>;
+  onCommitUiCjkFont: () => Promise<void>;
+  onSetUiFontSizeDraft: Dispatch<SetStateAction<number>>;
+  onCommitUiFontSize: (nextSize: number) => Promise<void>;
+  onSetUiFontWeightDraft: Dispatch<SetStateAction<number>>;
+  onCommitUiFontWeight: (nextWeight: number) => Promise<void>;
   onSetCodeFontDraft: Dispatch<SetStateAction<string>>;
   onCommitCodeFont: () => Promise<void>;
+  onSetMessageFontSizeDraft: Dispatch<SetStateAction<number>>;
+  onCommitMessageFontSize: (nextSize: number) => Promise<void>;
+  onSetMessageFontWeightDraft: Dispatch<SetStateAction<number>>;
+  onCommitMessageFontWeight: (nextWeight: number) => Promise<void>;
   onSetCodeFontSizeDraft: Dispatch<SetStateAction<number>>;
   onCommitCodeFontSize: (nextSize: number) => Promise<void>;
   onTestNotificationSound: () => void;
@@ -58,7 +82,21 @@ export const useSettingsDisplaySection = ({
     `${Math.round(clampUiScale(appSettings.uiScale) * 100)}%`,
   );
   const [uiFontDraft, setUiFontDraft] = useState(appSettings.uiFontFamily);
+  const [uiLatinFontDraft, setUiLatinFontDraft] = useState(
+    appSettings.uiLatinFontFamily,
+  );
+  const [uiCjkFontDraft, setUiCjkFontDraft] = useState(appSettings.uiCjkFontFamily);
+  const [uiFontSizeDraft, setUiFontSizeDraft] = useState(appSettings.uiFontSize);
+  const [uiFontWeightDraft, setUiFontWeightDraft] = useState(
+    appSettings.uiFontWeight,
+  );
   const [codeFontDraft, setCodeFontDraft] = useState(appSettings.codeFontFamily);
+  const [messageFontSizeDraft, setMessageFontSizeDraft] = useState(
+    appSettings.messageFontSize,
+  );
+  const [messageFontWeightDraft, setMessageFontWeightDraft] = useState(
+    appSettings.messageFontWeight,
+  );
   const [codeFontSizeDraft, setCodeFontSizeDraft] = useState(appSettings.codeFontSize);
 
   useEffect(() => {
@@ -70,8 +108,32 @@ export const useSettingsDisplaySection = ({
   }, [appSettings.uiFontFamily]);
 
   useEffect(() => {
+    setUiLatinFontDraft(appSettings.uiLatinFontFamily);
+  }, [appSettings.uiLatinFontFamily]);
+
+  useEffect(() => {
+    setUiCjkFontDraft(appSettings.uiCjkFontFamily);
+  }, [appSettings.uiCjkFontFamily]);
+
+  useEffect(() => {
+    setUiFontSizeDraft(appSettings.uiFontSize);
+  }, [appSettings.uiFontSize]);
+
+  useEffect(() => {
+    setUiFontWeightDraft(appSettings.uiFontWeight);
+  }, [appSettings.uiFontWeight]);
+
+  useEffect(() => {
     setCodeFontDraft(appSettings.codeFontFamily);
   }, [appSettings.codeFontFamily]);
+
+  useEffect(() => {
+    setMessageFontSizeDraft(appSettings.messageFontSize);
+  }, [appSettings.messageFontSize]);
+
+  useEffect(() => {
+    setMessageFontWeightDraft(appSettings.messageFontWeight);
+  }, [appSettings.messageFontWeight]);
 
   useEffect(() => {
     setCodeFontSizeDraft(appSettings.codeFontSize);
@@ -123,6 +185,48 @@ export const useSettingsDisplaySection = ({
     });
   };
 
+  const handleCommitUiLatinFont = async () => {
+    const nextFont = normalizeFontFamily(
+      uiLatinFontDraft,
+      DEFAULT_UI_LATIN_FONT_FAMILY,
+    );
+    setUiLatinFontDraft(nextFont);
+    if (nextFont === appSettings.uiLatinFontFamily) {
+      return;
+    }
+    await onUpdateAppSettings({
+      ...appSettings,
+      uiLatinFontFamily: nextFont,
+    });
+  };
+
+  const handleCommitUiCjkFont = async () => {
+    const nextFont = normalizeFontFamily(
+      uiCjkFontDraft,
+      DEFAULT_UI_CJK_FONT_FAMILY,
+    );
+    setUiCjkFontDraft(nextFont);
+    if (nextFont === appSettings.uiCjkFontFamily) {
+      return;
+    }
+    await onUpdateAppSettings({
+      ...appSettings,
+      uiCjkFontFamily: nextFont,
+    });
+  };
+
+  const handleCommitUiFontSize = async (nextSize: number) => {
+    const clampedSize = clampUiFontSize(nextSize);
+    setUiFontSizeDraft(clampedSize);
+    if (clampedSize === appSettings.uiFontSize) {
+      return;
+    }
+    await onUpdateAppSettings({
+      ...appSettings,
+      uiFontSize: clampedSize,
+    });
+  };
+
   const handleCommitCodeFont = async () => {
     const nextFont = normalizeFontFamily(codeFontDraft, DEFAULT_CODE_FONT_FAMILY);
     setCodeFontDraft(nextFont);
@@ -132,6 +236,42 @@ export const useSettingsDisplaySection = ({
     await onUpdateAppSettings({
       ...appSettings,
       codeFontFamily: nextFont,
+    });
+  };
+
+  const handleCommitUiFontWeight = async (nextWeight: number) => {
+    const clampedWeight = clampUiFontWeight(nextWeight);
+    setUiFontWeightDraft(clampedWeight);
+    if (clampedWeight === appSettings.uiFontWeight) {
+      return;
+    }
+    await onUpdateAppSettings({
+      ...appSettings,
+      uiFontWeight: clampedWeight,
+    });
+  };
+
+  const handleCommitMessageFontSize = async (nextSize: number) => {
+    const clampedSize = clampMessageFontSize(nextSize);
+    setMessageFontSizeDraft(clampedSize);
+    if (clampedSize === appSettings.messageFontSize) {
+      return;
+    }
+    await onUpdateAppSettings({
+      ...appSettings,
+      messageFontSize: clampedSize,
+    });
+  };
+
+  const handleCommitMessageFontWeight = async (nextWeight: number) => {
+    const clampedWeight = clampMessageFontWeight(nextWeight);
+    setMessageFontWeightDraft(clampedWeight);
+    if (clampedWeight === appSettings.messageFontWeight) {
+      return;
+    }
+    await onUpdateAppSettings({
+      ...appSettings,
+      messageFontWeight: clampedWeight,
     });
   };
 
@@ -154,7 +294,13 @@ export const useSettingsDisplaySection = ({
     scaleShortcutText,
     scaleDraft,
     uiFontDraft,
+    uiLatinFontDraft,
+    uiCjkFontDraft,
+    uiFontSizeDraft,
+    uiFontWeightDraft,
     codeFontDraft,
+    messageFontSizeDraft,
+    messageFontWeightDraft,
     codeFontSizeDraft,
     onUpdateAppSettings,
     onToggleTransparency,
@@ -163,8 +309,20 @@ export const useSettingsDisplaySection = ({
     onResetScale: handleResetScale,
     onSetUiFontDraft: setUiFontDraft,
     onCommitUiFont: handleCommitUiFont,
+    onSetUiLatinFontDraft: setUiLatinFontDraft,
+    onCommitUiLatinFont: handleCommitUiLatinFont,
+    onSetUiCjkFontDraft: setUiCjkFontDraft,
+    onCommitUiCjkFont: handleCommitUiCjkFont,
+    onSetUiFontSizeDraft: setUiFontSizeDraft,
+    onCommitUiFontSize: handleCommitUiFontSize,
+    onSetUiFontWeightDraft: setUiFontWeightDraft,
+    onCommitUiFontWeight: handleCommitUiFontWeight,
     onSetCodeFontDraft: setCodeFontDraft,
     onCommitCodeFont: handleCommitCodeFont,
+    onSetMessageFontSizeDraft: setMessageFontSizeDraft,
+    onCommitMessageFontSize: handleCommitMessageFontSize,
+    onSetMessageFontWeightDraft: setMessageFontWeightDraft,
+    onCommitMessageFontWeight: handleCommitMessageFontWeight,
     onSetCodeFontSizeDraft: setCodeFontSizeDraft,
     onCommitCodeFontSize: handleCommitCodeFontSize,
     onTestNotificationSound,

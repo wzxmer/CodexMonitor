@@ -201,7 +201,14 @@ export function useRemoteThreadLiveConnection({
         const sequence = reconnectSequenceRef.current + 1;
         reconnectSequenceRef.current = sequence;
         const workspaceAtStart = activeWorkspaceRef.current;
-        const shouldResume = options?.runResume !== false;
+        const canUseLocalProcessingSnapshot =
+          activeThreadIsProcessingRef.current &&
+          activeThreadHasLocalSnapshotRef.current &&
+          (options?.reason === "focus" ||
+            options?.reason === "detached-recovery" ||
+            options?.reason === "connected-recovery");
+        const shouldResume =
+          options?.runResume !== false && !canUseLocalProcessingSnapshot;
         const shouldKeepLiveState = options?.reason === "thread-switch";
         if (!workspaceAtStart?.connected) {
           setState("disconnected");

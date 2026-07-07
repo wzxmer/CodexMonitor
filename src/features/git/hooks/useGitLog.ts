@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GitLogEntry, WorkspaceInfo } from "../../../types";
 import { getGitLog } from "../../../services/tauri";
+import {
+  getErrorMessage,
+  isMissingGitRepositoryError,
+} from "../utils/gitErrors";
 
 type GitLogState = {
   entries: GitLogEntry[];
@@ -65,7 +69,9 @@ export function useGitLog(
         error: null,
       });
     } catch (error) {
-      console.error("Failed to load git log", error);
+      if (!isMissingGitRepositoryError(error)) {
+        console.error("Failed to load git log", error);
+      }
       if (
         requestIdRef.current !== requestId ||
         workspaceIdRef.current !== workspaceId
@@ -81,7 +87,7 @@ export function useGitLog(
         behindEntries: [],
         upstream: null,
         isLoading: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       });
     }
   }, [activeWorkspace]);
