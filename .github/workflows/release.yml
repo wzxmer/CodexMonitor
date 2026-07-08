@@ -155,7 +155,7 @@ jobs:
           PY
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.88.0
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -303,7 +303,7 @@ jobs:
           PY
 
       - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.88.0
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -417,7 +417,7 @@ jobs:
           PY
 
       - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.88.0
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
