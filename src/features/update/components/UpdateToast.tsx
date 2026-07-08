@@ -155,16 +155,6 @@ export function UpdateToast({
             </ToastActions>
           </>
         )}
-        {state.stage === "latest" && (
-          <div className="update-toast-inline">
-            <ToastBody className="update-toast-body update-toast-body-inline">
-              You’re up to date.
-            </ToastBody>
-            <button className="secondary" onClick={onDismiss}>
-              Dismiss
-            </button>
-          </div>
-        )}
         {state.stage === "downloading" && (
           <>
             <ToastBody className="update-toast-body">

@@ -69,22 +69,36 @@ describe("useUpdater", () => {
     expect(result.current.state.stage).toBe("idle");
   });
 
-  it("announces when no update is available for manual checks", async () => {
-    vi.useFakeTimers();
+  it("stays idle when no update is available for manual checks", async () => {
     checkMock.mockResolvedValue(null);
     const { result } = renderHook(() => useUpdater({}));
 
     await act(async () => {
-      await result.current.checkForUpdates({ announceNoUpdate: true });
-    });
-
-    expect(result.current.state.stage).toBe("latest");
-
-    await act(async () => {
-      vi.advanceTimersByTime(2000);
+      await result.current.checkForUpdates();
     });
 
     expect(result.current.state.stage).toBe("idle");
+  });
+
+  it("stays idle when the release has no updater manifest", async () => {
+    const onDebug = vi.fn();
+    checkMock.mockRejectedValue(
+      new Error("Could not fetch a valid release JSON from the remote"),
+    );
+    const { result } = renderHook(() => useUpdater({ onDebug }));
+
+    await act(async () => {
+      await result.current.checkForUpdates();
+    });
+
+    expect(result.current.state.stage).toBe("idle");
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "updater/error",
+        source: "error",
+        payload: "Could not fetch a valid release JSON from the remote",
+      }),
+    );
   });
 
   it("downloads and restarts when update is available", async () => {
@@ -191,7 +205,7 @@ describe("useUpdater", () => {
     const { result } = renderHook(() => useUpdater({ enabled: false }));
 
     await act(async () => {
-      await result.current.checkForUpdates({ announceNoUpdate: true });
+      await result.current.checkForUpdates();
       await result.current.startUpdate();
     });
 
@@ -209,11 +223,11 @@ describe("useUpdater", () => {
     expect(checkMock).not.toHaveBeenCalled();
 
     await act(async () => {
-      await result.current.checkForUpdates({ announceNoUpdate: true });
+      await result.current.checkForUpdates();
     });
 
     expect(checkMock).toHaveBeenCalledTimes(1);
-    expect(result.current.state.stage).toBe("latest");
+    expect(result.current.state.stage).toBe("idle");
   });
 
   it("loads post-update release notes after restart when marker matches current version", async () => {

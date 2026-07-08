@@ -74,7 +74,7 @@ export function useUpdaterController({
   useTauriEvent(
     subscribeUpdaterCheckEvent,
     () => {
-      void checkForUpdates({ announceNoUpdate: true });
+      void checkForUpdates();
     },
     { enabled },
   );

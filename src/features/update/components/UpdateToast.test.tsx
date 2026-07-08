@@ -81,20 +81,6 @@ describe("UpdateToast", () => {
     expect(onUpdate).toHaveBeenCalledTimes(1);
   });
 
-  it("renders latest state and allows dismiss", () => {
-    const onDismiss = vi.fn();
-    const state: UpdateState = { stage: "latest" };
-
-    const { container } = render(
-      <UpdateToast state={state} onUpdate={vi.fn()} onDismiss={onDismiss} />,
-    );
-    const scoped = within(container);
-
-    expect(scoped.getByText("You’re up to date.")).toBeTruthy();
-    fireEvent.click(scoped.getByRole("button", { name: "Dismiss" }));
-    expect(onDismiss).toHaveBeenCalledTimes(1);
-  });
-
   it("renders post-update loading notice and dismisses", () => {
     const onDismissPostUpdateNotice = vi.fn();
     const state: UpdateState = { stage: "idle" };

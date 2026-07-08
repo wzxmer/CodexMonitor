@@ -20,7 +20,6 @@ type UpdateStage =
   | "downloading"
   | "installing"
   | "restarting"
-  | "latest"
   | "error";
 
 type UpdateProgress = {
@@ -73,43 +72,24 @@ export function useUpdater({
   const updateRef = useRef<Update | null>(null);
   const hasAttemptedAutoCheckRef = useRef(false);
   const postUpdateFetchGenerationRef = useRef(0);
-  const latestTimeoutRef = useRef<number | null>(null);
-  const latestToastDurationMs = 2000;
-
-  const clearLatestTimeout = useCallback(() => {
-    if (latestTimeoutRef.current !== null) {
-      window.clearTimeout(latestTimeoutRef.current);
-      latestTimeoutRef.current = null;
-    }
-  }, []);
 
   const resetToIdle = useCallback(async () => {
-    clearLatestTimeout();
     const update = updateRef.current;
     updateRef.current = null;
     setState({ stage: "idle" });
     await update?.close();
-  }, [clearLatestTimeout]);
+  }, []);
 
-  const checkForUpdates = useCallback(async (options?: { announceNoUpdate?: boolean }) => {
+  const checkForUpdates = useCallback(async () => {
     if (!enabled) {
       return;
     }
     let update: Awaited<ReturnType<typeof check>> | null = null;
     try {
-      clearLatestTimeout();
       setState({ stage: "checking" });
       update = await check();
       if (!update) {
-        if (options?.announceNoUpdate) {
-          setState({ stage: "latest" });
-          latestTimeoutRef.current = window.setTimeout(() => {
-            latestTimeoutRef.current = null;
-            setState({ stage: "idle" });
-          }, latestToastDurationMs);
-        } else {
-          setState({ stage: "idle" });
-        }
+        setState({ stage: "idle" });
         return;
       }
 
@@ -128,13 +108,17 @@ export function useUpdater({
         label: "updater/error",
         payload: message,
       });
+      if (isMissingUpdateManifestError(message)) {
+        setState({ stage: "idle" });
+        return;
+      }
       setState({ stage: "error", error: message });
     } finally {
       if (!updateRef.current) {
         await update?.close();
       }
     }
-  }, [clearLatestTimeout, enabled, onDebug]);
+  }, [enabled, onDebug]);
 
   const startUpdate = useCallback(async () => {
     if (!enabled) {
@@ -301,12 +285,6 @@ export function useUpdater({
     };
   }, [enabled, onDebug]);
 
-  useEffect(() => {
-    return () => {
-      clearLatestTimeout();
-    };
-  }, [clearLatestTimeout]);
-
   const dismissPostUpdateNotice = useCallback(() => {
     postUpdateFetchGenerationRef.current += 1;
     clearPendingPostUpdateVersion();
@@ -321,4 +299,8 @@ export function useUpdater({
     postUpdateNotice,
     dismissPostUpdateNotice,
   };
+}
+
+function isMissingUpdateManifestError(message: string): boolean {
+  return message.includes("Could not fetch a valid release JSON from the remote");
 }
