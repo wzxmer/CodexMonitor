@@ -895,6 +895,20 @@ export async function isMobileRuntime(): Promise<boolean> {
   return invoke<boolean>("is_mobile_runtime");
 }
 
+export async function cleanupDownloadedReleaseAssets(): Promise<void> {
+  return invoke("cleanup_downloaded_release_assets");
+}
+
+export async function downloadAndOpenReleaseAsset(
+  url: string,
+  fileName: string,
+): Promise<{ path: string }> {
+  return invoke<{ path: string }>("download_and_open_release_asset", {
+    url,
+    fileName,
+  });
+}
+
 export async function updateAppSettings(settings: AppSettings): Promise<AppSettings> {
   return invoke<AppSettings>("update_app_settings", { settings });
 }

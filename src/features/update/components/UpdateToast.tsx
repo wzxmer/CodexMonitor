@@ -176,7 +176,16 @@ export function UpdateToast({
           </>
         )}
         {state.stage === "installing" && (
-          <ToastBody className="update-toast-body">Installing update…</ToastBody>
+          <>
+            <ToastBody className="update-toast-body">
+              Installer opened. Complete setup to finish the update.
+            </ToastBody>
+            <ToastActions className="update-toast-actions">
+              <button className="secondary" onClick={onDismiss}>
+                Dismiss
+              </button>
+            </ToastActions>
+          </>
         )}
         {state.stage === "restarting" && (
           <ToastBody className="update-toast-body">Restarting…</ToastBody>

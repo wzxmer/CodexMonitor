@@ -66,8 +66,6 @@ jobs:
     environment: release
     env:
       RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -207,11 +205,6 @@ jobs:
             -ov -format UDZO \
             release-artifacts/CodexMonitor_${VERSION}_aarch64.dmg
 
-          cp "src-tauri/target/release/bundle/macos/Codex Monitor.app.tar.gz" \
-            release-artifacts/CodexMonitor.app.tar.gz
-          cp "src-tauri/target/release/bundle/macos/Codex Monitor.app.tar.gz.sig" \
-            release-artifacts/CodexMonitor.app.tar.gz.sig
-
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -219,8 +212,6 @@ jobs:
           path: |
             release-artifacts/CodexMonitor.zip
             release-artifacts/CodexMonitor_*_aarch64.dmg
-            release-artifacts/CodexMonitor.app.tar.gz
-            release-artifacts/CodexMonitor.app.tar.gz.sig
 
   build_linux:
     name: linux bundles (${{ matrix.arch }})
@@ -229,8 +220,6 @@ jobs:
     environment: release
     env:
       RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     strategy:
       fail-fast: false
       matrix:
@@ -357,8 +346,6 @@ jobs:
     environment: release
     env:
       RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -668,64 +655,6 @@ jobs:
           Path("release-artifacts/release-notes.md").write_text(notes + "\n")
           PY
 
-      - name: Build updater manifest
-        run: |
-          set -euo pipefail
-          VERSION=$(python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          data = json.loads(Path("src-tauri/tauri.conf.json").read_text())
-          print(data["version"])
-          PY
-          )
-
-          python3 - <<'PY' "$VERSION"
-          import json
-          import sys
-          from datetime import datetime, timezone
-          from pathlib import Path
-          from urllib.parse import quote
-
-          version = sys.argv[1]
-          root = Path("release-artifacts")
-          base_url = f"https://github.com/wzxmer/CodexMonitor/releases/download/v{version}"
-
-          def one(pattern: str) -> Path:
-              matches = sorted(root.glob(pattern))
-              if len(matches) != 1:
-                  raise SystemExit(
-                      f"Expected exactly one artifact for {pattern}, found {len(matches)}: "
-                      + ", ".join(str(match) for match in matches)
-                  )
-              return matches[0]
-
-          def platform_entry(archive: Path) -> dict[str, str]:
-              signature_path = archive.with_name(f"{archive.name}.sig")
-              if not signature_path.exists():
-                  raise SystemExit(f"Missing updater signature: {signature_path}")
-              return {
-                  "signature": signature_path.read_text().strip(),
-                  "url": f"{base_url}/{quote(archive.name)}",
-              }
-
-          manifest = {
-              "version": version,
-              "notes": Path("release-artifacts/release-notes.md").read_text(),
-              "pub_date": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-              "platforms": {
-                  "darwin-aarch64": platform_entry(one("CodexMonitor.app.tar.gz")),
-                  "linux-x86_64": platform_entry(one("*_amd64.AppImage.tar.gz")),
-                  "linux-aarch64": platform_entry(one("*_aarch64.AppImage.tar.gz")),
-                  "windows-x86_64": platform_entry(one("*_x64-setup.nsis.zip")),
-              },
-          }
-
-          Path("release-artifacts/latest.json").write_text(
-              json.dumps(manifest, indent=2) + "\n"
-          )
-          PY
-
       - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -745,7 +674,6 @@ jobs:
           mapfile -t rpms < <(find release-artifacts -type f -name '*.rpm' | sort)
           mapfile -t windows_exes < <(find release-artifacts -type f -name '*.exe*' | sort)
           mapfile -t windows_msis < <(find release-artifacts -type f -name '*.msi*' | sort)
-          mapfile -t windows_zips < <(find release-artifacts -type f -name '*_x64-setup.nsis.zip' | sort)
           if [ ${#rpms[@]} -eq 0 ]; then
             echo "No RPM artifacts found for release upload"
             find release-artifacts -type f | sort
@@ -761,25 +689,17 @@ jobs:
             find release-artifacts -type f | sort
             exit 1
           fi
-          if [ ${#windows_zips[@]} -eq 0 ]; then
-            echo "No Windows updater zip artifact found"
-            find release-artifacts -type f | sort
-            exit 1
-          fi
 
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
             --notes-file release-artifacts/release-notes.md \
             --target "$GITHUB_SHA" \
-            release-artifacts/latest.json \
             release-artifacts/CodexMonitor.zip \
             release-artifacts/CodexMonitor_*_aarch64.dmg \
-            release-artifacts/CodexMonitor.app.tar.gz \
             "${appimages[@]}" \
             "${rpms[@]}" \
             "${windows_exes[@]}" \
-            "${windows_msis[@]}" \
-            "${windows_zips[@]}"
+            "${windows_msis[@]}"
 
       - name: Bump version and open PR
         env:

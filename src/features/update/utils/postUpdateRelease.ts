@@ -9,12 +9,34 @@ type GitHubReleaseResponse = {
   tag_name?: string;
   html_url?: string;
   body?: string | null;
+  assets?: GitHubReleaseAssetResponse[];
+};
+
+type GitHubReleaseAssetResponse = {
+  name?: string;
+  browser_download_url?: string;
+  size?: number;
 };
 
 export type PostUpdateReleaseInfo = {
   body: string | null;
   htmlUrl: string;
   tag: string | null;
+};
+
+export type ReleasePlatform = "windows" | "macos" | "linux" | "unknown";
+
+export type ReleaseAsset = {
+  name: string;
+  url: string;
+  size?: number;
+};
+
+export type ReleaseUpdateInfo = {
+  version: string;
+  htmlUrl: string;
+  body: string | null;
+  asset: ReleaseAsset;
 };
 
 function normalizeStoredVersion(value: string): string {
@@ -33,6 +55,130 @@ export function buildReleaseTagUrl(version: string): string {
   const normalized = normalizeStoredVersion(version);
   const tag = normalized.length > 0 ? `v${normalized}` : "latest";
   return `${GITHUB_RELEASES_WEB_BASE}/tag/${encodeURIComponent(tag)}`;
+}
+
+export function detectReleasePlatform(): ReleasePlatform {
+  const platformText = [
+    navigator.userAgent,
+    navigator.platform,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (platformText.includes("win")) {
+    return "windows";
+  }
+  if (platformText.includes("mac") || platformText.includes("darwin")) {
+    return "macos";
+  }
+  if (platformText.includes("linux") || platformText.includes("x11")) {
+    return "linux";
+  }
+  return "unknown";
+}
+
+export function isReleaseVersionNewer(
+  candidateVersion: string,
+  currentVersion: string,
+): boolean {
+  const candidate = parseVersionParts(candidateVersion);
+  const current = parseVersionParts(currentVersion);
+  if (!candidate || !current) {
+    return normalizeStoredVersion(candidateVersion) !== normalizeStoredVersion(currentVersion);
+  }
+  for (let index = 0; index < Math.max(candidate.length, current.length); index += 1) {
+    const candidatePart = candidate[index] ?? 0;
+    const currentPart = current[index] ?? 0;
+    if (candidatePart > currentPart) {
+      return true;
+    }
+    if (candidatePart < currentPart) {
+      return false;
+    }
+  }
+  return false;
+}
+
+export function selectReleaseAsset(
+  assets: ReleaseAsset[],
+  platform: ReleasePlatform,
+): ReleaseAsset | null {
+  const usableAssets = assets.filter((asset) => {
+    const name = asset.name.toLowerCase();
+    return (
+      asset.url.startsWith("https://github.com/wzxmer/CodexMonitor/releases/download/") &&
+      !name.endsWith(".sig") &&
+      !name.endsWith(".zip") &&
+      !name.endsWith(".blockmap")
+    );
+  });
+  const preferredExtensions =
+    platform === "windows"
+      ? [".msi", ".exe"]
+      : platform === "macos"
+        ? [".dmg"]
+        : platform === "linux"
+          ? [".appimage", ".rpm"]
+          : [".msi", ".exe", ".dmg", ".appimage", ".rpm"];
+
+  for (const extension of preferredExtensions) {
+    const match = usableAssets.find((asset) =>
+      asset.name.toLowerCase().endsWith(extension),
+    );
+    if (match) {
+      return match;
+    }
+  }
+  return null;
+}
+
+export async function fetchLatestReleaseUpdate(
+  currentVersion: string,
+  platform: ReleasePlatform = detectReleasePlatform(),
+): Promise<ReleaseUpdateInfo | null> {
+  const response = await fetch(`${GITHUB_RELEASES_API_BASE}/latest`, {
+    headers: {
+      Accept: "application/vnd.github+json",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`GitHub releases request failed (${response.status}).`);
+  }
+
+  const payload = (await response.json()) as GitHubReleaseResponse;
+  const releaseVersion = normalizeStoredVersion(payload.tag_name ?? "");
+  if (!releaseVersion || !isReleaseVersionNewer(releaseVersion, currentVersion)) {
+    return null;
+  }
+
+  const assets = (payload.assets ?? [])
+    .map((asset): ReleaseAsset | null => {
+      const name = asset.name?.trim();
+      const url = asset.browser_download_url?.trim();
+      if (!name || !url) {
+        return null;
+      }
+      return {
+        name,
+        url,
+        size: asset.size,
+      };
+    })
+    .filter((asset): asset is ReleaseAsset => asset !== null);
+  const selectedAsset = selectReleaseAsset(assets, platform);
+  if (!selectedAsset) {
+    throw new Error("No compatible installer asset found in the latest release.");
+  }
+
+  return {
+    version: releaseVersion,
+    htmlUrl:
+      payload.html_url && payload.html_url.trim().length > 0
+        ? payload.html_url
+        : buildReleaseTagUrl(releaseVersion),
+    body: payload.body?.trim() ? payload.body : null,
+    asset: selectedAsset,
+  };
 }
 
 export function savePendingPostUpdateVersion(version: string): void {
@@ -78,6 +224,19 @@ export function clearPendingPostUpdateVersion(): void {
   } catch {
     // Best-effort persistence.
   }
+}
+
+function parseVersionParts(value: string): number[] | null {
+  const normalized = normalizeStoredVersion(value);
+  if (!normalized) {
+    return null;
+  }
+  const core = normalized.split("-", 1)[0];
+  const parts = core.split(".");
+  if (parts.some((part) => !/^\d+$/.test(part))) {
+    return null;
+  }
+  return parts.map((part) => Number(part));
 }
 
 export async function fetchReleaseNotesForVersion(

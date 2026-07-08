@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
 import type { DebugEntry } from "../../../types";
+import {
+  cleanupDownloadedReleaseAssets,
+  downloadAndOpenReleaseAsset,
+} from "../../../services/tauri";
 import { useUpdater } from "./useUpdater";
 import { STORAGE_KEY_PENDING_POST_UPDATE_VERSION } from "../utils/postUpdateRelease";
 
@@ -11,21 +13,56 @@ vi.mock("@tauri-apps/api/core", () => ({
   isTauri: vi.fn(() => true),
 }));
 
-vi.mock("@tauri-apps/plugin-updater", () => ({
-  check: vi.fn(),
+vi.mock("../../../services/tauri", () => ({
+  cleanupDownloadedReleaseAssets: vi.fn(() => Promise.resolve()),
+  downloadAndOpenReleaseAsset: vi.fn(() => Promise.resolve({ path: "installer.msi" })),
 }));
 
-vi.mock("@tauri-apps/plugin-process", () => ({
-  relaunch: vi.fn(),
-}));
-
-const checkMock = vi.mocked(check);
-const relaunchMock = vi.mocked(relaunch);
+const cleanupDownloadedReleaseAssetsMock = vi.mocked(cleanupDownloadedReleaseAssets);
+const downloadAndOpenReleaseAssetMock = vi.mocked(downloadAndOpenReleaseAsset);
 const fetchMock = vi.fn();
+
+function latestReleaseResponse(version: string, assets = releaseAssets()) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      tag_name: `v${version}`,
+      html_url: `https://github.com/wzxmer/CodexMonitor/releases/tag/v${version}`,
+      body: "## Latest",
+      assets,
+    }),
+  } as Response;
+}
+
+function releaseAssets() {
+  return [
+    {
+      name: "CodexMonitor_9.9.9_x64_en-US.msi",
+      browser_download_url:
+        "https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x64_en-US.msi",
+      size: 100,
+    },
+    {
+      name: "CodexMonitor_9.9.9_aarch64.dmg",
+      browser_download_url:
+        "https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_aarch64.dmg",
+      size: 100,
+    },
+    {
+      name: "codex-monitor_9.9.9_amd64.AppImage",
+      browser_download_url:
+        "https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/codex-monitor_9.9.9_amd64.AppImage",
+      size: 100,
+    },
+  ];
+}
 
 describe("useUpdater", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    cleanupDownloadedReleaseAssetsMock.mockResolvedValue(undefined);
+    downloadAndOpenReleaseAssetMock.mockResolvedValue({ path: "installer.msi" });
     window.localStorage.clear();
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
@@ -37,7 +74,7 @@ describe("useUpdater", () => {
   });
 
   it("sets error state when update check fails", async () => {
-    checkMock.mockRejectedValue(new Error("nope"));
+    fetchMock.mockRejectedValue(new Error("nope"));
     const onDebug = vi.fn();
     const { result } = renderHook(() => useUpdater({ onDebug }));
 
@@ -59,7 +96,7 @@ describe("useUpdater", () => {
   });
 
   it("returns to idle when no update is available", async () => {
-    checkMock.mockResolvedValue(null);
+    fetchMock.mockResolvedValue(latestReleaseResponse(__APP_VERSION__));
     const { result } = renderHook(() => useUpdater({}));
 
     await act(async () => {
@@ -70,7 +107,7 @@ describe("useUpdater", () => {
   });
 
   it("stays idle when no update is available for manual checks", async () => {
-    checkMock.mockResolvedValue(null);
+    fetchMock.mockResolvedValue(latestReleaseResponse(__APP_VERSION__));
     const { result } = renderHook(() => useUpdater({}));
 
     await act(async () => {
@@ -80,40 +117,30 @@ describe("useUpdater", () => {
     expect(result.current.state.stage).toBe("idle");
   });
 
-  it("stays idle when the release has no updater manifest", async () => {
+  it("surfaces an error when the latest release has no compatible installer", async () => {
     const onDebug = vi.fn();
-    checkMock.mockRejectedValue(
-      new Error("Could not fetch a valid release JSON from the remote"),
-    );
+    fetchMock.mockResolvedValue(latestReleaseResponse("9.9.9", []));
     const { result } = renderHook(() => useUpdater({ onDebug }));
 
     await act(async () => {
       await result.current.checkForUpdates();
     });
 
-    expect(result.current.state.stage).toBe("idle");
+    expect(result.current.state.stage).toBe("error");
+    expect(result.current.state.error).toBe(
+      "No compatible installer asset found in the latest release.",
+    );
     expect(onDebug).toHaveBeenCalledWith(
       expect.objectContaining({
         label: "updater/error",
         source: "error",
-        payload: "Could not fetch a valid release JSON from the remote",
+        payload: "No compatible installer asset found in the latest release.",
       }),
     );
   });
 
-  it("downloads and restarts when update is available", async () => {
-    const close = vi.fn();
-    const downloadAndInstall = vi.fn(async (onEvent) => {
-      onEvent({ event: "Started", data: { contentLength: 100 } });
-      onEvent({ event: "Progress", data: { chunkLength: 40 } });
-      onEvent({ event: "Progress", data: { chunkLength: 60 } });
-      onEvent({ event: "Finished", data: {} });
-    });
-    checkMock.mockResolvedValue({
-      version: "1.2.3",
-      downloadAndInstall,
-      close,
-    } as any);
+  it("downloads and opens the installer when update is available", async () => {
+    fetchMock.mockResolvedValue(latestReleaseResponse("9.9.9"));
 
     const { result } = renderHook(() => useUpdater({}));
 
@@ -122,29 +149,26 @@ describe("useUpdater", () => {
     });
 
     expect(result.current.state.stage).toBe("available");
-    expect(result.current.state.version).toBe("1.2.3");
+    expect(result.current.state.version).toBe("9.9.9");
 
     await act(async () => {
       await result.current.startUpdate();
     });
 
-    await waitFor(() => expect(result.current.state.stage).toBe("restarting"));
+    await waitFor(() => expect(result.current.state.stage).toBe("installing"));
     expect(result.current.state.progress?.totalBytes).toBe(100);
     expect(result.current.state.progress?.downloadedBytes).toBe(100);
-    expect(downloadAndInstall).toHaveBeenCalledTimes(1);
-    expect(relaunchMock).toHaveBeenCalledTimes(1);
+    expect(downloadAndOpenReleaseAssetMock).toHaveBeenCalledWith(
+      expect.stringContaining("/releases/download/v9.9.9/"),
+      expect.stringMatching(/\.(msi|dmg|AppImage)$/),
+    );
     expect(
       window.localStorage.getItem(STORAGE_KEY_PENDING_POST_UPDATE_VERSION),
-    ).toBe("1.2.3");
+    ).toBe("9.9.9");
   });
 
-  it("resets to idle and closes update on dismiss", async () => {
-    const close = vi.fn();
-    checkMock.mockResolvedValue({
-      version: "1.0.0",
-      downloadAndInstall: vi.fn(),
-      close,
-    } as any);
+  it("resets to idle on dismiss", async () => {
+    fetchMock.mockResolvedValue(latestReleaseResponse("9.9.9"));
     const { result } = renderHook(() => useUpdater({}));
 
     await act(async () => {
@@ -156,21 +180,11 @@ describe("useUpdater", () => {
     });
 
     expect(result.current.state.stage).toBe("idle");
-    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces download errors and keeps progress", async () => {
-    const close = vi.fn();
-    const downloadAndInstall = vi.fn(async (onEvent) => {
-      onEvent({ event: "Started", data: { contentLength: 50 } });
-      onEvent({ event: "Progress", data: { chunkLength: 20 } });
-      throw new Error("download failed");
-    });
-    checkMock.mockResolvedValue({
-      version: "2.0.0",
-      downloadAndInstall,
-      close,
-    } as any);
+    fetchMock.mockResolvedValue(latestReleaseResponse("9.9.9"));
+    downloadAndOpenReleaseAssetMock.mockRejectedValue(new Error("download failed"));
     const onDebug = vi.fn();
     const { result } = renderHook(() => useUpdater({ onDebug }));
 
@@ -184,7 +198,7 @@ describe("useUpdater", () => {
 
     await waitFor(() => expect(result.current.state.stage).toBe("error"));
     expect(result.current.state.error).toBe("download failed");
-    expect(result.current.state.progress?.downloadedBytes).toBe(20);
+    expect(result.current.state.progress?.downloadedBytes).toBe(0);
     expect(onDebug).toHaveBeenCalledWith(
       expect.objectContaining({
         id: expect.any(String),
@@ -197,11 +211,7 @@ describe("useUpdater", () => {
   });
 
   it("does not run updater workflow when disabled", async () => {
-    checkMock.mockResolvedValue({
-      version: "9.9.9",
-      downloadAndInstall: vi.fn(),
-      close: vi.fn(),
-    } as any);
+    fetchMock.mockResolvedValue(latestReleaseResponse("9.9.9"));
     const { result } = renderHook(() => useUpdater({ enabled: false }));
 
     await act(async () => {
@@ -209,25 +219,34 @@ describe("useUpdater", () => {
       await result.current.startUpdate();
     });
 
-    expect(checkMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(downloadAndOpenReleaseAssetMock).not.toHaveBeenCalled();
     expect(result.current.state.stage).toBe("idle");
   });
 
   it("skips automatic startup checks when auto-check is disabled but still allows manual checks", async () => {
-    checkMock.mockResolvedValue(null);
+    fetchMock.mockResolvedValue(latestReleaseResponse(__APP_VERSION__));
 
     const { result } = renderHook(() =>
       useUpdater({ autoCheckOnMount: false }),
     );
 
-    expect(checkMock).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
 
     await act(async () => {
       await result.current.checkForUpdates();
     });
 
-    expect(checkMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.current.state.stage).toBe("idle");
+  });
+
+  it("cleans stale downloaded installers on startup", async () => {
+    renderHook(() => useUpdater({ autoCheckOnMount: false }));
+
+    await waitFor(() =>
+      expect(cleanupDownloadedReleaseAssetsMock).toHaveBeenCalledTimes(1),
+    );
   });
 
   it("loads post-update release notes after restart when marker matches current version", async () => {

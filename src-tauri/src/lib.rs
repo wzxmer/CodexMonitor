@@ -37,6 +37,7 @@ mod terminal;
 mod terminal;
 mod tray;
 mod types;
+mod updater;
 mod utils;
 mod window;
 mod workspaces;
@@ -316,6 +317,8 @@ pub fn run() {
             dictation::dictation_stop,
             dictation::dictation_cancel,
             local_usage::local_usage_snapshot,
+            updater::cleanup_downloaded_release_assets,
+            updater::download_and_open_release_asset,
             notifications::is_macos_debug_build,
             notifications::app_build_type,
             notifications::send_notification_fallback,

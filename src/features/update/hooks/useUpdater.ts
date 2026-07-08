@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
-import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
-import type { DownloadEvent, Update } from "@tauri-apps/plugin-updater";
 import type { DebugEntry } from "../../../types";
+import {
+  cleanupDownloadedReleaseAssets,
+  downloadAndOpenReleaseAsset,
+} from "../../../services/tauri";
 import {
   buildReleaseTagUrl,
   clearPendingPostUpdateVersion,
+  fetchLatestReleaseUpdate,
   fetchReleaseNotesForVersion,
+  type ReleaseUpdateInfo,
   loadPendingPostUpdateVersion,
   normalizeReleaseVersion,
   savePendingPostUpdateVersion,
@@ -69,26 +72,24 @@ export function useUpdater({
   const [postUpdateNotice, setPostUpdateNotice] = useState<PostUpdateNoticeState>(
     null,
   );
-  const updateRef = useRef<Update | null>(null);
+  const updateRef = useRef<ReleaseUpdateInfo | null>(null);
   const hasAttemptedAutoCheckRef = useRef(false);
   const postUpdateFetchGenerationRef = useRef(0);
 
   const resetToIdle = useCallback(async () => {
-    const update = updateRef.current;
     updateRef.current = null;
     setState({ stage: "idle" });
-    await update?.close();
   }, []);
 
   const checkForUpdates = useCallback(async () => {
     if (!enabled) {
       return;
     }
-    let update: Awaited<ReturnType<typeof check>> | null = null;
     try {
       setState({ stage: "checking" });
-      update = await check();
+      const update = await fetchLatestReleaseUpdate(__APP_VERSION__);
       if (!update) {
+        updateRef.current = null;
         setState({ stage: "idle" });
         return;
       }
@@ -108,15 +109,7 @@ export function useUpdater({
         label: "updater/error",
         payload: message,
       });
-      if (isMissingUpdateManifestError(message)) {
-        setState({ stage: "idle" });
-        return;
-      }
       setState({ stage: "error", error: message });
-    } finally {
-      if (!updateRef.current) {
-        await update?.close();
-      }
     }
   }, [enabled, onDebug]);
 
@@ -133,49 +126,24 @@ export function useUpdater({
     setState((prev) => ({
       ...prev,
       stage: "downloading",
-      progress: { totalBytes: undefined, downloadedBytes: 0 },
+      progress: {
+        totalBytes: update.asset.size,
+        downloadedBytes: 0,
+      },
       error: undefined,
     }));
 
     try {
-      await update.downloadAndInstall((event: DownloadEvent) => {
-        if (event.event === "Started") {
-          setState((prev) => ({
-            ...prev,
-            progress: {
-              totalBytes: event.data.contentLength,
-              downloadedBytes: 0,
-            },
-          }));
-          return;
-        }
-
-        if (event.event === "Progress") {
-          setState((prev) => ({
-            ...prev,
-            progress: {
-              totalBytes: prev.progress?.totalBytes,
-              downloadedBytes:
-                (prev.progress?.downloadedBytes ?? 0) + event.data.chunkLength,
-            },
-          }));
-          return;
-        }
-
-        if (event.event === "Finished") {
-          setState((prev) => ({
-            ...prev,
-            stage: "installing",
-          }));
-        }
-      });
-
+      await downloadAndOpenReleaseAsset(update.asset.url, update.asset.name);
       setState((prev) => ({
         ...prev,
-        stage: "restarting",
+        stage: "installing",
+        progress: {
+          totalBytes: update.asset.size,
+          downloadedBytes: update.asset.size ?? prev.progress?.downloadedBytes ?? 0,
+        },
       }));
       savePendingPostUpdateVersion(update.version);
-      await relaunch();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : JSON.stringify(error);
@@ -193,6 +161,23 @@ export function useUpdater({
       }));
     }
   }, [checkForUpdates, enabled, onDebug]);
+
+  useEffect(() => {
+    if (!enabled || !isTauri()) {
+      return;
+    }
+    void cleanupDownloadedReleaseAssets().catch((error) => {
+      const message =
+        error instanceof Error ? error.message : JSON.stringify(error);
+      onDebug?.({
+        id: `${Date.now()}-client-updater-cleanup-error`,
+        timestamp: Date.now(),
+        source: "error",
+        label: "updater/cleanup-error",
+        payload: message,
+      });
+    });
+  }, [enabled, onDebug]);
 
   useEffect(() => {
     if (!enabled || !autoCheckOnMount || import.meta.env.DEV || !isTauri()) {
@@ -299,8 +284,4 @@ export function useUpdater({
     postUpdateNotice,
     dismissPostUpdateNotice,
   };
-}
-
-function isMissingUpdateManifestError(message: string): boolean {
-  return message.includes("Could not fetch a valid release JSON from the remote");
 }
