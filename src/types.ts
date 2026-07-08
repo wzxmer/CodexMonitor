@@ -210,7 +210,7 @@ export type RemoteBackendTarget = {
 };
 export type ThemePreference = "system" | "light" | "dark" | "dim";
 export type ThemeAccentPreference = "codex" | "blue" | "green" | "pink" | "orange";
-export type MessageReadingStyle = "bubble" | "cli";
+export type MessageReadingStyle = "bubble" | "native" | "cli";
 export type AppLanguagePreference = "system" | "zh" | "en";
 export type PersonalityPreference = "friendly" | "pragmatic";
 export type FollowUpMessageBehavior = "queue" | "steer";

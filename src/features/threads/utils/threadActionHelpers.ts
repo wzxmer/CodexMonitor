@@ -137,21 +137,6 @@ export function buildResumeHydrationPlan({
   workspaceId: string;
 }): ResumeHydrationPlan {
   const items = buildItemsFromThread(thread);
-  if (localItems.length > 0 && !replaceLocal) {
-    return {
-      keepLocalProcessing: false,
-      lastMessageText: null,
-      lastMessageTimestamp: null,
-      mergedItems: localItems,
-      processingTimestamp: Date.now(),
-      resumedActiveTurnId: null,
-      shouldHydrate: false,
-      shouldMarkProcessing: false,
-      threadName: null,
-      reviewing: false,
-    };
-  }
-
   const resumedTurnState = getResumedTurnState(thread);
   const keepLocalProcessing =
     (localStatus?.isProcessing ?? false) &&

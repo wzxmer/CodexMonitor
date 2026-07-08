@@ -4,7 +4,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import type { AppSettings, CodexNativePetState } from "@/types";
+import type { AppSettings } from "@/types";
 import {
   CODE_FONT_SIZE_MAX,
   CODE_FONT_SIZE_MIN,
@@ -28,15 +28,7 @@ import {
   UI_FONT_WEIGHT_MIN,
   UI_LATIN_FONT_FAMILY_PRESETS,
 } from "@utils/fonts";
-import {
-  getCodexNativePetState,
-  importCodexNativePet,
-  listSystemFonts,
-  setCodexNativePetEnabled,
-  setCodexNativePetSelected,
-  wakeCodexNativePet,
-} from "@services/tauri";
-import { open } from "@tauri-apps/plugin-dialog";
+import { listSystemFonts } from "@services/tauri";
 
 import {
   SettingsSection,
@@ -305,87 +297,6 @@ export function SettingsDisplaySection({
     (option, index, options) =>
       options.findIndex((candidate) => candidate.value === option.value) === index,
   );
-
-  const [nativePetState, setNativePetState] = useState<CodexNativePetState | null>(null);
-  const [nativePetError, setNativePetError] = useState<string | null>(null);
-  const [nativePetBusy, setNativePetBusy] = useState(false);
-  const selectedNativePetId =
-    nativePetState?.selectedAvatarId ?? appSettings.codexPetId ?? "codex";
-
-  const syncLegacyCodexPet = (state: CodexNativePetState) => {
-    void onUpdateAppSettings({
-      ...appSettings,
-      codexPetEnabled: state.enabled,
-      codexPetId: "custom",
-      codexPetCustomImagePath: state.petsDir,
-      codexPetWakeVersion: Date.now(),
-    });
-  };
-
-  const refreshNativePetState = async () => {
-    setNativePetError(null);
-    try {
-      const state = await getCodexNativePetState();
-      setNativePetState(state);
-      if (appSettings.codexPetEnabled !== state.enabled) {
-        syncLegacyCodexPet(state);
-      }
-    } catch (error) {
-      setNativePetError(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  useEffect(() => {
-    void refreshNativePetState();
-  }, []);
-
-  const runNativePetAction = async (
-    action: () => Promise<CodexNativePetState>,
-    syncLegacy = true,
-  ) => {
-    setNativePetBusy(true);
-    setNativePetError(null);
-    try {
-      const nextState = await action();
-      setNativePetState(nextState);
-      if (syncLegacy) {
-        syncLegacyCodexPet(nextState);
-      }
-    } catch (error) {
-      setNativePetError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setNativePetBusy(false);
-    }
-  };
-
-  const toggleCodexPet = () => {
-    void runNativePetAction(() => setCodexNativePetEnabled(!nativePetState?.enabled));
-  };
-
-  const selectCodexPet = (avatarId: string) => {
-    void runNativePetAction(async () => {
-      const selected = await setCodexNativePetSelected(avatarId);
-      if (selected.enabled) {
-        return selected;
-      }
-      return setCodexNativePetEnabled(true);
-    });
-  };
-
-  const wakeNativeCodexPet = () => {
-    void runNativePetAction(() => wakeCodexNativePet());
-  };
-
-  const importCodexPet = async () => {
-    const selection = await open({
-      multiple: false,
-      directory: true,
-    });
-    if (!selection || Array.isArray(selection)) {
-      return;
-    }
-    void runNativePetAction(() => importCodexNativePet(selection));
-  };
 
   const applyFontClarityPreset = (preset: (typeof FONT_CLARITY_PRESETS)[number]) => {
     onSetUiLatinFontDraft(preset.uiLatinFontFamily);
@@ -1016,112 +927,6 @@ export function SettingsDisplaySection({
       </div>
       <div className="settings-subsection-title">{t("settings.display.sound")}</div>
       <div className="settings-subsection-subtitle">{t("settings.display.soundSubtitle")}</div>
-      <SettingsToggleRow
-        title={t("settings.display.codexPetTitle")}
-        subtitle={t("settings.display.codexPetSubtitle")}
-      >
-        <SettingsToggleSwitch
-          pressed={Boolean(nativePetState?.enabled)}
-          disabled={nativePetBusy}
-          onClick={toggleCodexPet}
-        />
-      </SettingsToggleRow>
-      <div className="settings-codex-pet-panel">
-        <div className="settings-help">
-          {nativePetState
-            ? `${nativePetState.pets.length} pets · ${nativePetState.petsDir}`
-            : t("common.loading")}
-        </div>
-        {nativePetError ? (
-          <div className="settings-help settings-error-text">{nativePetError}</div>
-        ) : null}
-        <div
-          className="settings-codex-pet-options"
-          role="radiogroup"
-          aria-label={t("settings.display.codexPetChoice")}
-        >
-          {(nativePetState?.pets ?? []).map((pet) => (
-            <button
-              key={pet.id}
-              type="button"
-              role="radio"
-              aria-checked={selectedNativePetId === pet.id}
-              className={`settings-codex-pet-option ${
-                selectedNativePetId === pet.id ? "is-selected" : ""
-              }`}
-              disabled={nativePetBusy}
-              onClick={() => selectCodexPet(pet.id)}
-            >
-              <span
-                className="settings-codex-pet-avatar settings-codex-pet-avatar--custom"
-                aria-hidden
-              >
-                <span />
-              </span>
-              <span className="settings-codex-pet-copy">
-                <span className="settings-codex-pet-title">{pet.displayName}</span>
-                <span className="settings-codex-pet-subtitle">
-                  {pet.id}
-                </span>
-              </span>
-            </button>
-          ))}
-          <button
-            type="button"
-            role="radio"
-            aria-checked={false}
-            className="settings-codex-pet-option"
-            disabled={nativePetBusy}
-            onClick={() => void importCodexPet()}
-          >
-            <span
-              className="settings-codex-pet-avatar settings-codex-pet-avatar--custom"
-              aria-hidden
-            >
-              <span />
-            </span>
-            <span className="settings-codex-pet-copy">
-              <span className="settings-codex-pet-title">
-                {t("settings.display.importPet")}
-              </span>
-              <span className="settings-codex-pet-subtitle">
-                pet.json + spritesheet.webp
-              </span>
-            </span>
-          </button>
-        </div>
-        {nativePetState?.selectedAvatarId && (
-          <div className="settings-help settings-codex-pet-path">
-            selected-avatar-id: {nativePetState.selectedAvatarId}
-          </div>
-        )}
-        <div className="settings-sound-actions">
-          <button
-            type="button"
-            className="ghost settings-button-compact"
-            disabled={nativePetBusy}
-            onClick={wakeNativeCodexPet}
-          >
-            {t("settings.display.wakePet")}
-          </button>
-          <button
-            type="button"
-            className="ghost settings-button-compact"
-            disabled={nativePetBusy}
-            onClick={() => void refreshNativePetState()}
-          >
-            {t("common.refresh")}
-          </button>
-          <button
-            type="button"
-            className="ghost settings-button-compact"
-            disabled={nativePetBusy}
-            onClick={() => void importCodexPet()}
-          >
-            {t("settings.display.importPetAction")}
-          </button>
-        </div>
-      </div>
       <SettingsToggleRow
         title={t("settings.display.notificationSoundsTitle")}
         subtitle={t("settings.display.notificationSoundsSubtitle")}

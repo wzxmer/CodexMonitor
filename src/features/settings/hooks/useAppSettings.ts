@@ -33,7 +33,7 @@ import { DEFAULT_COMMIT_MESSAGE_PROMPT } from "@utils/commitMessagePrompt";
 const allowedThemes = new Set(["system", "light", "dark", "dim"]);
 const allowedAppLanguages = new Set(["system", "zh", "en"]);
 const allowedThemeAccents = new Set(["codex", "blue", "green", "pink", "orange"]);
-const allowedMessageReadingStyles = new Set(["bubble", "cli"]);
+const allowedMessageReadingStyles = new Set(["bubble", "native", "cli"]);
 const allowedCodexPetIds = new Set(["codex", "terminal", "review", "custom"]);
 const allowedPersonality = new Set(["friendly", "pragmatic"]);
 const allowedFollowUpMessageBehavior = new Set(["queue", "steer"]);
@@ -64,6 +64,16 @@ function normalizeCssColor(value: string | null | undefined, fallback: string) {
     return trimmed;
   }
   return fallback;
+}
+
+function normalizeMessageReadingStyle(value: unknown): AppSettings["messageReadingStyle"] {
+  if (value === "comfortable") {
+    return "native";
+  }
+  if (typeof value === "string" && allowedMessageReadingStyles.has(value)) {
+    return value as AppSettings["messageReadingStyle"];
+  }
+  return "bubble";
 }
 
 type RemoteBackendTarget = AppSettings["remoteBackends"][number];
@@ -361,9 +371,7 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
       typeof settings.messageToolGroupsCollapsedByDefault === "boolean"
         ? settings.messageToolGroupsCollapsedByDefault
         : false,
-    messageReadingStyle: allowedMessageReadingStyles.has(settings.messageReadingStyle)
-      ? settings.messageReadingStyle
-      : "bubble",
+    messageReadingStyle: normalizeMessageReadingStyle(settings.messageReadingStyle),
     messageCanvasColor: normalizeCssColor(
       settings.messageCanvasColor,
       DEFAULT_MESSAGE_CANVAS_COLOR,

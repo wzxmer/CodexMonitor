@@ -396,14 +396,7 @@ describe("useThreads UX integration", () => {
     expect(sendCall?.[2]).toBe("hello target");
   });
 
-  it("keeps retrying recoverable final turn errors by starting a continuation turn", async () => {
-    nowSpy.mockRestore();
-    vi.useFakeTimers();
-    vi.setSystemTime(1_700_000_000_000);
-    vi.mocked(sendUserMessageService).mockResolvedValue({
-      result: { turn: { id: "turn-retry-1" } },
-    } as Awaited<ReturnType<typeof sendUserMessageService>>);
-
+  it("does not synthesize continuation turns after final turn errors", () => {
     renderHook(() =>
       useThreads({
         activeWorkspace: workspace,
@@ -414,123 +407,12 @@ describe("useThreads UX integration", () => {
 
     act(() => {
       handlers?.onTurnError?.("ws-1", "thread-1", "turn-1", {
-        message:
-          "unexpected status 502 Bad Gateway: error code: 502, url: https://fcodex.top/v1/responses",
+        message: "unexpected status 502 Bad Gateway",
         willRetry: false,
       });
     });
 
     expect(sendUserMessageService).not.toHaveBeenCalled();
-
-    await act(async () => {
-      vi.advanceTimersByTime(2_000);
-      await Promise.resolve();
-    });
-
-    expect(sendUserMessageService).toHaveBeenCalledWith(
-      "ws-1",
-      "thread-1",
-      "继续前面的任务",
-      expect.any(Object),
-    );
-
-    act(() => {
-      handlers?.onTurnStarted?.("ws-1", "thread-1", "turn-retry-1");
-      handlers?.onTurnError?.("ws-1", "thread-1", "turn-retry-1", {
-        message: "unexpected status 502 Bad Gateway",
-        willRetry: false,
-      });
-    });
-
-    await act(async () => {
-      vi.advanceTimersByTime(3_999);
-      await Promise.resolve();
-    });
-    expect(sendUserMessageService).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      vi.advanceTimersByTime(1);
-      await Promise.resolve();
-    });
-    expect(sendUserMessageService).toHaveBeenCalledTimes(2);
-  });
-
-  it("cancels pending recoverable turn retries when the thread is archived", async () => {
-    nowSpy.mockRestore();
-    vi.useFakeTimers();
-    vi.setSystemTime(1_700_000_000_000);
-    vi.mocked(sendUserMessageService).mockResolvedValue({
-      result: { turn: { id: "turn-retry-1" } },
-    } as Awaited<ReturnType<typeof sendUserMessageService>>);
-
-    renderHook(() =>
-      useThreads({
-        activeWorkspace: workspace,
-        workspaces: [workspace],
-        onWorkspaceConnected: vi.fn(),
-      }),
-    );
-
-    act(() => {
-      handlers?.onTurnError?.("ws-1", "thread-1", "turn-1", {
-        message: "unexpected status 502 Bad Gateway",
-        willRetry: false,
-      });
-      handlers?.onThreadArchived?.("ws-1", "thread-1");
-    });
-
-    await act(async () => {
-      vi.advanceTimersByTime(2_000);
-      await Promise.resolve();
-    });
-
-    expect(sendUserMessageService).not.toHaveBeenCalled();
-  });
-
-  it("reschedules recoverable turn retries when the continuation turn fails to start", async () => {
-    nowSpy.mockRestore();
-    vi.useFakeTimers();
-    vi.setSystemTime(1_700_000_000_000);
-    vi.mocked(sendUserMessageService)
-      .mockResolvedValueOnce({ result: {} } as Awaited<
-        ReturnType<typeof sendUserMessageService>
-      >)
-      .mockResolvedValueOnce({
-        result: { turn: { id: "turn-retry-2" } },
-      } as Awaited<ReturnType<typeof sendUserMessageService>>);
-
-    renderHook(() =>
-      useThreads({
-        activeWorkspace: workspace,
-        workspaces: [workspace],
-        onWorkspaceConnected: vi.fn(),
-      }),
-    );
-
-    act(() => {
-      handlers?.onTurnError?.("ws-1", "thread-1", "turn-1", {
-        message: "unexpected status 502 Bad Gateway",
-        willRetry: false,
-      });
-    });
-
-    await act(async () => {
-      vi.advanceTimersByTime(2_000);
-      await Promise.resolve();
-    });
-    expect(sendUserMessageService).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      vi.advanceTimersByTime(3_999);
-      await Promise.resolve();
-    });
-    expect(sendUserMessageService).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      vi.advanceTimersByTime(1);
-      await Promise.resolve();
-    });
-    expect(sendUserMessageService).toHaveBeenCalledTimes(2);
   });
 
   it("still starts thread when runtime codex args sync fails", async () => {

@@ -73,6 +73,7 @@ type MessageRowProps = MarkdownFileLinkProps & {
   ) => void;
   interrupted?: { label: string } | null;
   codeBlockCopyUseModifier?: boolean;
+  suppressCliTimestamp?: boolean;
 };
 
 type ReasoningRowProps = MarkdownFileLinkProps & {
@@ -447,6 +448,7 @@ export const MessageRow = memo(function MessageRow({
   onResendUserMessage,
   interrupted,
   codeBlockCopyUseModifier,
+  suppressCliTimestamp = false,
   showMessageFilePath,
   workspacePath,
   onOpenFileLink,
@@ -575,7 +577,9 @@ export const MessageRow = memo(function MessageRow({
     <div className={`message ${item.role}${isLongUserMessage ? " message-long" : ""}`}>
       <div
         ref={bubbleRef}
-        className={`bubble message-bubble${isTableOnlyAssistantMessage ? " message-bubble-table-only" : ""}`}
+        className={`bubble message-bubble${
+          isTableOnlyAssistantMessage ? " message-bubble-table-only" : ""
+        }${suppressCliTimestamp ? " message-bubble-cli-timestamp-hidden" : ""}`}
         data-cli-timestamp={cliTimestamp}
       >
         {interrupted && (

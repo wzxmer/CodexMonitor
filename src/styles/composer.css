@@ -155,30 +155,28 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.composer-input-area::before {
-  content: "";
+.composer-context-progress {
   position: absolute;
   inset: -1px;
-  border-radius: inherit;
-  padding: 1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
   pointer-events: none;
-  background:
-    conic-gradient(
-      from -90deg,
-      var(--composer-context-color) calc(var(--composer-context-used, 0) * 1%),
-      transparent 0
-    );
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
+  overflow: visible;
+  z-index: 1;
 }
 
-.composer-input-area.is-context-unknown::before {
+.composer-context-progress rect {
+  fill: none;
+  stroke: var(--composer-context-color);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-dasharray: var(--composer-context-used, 0) 100;
+  stroke-dashoffset: 0;
+  vector-effect: non-scaling-stroke;
+  transition: stroke-dasharray 0.18s ease, stroke 0.18s ease;
+}
+
+.composer-input-area.is-context-unknown .composer-context-progress {
   display: none;
 }
 
@@ -189,21 +187,21 @@
 
 .composer-context-count {
   position: absolute;
-  top: -11px;
-  left: 19px;
+  top: 7px;
+  right: 11px;
   z-index: 2;
-  min-width: 18px;
+  min-width: 28px;
   height: 18px;
-  padding: 0 5px;
+  padding: 0 6px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--composer-context-color) 58%, var(--cm-border-strong));
-  background: var(--cm-surface-panel-elevated);
+  border: 1px solid color-mix(in srgb, var(--composer-context-color) 45%, var(--cm-border-strong));
+  background: color-mix(in srgb, var(--cm-surface-panel-elevated) 92%, transparent);
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
   line-height: 16px;
   text-align: center;
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.1);
 }
 
 .composer-input-area .composer-context-count.ds-tooltip-trigger {
@@ -244,7 +242,7 @@
   gap: 10px;
   align-self: center;
   flex-shrink: 0;
-  padding: 0 2px 0 8px;
+  padding: 14px 2px 0 8px;
 }
 
 .composer-mobile-menu {

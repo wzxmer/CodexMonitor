@@ -172,8 +172,6 @@ export function SettingsAboutSection({
           <div className="settings-help">
             {t("about.newVersion")} <code>{updaterState.version}</code>。
           </div>
-        ) : updaterState.stage === "latest" ? (
-          <div className="settings-help">{t("about.latest")}</div>
         ) : null}
 
         <div className="settings-controls">
@@ -197,7 +195,7 @@ export function SettingsAboutSection({
                 updaterState.stage === "installing" ||
                 updaterState.stage === "restarting"
               }
-              onClick={() => void checkForUpdates({ announceNoUpdate: true })}
+              onClick={() => void checkForUpdates()}
             >
               {updaterState.stage === "checking"
                 ? t("about.checking")

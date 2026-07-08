@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -145,6 +145,7 @@ export function ComposerInput({
   const { t } = useI18n();
   const suggestionListRef = useRef<HTMLDivElement | null>(null);
   const suggestionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const [progressBounds, setProgressBounds] = useState({ width: 0, height: 0 });
   const { isPhoneLayout, isPhoneTallInput } = useComposerInputLayout({
     isExpanded,
     text,
@@ -164,6 +165,35 @@ export function ComposerInput({
     disabled,
     onAttachImages,
   });
+  const setInputAreaRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      dropTargetRef.current = node;
+    },
+    [dropTargetRef],
+  );
+  useEffect(() => {
+    const node = dropTargetRef.current;
+    if (!node) {
+      return undefined;
+    }
+    const updateBounds = () => {
+      const { width, height } = node.getBoundingClientRect();
+      setProgressBounds((prev) => {
+        const nextWidth = Math.round(width);
+        const nextHeight = Math.round(height);
+        return prev.width === nextWidth && prev.height === nextHeight
+          ? prev
+          : { width: nextWidth, height: nextHeight };
+      });
+    };
+    updateBounds();
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+    const observer = new ResizeObserver(updateBounds);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [dropTargetRef]);
   const handleActionClick = useCallback(() => {
     if (canStop) {
       onStop();
@@ -187,34 +217,44 @@ export function ComposerInput({
     onCancelDictation,
     onOpenDictationSettings,
   });
+  const boundedContextUsedPercent =
+    contextUsedPercent === null
+      ? null
+      : Math.min(100, Math.max(0, Math.round(contextUsedPercent)));
   const contextStatus = useMemo(() => {
-    if (contextUsedPercent === null) {
+    if (boundedContextUsedPercent === null) {
       return {
         className: "is-context-unknown",
         color: "var(--cm-border-heavy)",
         label: t("composer.contextRemainingEmpty"),
+        usedLabel: "0%",
       };
     }
-    const remaining = Math.max(0, 100 - contextUsedPercent);
+    const remaining = 100 - boundedContextUsedPercent;
     const className =
-      contextUsedPercent >= 95
+      boundedContextUsedPercent >= 95
         ? "is-context-danger"
-        : contextUsedPercent >= 80
+        : boundedContextUsedPercent >= 80
           ? "is-context-warning"
           : "is-context-ok";
     const color =
-      contextUsedPercent >= 95
+      boundedContextUsedPercent >= 95
         ? "var(--status-error)"
-        : contextUsedPercent >= 80
+        : boundedContextUsedPercent >= 80
           ? "var(--status-warning)"
           : "var(--status-success)";
     return {
       className,
       color,
       label: `${t("composer.contextRemainingPrefix")} ${remaining}%`,
+      usedLabel: `${boundedContextUsedPercent}%`,
     };
-  }, [contextUsedPercent, t]);
+  }, [boundedContextUsedPercent, t]);
   const contextCompactionLabel = `${t("composer.contextCompactionsPrefix")} ${contextCompactionCount}`;
+  const progressStrokeInset = 1;
+  const progressWidth = Math.max(progressBounds.width, 1);
+  const progressHeight = Math.max(progressBounds.height, 1);
+  const progressRadius = Math.min(20, progressHeight / 2);
 
   const handleTextareaChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -267,16 +307,32 @@ export function ComposerInput({
         className={`composer-input-area ${contextStatus.className}${isDragOver ? " is-drag-over" : ""}`}
         style={
           {
-            "--composer-context-used": contextUsedPercent ?? 0,
+            "--composer-context-used": boundedContextUsedPercent ?? 0,
             "--composer-context-color": contextStatus.color,
           } as CSSProperties
         }
-        ref={dropTargetRef}
+        ref={setInputAreaRef}
         onDragOver={handleDragOver}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        <svg
+          className="composer-context-progress"
+          viewBox={`0 0 ${progressWidth} ${progressHeight}`}
+          aria-hidden
+          focusable="false"
+        >
+          <rect
+            x={progressStrokeInset}
+            y={progressStrokeInset}
+            width={Math.max(progressWidth - progressStrokeInset * 2, 0)}
+            height={Math.max(progressHeight - progressStrokeInset * 2, 0)}
+            rx={progressRadius}
+            ry={progressRadius}
+            pathLength="100"
+          />
+        </svg>
         <div
           className="composer-context-count ds-tooltip-trigger"
           data-tooltip={`${contextStatus.label} · ${contextCompactionLabel}`}
@@ -284,7 +340,7 @@ export function ComposerInput({
           data-tooltip-align="start"
           aria-label={`${contextStatus.label}; ${contextCompactionLabel}`}
         >
-          {contextCompactionCount}
+          {contextStatus.usedLabel}
         </div>
         <ComposerAttachments
           attachments={attachments}

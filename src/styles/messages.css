@@ -740,6 +740,57 @@
   color: inherit;
 }
 
+.messages-reading-native .messages-inner {
+  max-width: min(100%, 960px);
+  gap: 12px;
+}
+
+.messages-reading-native .message.assistant {
+  justify-content: flex-start;
+}
+
+.messages-reading-native .message.assistant .bubble {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px 2px 12px 14px;
+  border-width: 0 0 0 3px;
+  border-left-color: var(--conversation-assistant-accent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--conversation-assistant-text);
+}
+
+.messages-reading-native .message.assistant .bubble:hover,
+.messages-reading-native .message.assistant .bubble:focus-within {
+  background: transparent;
+  border-color: var(--conversation-assistant-accent);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.messages-reading-native .message.user {
+  justify-content: flex-end;
+}
+
+.messages-reading-native .message.user .bubble {
+  max-width: min(70%, 620px);
+  padding: 10px 13px;
+  border-radius: 13px;
+  box-shadow: none;
+}
+
+.messages-reading-native .message.user.message-long .bubble {
+  max-width: min(82%, 760px);
+}
+
+.messages-reading-native .tool-group,
+.messages-reading-native .tool-inline,
+.messages-reading-native .working,
+.messages-reading-native .turn-complete {
+  max-width: min(100%, 900px);
+}
+
 .messages-reading-cli .messages-inner {
   position: relative;
   max-width: min(100%, 980px);
@@ -807,6 +858,14 @@
   font-family: var(--code-font-family);
   font-size: 12px;
   font-weight: 700;
+}
+
+.messages-reading-cli .message.assistant .bubble.message-bubble-cli-timestamp-hidden {
+  padding-top: 18px;
+}
+
+.messages-reading-cli .message.assistant .bubble.message-bubble-cli-timestamp-hidden::before {
+  content: none;
 }
 
 .messages-reading-cli .message.assistant .message-interrupted-status {

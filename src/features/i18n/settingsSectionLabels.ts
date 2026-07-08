@@ -6,6 +6,7 @@ export const SETTINGS_SECTION_LABEL_KEYS: Record<CodexSection, I18nKey> = {
   environments: "settings.section.environments",
   session: "settings.section.session",
   display: "settings.section.display",
+  pets: "settings.section.pets",
   about: "settings.section.about",
   composer: "settings.section.composer",
   dictation: "settings.section.dictation",

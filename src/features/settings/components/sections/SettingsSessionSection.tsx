@@ -16,7 +16,6 @@ import {
 import { useI18n } from "@/features/i18n/I18nProvider";
 
 const AUTO_ARCHIVE_DAY_OPTIONS = [3, 5, 7, 15, 30] as const;
-
 type SettingsSessionSectionProps = {
   appSettings: AppSettings;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;

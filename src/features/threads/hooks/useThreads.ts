@@ -92,26 +92,6 @@ const AUTO_ARCHIVE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const AUTO_ARCHIVE_PAGE_SIZE = 100;
 const AUTO_ARCHIVE_MAX_PAGES_PER_WORKSPACE = 50;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const RECOVERABLE_TURN_RETRY_PROMPT = "继续前面的任务";
-const RECOVERABLE_TURN_RETRY_BLOCKED_MESSAGE =
-  "recoverable continuation turn did not start";
-const RECOVERABLE_TURN_RETRY_BASE_DELAY_MS = 2_000;
-const RECOVERABLE_TURN_RETRY_MAX_DELAY_MS = 30_000;
-
-function isRecoverableTurnErrorMessage(message: string) {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("bad gateway") ||
-    normalized.includes("gateway timeout") ||
-    normalized.includes("temporarily unavailable") ||
-    normalized.includes(RECOVERABLE_TURN_RETRY_BLOCKED_MESSAGE) ||
-    normalized.includes("unexpected status 502") ||
-    normalized.includes("unexpected status 503") ||
-    normalized.includes("unexpected status 504") ||
-    /\b50[2-4]\b/.test(normalized)
-  );
-}
-
 export function useThreads({
   activeWorkspace,
   workspaces = activeWorkspace ? [activeWorkspace] : [],
@@ -166,13 +146,6 @@ export function useThreads({
   const subagentHydrationInFlightRef = useRef<Record<string, true>>({});
   const autoArchiveInFlightRef = useRef(false);
   const workspacesRef = useRef(workspaces);
-  const recoverableTurnRetryTimersRef = useRef<
-    Record<string, ReturnType<typeof setTimeout>>
-  >({});
-  const recoverableTurnRetryAttemptRef = useRef<Record<string, number>>({});
-  const recoverableTurnRetrySendRef = useRef<
-    ((workspaceId: string, threadId: string, attempt: number) => Promise<boolean>) | null
-  >(null);
   workspacesRef.current = workspaces;
   planByThreadRef.current = state.planByThread;
   itemsByThreadRef.current = state.itemsByThread;
@@ -250,85 +223,6 @@ export function useThreads({
       // Ignore refresh errors to avoid breaking the UI.
     }
   }, [onMessageActivity]);
-
-  const clearRecoverableTurnRetry = useCallback(
-    (workspaceId: string, threadId: string, resetAttempt = true) => {
-      const key = buildWorkspaceThreadKey(workspaceId, threadId);
-      const timer = recoverableTurnRetryTimersRef.current[key];
-      if (timer) {
-        clearTimeout(timer);
-        delete recoverableTurnRetryTimersRef.current[key];
-      }
-      if (resetAttempt) {
-        delete recoverableTurnRetryAttemptRef.current[key];
-      }
-    },
-    [],
-  );
-
-  const scheduleRecoverableTurnRetry = useCallback(
-    (workspaceId: string, threadId: string, message: string) => {
-      if (!isRecoverableTurnErrorMessage(message)) {
-        return;
-      }
-      const key = buildWorkspaceThreadKey(workspaceId, threadId);
-      if (recoverableTurnRetryTimersRef.current[key]) {
-        return;
-      }
-      const attempt = (recoverableTurnRetryAttemptRef.current[key] ?? 0) + 1;
-      recoverableTurnRetryAttemptRef.current[key] = attempt;
-      const delay = Math.min(
-        RECOVERABLE_TURN_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1),
-        RECOVERABLE_TURN_RETRY_MAX_DELAY_MS,
-      );
-      onDebug?.({
-        id: `${Date.now()}-client-turn-recoverable-retry-scheduled`,
-        timestamp: Date.now(),
-        source: "client",
-        label: "turn/recoverable retry scheduled",
-        payload: { workspaceId, threadId, attempt, delay, message },
-      });
-      recoverableTurnRetryTimersRef.current[key] = setTimeout(() => {
-        delete recoverableTurnRetryTimersRef.current[key];
-        void recoverableTurnRetrySendRef.current?.(workspaceId, threadId, attempt)
-          .then((retryStarted) => {
-            if (!retryStarted) {
-              scheduleRecoverableTurnRetry(
-                workspaceId,
-                threadId,
-                RECOVERABLE_TURN_RETRY_BLOCKED_MESSAGE,
-              );
-            }
-          })
-          .catch((error) => {
-            onDebug?.({
-              id: `${Date.now()}-client-turn-recoverable-retry-error`,
-              timestamp: Date.now(),
-              source: "error",
-              label: "turn/recoverable retry error",
-              payload: error instanceof Error ? error.message : String(error),
-            });
-            scheduleRecoverableTurnRetry(
-              workspaceId,
-              threadId,
-              error instanceof Error ? error.message : String(error),
-            );
-          });
-      }, delay);
-    },
-    [onDebug],
-  );
-
-  useEffect(
-    () => () => {
-      Object.values(recoverableTurnRetryTimersRef.current).forEach((timer) => {
-        clearTimeout(timer);
-      });
-      recoverableTurnRetryTimersRef.current = {};
-      recoverableTurnRetryAttemptRef.current = {};
-    },
-    [],
-  );
 
   useThreadStallWarnings({
     threadStatusById: state.threadStatusById,
@@ -601,7 +495,6 @@ export function useThreads({
       if (!workspaceId || !threadId) {
         return;
       }
-      clearRecoverableTurnRetry(workspaceId, threadId);
       threadHandlers.onThreadArchived?.(workspaceId, threadId);
       unpinThread(workspaceId, threadId);
 
@@ -667,7 +560,7 @@ export function useThreads({
         }
       })();
     },
-    [clearRecoverableTurnRetry, isSubagentThread, onDebug, threadHandlers, unpinThread],
+    [isSubagentThread, onDebug, threadHandlers, unpinThread],
   );
 
   const handleThreadUnarchived = useCallback(
@@ -679,18 +572,16 @@ export function useThreads({
 
   const handleTurnStarted = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
-      clearRecoverableTurnRetry(workspaceId, threadId, false);
       threadHandlers.onTurnStarted?.(workspaceId, threadId, turnId);
     },
-    [clearRecoverableTurnRetry, threadHandlers],
+    [threadHandlers],
   );
 
   const handleTurnCompleted = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
-      clearRecoverableTurnRetry(workspaceId, threadId);
       threadHandlers.onTurnCompleted?.(workspaceId, threadId, turnId);
     },
-    [clearRecoverableTurnRetry, threadHandlers],
+    [threadHandlers],
   );
 
   const handleTurnError = useCallback(
@@ -701,11 +592,8 @@ export function useThreads({
       payload: { message: string; willRetry: boolean },
     ) => {
       threadHandlers.onTurnError?.(workspaceId, threadId, turnId, payload);
-      if (!payload.willRetry) {
-        scheduleRecoverableTurnRetry(workspaceId, threadId, payload.message);
-      }
     },
-    [scheduleRecoverableTurnRetry, threadHandlers],
+    [threadHandlers],
   );
 
   const handlers = useMemo(
@@ -1093,52 +981,6 @@ export function useThreads({
     registerDetachedReviewChild,
     renameThread,
   });
-
-  recoverableTurnRetrySendRef.current = async (
-    workspaceId: string,
-    threadId: string,
-    attempt: number,
-  ) => {
-    if (threadStatusByIdRef.current[threadId]?.isProcessing) {
-      return true;
-    }
-    const workspace = workspacesRef.current.find((entry) => entry.id === workspaceId);
-    if (!workspace) {
-      onDebug?.({
-        id: `${Date.now()}-client-turn-recoverable-retry-missing-workspace`,
-        timestamp: Date.now(),
-        source: "error",
-        label: "turn/recoverable retry missing workspace",
-        payload: { workspaceId, threadId, attempt },
-      });
-      return true;
-    }
-    onDebug?.({
-      id: `${Date.now()}-client-turn-recoverable-retry`,
-      timestamp: Date.now(),
-      source: "client",
-      label: "turn/recoverable retry",
-      payload: { workspaceId, threadId, attempt },
-    });
-    const result = await sendUserMessageToThread(
-      workspace,
-      threadId,
-      RECOVERABLE_TURN_RETRY_PROMPT,
-      [],
-      { skipPromptExpansion: true },
-    );
-    if (result.status !== "sent") {
-      onDebug?.({
-        id: `${Date.now()}-client-turn-recoverable-retry-blocked`,
-        timestamp: Date.now(),
-        source: "error",
-        label: "turn/recoverable retry blocked",
-        payload: { workspaceId, threadId, attempt, status: result.status },
-      });
-      return false;
-    }
-    return true;
-  };
 
   const hasLocalThreadSnapshot = useCallback(
     (threadId: string | null) => {

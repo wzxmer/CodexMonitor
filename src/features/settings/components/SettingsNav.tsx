@@ -1,6 +1,7 @@
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
 import Archive from "lucide-react/dist/esm/icons/archive";
 import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
+import PawPrint from "lucide-react/dist/esm/icons/paw-print";
 import Mic from "lucide-react/dist/esm/icons/mic";
 import Keyboard from "lucide-react/dist/esm/icons/keyboard";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
@@ -67,6 +68,15 @@ export function SettingsNav({
           onClick={() => onSelectSection("display")}
         >
           {t(SETTINGS_SECTION_LABEL_KEYS.display)}
+        </PanelNavItem>
+        <PanelNavItem
+          className="settings-nav"
+          icon={<PawPrint aria-hidden />}
+          active={activeSection === "pets"}
+          showDisclosure={showDisclosure}
+          onClick={() => onSelectSection("pets")}
+        >
+          {t(SETTINGS_SECTION_LABEL_KEYS.pets)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"

@@ -4,52 +4,17 @@ import {
   fireEvent,
   render,
   screen,
-  waitFor,
-  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings } from "@/types";
-import {
-  getCodexNativePetState,
-  setCodexNativePetEnabled,
-  setCodexNativePetSelected,
-  wakeCodexNativePet,
-} from "@services/tauri";
 import {
   DEFAULT_UI_CJK_FONT_FAMILY,
   DEFAULT_UI_LATIN_FONT_FAMILY,
 } from "@utils/fonts";
 import { SettingsDisplaySection } from "./SettingsDisplaySection";
 
-const nativePetState = {
-  enabled: true,
-  selectedAvatarId: "codex",
-  codexHome: "/tmp/codex",
-  globalStatePath: "/tmp/codex/.codex-global-state.json",
-  petsDir: "/tmp/codex-pets",
-  pets: [
-    {
-      id: "codex",
-      displayName: "Codex",
-      directory: "/tmp/codex-pets/codex",
-      spritesheetPath: "/tmp/codex-pets/codex/spritesheet.webp",
-    },
-  ],
-};
-
 vi.mock("@services/tauri", () => ({
   listSystemFonts: vi.fn(async () => []),
-  getCodexNativePetState: vi.fn(async () => nativePetState),
-  setCodexNativePetEnabled: vi.fn(async (enabled: boolean) => ({
-    ...nativePetState,
-    enabled,
-  })),
-  setCodexNativePetSelected: vi.fn(async (selectedAvatarId: string) => ({
-    ...nativePetState,
-    selectedAvatarId,
-  })),
-  wakeCodexNativePet: vi.fn(async () => nativePetState),
-  importCodexNativePet: vi.fn(async () => nativePetState),
 }));
 
 describe("SettingsDisplaySection", () => {
@@ -104,7 +69,7 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("radio", { name: /CLI 暗黑/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /黑橙/ }));
 
     expect(onUpdateAppSettings).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -171,7 +136,7 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("radio", { name: /原生纯白/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /纯白/ }));
 
     expect(onUpdateAppSettings).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -302,44 +267,8 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    const petGroup = await screen.findByRole("radiogroup", {
-      name: "Codex 宠物选择",
-    });
-    await waitFor(() => {
-      expect(getCodexNativePetState).toHaveBeenCalledTimes(1);
-    });
-    fireEvent.click(within(petGroup).getByRole("radio", { name: /Codex/ }));
-    await waitFor(() => {
-      expect(setCodexNativePetSelected).toHaveBeenCalledWith("codex");
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "唤醒" }));
-    await waitFor(() => {
-      expect(wakeCodexNativePet).toHaveBeenCalled();
-    });
-
-    const petPanel = petGroup.closest(".settings-codex-pet-panel");
-    expect(petPanel).toBeTruthy();
-    fireEvent.click(within(petPanel as HTMLElement).getByRole("button", { name: "刷新" }));
-    await waitFor(() => {
-      expect(getCodexNativePetState).toHaveBeenCalledTimes(2);
-    });
-
-    const petRow = screen.getByText("Codex 宠物").closest(".settings-toggle-row");
-    expect(petRow).toBeTruthy();
-    fireEvent.click(within(petRow as HTMLElement).getByRole("button"));
-
-    await waitFor(() => {
-      expect(setCodexNativePetEnabled).toHaveBeenCalledWith(false);
-      expect(onUpdateAppSettings).toHaveBeenCalledWith(
-        expect.objectContaining({
-          codexPetEnabled: false,
-          codexPetId: "custom",
-          codexPetCustomImagePath: "/tmp/codex-pets",
-          codexPetWakeVersion: expect.any(Number),
-        }),
-      );
-    });
+    fireEvent.click(screen.getByRole("button", { name: "测试声音" }));
+    fireEvent.click(screen.getByRole("button", { name: "测试通知" }));
   });
 
 });

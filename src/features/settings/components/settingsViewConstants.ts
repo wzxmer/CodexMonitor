@@ -1,5 +1,5 @@
 import type { AppSettings } from "@/types";
-import type { CodexSection, ShortcutDraftKey, ShortcutSettingKey } from "./settingsTypes";
+import type { ShortcutDraftKey, ShortcutSettingKey } from "./settingsTypes";
 
 export const DICTATION_MODELS = [
   { id: "tiny", label: "Tiny", size: "75 MB", note: "最快，准确率最低。" },
@@ -72,23 +72,6 @@ export const COMPOSER_PRESET_CONFIGS: Record<
 
 export const SETTINGS_MOBILE_BREAKPOINT_PX = 720;
 export const DEFAULT_REMOTE_HOST = "127.0.0.1:4732";
-
-export const SETTINGS_SECTION_LABELS: Record<CodexSection, string> = {
-  projects: "项目",
-  environments: "环境",
-  session: "会话",
-  display: "显示与声音",
-  about: "关于",
-  composer: "输入",
-  dictation: "语音输入",
-  shortcuts: "快捷键",
-  "open-apps": "打开方式",
-  git: "Git",
-  server: "服务",
-  agents: "Agents",
-  codex: "Codex",
-  features: "功能",
-};
 
 export const SHORTCUT_DRAFT_KEY_BY_SETTING: Record<
   ShortcutSettingKey,

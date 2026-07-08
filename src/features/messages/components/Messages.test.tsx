@@ -1752,6 +1752,67 @@ describe("Messages", () => {
     expect(screen.getByText("npm run test")).toBeTruthy();
   });
 
+  it("hides only the duplicated first CLI timestamp inside expanded process groups", async () => {
+    const firstTimestamp = new Date("2026-07-08T19:54:52").getTime();
+    const secondTimestamp = new Date("2026-07-08T19:55:44").getTime();
+    const items: ConversationItem[] = [
+      {
+        id: "assistant-process-cli-time-1",
+        kind: "message",
+        role: "assistant",
+        text: "First process message.",
+        createdAt: firstTimestamp,
+      },
+      {
+        id: "assistant-process-cli-time-2",
+        kind: "message",
+        role: "assistant",
+        text: "Second process message.",
+        createdAt: secondTimestamp,
+      },
+      {
+        id: "assistant-final-cli-time",
+        kind: "message",
+        role: "assistant",
+        text: "Final result.",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        messageReadingStyle="cli"
+      />,
+    );
+
+    expect(screen.getByText("2 条过程消息")).toBeTruthy();
+    expect(screen.getByText("2026-07-08 19:54:52")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "展开过程消息" }));
+
+    const firstBubble = screen
+      .getByText("First process message.")
+      .closest(".message-bubble");
+    const secondBubble = screen
+      .getByText("Second process message.")
+      .closest(".message-bubble");
+
+    expect(firstBubble?.classList.contains("message-bubble-cli-timestamp-hidden")).toBe(
+      true,
+    );
+    expect(secondBubble?.classList.contains("message-bubble-cli-timestamp-hidden")).toBe(
+      false,
+    );
+    expect(
+      container.querySelectorAll(".message-bubble-cli-timestamp-hidden"),
+    ).toHaveLength(1);
+  });
+
   it("collapses process messages in every completed turn", async () => {
     const items: ConversationItem[] = [
       {
@@ -1906,7 +1967,12 @@ describe("Messages", () => {
     );
 
     expect(screen.queryByRole("button", { name: "舒适" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "原生" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "原生" }));
+
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
+      messageReadingStyle: "native",
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "CLI" }));
 
@@ -2006,7 +2072,7 @@ describe("Messages", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "样式" }));
-    fireEvent.click(screen.getByRole("button", { name: /CLI 暗黑/ }));
+    fireEvent.click(screen.getByRole("button", { name: /黑橙/ }));
     fireEvent.click(screen.getByRole("button", { name: "青绿" }));
     fireEvent.click(screen.getByRole("button", { name: "浅紫" }));
     fireEvent.change(screen.getByDisplayValue("#d9ebff"), {
@@ -2064,7 +2130,7 @@ describe("Messages", () => {
     });
   });
 
-  it("applies pure white canvas from native white preset", () => {
+  it("applies pure white canvas from white color preset", () => {
     const onUpdateConversationStyle = vi.fn();
 
     render(
@@ -2080,7 +2146,7 @@ describe("Messages", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "样式" }));
-    fireEvent.click(screen.getByRole("button", { name: /原生纯白/ }));
+    fireEvent.click(screen.getByRole("button", { name: /纯白/ }));
 
     expect(onUpdateConversationStyle).toHaveBeenCalledWith(
       expect.objectContaining({

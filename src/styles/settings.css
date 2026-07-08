@@ -329,101 +329,90 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin: -2px 0 18px;
-  padding-left: 2px;
 }
 
-.settings-codex-pet-options {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px;
-  max-width: 680px;
-}
-
-.settings-codex-pet-option {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 10px;
+.settings-codex-pet-toolbar {
+  display: flex;
   align-items: center;
-  min-height: 62px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-codex-pet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-codex-pet-list {
+  display: flex;
+  max-height: min(560px, 56vh);
+  flex-direction: column;
+  overflow-y: auto;
   border: 1px solid var(--cm-border-emphasis);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--cm-surface-panel-strong);
+}
+
+.settings-codex-pet-row {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 110px;
+  border: 0;
+  border-bottom: 1px solid var(--cm-border-subtle);
+  background: transparent;
   color: var(--text-muted);
-  padding: 9px 10px;
+  padding: 14px 16px;
   text-align: left;
   cursor: pointer;
 }
 
-.settings-codex-pet-option:hover,
-.settings-codex-pet-option.is-selected {
-  border-color: var(--border-accent-soft);
-  background: color-mix(in srgb, var(--surface-active) 62%, transparent);
+.settings-codex-pet-row:last-child {
+  border-bottom: 0;
+}
+
+.settings-codex-pet-row:hover,
+.settings-codex-pet-row.is-selected {
+  background: color-mix(in srgb, var(--surface-active) 58%, transparent);
   color: var(--text-strong);
 }
 
-.settings-codex-pet-avatar {
-  position: relative;
-  width: 38px;
-  height: 38px;
-  border-radius: 14px 14px 16px 16px;
-  border: 1px solid var(--border-subtle);
-  background: var(--pet-tone, linear-gradient(135deg, #f28b3c, #ffd4a3));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 8px 18px rgba(0, 0, 0, 0.16);
+.settings-codex-pet-preview {
+  display: flex;
+  width: 80px;
+  height: 80px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--cm-border-emphasis);
+  border-radius: 12px;
+  background: var(--surface-control);
 }
 
-.settings-codex-pet-avatar::before,
-.settings-codex-pet-avatar::after {
-  content: "";
-  position: absolute;
-  top: 13px;
-  width: 5px;
-  height: 7px;
-  border-radius: 999px;
-  background: rgba(24, 24, 24, 0.72);
-}
-
-.settings-codex-pet-avatar::before {
-  left: 11px;
-}
-
-.settings-codex-pet-avatar::after {
-  right: 11px;
-}
-
-.settings-codex-pet-avatar > span {
-  position: absolute;
-  left: 50%;
-  bottom: 8px;
-  width: 12px;
-  height: 3px;
-  border-radius: 999px;
-  background: rgba(24, 24, 24, 0.42);
-  transform: translateX(-50%);
-}
-
-.settings-codex-pet-avatar--custom {
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent),
-    var(--surface-control);
+.settings-codex-pet-preview img {
+  display: block;
+  max-width: 72px;
+  max-height: 72px;
+  object-fit: contain;
+  image-rendering: auto;
 }
 
 .settings-codex-pet-copy {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .settings-codex-pet-title {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 650;
   color: var(--text-strong);
 }
 
-.settings-codex-pet-subtitle,
 .settings-codex-pet-path {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -432,8 +421,23 @@
 
 .settings-codex-pet-subtitle {
   color: var(--text-subtle);
-  font-size: 11px;
-  line-height: 1.25;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-codex-pet-select {
+  min-width: 56px;
+  border-radius: 999px;
+  background: var(--surface-control);
+  color: var(--text-muted);
+  padding: 8px 12px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.settings-codex-pet-row.is-selected .settings-codex-pet-select {
+  color: var(--text-subtle);
 }
 
 .settings-help-error {

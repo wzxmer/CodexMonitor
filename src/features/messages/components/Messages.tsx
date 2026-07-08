@@ -423,7 +423,22 @@ export const Messages = memo(function Messages({
     { label: t("color.lightPink"), color: "#f6e2e2", text: "#3a2222" },
   ];
 
-  const renderItem = (item: ConversationItem) => {
+  const shouldSuppressGroupedCliTimestamp = (
+    item: ConversationItem,
+    groupTimestampText: string,
+    isFirstInGroup: boolean,
+  ) => {
+    if (!isFirstInGroup || !groupTimestampText || item.kind !== "message") {
+      return false;
+    }
+    const itemTimestamp = timestampFromItem(item);
+    return itemTimestamp !== null && formatCliTimestamp(itemTimestamp) === groupTimestampText;
+  };
+
+  const renderItem = (
+    item: ConversationItem,
+    options?: { suppressCliTimestamp?: boolean },
+  ) => {
     if (item.kind === "message") {
       const isCopied = copiedMessageId === item.id;
       return (
@@ -450,6 +465,7 @@ export const Messages = memo(function Messages({
                 }
               : null
           }
+          suppressCliTimestamp={options?.suppressCliTimestamp}
           workspacePath={workspacePath}
           onOpenFileLink={openFileLink}
           onOpenFileLinkMenu={showFileLinkMenu}
@@ -540,14 +556,18 @@ export const Messages = memo(function Messages({
               role="group"
               aria-label={t("messages.readingStyleShort")}
             >
-              {(["bubble", "cli"] as const).map((style) => (
+              {(["bubble", "native", "cli"] as const).map((style) => (
                 <button
                   key={style}
                   type="button"
                   className={messageReadingStyle === style ? "is-selected" : ""}
                   onClick={() => updateConversationStyle({ messageReadingStyle: style })}
                 >
-                  {style === "bubble" ? t("messages.style.bubble") : "CLI"}
+                  {style === "bubble"
+                    ? t("messages.style.bubble")
+                    : style === "native"
+                      ? t("messages.style.native")
+                      : "CLI"}
                 </button>
               ))}
             </div>
@@ -852,7 +872,7 @@ export const Messages = memo(function Messages({
                 </div>
                 {!isCollapsed && (
                   <div className="tool-group-body" id={groupBodyId}>
-                    {group.entries.map((processEntry) => {
+                    {group.entries.map((processEntry, processEntryIndex) => {
                       if (processEntry.kind === "toolGroup") {
                         return (
                           <div
@@ -860,12 +880,26 @@ export const Messages = memo(function Messages({
                             className="tool-group process-group-nested"
                           >
                             <div className="tool-group-body">
-                              {processEntry.group.items.map(renderItem)}
+                              {processEntry.group.items.map((nestedItem, nestedIndex) =>
+                                renderItem(nestedItem, {
+                                  suppressCliTimestamp: shouldSuppressGroupedCliTimestamp(
+                                    nestedItem,
+                                    groupTimestampText,
+                                    processEntryIndex === 0 && nestedIndex === 0,
+                                  ),
+                                }),
+                              )}
                             </div>
                           </div>
                         );
                       }
-                      return renderItem(processEntry.item);
+                      return renderItem(processEntry.item, {
+                        suppressCliTimestamp: shouldSuppressGroupedCliTimestamp(
+                          processEntry.item,
+                          groupTimestampText,
+                          processEntryIndex === 0,
+                        ),
+                      });
                     })}
                   </div>
                 )}
@@ -928,7 +962,15 @@ export const Messages = memo(function Messages({
                 </div>
                 {!isCollapsed && (
                   <div className="tool-group-body" id={groupBodyId}>
-                    {group.items.map(renderItem)}
+                    {group.items.map((item, index) =>
+                      renderItem(item, {
+                        suppressCliTimestamp: shouldSuppressGroupedCliTimestamp(
+                          item,
+                          groupTimestampText,
+                          index === 0,
+                        ),
+                      }),
+                    )}
                   </div>
                 )}
               </div>

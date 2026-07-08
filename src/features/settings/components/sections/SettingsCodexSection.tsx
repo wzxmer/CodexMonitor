@@ -818,7 +818,7 @@ export function SettingsCodexSection({
           />
           <button
             type="button"
-            className="settings-button-compact"
+            className="ghost settings-button-compact"
             disabled={!keyProfileDraftValid}
             onClick={handleAddKeyProfile}
           >

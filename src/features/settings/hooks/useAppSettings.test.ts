@@ -57,7 +57,7 @@ describe("useAppSettings", () => {
     expect(result.current.settings.remoteBackendHost).toBe("example:1234");
   });
 
-  it("migrates retired message reading styles to bubble", async () => {
+  it("migrates retired comfortable message reading style to native", async () => {
     getAppSettingsMock.mockResolvedValue(
       ({
         messageReadingStyle: "comfortable",
@@ -68,7 +68,7 @@ describe("useAppSettings", () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.settings.messageReadingStyle).toBe("bubble");
+    expect(result.current.settings.messageReadingStyle).toBe("native");
 
     await act(async () => {
       await result.current.saveSettings({
@@ -82,6 +82,20 @@ describe("useAppSettings", () => {
         messageReadingStyle: "bubble",
       }),
     );
+  });
+
+  it("keeps native message reading style", async () => {
+    getAppSettingsMock.mockResolvedValue(
+      ({
+        messageReadingStyle: "native",
+      } as unknown) as AppSettings,
+    );
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.messageReadingStyle).toBe("native");
   });
 
   it("keeps defaults when getAppSettings fails", async () => {

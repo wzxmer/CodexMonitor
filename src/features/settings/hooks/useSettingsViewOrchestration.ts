@@ -226,6 +226,10 @@ export function useSettingsViewOrchestration({
       onUpdateAppSettings,
     },
     displaySectionProps,
+    petsSectionProps: {
+      appSettings,
+      onUpdateAppSettings,
+    },
     composerSectionProps: {
       appSettings,
       followUpShortcutLabel,
