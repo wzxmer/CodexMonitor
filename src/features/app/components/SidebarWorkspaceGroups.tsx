@@ -52,6 +52,7 @@ type SidebarWorkspaceGroupsProps = {
   threadListLoadingByWorkspace: Record<string, boolean>;
   threadListPagingByWorkspace: Record<string, boolean>;
   threadListCursorByWorkspace: Record<string, string | null>;
+  localCodexHiddenThreadIds: Set<string>;
   expandedWorkspaces: Set<string>;
   activeWorkspaceId: string | null;
   activeThreadId: string | null;
@@ -238,6 +239,15 @@ function groupLocalCodexRowsByProject(rows: ThreadRowEntry[], unknownLabel: stri
   });
 
   return [...groups.values()];
+}
+
+function hideLocalCodexRowsByRootThreadId(
+  rows: ThreadRowEntry[],
+  hiddenThreadIds: Set<string>,
+) {
+  return splitRowsByRoot(rows)
+    .filter((group) => !hiddenThreadIds.has(group.root.thread.id))
+    .flatMap((group) => group.rows);
 }
 
 function resolveLocalCodexProjectWorkspaceId(
@@ -437,6 +447,7 @@ function LocalCodexWorkspaceEntry({
   threadListLoadingByWorkspace,
   threadListPagingByWorkspace,
   threadListCursorByWorkspace,
+  localCodexHiddenThreadIds,
   expandedWorkspaces,
   activeWorkspaceId,
   activeThreadId,
@@ -456,17 +467,25 @@ function LocalCodexWorkspaceEntry({
   const { t } = useI18n();
   const threads = threadsByWorkspace[workspace.id] ?? [];
   const isExpanded = isSearchActive || expandedWorkspaces.has(workspace.id);
-  const { pinnedRows, unpinnedRows, totalRoots } = getThreadRows(
+  const { pinnedRows, unpinnedRows } = getThreadRows(
     threads,
     true,
     workspace.id,
     getPinTimestamp,
     pinnedThreadsVersion,
   );
+  const visiblePinnedRows = hideLocalCodexRowsByRootThreadId(
+    pinnedRows,
+    localCodexHiddenThreadIds,
+  );
+  const visibleUnpinnedRows = hideLocalCodexRowsByRootThreadId(
+    unpinnedRows,
+    localCodexHiddenThreadIds,
+  );
   const nextCursor = threadListCursorByWorkspace[workspace.id] ?? null;
   const { visibleRows, displayRootCount } = getVisibleLocalCodexThreadListState({
-    rows: [...pinnedRows, ...unpinnedRows],
-    totalRoots: countRootRows(pinnedRows) + totalRoots,
+    rows: [...visiblePinnedRows, ...visibleUnpinnedRows],
+    totalRoots: countRootRows(visiblePinnedRows) + countRootRows(visibleUnpinnedRows),
     query: normalizedQuery,
     isSearchActive,
   });
@@ -557,6 +576,7 @@ function SidebarWorkspaceEntry({
   threadListLoadingByWorkspace,
   threadListPagingByWorkspace,
   threadListCursorByWorkspace,
+  localCodexHiddenThreadIds,
   expandedWorkspaces,
   activeWorkspaceId,
   activeThreadId,
@@ -616,6 +636,7 @@ function SidebarWorkspaceEntry({
         threadListLoadingByWorkspace={threadListLoadingByWorkspace}
         threadListPagingByWorkspace={threadListPagingByWorkspace}
         threadListCursorByWorkspace={threadListCursorByWorkspace}
+        localCodexHiddenThreadIds={localCodexHiddenThreadIds}
         expandedWorkspaces={expandedWorkspaces}
         activeWorkspaceId={activeWorkspaceId}
         activeThreadId={activeThreadId}

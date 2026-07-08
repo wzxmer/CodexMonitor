@@ -458,6 +458,20 @@ export const Sidebar = memo(function Sidebar({
     threadListCursorByWorkspace,
     workspaces,
   ]);
+  const localCodexHiddenThreadIds = useMemo(() => {
+    const threadIds = new Set<string>();
+    workspaces.forEach((workspace) => {
+      if (isLocalCodexWorkspaceId(workspace.id)) {
+        return;
+      }
+      (threadsByWorkspace[workspace.id] ?? []).forEach((thread) => {
+        if (thread.id) {
+          threadIds.add(thread.id);
+        }
+      });
+    });
+    return threadIds;
+  }, [threadsByWorkspace, workspaces]);
 
   const renderHighlightedName = useCallback(
     (name: string) => {
@@ -1155,6 +1169,7 @@ export const Sidebar = memo(function Sidebar({
                   threadListLoadingByWorkspace={threadListLoadingByWorkspace}
                   threadListPagingByWorkspace={threadListPagingByWorkspace}
                   threadListCursorByWorkspace={threadListCursorByWorkspace}
+                  localCodexHiddenThreadIds={localCodexHiddenThreadIds}
                   expandedWorkspaces={expandedWorkspaces}
                   activeWorkspaceId={activeWorkspaceId}
                   activeThreadId={activeThreadId}

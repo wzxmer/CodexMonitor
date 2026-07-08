@@ -456,6 +456,72 @@ describe("Sidebar", () => {
     });
   });
 
+  it("hides active project threads from local Codex history by thread id", () => {
+    const projectWorkspace = {
+      id: "ws-1",
+      name: "Alpha Project",
+      path: "/tmp/alpha",
+      connected: true,
+      settings: { sidebarCollapsed: false },
+    };
+    const localCodexWorkspace = {
+      id: LOCAL_CODEX_WORKSPACE_ID,
+      name: LOCAL_CODEX_WORKSPACE_NAME,
+      path: "",
+      connected: true,
+      settings: { sidebarCollapsed: false },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[projectWorkspace, localCodexWorkspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Workspaces",
+            workspaces: [projectWorkspace],
+          },
+          {
+            id: LOCAL_CODEX_GROUP_ID,
+            name: LOCAL_CODEX_GROUP_NAME,
+            workspaces: [localCodexWorkspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [
+            {
+              id: "thread-shared",
+              name: "Active project thread",
+              cwd: "/tmp/alpha",
+              updatedAt: 1000,
+            },
+          ],
+          [LOCAL_CODEX_WORKSPACE_ID]: [
+            {
+              id: "thread-shared",
+              name: "Duplicate history thread",
+              cwd: "/tmp/alpha",
+              updatedAt: 1000,
+            },
+            {
+              id: "thread-history-only",
+              name: "History only thread",
+              cwd: "/tmp/alpha",
+              updatedAt: 900,
+            },
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "展开 本机 Codex 历史会话" }));
+
+    expect(screen.getByText("Active project thread")).toBeTruthy();
+    expect(screen.queryByText("Duplicate history thread")).toBeNull();
+    expect(screen.getByText("History only thread")).toBeTruthy();
+  });
+
   it("keeps the parent project visible when only a worktree thread matches search", async () => {
     render(
       <Sidebar
