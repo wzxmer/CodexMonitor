@@ -76,8 +76,8 @@ fn temp_converted_image_path(path: &str, extension: &str) -> PathBuf {
         .chars()
         .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
         .collect::<String>();
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
         .map(|value| value.as_millis())
         .unwrap_or_default();
     std::env::temp_dir().join(format!("codex-monitor-image-{safe_stem}-{ts}.{extension}"))
