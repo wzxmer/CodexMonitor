@@ -117,6 +117,10 @@ type ExploreRowProps = {
   item: Extract<ConversationItem, { kind: "explore" }>;
 };
 
+type ProcessRowProps = {
+  item: Extract<ConversationItem, { kind: "process" }>;
+};
+
 type CommandOutputProps = {
   output: string;
 };
@@ -871,6 +875,35 @@ export const UserInputRow = memo(function UserInputRow({
             })}
           </div>
         )}
+      </div>
+    </div>
+  );
+});
+
+function processSummary(item: Extract<ConversationItem, { kind: "process" }>) {
+  if (item.processType === "skillTriggered") {
+    return { icon: Brain, label: "Using skill" };
+  }
+  if (item.processType === "agentSpawned") {
+    return { icon: Users, label: "Spawned agent" };
+  }
+  return { icon: Users, label: "Using agent" };
+}
+
+export const ProcessRow = memo(function ProcessRow({ item }: ProcessRowProps) {
+  const summary = processSummary(item);
+  const Icon = summary.icon;
+  return (
+    <div className="tool-inline process-inline">
+      <div className="tool-inline-bar-toggle" aria-hidden />
+      <div className="tool-inline-content">
+        <div className="process-inline-summary">
+          <Icon className="tool-inline-icon completed" size={14} aria-hidden />
+          <span className="tool-inline-label">{summary.label}:</span>
+          <span className="tool-inline-value">{item.label}</span>
+          {item.status && <span className="tool-inline-status">{item.status}</span>}
+        </div>
+        {item.detail && <div className="tool-inline-detail">{item.detail}</div>}
       </div>
     </div>
   );

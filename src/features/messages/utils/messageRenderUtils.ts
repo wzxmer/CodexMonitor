@@ -576,6 +576,8 @@ export function scrollKeyForItems(items: ConversationItem[]) {
       return `${last.id}-${last.summary.length}-${last.content.length}`;
     case "explore":
       return `${last.id}-${last.status}-${last.entries.length}`;
+    case "process":
+      return `${last.id}-${last.processType}-${last.label.length}-${last.status ?? ""}`;
     case "tool":
       return `${last.id}-${last.status ?? ""}-${last.output?.length ?? 0}`;
     case "diff":
@@ -628,6 +630,8 @@ export function getConversationItemSearchText(item: ConversationItem): string {
       return item.entries
         .map((entry) => [entry.kind, entry.label, entry.detail ?? ""].join("\n"))
         .join("\n");
+    case "process":
+      return [item.processType, item.label, item.detail ?? "", item.status ?? ""].join("\n");
     case "tool":
       return [
         item.title,

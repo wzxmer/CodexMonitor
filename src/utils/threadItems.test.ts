@@ -1009,6 +1009,45 @@ describe("threadItems", () => {
     }
   });
 
+  it("builds structured skill process items", () => {
+    const item = buildConversationItem({
+      type: "skillTriggered",
+      id: "skill-1",
+      skill: { name: "diagnose" },
+      reason: "bug report matched",
+      status: "started",
+    });
+
+    expect(item).toEqual({
+      id: "skill-1",
+      kind: "process",
+      processType: "skillTriggered",
+      label: "diagnose",
+      detail: "bug report matched",
+      status: "started",
+    });
+  });
+
+  it("builds structured agent process items from thread history", () => {
+    const item = buildConversationItemFromThreadItem({
+      type: "agent_spawned",
+      id: "agent-1",
+      agent: {
+        agent_nickname: "Atlas",
+        agent_role: "reviewer",
+      },
+    });
+
+    expect(item).toEqual({
+      id: "agent-1",
+      kind: "process",
+      processType: "agentSpawned",
+      label: "Atlas [reviewer]",
+      detail: undefined,
+      status: undefined,
+    });
+  });
+
   it("parses ISO timestamps for thread updates", () => {
     const timestamp = getThreadTimestamp({ updated_at: "2025-01-01T00:00:00Z" });
     expect(timestamp).toBe(Date.parse("2025-01-01T00:00:00Z"));

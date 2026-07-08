@@ -50,6 +50,13 @@ export function normalizeItem(item: ConversationItem): ConversationItem {
   if (item.kind === "explore") {
     return item;
   }
+  if (item.kind === "process") {
+    return {
+      ...item,
+      label: truncateText(item.label, 300),
+      detail: item.detail ? truncateText(item.detail, 1000) : item.detail,
+    };
+  }
   if (item.kind === "reasoning") {
     return {
       ...item,

@@ -62,6 +62,10 @@ export type WorkspaceThreadListState = {
   uniqueThreads: ThreadRecord[];
 };
 
+function isOptimisticLocalItem(item: ConversationItem) {
+  return item.id.startsWith("local-user-");
+}
+
 export function buildWorkspacePathLookup(
   workspaces: WorkspaceInfo[],
 ): WorkspacePathLookup {
@@ -151,13 +155,17 @@ export function buildResumeHydrationPlan({
     items.length > 0 &&
     localItems.length > 0 &&
     items.some((item) => localItems.some((local) => local.id === item.id));
+  const mergeCandidates =
+    items.length > 0 && localItems.length > 0 && !hasOverlap
+      ? localItems.filter(isOptimisticLocalItem)
+      : localItems;
   const mergedItems =
     items.length > 0
       ? replaceLocal
         ? items
-        : localItems.length > 0 && !hasOverlap
-          ? localItems
-          : mergeThreadItems(items, localItems)
+        : mergeCandidates.length > 0
+          ? mergeThreadItems(items, mergeCandidates)
+          : items
       : localItems;
   const preview = asString(thread.preview ?? "");
   const customName = getCustomName(workspaceId, threadId);

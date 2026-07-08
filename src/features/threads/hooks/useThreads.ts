@@ -51,6 +51,7 @@ import {
   getThreadListNextCursor,
   resolveWorkspaceIdForThreadPath,
 } from "@threads/utils/threadActionHelpers";
+import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 
 type UseThreadsOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -662,7 +663,10 @@ export function useThreads({
       ? autoArchiveThreadsDays
       : 7;
     const connectedWorkspaces = workspaces.filter(
-      (workspace) => workspace.id && workspace.connected,
+      (workspace) =>
+        workspace.id &&
+        workspace.connected &&
+        workspace.id !== LOCAL_CODEX_WORKSPACE_ID,
     );
     if (connectedWorkspaces.length === 0) {
       return;

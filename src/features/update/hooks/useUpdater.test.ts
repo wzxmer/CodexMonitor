@@ -95,7 +95,7 @@ describe("useUpdater", () => {
     );
   });
 
-  it("returns to idle when no update is available", async () => {
+  it("reports up-to-date when no update is available", async () => {
     fetchMock.mockResolvedValue(latestReleaseResponse(__APP_VERSION__));
     const { result } = renderHook(() => useUpdater({}));
 
@@ -103,10 +103,10 @@ describe("useUpdater", () => {
       await result.current.startUpdate();
     });
 
-    expect(result.current.state.stage).toBe("idle");
+    expect(result.current.state.stage).toBe("upToDate");
   });
 
-  it("stays idle when no update is available for manual checks", async () => {
+  it("reports up-to-date when no update is available for manual checks", async () => {
     fetchMock.mockResolvedValue(latestReleaseResponse(__APP_VERSION__));
     const { result } = renderHook(() => useUpdater({}));
 
@@ -114,7 +114,7 @@ describe("useUpdater", () => {
       await result.current.checkForUpdates();
     });
 
-    expect(result.current.state.stage).toBe("idle");
+    expect(result.current.state.stage).toBe("upToDate");
   });
 
   it("surfaces an error when the latest release has no compatible installer", async () => {
@@ -238,7 +238,7 @@ describe("useUpdater", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(result.current.state.stage).toBe("idle");
+    expect(result.current.state.stage).toBe("upToDate");
   });
 
   it("cleans stale downloaded installers on startup", async () => {

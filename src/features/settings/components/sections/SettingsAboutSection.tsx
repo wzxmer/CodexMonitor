@@ -172,6 +172,10 @@ export function SettingsAboutSection({
           <div className="settings-help">
             {t("about.newVersion")} <code>{updaterState.version}</code>。
           </div>
+        ) : updaterState.stage === "upToDate" ? (
+          <div className="settings-help">
+            {t("about.latest")}
+          </div>
         ) : null}
 
         <div className="settings-controls">

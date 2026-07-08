@@ -17,7 +17,7 @@ const MANAGED_AGENTS_DIR: &str = "agents";
 const TEMPLATE_BLANK: &str = "blank";
 const DEFAULT_AGENT_MODEL: &str = "gpt-5-codex";
 const DEFAULT_REASONING_EFFORT: &str = "medium";
-const NATIVE_MARKDOWN_IMPORT_FLAG: &str = "native_markdown_imported";
+const LEGACY_NATIVE_MARKDOWN_IMPORT_FLAG: &str = "native_markdown_imported";
 const NATIVE_MARKDOWN_SEARCH_ROOT: &str = ".tmp/plugins";
 
 const fn default_agent_max_depth() -> u32 {
@@ -450,23 +450,18 @@ struct NativeMarkdownAgentCandidate {
 
 fn ensure_default_native_markdown_agents_imported(codex_home: &Path) -> Result<(), String> {
     let (_, mut document) = config_toml_core::load_global_config_document(codex_home)?;
-    if document
-        .get("agents")
-        .and_then(Item::as_table_like)
-        .and_then(|table| table.get(NATIVE_MARKDOWN_IMPORT_FLAG))
-        .and_then(Item::as_bool)
-        .unwrap_or(false)
-    {
-        return Ok(());
-    }
+    let mut changed = remove_legacy_native_markdown_import_flag(&mut document);
 
     let candidates = discover_native_markdown_agent_candidates(codex_home);
     if candidates.is_empty() {
-        return Ok(());
+        return if changed {
+            config_toml_core::persist_global_config_document(codex_home, &document)
+        } else {
+            Ok(())
+        };
     }
     {
         let agents = config_toml_core::ensure_table(&mut document, "agents")?;
-        agents[NATIVE_MARKDOWN_IMPORT_FLAG] = value(true);
         for candidate in candidates {
             if has_agent_name_conflict(agents, candidate.name.as_str(), None) {
                 continue;
@@ -492,10 +487,23 @@ fn ensure_default_native_markdown_agents_imported(codex_home: &Path) -> Result<(
             }
             role["config_file"] = value(pathbuf_to_string(&relative_config_path)?);
             agents[&candidate.name] = Item::Table(role);
+            changed = true;
         }
     }
 
-    config_toml_core::persist_global_config_document(codex_home, &document)
+    if changed {
+        config_toml_core::persist_global_config_document(codex_home, &document)
+    } else {
+        Ok(())
+    }
+}
+
+fn remove_legacy_native_markdown_import_flag(document: &mut Document) -> bool {
+    document
+        .get_mut("agents")
+        .and_then(Item::as_table_mut)
+        .and_then(|agents| agents.remove(LEGACY_NATIVE_MARKDOWN_IMPORT_FLAG))
+        .is_some()
 }
 
 fn discover_native_markdown_agent_candidates(
@@ -709,7 +717,7 @@ fn validate_max_depth(value: u32) -> Result<(), String> {
 }
 
 fn is_reserved_agents_key(name: &str) -> bool {
-    name == "max_threads" || name == "max_depth" || name == NATIVE_MARKDOWN_IMPORT_FLAG
+    name == "max_threads" || name == "max_depth" || name == LEGACY_NATIVE_MARKDOWN_IMPORT_FLAG
 }
 
 fn has_agent_name_conflict(agents: &Table, name: &str, excluding: Option<&str>) -> bool {
@@ -1186,7 +1194,7 @@ config_file = "agents/researcher.toml"
             .expect("second import is no-op");
 
         let config = std::fs::read_to_string(codex_home.join("config.toml")).expect("read config");
-        assert!(config.contains("native_markdown_imported = true"));
+        assert!(!config.contains("native_markdown_imported"));
         assert!(config.contains("[agents.figma-implementation-agent]"));
         assert!(!config.contains("[agents.openai]"));
 
@@ -1218,6 +1226,34 @@ config_file = "agents/researcher.toml"
             let config = std::fs::read_to_string(config_path).expect("read config");
             assert!(!config.contains("native_markdown_imported"));
         }
+
+        let _ = std::fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn default_native_markdown_import_removes_legacy_import_marker() {
+        let codex_home = temp_dir("codex-home-legacy-native-agent-marker");
+        let config_path = codex_home.join("config.toml");
+        std::fs::write(
+            &config_path,
+            r#"
+[agents]
+native_markdown_imported = true
+max_threads = 8
+
+[agents.researcher]
+description = "Research role"
+config_file = "agents/researcher.toml"
+"#,
+        )
+        .expect("write config");
+
+        ensure_default_native_markdown_agents_imported(&codex_home).expect("remove legacy marker");
+
+        let config = std::fs::read_to_string(config_path).expect("read config");
+        assert!(!config.contains("native_markdown_imported"));
+        assert!(config.contains("max_threads = 8"));
+        assert!(config.contains("[agents.researcher]"));
 
         let _ = std::fs::remove_dir_all(codex_home);
     }

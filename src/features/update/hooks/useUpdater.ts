@@ -15,6 +15,7 @@ import {
 type UpdateStage =
   | "idle"
   | "checking"
+  | "upToDate"
   | "available"
   | "downloading"
   | "installing"
@@ -82,7 +83,7 @@ export function useUpdater({
       const update = await fetchLatestReleaseUpdate(__APP_VERSION__);
       if (!update) {
         updateRef.current = null;
-        setState({ stage: "idle" });
+        setState({ stage: "upToDate" });
         return;
       }
 

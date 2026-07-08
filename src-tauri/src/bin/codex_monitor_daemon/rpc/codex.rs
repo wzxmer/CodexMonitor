@@ -122,9 +122,10 @@ pub(super) async fn try_handle(
             let cursor = parse_optional_string(params, "cursor");
             let limit = parse_optional_u32(params, "limit");
             let sort_key = parse_optional_string(params, "sortKey");
+            let archived = parse_optional_bool(params, "archived");
             Some(
                 state
-                    .list_threads(workspace_id, cursor, limit, sort_key)
+                    .list_threads(workspace_id, cursor, limit, sort_key, archived)
                     .await,
             )
         }

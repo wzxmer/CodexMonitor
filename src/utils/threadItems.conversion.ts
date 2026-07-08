@@ -36,6 +36,124 @@ function extractImageInputValue(input: Record<string, unknown>) {
   return value.trim();
 }
 
+function readNestedRecord(
+  item: Record<string, unknown>,
+  keys: string[],
+): Record<string, unknown> | null {
+  for (const key of keys) {
+    const value = item[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function firstNonEmptyString(
+  item: Record<string, unknown>,
+  keys: string[],
+) {
+  for (const key of keys) {
+    const value = asString(item[key] ?? "").trim();
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
+
+function formatAgentLabel(source: Record<string, unknown>) {
+  const name = firstNonEmptyString(source, [
+    "name",
+    "agentName",
+    "agent_name",
+    "nickname",
+    "agentNickname",
+    "agent_nickname",
+    "id",
+    "agentId",
+    "agent_id",
+  ]);
+  const role = firstNonEmptyString(source, [
+    "role",
+    "agentRole",
+    "agent_role",
+    "description",
+  ]);
+  if (name && role) {
+    return `${name} [${role}]`;
+  }
+  return name || role;
+}
+
+function buildProcessItem(
+  item: Record<string, unknown>,
+  processType: Extract<ConversationItem, { kind: "process" }>["processType"],
+): Extract<ConversationItem, { kind: "process" }> | null {
+  const id = asString(item.id);
+  if (!id) {
+    return null;
+  }
+
+  const skill = readNestedRecord(item, ["skill", "skillTrigger", "skill_trigger"]);
+  const agent = readNestedRecord(item, ["agent", "subAgent", "sub_agent", "subagent"]);
+  const source = processType === "skillTriggered" ? skill ?? item : agent ?? item;
+  const explicitLabel = firstNonEmptyString(item, ["label", "title", "message"]);
+  const label =
+    processType === "skillTriggered"
+      ? firstNonEmptyString(source, ["name", "skillName", "skill_name", "id"])
+      : formatAgentLabel(source);
+  const detail = firstNonEmptyString(item, [
+    "detail",
+    "reason",
+    "trigger",
+    "description",
+  ]);
+
+  if (!label && !explicitLabel) {
+    return null;
+  }
+
+  return {
+    id,
+    kind: "process",
+    processType,
+    label: label || explicitLabel,
+    detail: detail || undefined,
+    status: firstNonEmptyString(item, ["status", "state"]) || undefined,
+  };
+}
+
+function processTypeFromItemType(
+  type: string,
+): Extract<ConversationItem, { kind: "process" }>["processType"] | null {
+  const normalized = type.replace(/[_\s-]/g, "").toLowerCase();
+  if (
+    normalized === "skilltriggered" ||
+    normalized === "skillselected" ||
+    normalized === "skilluse" ||
+    normalized === "skillused"
+  ) {
+    return "skillTriggered";
+  }
+  if (
+    normalized === "agentselected" ||
+    normalized === "agentswitched" ||
+    normalized === "agentassigned"
+  ) {
+    return "agentSelected";
+  }
+  if (
+    normalized === "agentspawned" ||
+    normalized === "subagentspawned" ||
+    normalized === "agentstarted" ||
+    normalized === "subagentstarted"
+  ) {
+    return "agentSpawned";
+  }
+  return null;
+}
+
 function parseUserInputs(inputs: Array<Record<string, unknown>>) {
   const textParts: string[] = [];
   const images: string[] = [];
@@ -84,6 +202,10 @@ export function buildConversationItem(
   }
   if (type === "agentMessage") {
     return null;
+  }
+  const processType = processTypeFromItemType(type);
+  if (processType) {
+    return buildProcessItem(item, processType);
   }
   if (type === "userMessage") {
     const content = Array.isArray(item.content) ? item.content : [];

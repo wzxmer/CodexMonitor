@@ -5,7 +5,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use tokio::sync::oneshot::error::TryRecvError;
 use tokio::sync::{oneshot, Mutex};
@@ -371,6 +371,29 @@ async fn resolve_workspace_path_core(
     Ok(entry.path.clone())
 }
 
+fn build_read_thread_params(thread_id: String) -> Value {
+    json!({ "threadId": thread_id, "includeTurns": true })
+}
+
+fn build_thread_list_params(
+    cursor: Option<String>,
+    limit: Option<u32>,
+    sort_key: Option<String>,
+    archived: Option<bool>,
+) -> Value {
+    json!({
+        "cursor": cursor,
+        "limit": limit,
+        "sortKey": sort_key,
+        "archived": archived,
+        // Keep interactive and sub-agent sessions visible across CLI versions so
+        // thread/list refreshes do not drop valid historical conversations.
+        // Intentionally exclude generic "subAgent" so parentless internal jobs
+        // (for example memory consolidation) do not leak back into app state.
+        "sourceKinds": THREAD_LIST_SOURCE_KINDS
+    })
+}
+
 pub(crate) async fn start_thread_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
@@ -405,7 +428,7 @@ pub(crate) async fn read_thread_core(
     thread_id: String,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({ "threadId": thread_id });
+    let params = build_read_thread_params(thread_id);
     session
         .send_request_for_workspace(&workspace_id, "thread/read", params)
         .await
@@ -453,18 +476,10 @@ pub(crate) async fn list_threads_core(
     cursor: Option<String>,
     limit: Option<u32>,
     sort_key: Option<String>,
+    archived: Option<bool>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({
-        "cursor": cursor,
-        "limit": limit,
-        "sortKey": sort_key,
-        // Keep interactive and sub-agent sessions visible across CLI versions so
-        // thread/list refreshes do not drop valid historical conversations.
-        // Intentionally exclude generic "subAgent" so parentless internal jobs
-        // (for example memory consolidation) do not leak back into app state.
-        "sourceKinds": THREAD_LIST_SOURCE_KINDS
-    });
+    let params = build_thread_list_params(cursor, limit, sort_key, archived);
     session
         .send_request_for_workspace(&workspace_id, "thread/list", params)
         .await
@@ -1224,5 +1239,32 @@ mod tests {
         assert!(THREAD_LIST_SOURCE_KINDS.contains(&"subAgentReview"));
         assert!(THREAD_LIST_SOURCE_KINDS.contains(&"subAgentCompact"));
         assert!(THREAD_LIST_SOURCE_KINDS.contains(&"subAgentThreadSpawn"));
+    }
+
+    #[test]
+    fn read_thread_params_request_turn_history() {
+        let params = build_read_thread_params("thread-1".to_string());
+
+        assert_eq!(params["threadId"], json!("thread-1"));
+        assert_eq!(params["includeTurns"], json!(true));
+    }
+
+    #[test]
+    fn thread_list_params_forward_archived_filter() {
+        let params = build_thread_list_params(
+            Some("cursor-1".to_string()),
+            Some(50),
+            Some("updated_at".to_string()),
+            Some(true),
+        );
+
+        assert_eq!(params["cursor"], json!("cursor-1"));
+        assert_eq!(params["limit"], json!(50));
+        assert_eq!(params["sortKey"], json!("updated_at"));
+        assert_eq!(params["archived"], json!(true));
+        assert!(params["sourceKinds"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("cli")));
     }
 }

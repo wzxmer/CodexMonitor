@@ -42,6 +42,7 @@ import {
   DiffRow,
   ExploreRow,
   MessageRow,
+  ProcessRow,
   ReasoningRow,
   ReviewRow,
   ToolRow,
@@ -602,6 +603,9 @@ export const Messages = memo(function Messages({
     if (item.kind === "explore") {
       return <ExploreRow key={item.id} item={item} />;
     }
+    if (item.kind === "process") {
+      return <ProcessRow key={item.id} item={item} />;
+    }
     return null;
   };
 
@@ -983,9 +987,11 @@ export const Messages = memo(function Messages({
                     <span className="tool-group-chevron" aria-hidden>
                       <ChevronIcon size={14} />
                     </span>
-                    <span className="tool-group-summary">{summaryText}</span>
+                    <span className="tool-group-summary-content">
+                      <span className="tool-group-summary">{summaryText}</span>
+                      {group.id === lineChangeStatsGroupId && renderLineChangeStats()}
+                    </span>
                   </button>
-                  {group.id === lineChangeStatsGroupId && renderLineChangeStats()}
                 </div>
                 {!isCollapsed && (
                   <div className="tool-group-body" id={groupBodyId}>
@@ -1059,9 +1065,11 @@ export const Messages = memo(function Messages({
                     <span className="tool-group-chevron" aria-hidden>
                       <ChevronIcon size={14} />
                     </span>
-                    <span className="tool-group-summary">{summaryText}</span>
+                    <span className="tool-group-summary-content">
+                      <span className="tool-group-summary">{summaryText}</span>
+                      {group.id === lineChangeStatsGroupId && renderLineChangeStats()}
+                    </span>
                   </button>
-                  {group.id === lineChangeStatsGroupId && renderLineChangeStats()}
                 </div>
                 {!isCollapsed && (
                   <div className="tool-group-body" id={groupBodyId}>

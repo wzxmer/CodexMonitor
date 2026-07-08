@@ -17,6 +17,7 @@ import {
   steerTurn,
 } from "@services/tauri";
 import { STORAGE_KEY_DETACHED_REVIEW_LINKS } from "@threads/utils/threadStorage";
+import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 import { useQueuedSend } from "./useQueuedSend";
 import { useThreads } from "./useThreads";
 
@@ -554,6 +555,46 @@ describe("useThreads UX integration", () => {
       "ws-1",
       "thread-other-workspace",
     );
+  });
+
+  it("does not scan the local Codex history workspace during auto archive", async () => {
+    now = Date.UTC(2026, 0, 10);
+    const localCodexWorkspace: WorkspaceInfo = {
+      id: LOCAL_CODEX_WORKSPACE_ID,
+      name: "本机 Codex 历史会话",
+      path: "",
+      connected: true,
+      settings: { sidebarCollapsed: false },
+    };
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-local-old",
+            cwd: "/tmp/codex",
+            updated_at: now - 5 * DAY_MS,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(archiveThread).mockResolvedValue({});
+
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: localCodexWorkspace,
+        workspaces: [localCodexWorkspace],
+        autoArchiveThreadsEnabled: true,
+        autoArchiveThreadsDays: 3,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(vi.mocked(archiveThread)).not.toHaveBeenCalled();
+    expect(vi.mocked(listThreads)).not.toHaveBeenCalled();
   });
 
   it("skips active and pinned threads during auto archive", async () => {

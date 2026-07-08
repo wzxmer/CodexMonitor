@@ -356,6 +356,94 @@ describe("useThreadActions", () => {
     });
   });
 
+  it("merges server history with stale local items when resume has no overlap", async () => {
+    const serverItem: ConversationItem = {
+      id: "server-assistant-1",
+      kind: "message",
+      role: "assistant",
+      text: "Server history",
+    };
+    const staleLocalItem: ConversationItem = {
+      id: "local-user-stale",
+      kind: "message",
+      role: "user",
+      text: "Stale local draft",
+    };
+    const mergedItems = [serverItem, staleLocalItem];
+
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-2",
+          preview: "Server history",
+          updated_at: 555,
+        },
+      },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([serverItem]);
+    vi.mocked(mergeThreadItems).mockReturnValue(mergedItems);
+    vi.mocked(isReviewingFromThread).mockReturnValue(false);
+
+    const { result, dispatch } = renderActions({
+      itemsByThread: { "thread-2": [staleLocalItem] },
+    });
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-2", true);
+    });
+
+    expect(mergeThreadItems).toHaveBeenCalledWith([serverItem], [staleLocalItem]);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "thread-2",
+      items: mergedItems,
+      trimItems: false,
+    });
+  });
+
+  it("drops non-optimistic local cache when resume server history has no overlap", async () => {
+    const serverItem: ConversationItem = {
+      id: "server-assistant-1",
+      kind: "message",
+      role: "assistant",
+      text: "Server history",
+    };
+    const staleLocalItem: ConversationItem = {
+      id: "other-thread-assistant-1",
+      kind: "message",
+      role: "assistant",
+      text: "Other thread history",
+    };
+
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-2",
+          preview: "Server history",
+          updated_at: 555,
+        },
+      },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([serverItem]);
+    vi.mocked(isReviewingFromThread).mockReturnValue(false);
+
+    const { result, dispatch } = renderActions({
+      itemsByThread: { "thread-2": [staleLocalItem] },
+    });
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-2", true);
+    });
+
+    expect(mergeThreadItems).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "thread-2",
+      items: [serverItem],
+      trimItems: false,
+    });
+  });
+
   it("links resumed spawn subagent to its parent from thread source", async () => {
     vi.mocked(resumeThread).mockResolvedValue({
       result: {
@@ -1077,6 +1165,161 @@ describe("useThreadActions", () => {
           updatedAt: 4500,
           createdAt: 0,
           cwd: "/tmp/outside",
+        },
+      ],
+    });
+  });
+
+  it("includes archived Codex threads in the local sessions workspace", async () => {
+    vi.mocked(listThreads)
+      .mockResolvedValueOnce({
+        result: {
+          data: [
+            {
+              id: "thread-live",
+              cwd: "/tmp/codex",
+              preview: "Live thread",
+              updated_at: 5000,
+            },
+          ],
+          nextCursor: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          data: [
+            {
+              id: "thread-archived",
+              cwd: "/tmp/codex",
+              preview: "Archived thread",
+              updated_at: 4500,
+            },
+          ],
+          nextCursor: null,
+        },
+      });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspaces([localCodexWorkspace]);
+    });
+
+    expect(listThreads).toHaveBeenNthCalledWith(
+      1,
+      LOCAL_CODEX_WORKSPACE_ID,
+      null,
+      100,
+      "updated_at",
+    );
+    expect(listThreads).toHaveBeenNthCalledWith(
+      2,
+      LOCAL_CODEX_WORKSPACE_ID,
+      null,
+      100,
+      "updated_at",
+      true,
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: LOCAL_CODEX_WORKSPACE_ID,
+      sortKey: "updated_at",
+      preserveAnchors: true,
+      threads: [
+        {
+          id: "thread-live",
+          name: "Live thread",
+          updatedAt: 5000,
+          createdAt: 0,
+          cwd: "/tmp/codex",
+        },
+        {
+          id: "thread-archived",
+          name: "Archived thread",
+          updatedAt: 4500,
+          createdAt: 0,
+          cwd: "/tmp/codex",
+        },
+      ],
+    });
+  });
+
+  it("does not restore archived Codex threads into normal workspace lists", async () => {
+    vi.mocked(listThreads)
+      .mockResolvedValueOnce({
+        result: {
+          data: [
+            {
+              id: "thread-live",
+              cwd: "/tmp/codex",
+              preview: "Live thread",
+              updated_at: 5000,
+            },
+          ],
+          nextCursor: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        result: {
+          data: [
+            {
+              id: "thread-archived",
+              cwd: "/tmp/codex",
+              preview: "Archived thread",
+              updated_at: 4500,
+            },
+          ],
+          nextCursor: null,
+        },
+      });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspaces([workspace, localCodexWorkspace]);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: "ws-1",
+      sortKey: "updated_at",
+      preserveAnchors: true,
+      threads: [
+        {
+          id: "thread-live",
+          name: "Live thread",
+          updatedAt: 5000,
+          createdAt: 0,
+        },
+      ],
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: LOCAL_CODEX_WORKSPACE_ID,
+      sortKey: "updated_at",
+      preserveAnchors: true,
+      threads: [
+        {
+          id: "thread-live",
+          name: "Live thread",
+          updatedAt: 5000,
+          createdAt: 0,
+          cwd: "/tmp/codex",
+        },
+        {
+          id: "thread-archived",
+          name: "Archived thread",
+          updatedAt: 4500,
+          createdAt: 0,
+          cwd: "/tmp/codex",
         },
       ],
     });

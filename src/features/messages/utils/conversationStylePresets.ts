@@ -17,7 +17,6 @@ export type ConversationStylePreset = {
     AppSettings,
     | "theme"
     | "themeAccent"
-    | "messageReadingStyle"
     | "messageCanvasColor"
     | "messageUserBubbleColor"
     | "messageUserTextColor"
@@ -36,7 +35,6 @@ export const CONVERSATION_STYLE_PRESETS: ConversationStylePreset[] = [
     settings: {
       theme: "light",
       themeAccent: "orange",
-      messageReadingStyle: "native",
       messageCanvasColor: "#ffffff",
       messageUserBubbleColor: "#fff7ed",
       messageUserTextColor: "#2e2118",
@@ -53,7 +51,6 @@ export const CONVERSATION_STYLE_PRESETS: ConversationStylePreset[] = [
     settings: {
       theme: "light",
       themeAccent: "orange",
-      messageReadingStyle: "native",
       messageCanvasColor: "#fffaf5",
       messageUserBubbleColor: "#fff4e8",
       messageUserTextColor: "#332519",
@@ -70,7 +67,6 @@ export const CONVERSATION_STYLE_PRESETS: ConversationStylePreset[] = [
     settings: {
       theme: "dark",
       themeAccent: "orange",
-      messageReadingStyle: "native",
       messageCanvasColor: "#12100e",
       messageUserBubbleColor: "#3a2617",
       messageUserTextColor: "#fff1df",
@@ -87,7 +83,6 @@ export const CONVERSATION_STYLE_PRESETS: ConversationStylePreset[] = [
     settings: {
       theme: "dark",
       themeAccent: "orange",
-      messageReadingStyle: "cli",
       messageCanvasColor: "#111315",
       messageUserBubbleColor: "#3a2a1d",
       messageUserTextColor: "#fff3df",

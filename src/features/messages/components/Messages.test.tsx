@@ -77,6 +77,42 @@ describe("Messages", () => {
     expect(screen.getByText(/超过初始加载上限 2 条/)).toBeTruthy();
   });
 
+  it("renders structured process items for skills and agents", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "skill-1",
+        kind: "process",
+        processType: "skillTriggered",
+        label: "diagnose",
+        detail: "bug report matched",
+        status: "started",
+      },
+      {
+        id: "agent-1",
+        kind: "process",
+        processType: "agentSpawned",
+        label: "Atlas [reviewer]",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByText("Using skill:")).toBeTruthy();
+    expect(screen.getByText("diagnose")).toBeTruthy();
+    expect(screen.getByText("bug report matched")).toBeTruthy();
+    expect(screen.getByText("Spawned agent:")).toBeTruthy();
+    expect(screen.getByText("Atlas [reviewer]")).toBeTruthy();
+  });
+
   it("opens current-session search with Ctrl+F and jumps to matching content", async () => {
     const scrollIntoViewMock = vi.fn();
     HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
@@ -1727,7 +1763,7 @@ describe("Messages", () => {
     expect(screen.getByText("git status")).toBeTruthy();
   });
 
-  it("renders turn line changes at the end of process group headers", async () => {
+  it("renders turn line changes inline after process group summary text", async () => {
     const items: ConversationItem[] = [
       {
         id: "assistant-process-line-stats",
@@ -1778,6 +1814,7 @@ describe("Messages", () => {
     const stats = container.querySelector(".tool-group-header .tool-group-line-change-stats");
     expect(stats?.textContent).toContain("+2");
     expect(stats?.textContent).toContain("-1");
+    expect(stats?.parentElement?.classList.contains("tool-group-summary-content")).toBe(true);
     expect(container.querySelector(".message-line-change-stats")).toBeNull();
   });
 
@@ -2132,7 +2169,7 @@ describe("Messages", () => {
     expect(screen.getByText("Session stopped.")).toBeTruthy();
   });
 
-  it("updates conversation colors and font from the style popover", () => {
+  it("updates conversation colors and font from the style popover without changing reading style", () => {
     const onUpdateConversationStyle = vi.fn();
     const items: ConversationItem[] = [
       {
@@ -2198,9 +2235,9 @@ describe("Messages", () => {
       expect.objectContaining({
         theme: "dark",
         themeAccent: "orange",
-        messageReadingStyle: "cli",
       }),
     );
+    expect(firstPresetSettings).not.toHaveProperty("messageReadingStyle");
     expect(onUpdateConversationStyle).toHaveBeenCalledWith({
       messageAssistantBubbleColor: "#f0faf6",
       messageAssistantAccentColor: "#4aa389",
@@ -2255,9 +2292,9 @@ describe("Messages", () => {
       expect.objectContaining({
         theme: "light",
         themeAccent: "orange",
-        messageReadingStyle: "native",
       }),
     );
+    expect(presetSettings).not.toHaveProperty("messageReadingStyle");
   });
 
   it("closes the conversation style popover when focus leaves it", () => {

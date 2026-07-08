@@ -23,7 +23,7 @@ describe("SettingsDisplaySection", () => {
     vi.clearAllMocks();
   });
 
-  it("applies a style preset to theme and message colors", () => {
+  it("applies a color preset without changing the reading style", () => {
     const onUpdateAppSettings = vi.fn(async (_next: AppSettings) => {});
 
     render(
@@ -85,7 +85,7 @@ describe("SettingsDisplaySection", () => {
       expect.objectContaining({
         theme: "dark",
         themeAccent: "orange",
-        messageReadingStyle: "cli",
+        messageReadingStyle: "bubble",
       }),
     );
   });
@@ -142,7 +142,7 @@ describe("SettingsDisplaySection", () => {
       expect.objectContaining({
         theme: "light",
         themeAccent: "orange",
-        messageReadingStyle: "native",
+        messageReadingStyle: "bubble",
         messageCanvasColor: "#ffffff",
         messageAssistantBubbleColor: "#ffffff",
       }),

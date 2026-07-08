@@ -117,7 +117,7 @@ export function UpdateToast({
     );
   }
 
-  if (state.stage === "idle") {
+  if (state.stage === "idle" || state.stage === "upToDate") {
     return null;
   }
 

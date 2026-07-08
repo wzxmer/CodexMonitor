@@ -134,6 +134,14 @@ export type ConversationItem =
     }
   | {
       id: string;
+      kind: "process";
+      processType: "skillTriggered" | "agentSelected" | "agentSpawned";
+      label: string;
+      detail?: string;
+      status?: string;
+    }
+  | {
+      id: string;
       kind: "tool";
       toolType: string;
       title: string;

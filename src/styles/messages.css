@@ -1055,6 +1055,7 @@
 
 .messages-reading-cli .tool-inline.tool-inline-row,
 .messages-reading-cli .tool-inline.explore-inline,
+.messages-reading-cli .tool-inline.process-inline,
 .messages-reading-cli .tool-inline.reasoning-inline,
 .messages-reading-cli .tool-inline.user-input-inline {
   padding: 6px 10px 6px 34px;
@@ -1346,7 +1347,8 @@
 }
 
 .tool-inline.tool-inline-row,
-.tool-inline.explore-inline {
+.tool-inline.explore-inline,
+.tool-inline.process-inline {
   border: none;
   border-radius: 0;
   background: transparent;
@@ -1561,6 +1563,16 @@
   gap: 8px;
   font-size: 12px;
   color: var(--text-stronger);
+}
+
+.process-inline-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-stronger);
+  min-width: 0;
 }
 
 .explore-inline-title {
@@ -1792,6 +1804,18 @@
   white-space: nowrap;
 }
 
+.tool-group-summary-content {
+  display: inline-flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.tool-group-summary-content .tool-group-summary {
+  flex: 0 1 auto;
+}
+
 .tool-group-timestamp {
   display: none;
 }
@@ -1912,6 +1936,7 @@
 .tool-inline-detail,
 .tool-inline-status,
 .explore-inline-header,
+.process-inline-summary,
 .explore-inline-label,
 .explore-inline-detail,
 .user-input-inline-question,

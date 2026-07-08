@@ -1165,8 +1165,15 @@ export async function listThreads(
   cursor?: string | null,
   limit?: number | null,
   sortKey?: "created_at" | "updated_at" | null,
+  archived?: boolean | null,
 ) {
-  return invoke<any>("list_threads", { workspaceId, cursor, limit, sortKey });
+  return invoke<any>("list_threads", {
+    workspaceId,
+    cursor,
+    limit,
+    sortKey,
+    archived,
+  });
 }
 
 export async function listMcpServerStatus(

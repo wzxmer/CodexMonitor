@@ -934,6 +934,32 @@ describe("SettingsView About", () => {
       expect(onToggleAutomaticAppUpdateChecks).toHaveBeenCalledTimes(1);
     });
   });
+
+  it("shows an up-to-date message after checking app updates", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        tag_name: `v${__APP_VERSION__}`,
+        html_url: `https://github.com/wzxmer/CodexMonitor/releases/tag/v${__APP_VERSION__}`,
+        assets: [],
+      }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    renderAboutSection();
+
+    await waitFor(() => {
+      expect(
+        (screen.getByRole("button", { name: "检查更新" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    expect(await screen.findByText("已经是最新版本！")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("SettingsView Environments", () => {
