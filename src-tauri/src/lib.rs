@@ -58,6 +58,15 @@ fn keep_daemon_running_after_close(app_handle: &tauri::AppHandle) -> bool {
 }
 
 #[cfg(desktop)]
+fn show_main_window(app_handle: &tauri::AppHandle) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+#[cfg(desktop)]
 async fn stop_managed_daemons_for_exit(app_handle: tauri::AppHandle) {
     let state = app_handle.state::<state::AppState>();
     let _ = tailscale::tailscale_daemon_stop(state).await;
@@ -103,6 +112,11 @@ pub fn run() {
 
     #[cfg(not(desktop))]
     let builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        show_main_window(app);
+    }));
 
     let builder = builder
         .on_window_event(|window, event| {
@@ -351,10 +365,7 @@ pub fn run() {
 
         #[cfg(target_os = "macos")]
         if let RunEvent::Reopen { .. } = event {
-            if let Some(window) = app_handle.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            show_main_window(app_handle);
         }
     });
 }
