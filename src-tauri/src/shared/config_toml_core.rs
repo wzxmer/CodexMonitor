@@ -5,6 +5,8 @@ use toml_edit::{value, Document, Item, Table};
 use crate::files::ops::{read_with_policy, write_with_policy};
 use crate::files::policy::{policy_for, FileKind, FileScope};
 
+const LEGACY_NATIVE_MARKDOWN_IMPORT_FLAG: &str = "native_markdown_imported";
+
 pub(crate) fn load_global_config_document(codex_home: &Path) -> Result<(bool, Document), String> {
     let policy = policy_for(FileScope::Global, FileKind::Config)?;
     let root = codex_home.to_path_buf();
@@ -23,6 +25,8 @@ pub(crate) fn persist_global_config_document(
 ) -> Result<(), String> {
     let policy = policy_for(FileScope::Global, FileKind::Config)?;
     let root = codex_home.to_path_buf();
+    let mut document = document.clone();
+    remove_legacy_agents_import_marker(&mut document);
     let mut rendered = document.to_string();
     if !rendered.ends_with('\n') {
         rendered.push('\n');
@@ -110,4 +114,56 @@ pub(crate) fn set_top_level_string(document: &mut Document, key: &str, value_raw
         return;
     }
     document[key] = value(trimmed);
+}
+
+pub(crate) fn remove_legacy_agents_import_marker(document: &mut Document) -> bool {
+    document
+        .get_mut("agents")
+        .and_then(Item::as_table_mut)
+        .and_then(|agents| agents.remove(LEGACY_NATIVE_MARKDOWN_IMPORT_FLAG))
+        .is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(prefix: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("codex-monitor-config-{prefix}-{nonce}"));
+        if dir.exists() {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    #[test]
+    fn persist_global_config_document_removes_legacy_agents_import_marker() {
+        let codex_home = temp_dir("legacy-agents-marker");
+        let document: Document = r#"
+[agents]
+native_markdown_imported = true
+max_threads = 8
+
+[agents.researcher]
+config_file = "agents/researcher.toml"
+"#
+        .parse()
+        .expect("parse");
+
+        persist_global_config_document(&codex_home, &document).expect("persist");
+
+        let config = std::fs::read_to_string(codex_home.join("config.toml")).expect("read config");
+        assert!(!config.contains("native_markdown_imported"));
+        assert!(config.contains("max_threads = 8"));
+        assert!(config.contains("[agents.researcher]"));
+
+        let _ = std::fs::remove_dir_all(codex_home);
+    }
 }

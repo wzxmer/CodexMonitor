@@ -181,6 +181,13 @@ impl DaemonState {
         let settings_path = config.data_dir.join("settings.json");
         let workspaces = read_workspaces(&storage_path).unwrap_or_default();
         let app_settings = read_settings(&settings_path).unwrap_or_default();
+        if let Err(error) =
+            agents_config_core::remove_legacy_native_markdown_import_flag_for_settings(
+                &app_settings,
+            )
+        {
+            eprintln!("DaemonState::load: failed to remove legacy agent import marker: {error}");
+        }
         let daemon_binary_path = std::env::current_exe()
             .ok()
             .and_then(|path| path.to_str().map(str::to_string));
@@ -593,8 +600,18 @@ impl DaemonState {
     }
 
     async fn update_app_settings(&self, settings: AppSettings) -> Result<AppSettings, String> {
-        settings_core::update_app_settings_core(settings, &self.app_settings, &self.settings_path)
-            .await
+        let updated = settings_core::update_app_settings_core(
+            settings,
+            &self.app_settings,
+            &self.settings_path,
+        )
+        .await?;
+        if let Err(error) =
+            agents_config_core::remove_legacy_native_markdown_import_flag_for_settings(&updated)
+        {
+            eprintln!("DaemonState::update_app_settings: failed to remove legacy agent import marker: {error}");
+        }
+        Ok(updated)
     }
 
     async fn set_codex_feature_flag(

@@ -6,6 +6,7 @@ use tokio::process::Child;
 use tokio::sync::Mutex;
 
 use crate::dictation::DictationState;
+use crate::shared::agents_config_core;
 use crate::shared::codex_core::CodexLoginCancelState;
 use crate::storage::{read_settings, read_workspaces};
 use crate::types::{AppSettings, TcpDaemonState, TcpDaemonStatus, WorkspaceEntry};
@@ -53,6 +54,13 @@ impl AppState {
         let settings_path = data_dir.join("settings.json");
         let workspaces = read_workspaces(&storage_path).unwrap_or_default();
         let app_settings = read_settings(&settings_path).unwrap_or_default();
+        if let Err(error) =
+            agents_config_core::remove_legacy_native_markdown_import_flag_for_settings(
+                &app_settings,
+            )
+        {
+            eprintln!("AppState::load: failed to remove legacy agent import marker: {error}");
+        }
         Self {
             workspaces: Mutex::new(workspaces),
             sessions: Mutex::new(HashMap::new()),

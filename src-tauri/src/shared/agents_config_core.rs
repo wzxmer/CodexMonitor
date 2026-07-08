@@ -6,6 +6,7 @@ use toml_edit::{value, Document, Item, Table};
 
 use crate::codex::home as codex_home;
 use crate::shared::config_toml_core;
+use crate::types::AppSettings;
 
 pub(crate) const DEFAULT_AGENT_MAX_THREADS: u32 = 6;
 pub(crate) const DEFAULT_AGENT_MAX_DEPTH: u32 = 1;
@@ -110,6 +111,15 @@ pub(crate) fn get_agents_settings_core(
         max_depth,
         agents,
     })
+}
+
+pub(crate) fn remove_legacy_native_markdown_import_flag_for_settings(
+    settings: &AppSettings,
+) -> Result<bool, String> {
+    let Some(codex_home) = codex_home::resolve_settings_codex_home(settings) else {
+        return Ok(false);
+    };
+    remove_legacy_native_markdown_import_flag_from_config(codex_home.as_path())
 }
 
 pub(crate) fn set_agents_core_settings_core(
@@ -498,12 +508,19 @@ fn ensure_default_native_markdown_agents_imported(codex_home: &Path) -> Result<(
     }
 }
 
+fn remove_legacy_native_markdown_import_flag_from_config(
+    codex_home: &Path,
+) -> Result<bool, String> {
+    let (exists, mut document) = config_toml_core::load_global_config_document(codex_home)?;
+    if !exists || !remove_legacy_native_markdown_import_flag(&mut document) {
+        return Ok(false);
+    }
+    config_toml_core::persist_global_config_document(codex_home, &document)?;
+    Ok(true)
+}
+
 fn remove_legacy_native_markdown_import_flag(document: &mut Document) -> bool {
-    document
-        .get_mut("agents")
-        .and_then(Item::as_table_mut)
-        .and_then(|agents| agents.remove(LEGACY_NATIVE_MARKDOWN_IMPORT_FLAG))
-        .is_some()
+    config_toml_core::remove_legacy_agents_import_marker(document)
 }
 
 fn discover_native_markdown_agent_candidates(
@@ -1254,6 +1271,33 @@ config_file = "agents/researcher.toml"
         assert!(!config.contains("native_markdown_imported"));
         assert!(config.contains("max_threads = 8"));
         assert!(config.contains("[agents.researcher]"));
+
+        let _ = std::fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn settings_scoped_cleanup_removes_legacy_import_marker_without_agents_load() {
+        let codex_home = temp_dir("codex-home-settings-legacy-native-agent-marker");
+        let config_path = codex_home.join("config.toml");
+        std::fs::write(
+            &config_path,
+            r#"
+[agents]
+native_markdown_imported = true
+max_threads = 8
+"#,
+        )
+        .expect("write config");
+        let mut settings = AppSettings::default();
+        settings.codex_home = Some(codex_home.to_string_lossy().to_string());
+
+        let removed = remove_legacy_native_markdown_import_flag_for_settings(&settings)
+            .expect("remove marker");
+
+        assert!(removed);
+        let config = std::fs::read_to_string(config_path).expect("read config");
+        assert!(!config.contains("native_markdown_imported"));
+        assert!(config.contains("max_threads = 8"));
 
         let _ = std::fs::remove_dir_all(codex_home);
     }

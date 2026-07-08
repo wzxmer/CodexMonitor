@@ -1,5 +1,6 @@
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, Window};
 
+use crate::shared::agents_config_core;
 use crate::shared::codex_native_pet_core::{
     get_codex_native_pet_state_core, import_codex_native_pet_core,
     set_codex_native_pet_enabled_core, set_codex_native_pet_position_core,
@@ -34,6 +35,11 @@ pub(crate) async fn update_app_settings(
     let previous = state.app_settings.lock().await.clone();
     let updated =
         update_app_settings_core(settings, &state.app_settings, &state.settings_path).await?;
+    if let Err(error) =
+        agents_config_core::remove_legacy_native_markdown_import_flag_for_settings(&updated)
+    {
+        eprintln!("update_app_settings: failed to remove legacy agent import marker: {error}");
+    }
     if should_reset_remote_backend(&previous, &updated) {
         *state.remote_backend.lock().await = None;
     }
