@@ -17,8 +17,8 @@ use crate::types::{
 
 use super::connect::{kill_session_by_id, take_live_shared_session, workspace_session_spawn_lock};
 use super::helpers::{
-    copy_agents_md_from_parent_to_worktree, normalize_setup_script, workspace_path_to_string,
-    worktree_setup_marker_path, AGENTS_MD_FILE_NAME,
+    AGENTS_MD_FILE_NAME, copy_agents_md_from_parent_to_worktree, normalize_setup_script,
+    workspace_path_to_string, worktree_setup_marker_path,
 };
 
 pub(crate) async fn worktree_setup_status_core(

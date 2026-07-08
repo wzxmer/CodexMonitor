@@ -1,5 +1,5 @@
-use base64::{engine::general_purpose::STANDARD, Engine as _};
-use serde_json::{json, Map, Value};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -8,9 +8,9 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::oneshot::error::TryRecvError;
-use tokio::sync::{oneshot, Mutex};
-use tokio::time::timeout;
+use tokio::sync::{Mutex, oneshot};
 use tokio::time::Instant;
+use tokio::time::timeout;
 
 use crate::backend::app_server::WorkspaceSession;
 use crate::codex::config as codex_config;
@@ -212,16 +212,22 @@ async fn get_session_clone(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspace_id: &str,
 ) -> Result<Arc<WorkspaceSession>, String> {
-    let sessions = sessions.lock().await;
-    if let Some(session) = sessions.get(workspace_id).cloned() {
-        return Ok(session);
-    }
-    if workspace_id == LOCAL_CODEX_WORKSPACE_ID {
-        return sessions
-            .values()
-            .next()
-            .cloned()
-            .ok_or_else(|| "workspace not connected".to_string());
+    let session = {
+        let sessions = sessions.lock().await;
+        if let Some(session) = sessions.get(workspace_id).cloned() {
+            Some(session)
+        } else if workspace_id == LOCAL_CODEX_WORKSPACE_ID {
+            sessions.values().next().cloned()
+        } else {
+            None
+        }
+    };
+    if let Some(session) = session {
+        if session.is_process_alive().await {
+            return Ok(session);
+        }
+        let mut sessions = sessions.lock().await;
+        sessions.retain(|_, candidate| !Arc::ptr_eq(candidate, &session));
     }
     Err("workspace not connected".to_string())
 }

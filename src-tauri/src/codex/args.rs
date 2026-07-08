@@ -40,9 +40,11 @@ mod tests {
     #[test]
     fn parses_empty_args() {
         assert!(parse_codex_args(None).expect("parse none").is_empty());
-        assert!(parse_codex_args(Some("   "))
-            .expect("parse blanks")
-            .is_empty());
+        assert!(
+            parse_codex_args(Some("   "))
+                .expect("parse blanks")
+                .is_empty()
+        );
     }
 
     #[test]

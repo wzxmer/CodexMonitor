@@ -61,7 +61,7 @@ mod files {
 }
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::File;
@@ -73,9 +73,9 @@ use std::sync::Arc;
 use ignore::WalkBuilder;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, mpsc, Mutex, Semaphore};
+use tokio::sync::{Mutex, Semaphore, broadcast, mpsc};
 
-use backend::app_server::{spawn_workspace_session, WorkspaceSession};
+use backend::app_server::{WorkspaceSession, spawn_workspace_session};
 use backend::events::{AppServerEvent, EventSink, TerminalExit, TerminalOutput};
 use shared::codex_core::CodexLoginCancelState;
 use shared::process_core::kill_child_process_tree;
@@ -540,13 +540,6 @@ impl DaemonState {
     }
 
     async fn connect_workspace(&self, id: String, client_version: String) -> Result<(), String> {
-        {
-            let sessions = self.sessions.lock().await;
-            if sessions.contains_key(&id) {
-                return Ok(());
-            }
-        }
-
         let client_version = client_version.clone();
         workspaces_core::connect_workspace_core(
             id,
@@ -1602,8 +1595,8 @@ mod tests {
     use std::future::Future;
     use std::path::PathBuf;
     use std::process::Stdio;
-    use std::sync::atomic::AtomicU64;
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicU64};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
 
@@ -1706,6 +1699,7 @@ mod tests {
             active_turns: Mutex::new(HashMap::new()),
             hidden_thread_ids: Mutex::new(HashSet::new()),
             next_id: AtomicU64::new(0),
+            output_closed: AtomicBool::new(false),
             background_thread_callbacks: Mutex::new(HashMap::new()),
             workspace_ids: Mutex::new(HashSet::from([owner_workspace_id.clone()])),
             workspace_roots: Mutex::new(HashMap::new()),

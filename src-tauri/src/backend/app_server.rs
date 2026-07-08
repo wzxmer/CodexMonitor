@@ -1,15 +1,15 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::time::timeout;
 
 use crate::backend::events::{AppServerEvent, EventSink};
@@ -19,9 +19,6 @@ use crate::types::WorkspaceEntry;
 
 #[cfg(target_os = "windows")]
 use crate::shared::process_core::{build_cmd_c_command, resolve_windows_executable};
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
-
 fn extract_thread_id(value: &Value) -> Option<String> {
     fn extract_from_container(container: Option<&Value>) -> Option<String> {
         let container = container?;
@@ -548,6 +545,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) active_turns: Mutex<HashMap<String, String>>,
     pub(crate) hidden_thread_ids: Mutex<HashSet<String>>,
     pub(crate) next_id: AtomicU64,
+    pub(crate) output_closed: AtomicBool,
     /// Callbacks for background threads - events for these threadIds are sent through the channel
     pub(crate) background_thread_callbacks: Mutex<HashMap<String, mpsc::UnboundedSender<Value>>>,
     pub(crate) owner_workspace_id: String,
@@ -556,6 +554,18 @@ pub(crate) struct WorkspaceSession {
 }
 
 impl WorkspaceSession {
+    pub(crate) fn mark_output_closed(&self) {
+        self.output_closed.store(true, Ordering::SeqCst);
+    }
+
+    pub(crate) async fn is_process_alive(&self) -> bool {
+        if self.output_closed.load(Ordering::SeqCst) {
+            return false;
+        }
+        let mut child = self.child.lock().await;
+        matches!(child.try_wait(), Ok(None))
+    }
+
     pub(crate) async fn register_workspace(&self, workspace_id: &str) {
         self.register_workspace_with_path(workspace_id, None).await;
     }
@@ -930,6 +940,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
         active_turns: Mutex::new(HashMap::new()),
         hidden_thread_ids: Mutex::new(HashSet::new()),
         next_id: AtomicU64::new(1),
+        output_closed: AtomicBool::new(false),
         background_thread_callbacks: Mutex::new(HashMap::new()),
         owner_workspace_id: entry.id.clone(),
         workspace_ids: Mutex::new(HashSet::from([entry.id.clone()])),
@@ -1201,6 +1212,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
             }
         }
 
+        session_clone.mark_output_closed();
         fail_pending_and_active_turns_after_output_end(
             &session_clone,
             &event_sink_clone,

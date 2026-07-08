@@ -1,7 +1,7 @@
 use super::*;
 use crate::shared::workspace_rpc;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::future::Future;
 
 #[derive(Debug, Deserialize)]

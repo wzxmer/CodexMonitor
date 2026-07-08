@@ -23,8 +23,7 @@ pub(super) fn workspace_session_spawn_lock() -> &'static Mutex<()> {
 }
 
 async fn session_process_is_alive(session: &Arc<WorkspaceSession>) -> bool {
-    let mut child = session.child.lock().await;
-    matches!(child.try_wait(), Ok(None))
+    session.is_process_alive().await
 }
 
 async fn remove_session_references(
@@ -161,8 +160,8 @@ mod tests {
 
     use std::collections::{HashMap, HashSet};
     use std::process::Stdio;
-    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
     use tokio::process::Command;
     use tokio::sync::Mutex;
@@ -209,6 +208,7 @@ mod tests {
             active_turns: Mutex::new(HashMap::new()),
             hidden_thread_ids: Mutex::new(HashSet::new()),
             next_id: AtomicU64::new(0),
+            output_closed: AtomicBool::new(false),
             background_thread_callbacks: Mutex::new(HashMap::new()),
             owner_workspace_id: "test-owner".to_string(),
             workspace_ids: Mutex::new(HashSet::from(["test-owner".to_string()])),
@@ -280,6 +280,41 @@ mod tests {
 
             assert_eq!(spawn_calls.load(Ordering::SeqCst), 1);
             assert!(sessions.lock().await.contains_key(&entry.id));
+            kill_session_by_id(&sessions, &entry.id).await;
+        });
+    }
+
+    #[test]
+    fn connect_workspace_respawns_when_existing_session_output_closed() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let entry = make_workspace_entry("ws-dead");
+            let stale_session = make_session(entry.clone());
+            stale_session.mark_output_closed();
+            let workspaces = Mutex::new(HashMap::from([(entry.id.clone(), entry.clone())]));
+            let sessions = Mutex::new(HashMap::from([(entry.id.clone(), stale_session)]));
+            let app_settings = Mutex::new(AppSettings::default());
+            let spawn_calls = Arc::new(AtomicUsize::new(0));
+            let spawn_calls_ref = spawn_calls.clone();
+            let entry_for_spawn = entry.clone();
+
+            connect_workspace_core(
+                entry.id.clone(),
+                &workspaces,
+                &sessions,
+                &app_settings,
+                move |_entry, _default_bin, _codex_args, _codex_home| {
+                    let spawn_calls_ref = spawn_calls_ref.clone();
+                    let entry_for_spawn = entry_for_spawn.clone();
+                    async move {
+                        spawn_calls_ref.fetch_add(1, Ordering::SeqCst);
+                        Ok(make_session(entry_for_spawn))
+                    }
+                },
+            )
+            .await
+            .expect("dead session should respawn");
+
+            assert_eq!(spawn_calls.load(Ordering::SeqCst), 1);
             kill_session_by_id(&sessions, &entry.id).await;
         });
     }

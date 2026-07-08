@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
-use toml_edit::{value, Document, Item, Table};
+use toml_edit::{Document, Item, Table, value};
 
 use crate::codex::home as codex_home;
 use crate::shared::config_toml_core;
@@ -738,7 +738,7 @@ fn assert_managed_path_without_symlinks(
                     "Failed to validate managed agent path {}: {}",
                     current.display(),
                     err
-                ))
+                ));
             }
         }
     }

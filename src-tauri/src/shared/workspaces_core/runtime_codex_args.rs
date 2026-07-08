@@ -131,7 +131,7 @@ mod tests {
 
     use std::collections::HashSet;
     use std::process::Stdio;
-    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
     use tokio::process::Command;
 
@@ -177,6 +177,7 @@ mod tests {
             active_turns: Mutex::new(HashMap::new()),
             hidden_thread_ids: Mutex::new(HashSet::new()),
             next_id: AtomicU64::new(0),
+            output_closed: AtomicBool::new(false),
             background_thread_callbacks: Mutex::new(HashMap::new()),
             owner_workspace_id: "test-owner".to_string(),
             workspace_ids: Mutex::new(HashSet::from(["test-owner".to_string()])),

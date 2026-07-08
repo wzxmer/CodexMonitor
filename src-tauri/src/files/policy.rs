@@ -57,7 +57,7 @@ pub(crate) fn policy_for(scope: FileScope, kind: FileKind) -> Result<FilePolicy,
 
 #[cfg(test)]
 mod tests {
-    use super::{policy_for, FileKind, FileScope};
+    use super::{FileKind, FileScope, policy_for};
 
     #[test]
     fn workspace_agents_policy_is_strict() {

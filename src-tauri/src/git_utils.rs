@@ -156,11 +156,7 @@ pub(crate) fn parse_github_repo(remote_url: &str) -> Option<String> {
         .trim_end_matches(".git")
         .trim_end_matches('/')
         .to_string();
-    if path.is_empty() {
-        None
-    } else {
-        Some(path)
-    }
+    if path.is_empty() { None } else { Some(path) }
 }
 
 pub(crate) fn resolve_git_root(entry: &WorkspaceEntry) -> Result<PathBuf, String> {

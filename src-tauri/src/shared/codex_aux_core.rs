@@ -1,21 +1,20 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 use tokio::time::timeout;
 
 use crate::backend::app_server::{
-    build_codex_command_with_bin, build_codex_path_env, check_codex_installation,
-    resolve_codex_command_path, WorkspaceSession,
+    WorkspaceSession, build_codex_command_with_bin, build_codex_path_env, check_codex_installation,
+    resolve_codex_command_path,
 };
 use crate::shared::process_core::tokio_command;
 use crate::types::{AppSettings, WorkspaceEntry};
 
-const DEFAULT_COMMIT_MESSAGE_PROMPT: &str =
-    "Generate a concise git commit message for the following changes. \
+const DEFAULT_COMMIT_MESSAGE_PROMPT: &str = "Generate a concise git commit message for the following changes. \
 Follow conventional commit format (e.g., feat:, fix:, refactor:, docs:, etc.). \
 Keep the summary line under 72 characters. \
 Only output the commit message, nothing else.\n\n\
@@ -718,9 +717,11 @@ mod tests {
         let raw = r#"{"description":"Researches large codebases","developerInstructions":"Map relevant modules first.\nSummarize findings before proposing edits.\nCall out risks and unknowns."}"#;
         let parsed = parse_agent_description_value(raw).expect("parse description");
         assert_eq!(parsed.description, "Researches large codebases");
-        assert!(parsed
-            .developer_instructions
-            .contains("Map relevant modules first."));
+        assert!(
+            parsed
+                .developer_instructions
+                .contains("Map relevant modules first.")
+        );
     }
 
     #[test]
