@@ -1925,6 +1925,34 @@ describe("Messages", () => {
     ).toMatch(/2026-07-07 \d{2}:21:59/);
   });
 
+  it("shows interrupted status on the latest assistant message without replacing content", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "assistant-before-stop",
+        kind: "message",
+        role: "assistant",
+        text: "最后一段流式输出",
+        createdAt: new Date("2026-07-07T15:21:59").getTime(),
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        messageReadingStyle="cli"
+        interruptedStatus={{ timestamp: Date.now() }}
+      />,
+    );
+
+    expect(screen.getByText("最后一段流式输出")).toBeTruthy();
+    expect(screen.getByText("Session stopped.")).toBeTruthy();
+  });
+
   it("updates conversation colors and font from the style popover", () => {
     const onUpdateConversationStyle = vi.fn();
     const items: ConversationItem[] = [
@@ -1979,15 +2007,17 @@ describe("Messages", () => {
 
     expect(onUpdateConversationStyle).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: "dark",
-        themeAccent: "orange",
-        messageReadingStyle: "cli",
-        messageCanvasColor: "#070604",
-        messageUserBubbleColor: "#3a210c",
+        messageCanvasColor: "#111315",
+        messageUserBubbleColor: "#3a2a1d",
         messageUserTextColor: "#fff3df",
+        messageAssistantBubbleColor: "#1b1b1c",
         messageAssistantAccentColor: "#ff9f43",
       }),
     );
+    const firstPresetSettings = onUpdateConversationStyle.mock.calls[0]?.[0];
+    expect(firstPresetSettings).not.toHaveProperty("messageReadingStyle");
+    expect(firstPresetSettings).not.toHaveProperty("theme");
+    expect(firstPresetSettings).not.toHaveProperty("themeAccent");
     expect(onUpdateConversationStyle).toHaveBeenCalledWith({
       messageAssistantBubbleColor: "#f0faf6",
       messageAssistantAccentColor: "#4aa389",
@@ -2034,11 +2064,13 @@ describe("Messages", () => {
 
     expect(onUpdateConversationStyle).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: "light",
-        messageReadingStyle: "codex",
         messageCanvasColor: "#ffffff",
       }),
     );
+    const presetSettings = onUpdateConversationStyle.mock.calls[0]?.[0];
+    expect(presetSettings).not.toHaveProperty("messageReadingStyle");
+    expect(presetSettings).not.toHaveProperty("theme");
+    expect(presetSettings).not.toHaveProperty("themeAccent");
   });
 
   it("closes the conversation style popover when focus leaves it", () => {

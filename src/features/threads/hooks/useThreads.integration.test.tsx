@@ -796,6 +796,14 @@ describe("useThreads UX integration", () => {
     });
 
     expect(interruptMock).toHaveBeenCalledWith("ws-1", "thread-1", "pending");
+    expect(result.current.interruptedThreadById["thread-1"]).toEqual(
+      expect.objectContaining({ timestamp: expect.any(Number) }),
+    );
+    expect(
+      result.current.activeItems.some(
+        (item) => item.kind === "message" && item.text === "Session stopped.",
+      ),
+    ).toBe(false);
 
     act(() => {
       handlers?.onTurnStarted?.("ws-1", "thread-1", "turn-1");

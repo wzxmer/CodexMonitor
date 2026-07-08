@@ -14,11 +14,13 @@ import Pencil from "lucide-react/dist/esm/icons/pencil";
 import Quote from "lucide-react/dist/esm/icons/quote";
 import Search from "lucide-react/dist/esm/icons/search";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
+import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert";
 import Users from "lucide-react/dist/esm/icons/users";
 import Wrench from "lucide-react/dist/esm/icons/wrench";
 import X from "lucide-react/dist/esm/icons/x";
 import { exportMarkdownFile } from "@services/tauri";
 import { pushErrorToast } from "@services/toasts";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import type { ConversationItem } from "../../../types";
 import { attachmentDisplayName } from "../../../utils/attachments";
 import type { ParsedFileLocation } from "../../../utils/fileLinks";
@@ -69,6 +71,7 @@ type MessageRowProps = MarkdownFileLinkProps & {
     item: Extract<ConversationItem, { kind: "message" }>,
     text: string,
   ) => void;
+  interrupted?: { label: string } | null;
   codeBlockCopyUseModifier?: boolean;
 };
 
@@ -126,7 +129,7 @@ function extractTimestampFromMessageId(id: string) {
   return Number.isFinite(value) ? value : null;
 }
 
-function formatCliTimestamp(timestamp: number) {
+export function formatCliTimestamp(timestamp: number) {
   const date = new Date(timestamp);
   if (!Number.isFinite(date.getTime())) {
     return "";
@@ -234,12 +237,13 @@ const MessageAttachmentList = memo(function MessageAttachmentList({
 }: {
   attachments: string[];
 }) {
+  const { t } = useI18n();
   if (attachments.length === 0) {
     return null;
   }
 
   return (
-    <div className="message-attachments" aria-label="附件">
+    <div className="message-attachments" aria-label={t("messages.attachments")}>
       {attachments.map((attachment, index) => {
         const name = attachmentDisplayName(attachment);
         return (
@@ -441,6 +445,7 @@ export const MessageRow = memo(function MessageRow({
   onCopy,
   onQuote,
   onResendUserMessage,
+  interrupted,
   codeBlockCopyUseModifier,
   showMessageFilePath,
   workspacePath,
@@ -448,6 +453,7 @@ export const MessageRow = memo(function MessageRow({
   onOpenFileLinkMenu,
   onOpenThreadLink,
 }: MessageRowProps) {
+  const { t } = useI18n();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(item.text);
@@ -572,6 +578,12 @@ export const MessageRow = memo(function MessageRow({
         className={`bubble message-bubble${isTableOnlyAssistantMessage ? " message-bubble-table-only" : ""}`}
         data-cli-timestamp={cliTimestamp}
       >
+        {interrupted && (
+          <span className="message-interrupted-status" title={interrupted.label}>
+            <TriangleAlert size={13} aria-hidden />
+            <span>{interrupted.label}</span>
+          </span>
+        )}
         {imageItems.length > 0 && (
           <MessageImageGrid
             images={imageItems}
@@ -599,11 +611,11 @@ export const MessageRow = memo(function MessageRow({
                   submitEdit();
                 }
               }}
-              aria-label="编辑消息"
+              aria-label={t("messages.editMessage")}
             />
             <div className="message-edit-actions">
               <button type="button" className="ghost" onClick={cancelEdit}>
-                取消
+                {t("messages.cancel")}
               </button>
               <button
                 type="button"
@@ -611,7 +623,7 @@ export const MessageRow = memo(function MessageRow({
                 onClick={submitEdit}
                 disabled={!editText.trim()}
               >
-                重新发送
+                {t("messages.resend")}
               </button>
             </div>
           </div>
@@ -657,8 +669,8 @@ export const MessageRow = memo(function MessageRow({
             type="button"
             className="ghost message-edit-button"
             onClick={startEdit}
-            aria-label="编辑并重新发送"
-            title="编辑并重新发送"
+            aria-label={t("messages.editAndResend")}
+            title={t("messages.editAndResend")}
           >
             <Pencil size={14} aria-hidden />
           </button>

@@ -6,6 +6,7 @@ import {
   PopoverSurface,
 } from "../../design-system/components/popover/PopoverPrimitives";
 import { useMenuController } from "../../app/hooks/useMenuController";
+import { useI18n } from "@/features/i18n/I18nProvider";
 
 type ComposerQueueProps = {
   queuedMessages: QueuedMessage[];
@@ -24,13 +25,14 @@ export function ComposerQueue({
   onEditQueued,
   onDeleteQueued,
 }: ComposerQueueProps) {
+  const { t } = useI18n();
   if (queuedMessages.length === 0) {
     return null;
   }
 
   return (
     <div className="composer-queue">
-      <div className="composer-queue-title">队列中</div>
+      <div className="composer-queue-title">{t("composer.queueTitle")}</div>
       {pausedReason ? (
         <div className="composer-queue-hint">{pausedReason}</div>
       ) : null}
@@ -41,11 +43,11 @@ export function ComposerQueue({
               {item.text ||
                 (item.images?.length
                   ? item.images.length === 1
-                    ? "附件"
-                    : "附件"
+                    ? t("composer.attachment")
+                    : t("composer.attachment")
                   : "")}
               {item.images?.length
-                ? ` · ${item.images.length} 个附件`
+                ? ` · ${item.images.length} ${t("composer.attachmentCountSuffix")}`
                 : ""}
             </span>
             {canSteerQueued && (
@@ -54,7 +56,7 @@ export function ComposerQueue({
                 className="composer-queue-steer"
                 onClick={() => onSteerQueued?.(item.id)}
               >
-                引导
+                {t("composer.guide")}
               </button>
             )}
             <QueueMenuButton
@@ -76,6 +78,7 @@ type QueueMenuButtonProps = {
 };
 
 function QueueMenuButton({ item, onEditQueued, onDeleteQueued }: QueueMenuButtonProps) {
+  const { t } = useI18n();
   const menu = useMenuController();
   const handleToggleMenu = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -102,7 +105,7 @@ function QueueMenuButton({ item, onEditQueued, onDeleteQueued }: QueueMenuButton
         type="button"
         className={`composer-queue-menu${menu.isOpen ? " is-open" : ""}`}
         onClick={handleToggleMenu}
-        aria-label="队列项菜单"
+        aria-label={t("composer.queueMenu")}
         aria-haspopup="menu"
         aria-expanded={menu.isOpen}
       >
@@ -110,8 +113,8 @@ function QueueMenuButton({ item, onEditQueued, onDeleteQueued }: QueueMenuButton
       </button>
       {menu.isOpen && (
         <PopoverSurface className="composer-queue-item-popover" role="menu">
-          <PopoverMenuItem onClick={handleEdit}>编辑</PopoverMenuItem>
-          <PopoverMenuItem onClick={handleDelete}>删除</PopoverMenuItem>
+          <PopoverMenuItem onClick={handleEdit}>{t("composer.edit")}</PopoverMenuItem>
+          <PopoverMenuItem onClick={handleDelete}>{t("composer.delete")}</PopoverMenuItem>
         </PopoverSurface>
       )}
     </div>

@@ -1,4 +1,5 @@
 import { memo, useMemo } from "react";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import type {
   ReviewPromptState,
   ReviewPromptStep,
@@ -102,6 +103,7 @@ const BaseBranchStep = memo(function BaseBranchStep({
   highlightedBranchIndex: number;
   onHighlightBranch: (index: number) => void;
 }) {
+  const { t } = useI18n();
   const branches = reviewPrompt.branches;
   return (
     <div className="review-inline-section">
@@ -126,9 +128,9 @@ const BaseBranchStep = memo(function BaseBranchStep({
       <div className="review-inline-hint">Pick a recent local branch:</div>
       <div className="review-inline-list" role="listbox" aria-label="Base branches">
         {reviewPrompt.isLoadingBranches ? (
-          <div className="review-inline-empty">正在加载分支…</div>
+          <div className="review-inline-empty">{t("review.loadingBranches")}</div>
         ) : branches.length === 0 ? (
-          <div className="review-inline-empty">未找到分支。</div>
+          <div className="review-inline-empty">{t("review.noBranches")}</div>
         ) : (
           branches.map((branch, index) => {
             const selected = index === highlightedBranchIndex;
@@ -173,6 +175,7 @@ const CommitStep = memo(function CommitStep({
   highlightedCommitIndex: number;
   onHighlightCommit: (index: number) => void;
 }) {
+  const { t } = useI18n();
   const commits = reviewPrompt.commits;
   return (
     <div className="review-inline-section">
@@ -197,9 +200,9 @@ const CommitStep = memo(function CommitStep({
       <div className="review-inline-hint">Select a recent commit:</div>
       <div className="review-inline-list" role="listbox" aria-label="Commits">
         {reviewPrompt.isLoadingCommits ? (
-          <div className="review-inline-empty">正在加载提交…</div>
+          <div className="review-inline-empty">{t("review.loadingCommits")}</div>
         ) : commits.length === 0 ? (
-          <div className="review-inline-empty">未找到提交。</div>
+          <div className="review-inline-empty">{t("review.noCommits")}</div>
         ) : (
           commits.map((commit, index) => {
             const title = commit.summary || commit.sha;

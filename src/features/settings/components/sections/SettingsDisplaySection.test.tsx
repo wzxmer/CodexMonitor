@@ -66,9 +66,10 @@ describe("SettingsDisplaySection", () => {
         theme: "dark",
         themeAccent: "orange",
         messageReadingStyle: "cli",
-        messageCanvasColor: "#070604",
-        messageUserBubbleColor: "#3a210c",
+        messageCanvasColor: "#111315",
+        messageUserBubbleColor: "#3a2a1d",
         messageUserTextColor: "#fff3df",
+        messageAssistantBubbleColor: "#1b1b1c",
         messageAssistantAccentColor: "#ff9f43",
       }),
     );
@@ -521,6 +522,82 @@ describe("SettingsDisplaySection", () => {
     expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
     expect(onUpdateAppSettings).toHaveBeenCalledWith(
       expect.objectContaining({ chatHistoryScrollbackItems: 200 }),
+    );
+  });
+
+  it("updates desktop pet type and controls visibility", () => {
+    const onUpdateAppSettings = vi.fn(async () => {});
+
+    render(
+      <SettingsDisplaySection
+        appSettings={
+          ({
+            theme: "system",
+            usageShowRemaining: false,
+            showMessageFilePath: true,
+            chatHistoryScrollbackItems: 200,
+            threadTitleAutogenerationEnabled: false,
+            uiFontFamily: "",
+            codeFontFamily: "",
+            codeFontSize: 11,
+            notificationSoundsEnabled: true,
+            systemNotificationsEnabled: true,
+            codexPetId: "codex",
+            codexPetEnabled: true,
+            codexPetWakeVersion: 2,
+          } as unknown) as AppSettings
+        }
+        reduceTransparency={false}
+        scaleShortcutTitle=""
+        scaleShortcutText=""
+        scaleDraft="100%"
+        codeFontDraft=""
+        codeFontSizeDraft={11}
+        onUpdateAppSettings={onUpdateAppSettings}
+        onToggleTransparency={vi.fn()}
+        onSetScaleDraft={vi.fn() as any}
+        onCommitScale={vi.fn(async () => {})}
+        onResetScale={vi.fn(async () => {})}
+        onSetCodeFontDraft={vi.fn() as any}
+        onCommitCodeFont={vi.fn(async () => {})}
+        onSetCodeFontSizeDraft={vi.fn() as any}
+        onCommitCodeFontSize={vi.fn(async () => {})}
+        onTestNotificationSound={vi.fn()}
+        onTestSystemNotification={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /默认助手宠物/ }));
+    fireEvent.click(screen.getByRole("button", { name: "唤醒" }));
+    fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+    const petRow = screen.getByText("Codex 宠物").closest(".settings-toggle-row");
+    expect(petRow).toBeTruthy();
+    fireEvent.click(within(petRow as HTMLElement).getByRole("button"));
+
+    expect(onUpdateAppSettings).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        codexPetId: "codex",
+        codexPetWakeVersion: expect.any(Number),
+      }),
+    );
+    expect(onUpdateAppSettings).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        codexPetWakeVersion: expect.any(Number),
+      }),
+    );
+    expect(onUpdateAppSettings).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        codexPetWakeVersion: 3,
+      }),
+    );
+    expect(onUpdateAppSettings).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({
+        codexPetEnabled: false,
+      }),
     );
   });
 

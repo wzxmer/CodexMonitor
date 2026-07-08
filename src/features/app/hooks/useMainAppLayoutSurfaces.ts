@@ -35,6 +35,7 @@ type UseMainAppLayoutSurfacesArgs = {
   threadsByWorkspace: SidebarProps["threadsByWorkspace"];
   threadParentById: SidebarProps["threadParentById"];
   threadStatusById: ThreadState["threadStatusById"];
+  interruptedThreadById: ThreadState["interruptedThreadById"];
   threadResumeLoadingById: Record<string, boolean>;
   threadListLoadingByWorkspace: SidebarProps["threadListLoadingByWorkspace"];
   threadListPagingByWorkspace: SidebarProps["threadListPagingByWorkspace"];
@@ -241,6 +242,7 @@ function buildPrimarySurface({
   threadsByWorkspace,
   threadParentById,
   threadStatusById,
+  interruptedThreadById,
   threadResumeLoadingById,
   threadListLoadingByWorkspace,
   threadListPagingByWorkspace,
@@ -457,6 +459,9 @@ function buildPrimarySurface({
       messageFontFamily: appSettings.messageFontFamily,
       messageFontSize: appSettings.messageFontSize,
       messageFontWeight: appSettings.messageFontWeight,
+      interruptedStatus: activeThreadId
+        ? interruptedThreadById[activeThreadId] ?? null
+        : null,
       onUpdateConversationStyle: (next) => {
         void onUpdateAppSettings({
           ...appSettings,
@@ -1001,6 +1006,7 @@ export function useMainAppLayoutSurfaces({
   threadsByWorkspace,
   threadParentById,
   threadStatusById,
+  interruptedThreadById,
   threadResumeLoadingById,
   threadListLoadingByWorkspace,
   threadListPagingByWorkspace,
@@ -1167,6 +1173,7 @@ export function useMainAppLayoutSurfaces({
     threadsByWorkspace,
     threadParentById,
     threadStatusById,
+    interruptedThreadById,
     threadResumeLoadingById,
     threadListLoadingByWorkspace,
     threadListPagingByWorkspace,

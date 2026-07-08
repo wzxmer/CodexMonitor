@@ -1,4 +1,10 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type { AppSettings } from "@/types";
 import {
   CODE_FONT_SIZE_MAX,
@@ -24,6 +30,7 @@ import {
   UI_LATIN_FONT_FAMILY_PRESETS,
 } from "@utils/fonts";
 import { listSystemFonts } from "@services/tauri";
+import { open } from "@tauri-apps/plugin-dialog";
 
 import {
   CHAT_SCROLLBACK_DEFAULT,
@@ -39,6 +46,7 @@ import {
   SettingsToggleSwitch,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
 import { RoundedSelect } from "@/features/design-system/components/select/RoundedSelect";
+import { useI18n } from "@/features/i18n/I18nProvider";
 
 const THEME_ACCENT_OPTIONS: Array<{
   value: AppSettings["themeAccent"];
@@ -145,15 +153,15 @@ const STYLE_PRESETS: Array<{
     id: "cli-ember",
     title: "CLI 暗黑",
     subtitle: "黑橙终端感",
-    swatch: "linear-gradient(135deg, #070604 0%, #15100b 55%, #ff9f43 100%)",
+    swatch: "linear-gradient(135deg, #151719 0%, #24211d 58%, #ff9f43 100%)",
     settings: {
       theme: "dark",
       themeAccent: "orange",
       messageReadingStyle: "cli",
-      messageCanvasColor: "#070604",
-      messageUserBubbleColor: "#3a210c",
+      messageCanvasColor: "#111315",
+      messageUserBubbleColor: "#3a2a1d",
       messageUserTextColor: "#fff3df",
-      messageAssistantBubbleColor: "#0a0805",
+      messageAssistantBubbleColor: "#1b1b1c",
       messageAssistantAccentColor: "#ff9f43",
       messageAssistantTextColor: "#f6e7cf",
     },
@@ -204,6 +212,34 @@ const FONT_CLARITY_PRESETS: Array<{
     uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
     uiFontWeight: 400,
     messageFontWeight: 450,
+  },
+];
+
+type CodexPetId = NonNullable<AppSettings["codexPetId"]>;
+
+const CODEX_PET_OPTIONS: Array<{
+  id: Exclude<CodexPetId, "custom">;
+  title: string;
+  subtitle: string;
+  tone: string;
+}> = [
+  {
+    id: "codex",
+    title: "Codex",
+    subtitle: "默认助手宠物",
+    tone: "linear-gradient(135deg, #f28b3c, #ffd4a3)",
+  },
+  {
+    id: "terminal",
+    title: "Terminal",
+    subtitle: "终端工作流",
+    tone: "linear-gradient(135deg, #58d68d, #9af5c4)",
+  },
+  {
+    id: "review",
+    title: "Review",
+    subtitle: "代码审查提醒",
+    tone: "linear-gradient(135deg, #7dadff, #c7d8ff)",
   },
 ];
 
@@ -284,6 +320,12 @@ export function SettingsDisplaySection({
   onTestNotificationSound,
   onTestSystemNotification,
 }: SettingsDisplaySectionProps) {
+  const { t } = useI18n();
+  const languageOptions = [
+    { value: "system", label: t("language.auto") },
+    { value: "zh", label: t("language.zh") },
+    { value: "en", label: t("language.en") },
+  ] satisfies Array<{ value: AppSettings["appLanguage"]; label: string }>;
   const scrollbackUnlimited = appSettings.chatHistoryScrollbackItems === null;
   const [scrollbackDraft, setScrollbackDraft] = useState(() => {
     const value = appSettings.chatHistoryScrollbackItems;
@@ -356,6 +398,49 @@ export function SettingsDisplaySection({
     }
     return "custom";
   })();
+  const codexPetId = appSettings.codexPetId ?? "codex";
+  const codexPetWakeVersion = appSettings.codexPetWakeVersion ?? 0;
+  const customPetAvailable = Boolean(appSettings.codexPetCustomImagePath);
+
+  const updateCodexPet = (next: Partial<AppSettings>) => {
+    void onUpdateAppSettings({
+      ...appSettings,
+      ...next,
+    });
+  };
+
+  const wakeCodexPet = () => {
+    updateCodexPet({
+      codexPetWakeVersion: Date.now(),
+    });
+  };
+
+  const refreshCodexPet = () => {
+    updateCodexPet({
+      codexPetWakeVersion: codexPetWakeVersion + 1,
+    });
+  };
+
+  const importCodexPet = async () => {
+    const selection = await open({
+      multiple: false,
+      directory: false,
+      filters: [
+        {
+          name: "Image",
+          extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"],
+        },
+      ],
+    });
+    if (!selection || Array.isArray(selection)) {
+      return;
+    }
+    updateCodexPet({
+      codexPetId: "custom",
+      codexPetCustomImagePath: selection,
+      codexPetWakeVersion: Date.now(),
+    });
+  };
 
   const commitScrollback = () => {
     if (scrollbackUnlimited) {
@@ -454,12 +539,34 @@ export function SettingsDisplaySection({
 
   return (
     <SettingsSection
-      title="显示与声音"
-      subtitle="调整视觉效果和声音提醒。"
+      title={t("settings.display.title")}
+      subtitle={t("settings.display.subtitle")}
     >
-      <div className="settings-subsection-title">显示</div>
+      <div className="settings-subsection-title">
+        {t("settings.display.sectionTitle")}
+      </div>
       <div className="settings-subsection-subtitle">
-        调整窗口背景和效果的渲染方式。
+        {t("settings.display.sectionSubtitle")}
+      </div>
+      <div className="settings-field">
+        <label className="settings-field-label" htmlFor="language-select">
+          {t("settings.display.language")}
+        </label>
+        <RoundedSelect
+          ariaLabel={t("settings.display.language")}
+          className="settings-select"
+          value={appSettings.appLanguage}
+          options={languageOptions}
+          onChange={(nextValue) =>
+            void onUpdateAppSettings({
+              ...appSettings,
+              appLanguage: nextValue as AppSettings["appLanguage"],
+            })
+          }
+        />
+        <div className="settings-help">
+          {t("settings.display.languageHelp")}
+        </div>
       </div>
       <div className="settings-field">
         <div className="settings-field-label">风格方案</div>
@@ -1138,6 +1245,100 @@ export function SettingsDisplaySection({
           }
         />
       </SettingsToggleRow>
+      <div className="settings-codex-pet-panel">
+        <div
+          className="settings-codex-pet-options"
+          role="radiogroup"
+          aria-label="Codex 宠物选择"
+        >
+          {CODEX_PET_OPTIONS.map((pet) => (
+            <button
+              key={pet.id}
+              type="button"
+              role="radio"
+              aria-checked={codexPetId === pet.id}
+              className={`settings-codex-pet-option ${
+                codexPetId === pet.id ? "is-selected" : ""
+              }`}
+              onClick={() =>
+                updateCodexPet({
+                  codexPetId: pet.id,
+                  codexPetWakeVersion: Date.now(),
+                })
+              }
+            >
+              <span
+                className={`settings-codex-pet-avatar settings-codex-pet-avatar--${pet.id}`}
+                style={{ "--pet-tone": pet.tone } as CSSProperties}
+                aria-hidden
+              >
+                <span />
+              </span>
+              <span className="settings-codex-pet-copy">
+                <span className="settings-codex-pet-title">{pet.title}</span>
+                <span className="settings-codex-pet-subtitle">{pet.subtitle}</span>
+              </span>
+            </button>
+          ))}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={codexPetId === "custom"}
+            className={`settings-codex-pet-option ${
+              codexPetId === "custom" ? "is-selected" : ""
+            }`}
+            onClick={() =>
+              customPetAvailable
+                ? updateCodexPet({
+                    codexPetId: "custom",
+                    codexPetWakeVersion: Date.now(),
+                  })
+                : void importCodexPet()
+            }
+          >
+            <span
+              className="settings-codex-pet-avatar settings-codex-pet-avatar--custom"
+              aria-hidden
+            >
+              <span />
+            </span>
+            <span className="settings-codex-pet-copy">
+              <span className="settings-codex-pet-title">导入宠物</span>
+              <span className="settings-codex-pet-subtitle">
+                {customPetAvailable ? "使用自定义图片" : "PNG / JPG / GIF / WebP"}
+              </span>
+            </span>
+          </button>
+        </div>
+        {appSettings.codexPetCustomImagePath && (
+          <div className="settings-help settings-codex-pet-path">
+            已导入：{appSettings.codexPetCustomImagePath}
+          </div>
+        )}
+        <div className="settings-sound-actions">
+          <button
+            type="button"
+            className="ghost settings-button-compact"
+            onClick={wakeCodexPet}
+          >
+            唤醒
+          </button>
+          <button
+            type="button"
+            className="ghost settings-button-compact"
+            onClick={refreshCodexPet}
+          >
+            刷新
+          </button>
+          <button
+            type="button"
+            className="ghost settings-button-compact"
+            onClick={() => void importCodexPet()}
+          >
+            导入
+          </button>
+        </div>
+      </div>
       <SettingsToggleRow
         title="通知声音"
         subtitle="窗口未聚焦时，长时间运行的 agent 完成后播放提示音。"

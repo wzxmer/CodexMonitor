@@ -315,6 +315,117 @@
   line-height: 1.25;
 }
 
+.settings-codex-pet-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: -2px 0 18px;
+  padding-left: 2px;
+}
+
+.settings-codex-pet-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  max-width: 680px;
+}
+
+.settings-codex-pet-option {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 62px;
+  border: 1px solid var(--cm-border-emphasis);
+  border-radius: 12px;
+  background: var(--cm-surface-panel-strong);
+  color: var(--text-muted);
+  padding: 9px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-codex-pet-option:hover,
+.settings-codex-pet-option.is-selected {
+  border-color: var(--border-accent-soft);
+  background: color-mix(in srgb, var(--surface-active) 62%, transparent);
+  color: var(--text-strong);
+}
+
+.settings-codex-pet-avatar {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border-radius: 14px 14px 16px 16px;
+  border: 1px solid var(--border-subtle);
+  background: var(--pet-tone, linear-gradient(135deg, #f28b3c, #ffd4a3));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 8px 18px rgba(0, 0, 0, 0.16);
+}
+
+.settings-codex-pet-avatar::before,
+.settings-codex-pet-avatar::after {
+  content: "";
+  position: absolute;
+  top: 13px;
+  width: 5px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(24, 24, 24, 0.72);
+}
+
+.settings-codex-pet-avatar::before {
+  left: 11px;
+}
+
+.settings-codex-pet-avatar::after {
+  right: 11px;
+}
+
+.settings-codex-pet-avatar > span {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  width: 12px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(24, 24, 24, 0.42);
+  transform: translateX(-50%);
+}
+
+.settings-codex-pet-avatar--custom {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent),
+    var(--surface-control);
+}
+
+.settings-codex-pet-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-codex-pet-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-strong);
+}
+
+.settings-codex-pet-subtitle,
+.settings-codex-pet-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-codex-pet-subtitle {
+  color: var(--text-subtle);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
 .settings-help-error {
   color: var(--text-danger);
 }

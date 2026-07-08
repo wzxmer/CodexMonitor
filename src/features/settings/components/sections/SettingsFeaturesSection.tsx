@@ -5,6 +5,8 @@ import {
   SettingsToggleRow,
   SettingsToggleSwitch,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
+import { useI18n } from "@/features/i18n/I18nProvider";
+import type { ResolvedAppLanguage } from "@/features/i18n/appLanguage";
 import type { SettingsFeaturesSectionProps } from "@settings/hooks/useSettingsFeaturesSection";
 import { fileManagerName, openInFileManagerLabel } from "@utils/platformPaths";
 
@@ -76,34 +78,63 @@ const FEATURE_DESCRIPTION_FALLBACKS: Record<string, string> = {
   responses_websockets_v2: "启用 Responses API WebSocket v2 模式。",
 };
 
-function formatUnknownFeatureLabel(featureName: string): string {
+function formatUnknownFeatureLabel(
+  featureName: string,
+  language: ResolvedAppLanguage,
+): string {
   const normalized = featureName
     .split("_")
     .filter((part) => part.length > 0)
     .join(" / ");
+  if (language === "en") {
+    return normalized
+      ? normalized.replace(/\b\w/g, (char) => char.toUpperCase())
+      : "Unknown feature";
+  }
   return normalized ? `功能键：${normalized}` : "未知功能";
 }
 
-function formatFeatureLabel(feature: CodexFeature): string {
-  const localized = FEATURE_LABELS[feature.name];
+function formatFeatureLabel(
+  feature: CodexFeature,
+  language: ResolvedAppLanguage,
+): string {
+  const localized = language === "zh" ? FEATURE_LABELS[feature.name] : null;
   if (localized) {
     return localized;
   }
-  return formatUnknownFeatureLabel(feature.name);
+  const displayName = feature.displayName?.trim();
+  if (displayName) {
+    return displayName;
+  }
+  return formatUnknownFeatureLabel(feature.name, language);
 }
 
-function featureSubtitle(feature: CodexFeature): string {
-  const fallbackDescription = FEATURE_DESCRIPTION_FALLBACKS[feature.name];
+function featureSubtitle(
+  feature: CodexFeature,
+  language: ResolvedAppLanguage,
+): string {
+  const fallbackDescription =
+    language === "zh" ? FEATURE_DESCRIPTION_FALLBACKS[feature.name] : null;
   if (fallbackDescription) {
     return fallbackDescription;
   }
+  const description = feature.description?.trim();
+  if (description) {
+    return description;
+  }
   if (feature.stage === "deprecated") {
-    return "已弃用的功能开关。";
+    return language === "en"
+      ? "Deprecated feature toggle."
+      : "已弃用的功能开关。";
   }
   if (feature.stage === "removed") {
-    return "保留用于向后兼容的旧功能开关。";
+    return language === "en"
+      ? "Legacy feature toggle retained for backward compatibility."
+      : "保留用于向后兼容的旧功能开关。";
   }
-  return `功能键：features.${feature.name}`;
+  return language === "en"
+    ? `Feature key: features.${feature.name}`
+    : `功能键：features.${feature.name}`;
 }
 
 export function SettingsFeaturesSection({
@@ -120,14 +151,17 @@ export function SettingsFeaturesSection({
   onToggleCodexFeature,
   onUpdateAppSettings,
 }: SettingsFeaturesSectionProps) {
+  const { language, t } = useI18n();
   return (
     <SettingsSection
-      title="功能"
-      subtitle="管理 Codex 的稳定功能和实验功能。"
+      title={t("features.title")}
+      subtitle={t("features.subtitle")}
     >
       <SettingsToggleRow
-        title="配置文件"
-        subtitle={`在 ${fileManagerName()} 中打开 Codex 配置。`}
+        title={t("features.configFile")}
+        subtitle={`${t("features.configSubtitlePrefix")}${fileManagerName()}${t(
+          "features.configSubtitleSuffix",
+        )}`}
       >
         <button type="button" className="ghost" onClick={onOpenConfig}>
           {openInFileManagerLabel()}
@@ -135,14 +169,14 @@ export function SettingsFeaturesSection({
       </SettingsToggleRow>
       {openConfigError && <div className="settings-help">{openConfigError}</div>}
       <SettingsSubsection
-        title="稳定功能"
-        subtitle="默认启用的生产可用功能。"
+        title={t("features.stable")}
+        subtitle={t("features.stableSubtitle")}
       />
       <SettingsToggleRow
-        title="个性"
+        title={t("features.personality")}
         subtitle={
           <>
-            选择 Codex 沟通风格（写入 config.toml 顶层 <code>personality</code>）。
+            {t("features.personalitySubtitle")}
           </>
         }
       >
@@ -156,15 +190,15 @@ export function SettingsFeaturesSection({
               personality: event.target.value as (typeof appSettings)["personality"],
             })
           }
-          aria-label="个性"
+          aria-label={t("features.personality")}
         >
-          <option value="friendly">友好</option>
-          <option value="pragmatic">务实</option>
+          <option value="friendly">{t("features.friendly")}</option>
+          <option value="pragmatic">{t("features.pragmatic")}</option>
         </select>
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="需要回应时暂停队列消息"
-        subtitle="当 Codex 等待计划确认、修改意见或你的回答时，暂停已排队消息。"
+        title={t("features.pauseQueueTitle")}
+        subtitle={t("features.pauseQueueSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.pauseQueuedMessagesWhenResponseRequired}
@@ -180,8 +214,8 @@ export function SettingsFeaturesSection({
       {stableFeatures.map((feature) => (
         <SettingsToggleRow
           key={feature.name}
-          title={formatFeatureLabel(feature)}
-          subtitle={featureSubtitle(feature)}
+          title={formatFeatureLabel(feature, language)}
+          subtitle={featureSubtitle(feature, language)}
         >
           <SettingsToggleSwitch
             pressed={feature.enabled}
@@ -194,17 +228,17 @@ export function SettingsFeaturesSection({
         !featuresLoading &&
         !featureError &&
         stableFeatures.length === 0 && (
-        <div className="settings-help">Codex 未返回稳定功能开关。</div>
+        <div className="settings-help">{t("features.noStable")}</div>
       )}
       <SettingsSubsection
-        title="实验功能"
-        subtitle="预览中或开发中的功能。"
+        title={t("features.experimental")}
+        subtitle={t("features.experimentalSubtitle")}
       />
       {experimentalFeatures.map((feature) => (
         <SettingsToggleRow
           key={feature.name}
-          title={formatFeatureLabel(feature)}
-          subtitle={featureSubtitle(feature)}
+          title={formatFeatureLabel(feature, language)}
+          subtitle={featureSubtitle(feature, language)}
         >
           <SettingsToggleSwitch
             pressed={feature.enabled}
@@ -219,15 +253,15 @@ export function SettingsFeaturesSection({
         hasDynamicFeatureRows &&
         experimentalFeatures.length === 0 && (
           <div className="settings-help">
-            Codex 未返回预览中或开发中的功能开关。
+            {t("features.noExperimental")}
           </div>
         )}
       {featuresLoading && (
-        <div className="settings-help">正在加载 Codex 功能开关...</div>
+        <div className="settings-help">{t("features.loading")}</div>
       )}
       {!hasFeatureWorkspace && !featuresLoading && (
         <div className="settings-help">
-          连接项目后才能加载 Codex 功能开关。
+          {t("features.connectFirst")}
         </div>
       )}
       {featureError && <div className="settings-help">{featureError}</div>}

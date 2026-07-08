@@ -31,8 +31,10 @@ import { isMobilePlatform } from "@utils/platformPaths";
 import { DEFAULT_COMMIT_MESSAGE_PROMPT } from "@utils/commitMessagePrompt";
 
 const allowedThemes = new Set(["system", "light", "dark", "dim"]);
+const allowedAppLanguages = new Set(["system", "zh", "en"]);
 const allowedThemeAccents = new Set(["codex", "blue", "green", "pink", "orange"]);
 const allowedMessageReadingStyles = new Set(["bubble", "cli", "codex"]);
+const allowedCodexPetIds = new Set(["codex", "terminal", "review", "custom"]);
 const allowedPersonality = new Set(["friendly", "pragmatic"]);
 const allowedFollowUpMessageBehavior = new Set(["queue", "steer"]);
 const allowedComposerSendShortcut = new Set([
@@ -200,6 +202,7 @@ function buildDefaultSettings(): AppSettings {
     lastComposerModelId: null,
     lastComposerReasoningEffort: null,
     uiScale: UI_SCALE_DEFAULT,
+    appLanguage: "system",
     theme: "system",
     themeAccent: "codex",
     usageShowRemaining: false,
@@ -229,6 +232,9 @@ function buildDefaultSettings(): AppSettings {
     systemNotificationsEnabled: true,
     subagentSystemNotificationsEnabled: true,
     codexPetEnabled: false,
+    codexPetId: "codex",
+    codexPetCustomImagePath: null,
+    codexPetWakeVersion: 0,
     splitChatDiffView: false,
     preloadGitDiffs: true,
     gitDiffIgnoreWhitespaceChanges: false,
@@ -299,6 +305,9 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     codexBin: settings.codexBin?.trim() ? settings.codexBin.trim() : null,
     codexArgs: settings.codexArgs?.trim() ? settings.codexArgs.trim() : null,
     uiScale: clampUiScale(settings.uiScale),
+    appLanguage: allowedAppLanguages.has(settings.appLanguage)
+      ? settings.appLanguage
+      : "system",
     theme: allowedThemes.has(settings.theme) ? settings.theme : "system",
     themeAccent: allowedThemeAccents.has(settings.themeAccent)
       ? settings.themeAccent
@@ -382,6 +391,19 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     codexPetEnabled: typeof settings.codexPetEnabled === "boolean"
       ? settings.codexPetEnabled
       : false,
+    codexPetId: allowedCodexPetIds.has(settings.codexPetId ?? "")
+      ? settings.codexPetId
+      : "codex",
+    codexPetCustomImagePath:
+      typeof settings.codexPetCustomImagePath === "string" &&
+      settings.codexPetCustomImagePath.trim().length > 0
+        ? settings.codexPetCustomImagePath
+        : null,
+    codexPetWakeVersion:
+      typeof settings.codexPetWakeVersion === "number" &&
+      Number.isFinite(settings.codexPetWakeVersion)
+        ? settings.codexPetWakeVersion
+        : 0,
     reviewDeliveryMode:
       settings.reviewDeliveryMode === "detached" ? "detached" : "inline",
     chatHistoryScrollbackItems,

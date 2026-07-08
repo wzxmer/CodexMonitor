@@ -125,6 +125,7 @@ const baseSettings: AppSettings = {
   lastComposerModelId: null,
   lastComposerReasoningEffort: null,
   uiScale: 1,
+  appLanguage: "system",
   theme: "system",
   themeAccent: "codex",
   usageShowRemaining: false,
@@ -545,6 +546,20 @@ const renderEnvironmentsSection = (
 };
 
 describe("SettingsView Display", () => {
+  it("updates the app language preference", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderDisplaySection({ onUpdateAppSettings });
+
+    fireEvent.click(screen.getByRole("button", { name: "语言" }));
+    fireEvent.click(screen.getByRole("option", { name: "English" }));
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ appLanguage: "en" }),
+      );
+    });
+  });
+
   it("updates the theme selection", async () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
@@ -1860,11 +1875,10 @@ describe("SettingsView Features", () => {
 
     expect(await screen.findByText("统一执行工具")).toBeTruthy();
     expect(screen.getByText("使用单一 PTY 执行工具。")).toBeTruthy();
-    expect(screen.getByText("功能键：unknown / preview / flag")).toBeTruthy();
-    expect(screen.getByText("功能键：features.unknown_preview_flag")).toBeTruthy();
+    expect(screen.getByText("Unknown preview")).toBeTruthy();
+    expect(screen.getByText("Remote English description.")).toBeTruthy();
     expect(screen.queryByText("Background terminal")).toBeNull();
     expect(screen.queryByText("Run long-running terminal commands in the background.")).toBeNull();
-    expect(screen.queryByText("Remote English description.")).toBeNull();
   });
 
   it("shows fallback description when Codex omits feature description", async () => {

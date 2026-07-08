@@ -3,6 +3,7 @@ import FileText from "lucide-react/dist/esm/icons/file-text";
 import Image from "lucide-react/dist/esm/icons/image";
 import X from "lucide-react/dist/esm/icons/x";
 import { attachmentDisplayName, isImageAttachment } from "../../../utils/attachments";
+import { useI18n } from "@/features/i18n/I18nProvider";
 
 type ComposerAttachmentsProps = {
   attachments: string[];
@@ -36,6 +37,7 @@ export function ComposerAttachments({
   disabled,
   onRemoveAttachment,
 }: ComposerAttachmentsProps) {
+  const { t } = useI18n();
   if (attachments.length === 0) {
     return null;
   }
@@ -45,9 +47,9 @@ export function ComposerAttachments({
       {attachments.map((path) => {
         const title = fileTitle(path);
         const titleAttr = path.startsWith("data:image/")
-          ? "粘贴的图片"
+          ? t("composer.pastedImage")
           : path.startsWith("data:")
-            ? "粘贴的附件"
+            ? t("composer.pastedAttachment")
             : path;
         const previewSrc = attachmentPreviewSrc(path);
         return (
@@ -75,7 +77,7 @@ export function ComposerAttachments({
               type="button"
               className="composer-attachment-remove"
               onClick={() => onRemoveAttachment?.(path)}
-              aria-label={`移除 ${title}`}
+              aria-label={`${t("composer.remove")} ${title}`}
               disabled={disabled}
             >
               <X size={12} aria-hidden />

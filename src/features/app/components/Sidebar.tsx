@@ -37,6 +37,7 @@ import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import { getUsageLabels } from "../utils/usageLabels";
 import { formatRelativeTimeShort } from "../../../utils/time";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
@@ -100,14 +101,8 @@ function getThreadBucketId(timestamp: number, nowMs: number): ThreadBucket["id"]
 function groupFlatThreadRowsByTimeBucket(
   groups: FlatThreadRootGroup[],
   nowMs: number,
+  bucketLabels: Record<ThreadBucket["id"], string>,
 ): ThreadBucket[] {
-  const bucketLabels: Record<ThreadBucket["id"], string> = {
-    now: "Now",
-    today: "Earlier today",
-    yesterday: "Yesterday",
-    week: "This week",
-    older: "Older",
-  };
   const order: ThreadBucket["id"][] = ["now", "today", "yesterday", "week", "older"];
   const bucketMap = new Map<ThreadBucket["id"], FlatThreadRow[]>();
 
@@ -250,6 +245,7 @@ export const Sidebar = memo(function Sidebar({
   onWorkspaceDragLeave,
   onWorkspaceDrop,
 }: SidebarProps) {
+  const { t } = useI18n();
   const [expandedWorkspaces, setExpandedWorkspaces] = useState(
     new Set<string>(),
   );
@@ -407,8 +403,8 @@ export const Sidebar = memo(function Sidebar({
     ? accountEmail
     : accountInfo?.type === "apikey"
       ? "API key"
-      : "登录 Codex";
-  const accountActionLabel = accountEmail ? "切换账号" : "登录";
+      : t("sidebar.loginCodex");
+  const accountActionLabel = accountEmail ? t("sidebar.switchAccount") : t("sidebar.login");
   const showAccountSwitcher = Boolean(activeWorkspaceId);
   const accountSwitchDisabled = accountSwitching || !activeWorkspaceId;
   const accountCancelDisabled = !accountSwitching || !activeWorkspaceId;
@@ -722,8 +718,15 @@ export const Sidebar = memo(function Sidebar({
     [flatThreadRootGroups],
   );
   const threadBuckets = useMemo(
-    () => groupFlatThreadRowsByTimeBucket(flatThreadRootGroups, Date.now()),
-    [flatThreadRootGroups],
+    () =>
+      groupFlatThreadRowsByTimeBucket(flatThreadRootGroups, Date.now(), {
+        now: t("sidebar.now"),
+        today: t("sidebar.earlierToday"),
+        yesterday: t("sidebar.yesterday"),
+        week: t("sidebar.thisWeek"),
+        older: t("sidebar.older"),
+      }),
+    [flatThreadRootGroups, t],
   );
 
   const scrollFadeDeps = useMemo(
@@ -955,9 +958,9 @@ export const Sidebar = memo(function Sidebar({
             <FolderOpen className="workspace-drop-overlay-icon" aria-hidden />
           )}
           {workspaceDropText === "Drop Project Here"
-            ? "把项目拖到这里"
+            ? t("sidebar.dropProjectHere")
             : workspaceDropText === "Adding Project..."
-              ? "正在添加项目..."
+              ? t("sidebar.addingProject")
               : workspaceDropText}
         </div>
       </div>
@@ -972,7 +975,7 @@ export const Sidebar = memo(function Sidebar({
           {pinnedThreadRows.length > 0 && (
             <div className="pinned-section">
               <div className="sidebar-section-header">
-                <div className="sidebar-section-title">置顶会话</div>
+                <div className="sidebar-section-title">{t("sidebar.pinnedThreads")}</div>
                 <div className="sidebar-section-count">{pinnedRootCount}</div>
               </div>
               <PinnedThreadList
@@ -1071,15 +1074,15 @@ export const Sidebar = memo(function Sidebar({
           {!groupedWorkspacesForRender.length && (
             <div className="empty">
               {isSearchActive
-                ? "没有匹配的会话。"
-                : "添加项目后开始。"}
+                ? t("sidebar.noMatchingThreads")
+                : t("sidebar.addProjectToStart")}
             </div>
           )}
           {isThreadsOnlyMode &&
             groupedWorkspacesForRender.length > 0 &&
             flatThreadRows.length === 0 &&
             pinnedThreadRows.length === 0 && (
-              <div className="empty">暂无会话。</div>
+              <div className="empty">{t("sidebar.noThreads")}</div>
             )}
         </div>
       </div>

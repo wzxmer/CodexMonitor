@@ -3,6 +3,7 @@ import type { MouseEvent, ReactNode } from "react";
 
 import type { ThreadSummary, WorkspaceInfo } from "../../../types";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import { ThreadList } from "./ThreadList";
 import { ThreadLoading } from "./ThreadLoading";
 import { WorktreeCard } from "./WorktreeCard";
@@ -90,13 +91,15 @@ export function WorktreeSection({
   onLoadOlderThreads,
   searchQuery = "",
   isSearchActive = false,
-  sectionLabel = "工作树 Agents",
+  sectionLabel,
   sectionIcon,
   className,
 }: WorktreeSectionProps) {
+  const { t } = useI18n();
   if (!worktrees.length) {
     return null;
   }
+  const resolvedSectionLabel = sectionLabel ?? t("sidebar.worktreeAgents");
 
   return (
     <div className={`worktree-section${className ? ` ${className}` : ""}`}>
@@ -105,7 +108,7 @@ export function WorktreeSection({
           <span className="worktree-header-icon-wrap">
             {sectionIcon ?? <Layers className="worktree-header-icon" aria-hidden />}
           </span>
-          <span>{sectionLabel}</span>
+          <span>{resolvedSectionLabel}</span>
         </span>
         <span className="worktree-header-count">{worktrees.length}</span>
       </div>

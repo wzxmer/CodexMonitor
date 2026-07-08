@@ -10,6 +10,7 @@ import {
   PopoverMenuItem,
   PopoverSurface,
 } from "../../design-system/components/popover/PopoverPrimitives";
+import { useI18n } from "@/features/i18n/I18nProvider";
 
 type ComposerMobileActionsMenuProps = {
   disabled: boolean;
@@ -46,6 +47,7 @@ export function ComposerMobileActionsMenu({
   setMobileActionsOpen,
   showDictationAction,
 }: ComposerMobileActionsMenuProps) {
+  const { t } = useI18n();
   return (
     <div
       className={`composer-mobile-menu${mobileActionsOpen ? " is-open" : ""}`}
@@ -58,8 +60,8 @@ export function ComposerMobileActionsMenu({
         disabled={disabled}
         aria-expanded={mobileActionsOpen}
         aria-haspopup="menu"
-        aria-label="更多操作"
-        title="更多操作"
+        aria-label={t("composer.moreActions")}
+        title={t("composer.moreActions")}
       >
         <Plus size={14} aria-hidden />
       </button>
@@ -70,7 +72,7 @@ export function ComposerMobileActionsMenu({
             disabled={disabled || !onAddAttachment}
             icon={<Paperclip size={14} />}
           >
-            添加附件
+            {t("composer.addAttachment")}
           </PopoverMenuItem>
           {onToggleExpand && (
             <PopoverMenuItem
@@ -80,7 +82,7 @@ export function ComposerMobileActionsMenu({
                 isExpanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />
               }
             >
-              {isExpanded ? "收起输入框" : "展开输入框"}
+              {isExpanded ? t("composer.collapseInput") : t("composer.expandInput")}
             </PopoverMenuItem>
           )}
           {showDictationAction && (

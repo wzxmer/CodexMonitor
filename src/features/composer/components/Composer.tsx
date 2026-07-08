@@ -44,6 +44,7 @@ import { usePromptHistory } from "../hooks/usePromptHistory";
 import { ComposerInput } from "./ComposerInput";
 import { ComposerMetaBar } from "./ComposerMetaBar";
 import { ComposerQueue } from "./ComposerQueue";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import { isMacPlatform } from "../../../utils/platformPaths";
 import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
 
@@ -206,7 +207,7 @@ export const Composer = memo(function Composer({
   onSteerQueued,
   onEditQueued,
   onDeleteQueued,
-  sendLabel = "发送",
+  sendLabel = "",
   draftText = "",
   onDraftChange,
   historyKey = null,
@@ -256,6 +257,7 @@ export const Composer = memo(function Composer({
   onFileAutocompleteActiveChange,
   contextActions = [],
 }: ComposerProps) {
+  const { t } = useI18n();
   const [text, setText] = useState(draftText);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [appMentionBindings, setAppMentionBindings] = useState<AppMentionBinding[]>([]);
@@ -277,9 +279,9 @@ export const Composer = memo(function Composer({
     : "default";
   const effectiveSendLabel = isProcessing
     ? effectiveFollowUpBehavior === "steer"
-      ? "追加指令"
-      : "排队"
-    : sendLabel;
+      ? t("composer.steer")
+      : t("composer.queue")
+    : sendLabel || t("composer.send");
   const {
     expandFenceOnSpace,
     expandFenceOnEnter,
@@ -596,7 +598,7 @@ export const Composer = memo(function Composer({
         onDeleteQueued={onDeleteQueued}
       />
       {contextActions.length > 0 ? (
-        <div className="composer-context-actions" role="toolbar" aria-label="审查工具">
+        <div className="composer-context-actions" role="toolbar" aria-label="Review tools">
           {contextActions.map((action) => (
             <button
               key={action.id}

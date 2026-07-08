@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { AppSettings } from "../../../types";
+import { resolveAppLanguage } from "@/features/i18n/appLanguage";
 
 export function useCodeCssVars(appSettings: AppSettings) {
   useEffect(() => {
@@ -22,7 +23,11 @@ export function useCodeCssVars(appSettings: AppSettings) {
     );
     root.style.setProperty("--code-font-size", `${appSettings.codeFontSize}px`);
     root.dataset.themeAccent = appSettings.themeAccent;
+    const resolvedLanguage = resolveAppLanguage(appSettings.appLanguage);
+    root.dataset.appLanguage = resolvedLanguage;
+    root.lang = resolvedLanguage === "zh" ? "zh-CN" : "en";
   }, [
+    appSettings.appLanguage,
     appSettings.codeFontFamily,
     appSettings.codeFontSize,
     appSettings.messageFontSize,

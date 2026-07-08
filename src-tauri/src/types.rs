@@ -487,6 +487,8 @@ pub(crate) struct AppSettings {
     pub(crate) last_composer_reasoning_effort: Option<String>,
     #[serde(default = "default_ui_scale", rename = "uiScale")]
     pub(crate) ui_scale: f64,
+    #[serde(default = "default_app_language", rename = "appLanguage")]
+    pub(crate) app_language: String,
     #[serde(default = "default_theme", rename = "theme")]
     pub(crate) theme: String,
     #[serde(default = "default_theme_accent", rename = "themeAccent")]
@@ -606,6 +608,12 @@ pub(crate) struct AppSettings {
     pub(crate) subagent_system_notifications_enabled: bool,
     #[serde(default, rename = "codexPetEnabled")]
     pub(crate) codex_pet_enabled: bool,
+    #[serde(default = "default_codex_pet_id", rename = "codexPetId")]
+    pub(crate) codex_pet_id: String,
+    #[serde(default, rename = "codexPetCustomImagePath")]
+    pub(crate) codex_pet_custom_image_path: Option<String>,
+    #[serde(default, rename = "codexPetWakeVersion")]
+    pub(crate) codex_pet_wake_version: u64,
     #[serde(
         default = "default_collaboration_modes_enabled",
         rename = "collaborationModesEnabled"
@@ -769,6 +777,10 @@ fn default_remote_backends() -> Vec<RemoteBackendTarget> {
 
 fn default_ui_scale() -> f64 {
     1.0
+}
+
+fn default_app_language() -> String {
+    "system".to_string()
 }
 
 fn default_theme() -> String {
@@ -1025,6 +1037,10 @@ fn default_system_notifications_enabled() -> bool {
 
 fn default_subagent_system_notifications_enabled() -> bool {
     true
+}
+
+fn default_codex_pet_id() -> String {
+    "codex".to_string()
 }
 
 fn default_split_chat_diff_view() -> bool {
@@ -1294,6 +1310,7 @@ impl Default for AppSettings {
             last_composer_model_id: None,
             last_composer_reasoning_effort: None,
             ui_scale: 1.0,
+            app_language: default_app_language(),
             theme: default_theme(),
             theme_accent: default_theme_accent(),
             usage_show_remaining: default_usage_show_remaining(),
@@ -1324,6 +1341,9 @@ impl Default for AppSettings {
             system_notifications_enabled: true,
             subagent_system_notifications_enabled: true,
             codex_pet_enabled: false,
+            codex_pet_id: default_codex_pet_id(),
+            codex_pet_custom_image_path: None,
+            codex_pet_wake_version: 0,
             split_chat_diff_view: default_split_chat_diff_view(),
             preload_git_diffs: default_preload_git_diffs(),
             git_diff_ignore_whitespace_changes: default_git_diff_ignore_whitespace_changes(),
@@ -1480,6 +1500,7 @@ mod tests {
         assert!(settings.last_composer_model_id.is_none());
         assert!(settings.last_composer_reasoning_effort.is_none());
         assert!((settings.ui_scale - 1.0).abs() < f64::EPSILON);
+        assert_eq!(settings.app_language, "system");
         assert_eq!(settings.theme, "system");
         assert!(!settings.usage_show_remaining);
         assert!(settings.show_message_file_path);
@@ -1492,6 +1513,10 @@ mod tests {
         assert!(settings.notification_sounds_enabled);
         assert!(settings.system_notifications_enabled);
         assert!(settings.subagent_system_notifications_enabled);
+        assert!(!settings.codex_pet_enabled);
+        assert_eq!(settings.codex_pet_id, "codex");
+        assert!(settings.codex_pet_custom_image_path.is_none());
+        assert_eq!(settings.codex_pet_wake_version, 0);
         assert!(!settings.split_chat_diff_view);
         assert!(settings.preload_git_diffs);
         assert!(!settings.git_diff_ignore_whitespace_changes);

@@ -502,6 +502,29 @@
   position: relative;
 }
 
+.message-interrupted-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 8px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--status-warning) 42%, var(--cm-border-default));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--status-warning) 14%, var(--messages-solid-panel));
+  color: color-mix(in srgb, var(--status-warning) 78%, var(--text-stronger));
+  font-family: var(--code-font-family);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.message-interrupted-status svg {
+  flex: 0 0 auto;
+}
+
 .message.assistant .message-bubble.message-bubble-table-only {
   max-width: min(100%, 1120px);
   padding: 0;
@@ -665,6 +688,14 @@
   max-width: min(82%, 720px);
   border-radius: 14px;
   background: color-mix(in srgb, var(--conversation-user-color) 70%, var(--cm-surface-panel));
+  color: var(--conversation-user-text);
+}
+
+.message.user .bubble .markdown,
+.message.user .bubble .item-text,
+.message.user .bubble p,
+.message.user .bubble li {
+  color: inherit;
 }
 
 .messages-reading-cli .messages-inner {
@@ -722,6 +753,7 @@
   display: flex;
   align-items: center;
   padding: 0 14px;
+  padding-right: 160px;
   border-bottom: 1px solid var(--cm-border-default);
   border-radius: 11px 11px 0 0;
   background: color-mix(in srgb, var(--conversation-assistant-accent) 10%, var(--messages-solid-control));
@@ -729,6 +761,18 @@
   font-family: var(--code-font-family);
   font-size: 12px;
   font-weight: 700;
+}
+
+.messages-reading-cli .message.assistant .message-interrupted-status {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 1;
+  max-width: min(150px, 42%);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: color-mix(in srgb, var(--status-warning) 16%, var(--messages-solid-control));
 }
 
 .messages-reading-cli .message.user .bubble {
@@ -758,16 +802,50 @@
   padding: 0 54px 0 0;
 }
 
+.messages-reading-cli .tool-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--messages-process-border);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--conversation-assistant-accent) 10%, var(--messages-solid-control));
+}
+
 .messages-reading-cli .tool-group-toggle {
   font-family: var(--code-font-family);
   font-size: 12px;
-  width: fit-content;
-  min-height: 30px;
-  padding: 6px 10px;
-  border: 1px solid var(--messages-process-border);
-  border-radius: 10px;
-  background: var(--messages-process-bg);
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
   color: var(--messages-process-text);
+}
+
+.messages-reading-cli .tool-group-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--messages-process-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messages-reading-cli .tool-group-timestamp {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  color: color-mix(in srgb, var(--conversation-assistant-accent) 72%, var(--text-muted));
+  font-family: var(--code-font-family);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .messages-reading-cli .tool-inline {
@@ -807,14 +885,6 @@
   display: none !important;
 }
 
-.messages-reading-cli .tool-group-header {
-  padding-left: 0;
-}
-
-.messages-reading-cli .tool-group-toggle {
-  min-height: 26px;
-}
-
 .messages-reading-cli .tool-inline-summary,
 .messages-reading-cli .tool-inline-detail,
 .messages-reading-cli .explore-inline-item {
@@ -839,7 +909,6 @@
   border-radius: 18px;
   background: color-mix(in srgb, var(--conversation-user-color) 76%, var(--messages-solid-panel));
   color: var(--conversation-user-text);
-  color: var(--text-stronger);
   box-shadow: none;
 }
 
@@ -1636,6 +1705,10 @@
 .tool-group-summary {
   color: var(--text-muted);
   font-weight: 600;
+}
+
+.tool-group-timestamp {
+  display: none;
 }
 
 .tool-group-body {

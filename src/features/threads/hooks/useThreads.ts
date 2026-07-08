@@ -880,6 +880,7 @@ export function useThreads({
     rateLimitsByWorkspace: state.rateLimitsByWorkspace,
     accountByWorkspace: state.accountByWorkspace,
     planByThread: state.planByThread,
+    interruptedThreadById: state.interruptedThreadById,
     lastAgentMessageByThread: state.lastAgentMessageByThread,
     pinnedThreadsVersion,
     refreshAccountRateLimits,

@@ -3,6 +3,7 @@ import Ellipsis from "lucide-react/dist/esm/icons/ellipsis";
 import Plus from "lucide-react/dist/esm/icons/plus";
 
 import type { WorkspaceInfo } from "../../../types";
+import { useI18n } from "@/features/i18n/I18nProvider";
 
 type WorkspaceCardProps = {
   workspace: WorkspaceInfo;
@@ -44,6 +45,7 @@ export function WorkspaceCard({
   onToggleAddMenu,
   children,
 }: WorkspaceCardProps) {
+  const { t } = useI18n();
   const contentCollapsedClass = isCollapsed ? " collapsed" : "";
   const toggleWorkspace = () => {
     onToggleWorkspaceCollapse(workspace.id, !isCollapsed);
@@ -75,7 +77,7 @@ export function WorkspaceCard({
                   toggleWorkspace();
                 }}
                 data-tauri-drag-region="false"
-                aria-label={isCollapsed ? "显示 Agents" : "隐藏 Agents"}
+                aria-label={isCollapsed ? t("sidebar.showAgents") : t("sidebar.hideAgents")}
                 aria-expanded={!isCollapsed}
               >
                 <span className="workspace-toggle-icon">›</span>
@@ -94,8 +96,8 @@ export function WorkspaceCard({
                   onAddAgent(workspace);
                 }}
                 data-tauri-drag-region="false"
-                aria-label="立即创建"
-                title="新建 Agent"
+                aria-label={t("sidebar.createNow")}
+                title={t("sidebar.newAgent")}
               >
                 <Plus size={14} aria-hidden />
               </button>
@@ -121,8 +123,8 @@ export function WorkspaceCard({
                   );
                 }}
                 data-tauri-drag-region="false"
-                aria-label="更多 Agent 选项"
-                title="更多 Agent 选项"
+                aria-label={t("sidebar.moreAgentOptions")}
+                title={t("sidebar.moreAgentOptions")}
                 aria-expanded={addMenuOpen}
               >
                 <Ellipsis size={15} aria-hidden />
@@ -132,13 +134,13 @@ export function WorkspaceCard({
           {!hideConnectButton && !workspace.connected && (
             <span
               className="connect"
-              title="连接项目上下文到共享 Codex 服务"
+              title={t("sidebar.connectContext")}
               onClick={(event) => {
                 event.stopPropagation();
                 onConnectWorkspace(workspace);
               }}
             >
-              连接
+              {t("sidebar.connect")}
             </span>
           )}
         </div>

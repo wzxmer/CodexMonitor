@@ -1,6 +1,7 @@
 import type { CSSProperties, MouseEvent } from "react";
 import Pin from "lucide-react/dist/esm/icons/pin";
 import PinOff from "lucide-react/dist/esm/icons/pin-off";
+import { useI18n } from "@/features/i18n/I18nProvider";
 
 import type { ThreadSummary } from "../../../types";
 import { getThreadStatusClass, type ThreadStatusById } from "../../../utils/threadStatus";
@@ -90,6 +91,7 @@ export function ThreadRow({
   onToggleSubagents,
   showPinnedLabel = true,
 }: ThreadRowProps) {
+  const { t } = useI18n();
   const relativeTime = getThreadTime(thread);
   const badge = getThreadArgsBadge?.(workspaceId, thread.id) ?? null;
   const modelBadge =
@@ -215,8 +217,8 @@ export function ThreadRow({
               onToggleThreadPin(workspaceId, thread.id, isPinned);
             }}
             data-tauri-drag-region="false"
-            aria-label={isPinned ? "取消置顶会话" : "置顶会话"}
-            title={isPinned ? "取消置顶" : "置顶"}
+            aria-label={isPinned ? t("sidebar.unpinThread") : t("sidebar.pinThread")}
+            title={isPinned ? t("sidebar.unpin") : t("sidebar.pin")}
             aria-pressed={isPinned}
           >
             {isPinned ? (

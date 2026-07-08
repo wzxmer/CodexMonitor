@@ -211,6 +211,7 @@ export type RemoteBackendTarget = {
 export type ThemePreference = "system" | "light" | "dark" | "dim";
 export type ThemeAccentPreference = "codex" | "blue" | "green" | "pink" | "orange";
 export type MessageReadingStyle = "bubble" | "cli" | "codex";
+export type AppLanguagePreference = "system" | "zh" | "en";
 export type PersonalityPreference = "friendly" | "pragmatic";
 export type FollowUpMessageBehavior = "queue" | "steer";
 export type ComposerSendShortcut = "enter" | "ctrl-enter" | "enter-and-ctrl-enter";
@@ -275,6 +276,7 @@ export type AppSettings = {
   lastComposerModelId: string | null;
   lastComposerReasoningEffort: string | null;
   uiScale: number;
+  appLanguage: AppLanguagePreference;
   theme: ThemePreference;
   themeAccent: ThemeAccentPreference;
   usageShowRemaining: boolean;
@@ -304,6 +306,9 @@ export type AppSettings = {
   systemNotificationsEnabled: boolean;
   subagentSystemNotificationsEnabled: boolean;
   codexPetEnabled?: boolean;
+  codexPetId?: "codex" | "terminal" | "review" | "custom";
+  codexPetCustomImagePath?: string | null;
+  codexPetWakeVersion?: number;
   splitChatDiffView: boolean;
   preloadGitDiffs: boolean;
   gitDiffIgnoreWhitespaceChanges: boolean;

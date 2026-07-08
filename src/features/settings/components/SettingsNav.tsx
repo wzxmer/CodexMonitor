@@ -12,6 +12,8 @@ import ServerCog from "lucide-react/dist/esm/icons/server-cog";
 import Bot from "lucide-react/dist/esm/icons/bot";
 import Info from "lucide-react/dist/esm/icons/info";
 import { PanelNavItem, PanelNavList } from "@/features/design-system/components/panel/PanelPrimitives";
+import { useI18n } from "@/features/i18n/I18nProvider";
+import { SETTINGS_SECTION_LABEL_KEYS } from "@/features/i18n/settingsSectionLabels";
 import type { CodexSection } from "./settingsTypes";
 
 type SettingsNavProps = {
@@ -25,6 +27,7 @@ export function SettingsNav({
   onSelectSection,
   showDisclosure = false,
 }: SettingsNavProps) {
+  const { t } = useI18n();
   return (
     <aside className="settings-sidebar">
       <PanelNavList className="settings-nav-list">
@@ -35,7 +38,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("projects")}
         >
-          项目
+          {t(SETTINGS_SECTION_LABEL_KEYS.projects)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -44,7 +47,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("environments")}
         >
-          环境
+          {t(SETTINGS_SECTION_LABEL_KEYS.environments)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -53,7 +56,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("display")}
         >
-          显示与声音
+          {t(SETTINGS_SECTION_LABEL_KEYS.display)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -62,7 +65,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("composer")}
         >
-          输入
+          {t(SETTINGS_SECTION_LABEL_KEYS.composer)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -71,7 +74,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("dictation")}
         >
-          语音输入
+          {t(SETTINGS_SECTION_LABEL_KEYS.dictation)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -80,7 +83,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("shortcuts")}
         >
-          快捷键
+          {t(SETTINGS_SECTION_LABEL_KEYS.shortcuts)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -89,7 +92,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("open-apps")}
         >
-          打开方式
+          {t(SETTINGS_SECTION_LABEL_KEYS["open-apps"])}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -98,7 +101,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("git")}
         >
-          Git
+          {t(SETTINGS_SECTION_LABEL_KEYS.git)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -107,7 +110,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("server")}
         >
-          服务
+          {t(SETTINGS_SECTION_LABEL_KEYS.server)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -116,7 +119,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("agents")}
         >
-          Agents
+          {t(SETTINGS_SECTION_LABEL_KEYS.agents)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -125,7 +128,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("codex")}
         >
-          Codex
+          {t(SETTINGS_SECTION_LABEL_KEYS.codex)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -134,7 +137,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("features")}
         >
-          功能
+          {t(SETTINGS_SECTION_LABEL_KEYS.features)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -143,7 +146,7 @@ export function SettingsNav({
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("about")}
         >
-          关于
+          {t(SETTINGS_SECTION_LABEL_KEYS.about)}
         </PanelNavItem>
       </PanelNavList>
     </aside>

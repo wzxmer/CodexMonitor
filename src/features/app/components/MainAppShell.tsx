@@ -7,6 +7,7 @@ import {
 } from "@/features/layout/components/SidebarToggleControls";
 import { WindowCaptionControls } from "@/features/layout/components/WindowCaptionControls";
 import { MobileServerSetupWizard } from "@/features/mobile/components/MobileServerSetupWizard";
+import { CodexPet } from "@app/components/CodexPet";
 
 const GitHubPanelData = lazy(() =>
   import("@/features/git/components/GitHubPanelData").then((module) => ({
@@ -36,6 +37,7 @@ type MainAppShellProps = {
   appModalsProps: AppModalsProps;
   showMobileSetupWizard: boolean;
   mobileSetupWizardProps: ComponentProps<typeof MobileServerSetupWizard>;
+  codexPetProps?: ComponentProps<typeof CodexPet>;
 };
 
 export function MainAppShell({
@@ -50,6 +52,7 @@ export function MainAppShell({
   appModalsProps,
   showMobileSetupWizard,
   mobileSetupWizardProps,
+  codexPetProps,
 }: MainAppShellProps) {
   return (
     <div className={`${appClassName}${isResizing ? " is-resizing" : ""}`} style={appStyle} ref={appRef}>
@@ -62,6 +65,7 @@ export function MainAppShell({
         </Suspense>
       ) : null}
       <AppLayout {...appLayoutProps} />
+      {codexPetProps ? <CodexPet {...codexPetProps} /> : null}
       <AppModals {...appModalsProps} />
       {showMobileSetupWizard ? <MobileServerSetupWizard {...mobileSetupWizardProps} /> : null}
     </div>

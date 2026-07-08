@@ -164,8 +164,10 @@ export function reduceThreadLifecycle(
       const { [action.threadId]: ____, ...restDiffs } = state.turnDiffByThread;
       const { [action.threadId]: _____, ...restPlans } = state.planByThread;
       const { [action.threadId]: ______, ...restParents } = state.threadParentById;
+      const { [action.threadId]: _______, ...restInterrupted } =
+        state.interruptedThreadById;
       const {
-        [action.threadId]: _______,
+        [action.threadId]: ________,
         ...restPendingUserMessageReplacement
       } = state.pendingUserMessageReplacementByThread;
       return {
@@ -180,6 +182,7 @@ export function reduceThreadLifecycle(
         turnDiffByThread: restDiffs,
         planByThread: restPlans,
         threadParentById: restParents,
+        interruptedThreadById: restInterrupted,
         pendingUserMessageReplacementByThread: restPendingUserMessageReplacement,
         activeThreadIdByWorkspace: {
           ...state.activeThreadIdByWorkspace,
@@ -228,6 +231,10 @@ export function reduceThreadLifecycle(
             ...state.threadStatusById,
             [action.threadId]: nextStatus,
           },
+          interruptedThreadById: (() => {
+            const { [action.threadId]: _, ...rest } = state.interruptedThreadById;
+            return rest;
+          })(),
         };
       }
       const nextDuration =
@@ -250,6 +257,24 @@ export function reduceThreadLifecycle(
           ...state.threadStatusById,
           [action.threadId]: nextStatus,
         },
+      };
+    }
+    case "markThreadInterrupted":
+      return {
+        ...state,
+        interruptedThreadById: {
+          ...state.interruptedThreadById,
+          [action.threadId]: { timestamp: action.timestamp },
+        },
+      };
+    case "clearThreadInterrupted": {
+      if (!state.interruptedThreadById[action.threadId]) {
+        return state;
+      }
+      const { [action.threadId]: _, ...rest } = state.interruptedThreadById;
+      return {
+        ...state,
+        interruptedThreadById: rest,
       };
     }
     case "setActiveTurnId":

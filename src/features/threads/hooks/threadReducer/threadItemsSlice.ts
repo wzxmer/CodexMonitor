@@ -37,6 +37,17 @@ function sameMessageAttachments(left?: string[], right?: string[]) {
   );
 }
 
+function clearInterruptedThread(
+  state: ThreadState,
+  threadId: string,
+): Pick<ThreadState, "interruptedThreadById"> {
+  if (!state.interruptedThreadById[threadId]) {
+    return { interruptedThreadById: state.interruptedThreadById };
+  }
+  const { [threadId]: _, ...rest } = state.interruptedThreadById;
+  return { interruptedThreadById: rest };
+}
+
 export function reduceThreadItems(state: ThreadState, action: ThreadAction): ThreadState {
   switch (action.type) {
     case "addAssistantMessage": {
@@ -86,6 +97,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
       });
       return {
         ...state,
+        ...clearInterruptedThread(state, action.threadId),
         itemsByThread: {
           ...state.itemsByThread,
           [action.threadId]: updatedItems,
@@ -123,6 +135,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
       });
       return {
         ...state,
+        ...clearInterruptedThread(state, action.threadId),
         itemsByThread: {
           ...state.itemsByThread,
           [action.threadId]: updatedItems,
@@ -244,6 +257,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
       }
       return {
         ...state,
+        ...(isUserMessage ? clearInterruptedThread(state, action.threadId) : {}),
         itemsByThread: {
           ...state.itemsByThread,
           [action.threadId]: updatedItems,

@@ -45,6 +45,7 @@ export type ThreadState = {
   rateLimitsByWorkspace: Record<string, RateLimitSnapshot | null>;
   accountByWorkspace: Record<string, AccountSnapshot | null>;
   planByThread: Record<string, TurnPlan | null>;
+  interruptedThreadById: Record<string, { timestamp: number }>;
   lastAgentMessageByThread: Record<string, { text: string; timestamp: number }>;
   pendingUserMessageReplacementByThread: Record<
     string,
@@ -175,6 +176,8 @@ export type ThreadAction =
   | { type: "setThreadTurnDiff"; threadId: string; diff: string }
   | { type: "setThreadPlan"; threadId: string; plan: TurnPlan | null }
   | { type: "clearThreadPlan"; threadId: string }
+  | { type: "markThreadInterrupted"; threadId: string; timestamp: number }
+  | { type: "clearThreadInterrupted"; threadId: string }
   | {
       type: "setLastAgentMessage";
       threadId: string;
@@ -205,6 +208,7 @@ export const initialState: ThreadState = {
   rateLimitsByWorkspace: {},
   accountByWorkspace: {},
   planByThread: {},
+  interruptedThreadById: {},
   lastAgentMessageByThread: {},
   pendingUserMessageReplacementByThread: {},
 };

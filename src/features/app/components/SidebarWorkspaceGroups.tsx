@@ -6,6 +6,7 @@ import Plus from "lucide-react/dist/esm/icons/plus";
 
 import type { ThreadSummary, WorkspaceInfo } from "../../../types";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import {
   PopoverMenuItem,
   PopoverSurface,
@@ -116,9 +117,9 @@ function normalizeLocalCodexProjectPath(path: string | null | undefined) {
   return (path ?? "").trim().replace(/\\/g, "/").replace(/\/+$/g, "");
 }
 
-function getLocalCodexProjectLabel(path: string) {
+function getLocalCodexProjectLabel(path: string, unknownLabel = "Unknown project") {
   if (!path) {
-    return "未知项目";
+    return unknownLabel;
   }
   const parts = path.split("/").filter(Boolean);
   return parts.length > 0 ? parts[parts.length - 1] : path;
@@ -209,7 +210,7 @@ function getVisibleThreadSections({
   };
 }
 
-function groupLocalCodexRowsByProject(rows: ThreadRowEntry[]) {
+function groupLocalCodexRowsByProject(rows: ThreadRowEntry[], unknownLabel: string) {
   const groups = new Map<
     string,
     {
@@ -227,7 +228,7 @@ function groupLocalCodexRowsByProject(rows: ThreadRowEntry[]) {
       groups.get(key) ??
       {
         key,
-        label: getLocalCodexProjectLabel(path),
+        label: getLocalCodexProjectLabel(path, unknownLabel),
         path,
         rows: [] as ThreadRowEntry[],
       };
@@ -310,7 +311,8 @@ function LocalCodexProjectThreadGroups({
     canPin: boolean,
   ) => void;
 }) {
-  const groups = groupLocalCodexRowsByProject(rows);
+  const { t } = useI18n();
+  const groups = groupLocalCodexRowsByProject(rows, t("sidebar.unknownProject"));
   const [collapsedProjectKeys, setCollapsedProjectKeys] = useState<Set<string>>(
     () => new Set(),
   );
@@ -338,10 +340,10 @@ function LocalCodexProjectThreadGroups({
         disabled={isPaging}
       >
         {isPaging
-          ? "加载中..."
+          ? t("sidebar.loading")
           : isSearchActive
-            ? "搜索更早会话..."
-            : "加载更早会话..."}
+            ? t("sidebar.searchOlderThreads")
+            : t("sidebar.loadOlderThreads")}
       </button>
     );
   }
@@ -362,7 +364,9 @@ function LocalCodexProjectThreadGroups({
                 isProjectCollapsed ? "" : " expanded"
               }`}
               aria-expanded={!isProjectCollapsed}
-              aria-label={`${isProjectCollapsed ? "展开" : "折叠"} ${group.label}`}
+              aria-label={`${
+                isProjectCollapsed ? t("sidebar.expand") : t("sidebar.collapse")
+              } ${group.label}`}
               onClick={(event) => {
                 event.stopPropagation();
                 toggleProjectCollapse(group.key);
@@ -415,7 +419,7 @@ function LocalCodexProjectThreadGroups({
           }}
           disabled={isPaging}
         >
-          {isPaging ? "加载中..." : "加载更早会话..."}
+          {isPaging ? t("sidebar.loading") : t("sidebar.loadOlderThreads")}
         </button>
       )}
     </>
@@ -448,6 +452,7 @@ function LocalCodexWorkspaceEntry({
   onToggleExpanded,
   onLoadOlderThreads,
 }: SidebarWorkspaceEntryProps) {
+  const { t } = useI18n();
   const threads = threadsByWorkspace[workspace.id] ?? [];
   const isExpanded = isSearchActive || expandedWorkspaces.has(workspace.id);
   const { pinnedRows, unpinnedRows, totalRoots } = getThreadRows(
@@ -476,7 +481,9 @@ function LocalCodexWorkspaceEntry({
         type="button"
         className={`local-codex-history-header${isExpanded ? " expanded" : ""}`}
         aria-expanded={isExpanded}
-        aria-label={`${isExpanded ? "折叠" : "展开"} ${LOCAL_CODEX_WORKSPACE_NAME}`}
+        aria-label={`${isExpanded ? t("sidebar.collapse") : t("sidebar.expand")} ${
+          LOCAL_CODEX_WORKSPACE_NAME
+        }`}
         onClick={(event) => {
           event.stopPropagation();
           onToggleExpanded(workspace.id);
@@ -494,11 +501,11 @@ function LocalCodexWorkspaceEntry({
           <div className="local-codex-history-content-inner">
             {!workspace.connected && (
               <div className="workspace-local-empty">
-                添加或连接一个项目后，这里会同步显示本机 Codex 历史会话。
+                {t("sidebar.localHistoryConnectHint")}
               </div>
             )}
             {workspace.connected && !hasLoadedRows && !nextCursor && !showThreadLoader && (
-              <div className="workspace-local-empty">暂无本机 Codex 历史会话。</div>
+              <div className="workspace-local-empty">{t("sidebar.noLocalHistory")}</div>
             )}
             {showThreadList && (
               <LocalCodexProjectThreadGroups
@@ -581,6 +588,7 @@ function SidebarWorkspaceEntry({
   onLoadOlderThreads,
   onToggleAddMenu,
 }: SidebarWorkspaceEntryProps) {
+  const { t } = useI18n();
   if (cloneChildIds.has(workspace.id)) {
     return null;
   }
@@ -702,10 +710,10 @@ function SidebarWorkspaceEntry({
       workspaceName={renderHighlightedName(workspace.name)}
       summary={
         displayThreadRootCount > 0
-          ? `${displayThreadRootCount} 个会话${
-              threads[0] ? ` · 更新于 ${getThreadTime(threads[0])}` : ""
+          ? `${displayThreadRootCount} ${t("sidebar.threadCountSuffix")}${
+              threads[0] ? ` · ${t("sidebar.updatedAt")} ${getThreadTime(threads[0])}` : ""
             }`
-          : "暂无会话"
+          : t("sidebar.noThreads")
       }
       isActive={workspace.id === activeWorkspaceId}
       isCollapsed={isCollapsed}
@@ -737,7 +745,7 @@ function SidebarWorkspaceEntry({
               }}
               icon={<Plus aria-hidden />}
             >
-              新建 Agent
+              {t("sidebar.newAgent")}
             </PopoverMenuItem>
             <PopoverMenuItem
               className="workspace-add-option"
@@ -748,7 +756,7 @@ function SidebarWorkspaceEntry({
               }}
               icon={<GitBranch aria-hidden />}
             >
-              新建 worktree Agent
+              {t("sidebar.newWorktreeAgent")}
             </PopoverMenuItem>
             <PopoverMenuItem
               className="workspace-add-option"
@@ -759,7 +767,7 @@ function SidebarWorkspaceEntry({
               }}
               icon={<Copy aria-hidden />}
             >
-              新建副本 Agent
+              {t("sidebar.newCloneAgent")}
             </PopoverMenuItem>
           </PopoverSurface>,
           document.body,
@@ -780,7 +788,7 @@ function SidebarWorkspaceEntry({
           <span className={`thread-status ${draftStatusClass}`} aria-hidden />
           <div className="thread-content">
             <div className="thread-headline">
-              <span className="thread-name">新建 Agent</span>
+              <span className="thread-name">{t("sidebar.draftNewAgent")}</span>
             </div>
           </div>
         </div>
@@ -814,7 +822,7 @@ function SidebarWorkspaceEntry({
           onLoadOlderThreads={onLoadOlderThreads}
           searchQuery={normalizedQuery}
           isSearchActive={isSearchActive}
-          sectionLabel="副本 Agents"
+          sectionLabel={t("sidebar.cloneAgents")}
           sectionIcon={<Copy className="worktree-header-icon" aria-hidden />}
           className="clone-section"
         />

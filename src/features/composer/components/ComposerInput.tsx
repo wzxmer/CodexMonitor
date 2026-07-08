@@ -18,6 +18,7 @@ import { ComposerMobileActionsMenu } from "./ComposerMobileActionsMenu";
 import { ComposerSuggestionsPopover } from "./ComposerSuggestionsPopover";
 import { ComposerAttachments } from "./ComposerAttachments";
 import { DictationWaveform } from "../../dictation/components/DictationWaveform";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import { useComposerDictationControls } from "../hooks/useComposerDictationControls";
 import { useComposerInputLayout } from "../hooks/useComposerInputLayout";
 import { useComposerMobileActions } from "../hooks/useComposerMobileActions";
@@ -136,6 +137,7 @@ export function ComposerInput({
   onReviewPromptUpdateCustomInstructions,
   onReviewPromptConfirmCustom,
 }: ComposerInputProps) {
+  const { t } = useI18n();
   const suggestionListRef = useRef<HTMLDivElement | null>(null);
   const suggestionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const { isPhoneLayout, isPhoneTallInput } = useComposerInputLayout({
@@ -211,7 +213,7 @@ export function ComposerInput({
     }
     setMobileActionsOpen(false);
     onAddAttachment();
-  }, [disabled, onAddAttachment]);
+  }, [disabled, onAddAttachment, setMobileActionsOpen]);
 
   const handleMobileExpandClick = useCallback(() => {
     if (disabled || !onToggleExpand) {
@@ -219,12 +221,12 @@ export function ComposerInput({
     }
     setMobileActionsOpen(false);
     onToggleExpand();
-  }, [disabled, onToggleExpand]);
+  }, [disabled, onToggleExpand, setMobileActionsOpen]);
 
   const handleMobileDictationClick = useCallback(() => {
     setMobileActionsOpen(false);
     handleMicClick();
-  }, [handleMicClick]);
+  }, [handleMicClick, setMobileActionsOpen]);
 
   return (
     <div className={`composer-input${isPhoneLayout && isPhoneTallInput ? " is-phone-tall" : ""}`}>
@@ -247,8 +249,8 @@ export function ComposerInput({
             className="composer-attach"
             onClick={onAddAttachment}
             disabled={disabled || !onAddAttachment}
-            aria-label="添加附件"
-            title="添加附件"
+            aria-label={t("composer.addAttachment")}
+            title={t("composer.addAttachment")}
           >
             <Paperclip size={14} aria-hidden />
           </button>
@@ -275,8 +277,8 @@ export function ComposerInput({
             ref={textareaRef}
             placeholder={
               disabled
-                ? "正在审查，完成后可继续对话。"
-                : "让 Codex 做点什么..."
+                ? t("composer.reviewPlaceholder")
+                : t("composer.placeholder")
             }
             value={text}
             onChange={handleTextareaChange}
@@ -297,8 +299,12 @@ export function ComposerInput({
                 }`}
                 onClick={onToggleExpand}
                 disabled={disabled}
-                aria-label={isExpanded ? "收起输入框" : "展开输入框"}
-                title={isExpanded ? "收起输入框" : "展开输入框"}
+                aria-label={
+                  isExpanded ? t("composer.collapseInput") : t("composer.expandInput")
+                }
+                title={
+                  isExpanded ? t("composer.collapseInput") : t("composer.expandInput")
+                }
               >
                 {isExpanded ? <ChevronDown aria-hidden /> : <ChevronUp aria-hidden />}
               </button>
@@ -328,8 +334,8 @@ export function ComposerInput({
               }`}
               onClick={handleActionClick}
               disabled={(disabled && !canStop) || isDictationBusy || (!canStop && !canSend)}
-              aria-label={canStop ? "停止" : sendLabel}
-              title={canStop ? "停止" : sendLabel}
+              aria-label={canStop ? t("composer.stop") : sendLabel}
+              title={canStop ? t("composer.stop") : sendLabel}
             >
               {canStop ? (
                 <>
@@ -367,7 +373,7 @@ export function ComposerInput({
               className="ghost composer-dictation-error-dismiss"
               onClick={onDismissDictationError}
             >
-              关闭
+              {t("composer.close")}
             </button>
           </div>
         )}
@@ -380,7 +386,7 @@ export function ComposerInput({
                 className="ghost composer-dictation-error-dismiss"
                 onClick={onDismissDictationHint}
               >
-                关闭
+                {t("composer.close")}
               </button>
             )}
           </div>

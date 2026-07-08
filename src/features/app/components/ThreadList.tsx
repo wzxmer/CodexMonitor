@@ -2,6 +2,7 @@ import { useMemo, useState, type MouseEvent } from "react";
 
 import type { ThreadSummary } from "../../../types";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import { ThreadRow } from "./ThreadRow";
 import { buildThreadRowVisibility } from "./threadRowVisibility";
 
@@ -64,6 +65,7 @@ export function ThreadList({
   onShowThreadMenu,
   onToggleThreadPin,
 }: ThreadListProps) {
+  const { t } = useI18n();
   const indentUnit = nested ? 10 : 14;
   const [collapsedThreadKeys, setCollapsedThreadKeys] = useState<Set<string>>(new Set());
 
@@ -154,7 +156,7 @@ export function ThreadList({
             onToggleExpanded(workspaceId);
           }}
         >
-          {isExpanded ? "收起" : "更多..."}
+          {isExpanded ? t("sidebar.collapseList") : t("sidebar.showMore")}
         </button>
       )}
       {showLoadOlder && nextCursor && (isExpanded || totalThreadRoots <= 3) && (
@@ -167,10 +169,10 @@ export function ThreadList({
           disabled={isPaging}
         >
           {isPaging
-            ? "加载中..."
+            ? t("sidebar.loading")
             : totalThreadRoots === 0
-              ? "搜索更早会话..."
-              : "加载更早会话..."}
+              ? t("sidebar.searchOlderThreads")
+              : t("sidebar.loadOlderThreads")}
         </button>
       )}
     </div>

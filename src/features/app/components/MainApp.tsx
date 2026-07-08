@@ -74,6 +74,9 @@ import { useRemoteThreadLiveConnection } from "@app/hooks/useRemoteThreadLiveCon
 import { useTrayRecentThreads } from "@app/hooks/useTrayRecentThreads";
 import { useTraySessionUsage } from "@app/hooks/useTraySessionUsage";
 import { useTauriEvent } from "@app/hooks/useTauriEvent";
+import { I18nProvider } from "@/features/i18n/I18nProvider";
+import { resolveAppLanguage } from "@/features/i18n/appLanguage";
+import { I18N_STRINGS, type I18nKey } from "@/features/i18n/strings";
 import { useAppBootstrapOrchestration } from "@app/bootstrap/useAppBootstrapOrchestration";
 import {
   useThreadCodexBootstrapOrchestration,
@@ -155,6 +158,11 @@ export default function MainApp() {
     clearDebugEntries,
     shouldReduceTransparency,
   } = useAppBootstrapOrchestration();
+  const appLanguage = resolveAppLanguage(appSettings.appLanguage);
+  const t = useCallback(
+    (key: I18nKey) => I18N_STRINGS[appLanguage][key] ?? I18N_STRINGS.zh[key],
+    [appLanguage],
+  );
   const {
     threadListSortKey,
     setThreadListSortKey,
@@ -515,6 +523,7 @@ export default function MainApp() {
     rateLimitsByWorkspace,
     accountByWorkspace,
     planByThread,
+    interruptedThreadById,
     lastAgentMessageByThread,
     pinnedThreadsVersion,
     interruptTurn,
@@ -1443,13 +1452,17 @@ export default function MainApp() {
             label: "local-codex/workspace-add error",
             payload: { cwd: path, message },
           });
-          alert(`无法继续这个本机 Codex 会话。\n\n${message}`);
+          alert(`${t("localCodex.resumeFailed")}\n\n${message}`);
           return;
         }
       }
 
       if (!workspaceId) {
-        alert(`无法继续这个本机 Codex 会话。\n\n找不到项目：${path}`);
+        alert(
+          `${t("localCodex.resumeFailed")}\n\n${t(
+            "localCodex.projectNotFound",
+          )}: ${path}`,
+        );
         return;
       }
 
@@ -1467,7 +1480,7 @@ export default function MainApp() {
             label: "local-codex/workspace-connect error",
             payload: { cwd: path, workspaceId, message },
           });
-          alert(`无法继续这个本机 Codex 会话。\n\n${message}`);
+          alert(`${t("localCodex.resumeFailed")}\n\n${message}`);
           return;
         }
       }
@@ -1495,6 +1508,7 @@ export default function MainApp() {
       setActiveTab,
       setActiveThreadId,
       storedWorkspaces,
+      t,
     ],
   );
 
@@ -1741,6 +1755,7 @@ export default function MainApp() {
     threadsByWorkspace,
     threadParentById,
     threadStatusById,
+    interruptedThreadById,
     threadResumeLoadingById,
     threadListLoadingByWorkspace,
     threadListPagingByWorkspace,
@@ -1964,6 +1979,12 @@ export default function MainApp() {
       appModalsProps,
       showMobileSetupWizard,
       mobileSetupWizardProps,
+      codexPetProps: {
+        enabled: appSettings.codexPetEnabled,
+        petId: appSettings.codexPetId,
+        customImagePath: appSettings.codexPetCustomImagePath,
+        wakeVersion: appSettings.codexPetWakeVersion,
+      },
     },
     gitHubPanelDataProps: {
       activeWorkspace,
@@ -2021,5 +2042,9 @@ export default function MainApp() {
     },
   });
 
-  return <MainAppShell {...mainAppShellProps} />;
+  return (
+    <I18nProvider preference={appSettings.appLanguage}>
+      <MainAppShell {...mainAppShellProps} />
+    </I18nProvider>
+  );
 }

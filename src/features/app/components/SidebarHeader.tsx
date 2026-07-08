@@ -15,6 +15,7 @@ import {
   PopoverMenuItem,
   PopoverSurface,
 } from "../../design-system/components/popover/PopoverPrimitives";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import { useMenuController } from "../hooks/useMenuController";
 
 type SidebarHeaderProps = {
@@ -44,6 +45,7 @@ export function SidebarHeader({
   refreshDisabled = false,
   refreshInProgress = false,
 }: SidebarHeaderProps) {
+  const { t } = useI18n();
   const sortMenu = useMenuController();
   const { isOpen: sortMenuOpen, containerRef: sortMenuRef } = sortMenu;
   const sortMenuPopoverRef = useRef<HTMLDivElement | null>(null);
@@ -130,8 +132,8 @@ export function SidebarHeader({
             className="sidebar-title-add ds-tooltip-trigger"
             onClick={onAddWorkspace}
             data-tauri-drag-region="false"
-            aria-label="添加项目"
-            data-tooltip="添加项目"
+            aria-label={t("sidebar.addProject")}
+            data-tooltip={t("sidebar.addProject")}
             data-tooltip-align="start"
             data-tooltip-placement="bottom"
             type="button"
@@ -142,11 +144,11 @@ export function SidebarHeader({
             className="sidebar-home-toggle ds-tooltip-trigger"
             onClick={onSelectHome}
             data-tauri-drag-region="false"
-            aria-label="打开首页"
-            data-tooltip="主页"
+            aria-label={t("sidebar.openHome")}
+            data-tooltip={t("sidebar.home")}
             data-tooltip-align="start"
             data-tooltip-placement="bottom"
-            title="主页"
+            title={t("sidebar.home")}
             type="button"
           >
             <House aria-hidden />
@@ -161,9 +163,9 @@ export function SidebarHeader({
             className="ghost sidebar-sort-toggle ds-tooltip-trigger"
             onClick={sortMenu.toggle}
             data-tauri-drag-region="false"
-            aria-label="整理和排序会话"
-            title="整理和排序会话"
-            data-tooltip="整理和排序会话"
+            aria-label={t("sidebar.organizeAndSort")}
+            title={t("sidebar.organizeAndSort")}
+            data-tooltip={t("sidebar.organizeAndSort")}
             data-tooltip-align="end"
             data-tooltip-placement="bottom"
           >
@@ -180,7 +182,7 @@ export function SidebarHeader({
                   : undefined
               }
             >
-              <div className="sidebar-sort-section-label">整理</div>
+              <div className="sidebar-sort-section-label">{t("sidebar.organize")}</div>
               <PopoverMenuItem
                 className="sidebar-sort-option"
                 role="menuitemradio"
@@ -190,7 +192,7 @@ export function SidebarHeader({
                 icon={<FolderTree aria-hidden />}
                 active={threadListOrganizeMode === "by_project"}
               >
-                按项目
+                {t("sidebar.byProject")}
               </PopoverMenuItem>
               <PopoverMenuItem
                 className="sidebar-sort-option"
@@ -201,7 +203,7 @@ export function SidebarHeader({
                 icon={<BetweenHorizontalStart aria-hidden />}
                 active={threadListOrganizeMode === "by_project_activity"}
               >
-                按项目活跃度
+                {t("sidebar.byProjectActivity")}
               </PopoverMenuItem>
               <PopoverMenuItem
                 className="sidebar-sort-option"
@@ -212,10 +214,10 @@ export function SidebarHeader({
                 icon={<ListTree aria-hidden />}
                 active={threadListOrganizeMode === "threads_only"}
               >
-                会话列表
+                {t("sidebar.threadsOnly")}
               </PopoverMenuItem>
               <div className="sidebar-sort-divider" aria-hidden />
-              <div className="sidebar-sort-section-label">排序</div>
+              <div className="sidebar-sort-section-label">{t("sidebar.sort")}</div>
               <PopoverMenuItem
                 className="sidebar-sort-option"
                 role="menuitemradio"
@@ -225,7 +227,7 @@ export function SidebarHeader({
                 icon={<ArrowDownUp aria-hidden />}
                 active={threadListSortKey === "updated_at"}
               >
-                最近更新
+                {t("sidebar.recentlyUpdated")}
               </PopoverMenuItem>
               <PopoverMenuItem
                 className="sidebar-sort-option"
@@ -236,7 +238,7 @@ export function SidebarHeader({
                 icon={<Calendar aria-hidden />}
                 active={threadListSortKey === "created_at"}
               >
-                创建时间
+                {t("sidebar.createdAt")}
               </PopoverMenuItem>
             </PopoverSurface>
           )}
@@ -245,10 +247,10 @@ export function SidebarHeader({
           className="ghost sidebar-refresh-toggle ds-tooltip-trigger"
           onClick={onRefreshAllThreads}
           data-tauri-drag-region="false"
-          aria-label="刷新会话"
+          aria-label={t("sidebar.refreshThreads")}
           type="button"
-          title="刷新会话"
-          data-tooltip="刷新会话"
+          title={t("sidebar.refreshThreads")}
+          data-tooltip={t("sidebar.refreshThreads")}
           data-tooltip-align="end"
           data-tooltip-placement="bottom"
           disabled={refreshDisabled}
@@ -263,8 +265,8 @@ export function SidebarHeader({
           className={`ghost sidebar-search-toggle ds-tooltip-trigger${isSearchOpen ? " is-active" : ""}`}
           onClick={onToggleSearch}
           data-tauri-drag-region="false"
-          aria-label="切换搜索"
-          data-tooltip={isSearchOpen ? "关闭搜索" : "搜索会话"}
+          aria-label={t("sidebar.toggleSearch")}
+          data-tooltip={isSearchOpen ? t("sidebar.closeSearch") : t("sidebar.searchThreads")}
           data-tooltip-align="end"
           data-tooltip-placement="bottom"
           aria-pressed={isSearchOpen}

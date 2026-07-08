@@ -1,6 +1,7 @@
 import type { MouseEvent } from "react";
 
 import type { WorkspaceInfo } from "../../../types";
+import { useI18n } from "@/features/i18n/I18nProvider";
 
 type WorktreeCardProps = {
   worktree: WorkspaceInfo;
@@ -21,6 +22,7 @@ export function WorktreeCard({
   onConnectWorkspace,
   children,
 }: WorktreeCardProps) {
+  const { t } = useI18n();
   const worktreeCollapsed = worktree.settings.sidebarCollapsed;
   const worktreeBranch = worktree.worktree?.branch ?? "";
   const worktreeLabel = worktree.name?.trim() || worktreeBranch;
@@ -64,7 +66,7 @@ export function WorktreeCard({
           {isDeleting ? (
             <div className="worktree-deleting" role="status" aria-live="polite">
               <span className="worktree-deleting-spinner" aria-hidden />
-              <span className="worktree-deleting-label">删除中</span>
+              <span className="worktree-deleting-label">{t("sidebar.deleting")}</span>
             </div>
           ) : (
             <>
@@ -75,7 +77,9 @@ export function WorktreeCard({
                   toggleWorktree();
                 }}
                 data-tauri-drag-region="false"
-                aria-label={worktreeCollapsed ? "显示 Agents" : "隐藏 Agents"}
+                aria-label={
+                  worktreeCollapsed ? t("sidebar.showAgents") : t("sidebar.hideAgents")
+                }
                 aria-expanded={!worktreeCollapsed}
               >
                 <span className="worktree-toggle-icon">›</span>
@@ -83,13 +87,13 @@ export function WorktreeCard({
               {!worktree.connected && (
                 <span
                   className="connect"
-                  title="连接项目上下文到共享 Codex 服务"
+                  title={t("sidebar.connectContext")}
                   onClick={(event) => {
                     event.stopPropagation();
                     onConnectWorkspace(worktree);
                   }}
                 >
-                  连接
+                  {t("sidebar.connect")}
                 </span>
               )}
             </>
