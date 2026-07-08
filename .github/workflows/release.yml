@@ -819,4 +819,5 @@ jobs:
             --title "chore: bump version to ${NEXT_VERSION}" \
             --body "Post-release version bump to ${NEXT_VERSION}." \
             --base main \
-            --head "chore/bump-version-${NEXT_VERSION}"
+            --head "chore/bump-version-${NEXT_VERSION}" || \
+            echo "Unable to create version bump PR; branch chore/bump-version-${NEXT_VERSION} was pushed."
