@@ -8,6 +8,7 @@ import {
   archiveThread,
   interruptTurn,
   listThreads,
+  listWorkspaces,
   readThread,
   resumeThread,
   sendUserMessage as sendUserMessageService,
@@ -40,6 +41,7 @@ vi.mock("@services/tauri", () => ({
   startReview: vi.fn(),
   startThread: vi.fn(),
   listThreads: vi.fn(),
+  listWorkspaces: vi.fn(),
   resumeThread: vi.fn(),
   readThread: vi.fn(),
   archiveThread: vi.fn(),
@@ -66,6 +68,7 @@ describe("useThreads UX integration", () => {
     handlers = null;
     localStorage.clear();
     vi.clearAllMocks();
+    vi.mocked(listWorkspaces).mockResolvedValue([]);
     now = 1000;
     nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now++);
   });
@@ -595,6 +598,71 @@ describe("useThreads UX integration", () => {
     });
     expect(vi.mocked(archiveThread)).not.toHaveBeenCalled();
     expect(vi.mocked(listThreads)).not.toHaveBeenCalled();
+  });
+
+  it("auto-archives old local Codex history threads that do not belong to a workspace", async () => {
+    now = Date.UTC(2026, 0, 10);
+    const localCodexWorkspace: WorkspaceInfo = {
+      id: LOCAL_CODEX_WORKSPACE_ID,
+      name: "本机 Codex 历史会话",
+      path: "",
+      connected: true,
+      settings: { sidebarCollapsed: false },
+    };
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-local-old",
+            cwd: "/tmp/untracked-project",
+            updated_at: now - 5 * DAY_MS,
+          },
+          {
+            id: "thread-project-old",
+            cwd: "/tmp/codex",
+            updated_at: now - 5 * DAY_MS,
+          },
+          {
+            id: "thread-known-project-old",
+            cwd: "/tmp/known-project",
+            updated_at: now - 5 * DAY_MS,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(listWorkspaces).mockResolvedValue([
+      {
+        id: "ws-known",
+        name: "Known Project",
+        path: "/tmp/known-project",
+        connected: false,
+        settings: { sidebarCollapsed: false },
+      },
+    ]);
+    vi.mocked(archiveThread).mockResolvedValue({});
+
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        workspaces: [workspace, localCodexWorkspace],
+        autoArchiveThreadsEnabled: true,
+        autoArchiveThreadsDays: 3,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(archiveThread)).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-local-old",
+      );
+    });
+    expect(vi.mocked(archiveThread)).toHaveBeenCalledWith("ws-1", "thread-project-old");
+    expect(vi.mocked(archiveThread)).not.toHaveBeenCalledWith(
+      "ws-1",
+      "thread-known-project-old",
+    );
   });
 
   it("skips active and pinned threads during auto archive", async () => {
