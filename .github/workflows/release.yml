@@ -8,8 +8,61 @@ permissions:
   pull-requests: write
 
 jobs:
+  prepare_release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve release version
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION=$(python3 - <<'PY'
+          import json
+          import re
+          import subprocess
+          from pathlib import Path
+
+          current = json.loads(Path("src-tauri/tauri.conf.json").read_text())["version"]
+
+          def parse(version):
+              parts = version.split(".")
+              if len(parts) != 3:
+                  raise SystemExit(f"Expected version like 0.X.Y, got {version}")
+              return tuple(int(part) for part in parts)
+
+          current_tuple = parse(current)
+          tags = subprocess.check_output(
+              ["git", "tag", "--list", "v[0-9]*.[0-9]*.[0-9]*"],
+              text=True,
+          ).splitlines()
+
+          released = []
+          for tag in tags:
+              match = re.fullmatch(r"v(\d+\.\d+\.\d+)", tag.strip())
+              if match:
+                  released.append(parse(match.group(1)))
+
+          if released:
+              latest = max(released)
+              if current_tuple <= latest:
+                  current_tuple = (latest[0], latest[1], latest[2] + 1)
+
+          print(".".join(str(part) for part in current_tuple))
+          PY
+          )
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved release version: ${VERSION}"
+
   build_macos:
     runs-on: macos-latest
+    needs: prepare_release
     environment: release
     env:
       CODESIGN_IDENTITY: ${{ vars.CODESIGN_IDENTITY }}
@@ -17,6 +70,7 @@ jobs:
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+      RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,6 +83,81 @@ jobs:
         with:
           node-version: 20
           cache: npm
+
+      - name: Apply release version
+        run: |
+          set -euo pipefail
+          python3 - <<PY
+          import json
+          from pathlib import Path
+
+          for filename in ("package.json", "package-lock.json"):
+              path = Path(filename)
+              data = json.loads(path.read_text())
+              data["version"] = "$RELEASE_VERSION"
+              if filename == "package-lock.json":
+                  data["packages"][""]["version"] = "$RELEASE_VERSION"
+              path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+
+          python3 - <<PY
+          import json
+          from pathlib import Path
+
+          path = Path("src-tauri/tauri.conf.json")
+          data = json.loads(path.read_text())
+          data["version"] = "$RELEASE_VERSION"
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+
+          python3 - <<PY
+          import re
+          from pathlib import Path
+
+          path = Path("src-tauri/Cargo.toml")
+          content = path.read_text()
+          content, count = re.subn(
+            r'(?m)^version = ".*"$',
+            'version = "$RELEASE_VERSION"',
+            content,
+            count=1,
+          )
+          if count != 1:
+            raise SystemExit("Failed to update src-tauri/Cargo.toml version")
+          path.write_text(content)
+          PY
+
+          python3 - <<PY
+          import re
+          from pathlib import Path
+
+          path = Path("src-tauri/Cargo.lock")
+          content = path.read_text()
+          content, count = re.subn(
+            r'(?ms)(\[\[package\]\]\nname = "codex-monitor"\nversion = ")[^"]+(")',
+            r'\g<1>$RELEASE_VERSION\2',
+            content,
+            count=1,
+          )
+          if count != 1:
+            raise SystemExit("Failed to update codex-monitor version in src-tauri/Cargo.lock")
+          path.write_text(content)
+          PY
+
+          python3 - <<PY
+          import plistlib
+          from pathlib import Path
+
+          path = Path("src-tauri/gen/apple/codex-monitor_iOS/Info.plist")
+          with path.open("rb") as f:
+            data = plistlib.load(f)
+
+          data["CFBundleShortVersionString"] = "$RELEASE_VERSION"
+          data["CFBundleVersion"] = "$RELEASE_VERSION"
+
+          with path.open("wb") as f:
+            plistlib.dump(data, f, sort_keys=False)
+          PY
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -169,10 +298,12 @@ jobs:
   build_linux:
     name: linux bundles (${{ matrix.arch }})
     runs-on: ${{ matrix.platform }}
+    needs: prepare_release
     environment: release
     env:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+      RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -194,6 +325,66 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
+
+      - name: Apply release version
+        run: |
+          set -euo pipefail
+          python3 - <<PY
+          import json
+          from pathlib import Path
+
+          for filename in ("package.json", "package-lock.json"):
+              path = Path(filename)
+              data = json.loads(path.read_text())
+              data["version"] = "$RELEASE_VERSION"
+              if filename == "package-lock.json":
+                  data["packages"][""]["version"] = "$RELEASE_VERSION"
+              path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+
+          python3 - <<PY
+          import json
+          from pathlib import Path
+
+          path = Path("src-tauri/tauri.conf.json")
+          data = json.loads(path.read_text())
+          data["version"] = "$RELEASE_VERSION"
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+
+          python3 - <<PY
+          import re
+          from pathlib import Path
+
+          path = Path("src-tauri/Cargo.toml")
+          content = path.read_text()
+          content, count = re.subn(
+            r'(?m)^version = ".*"$',
+            'version = "$RELEASE_VERSION"',
+            content,
+            count=1,
+          )
+          if count != 1:
+            raise SystemExit("Failed to update src-tauri/Cargo.toml version")
+          path.write_text(content)
+          PY
+
+          python3 - <<PY
+          import re
+          from pathlib import Path
+
+          path = Path("src-tauri/Cargo.lock")
+          content = path.read_text()
+          content, count = re.subn(
+            r'(?ms)(\[\[package\]\]\nname = "codex-monitor"\nversion = ")[^"]+(")',
+            r'\g<1>$RELEASE_VERSION\2',
+            content,
+            count=1,
+          )
+          if count != 1:
+            raise SystemExit("Failed to update codex-monitor version in src-tauri/Cargo.lock")
+          path.write_text(content)
+          PY
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -243,10 +434,12 @@ jobs:
 
   build_windows:
     runs-on: windows-latest
+    needs: prepare_release
     environment: release
     env:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+      RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -255,6 +448,67 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
+
+      - name: Apply release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<PY
+          import json
+          from pathlib import Path
+
+          for filename in ("package.json", "package-lock.json"):
+              path = Path(filename)
+              data = json.loads(path.read_text())
+              data["version"] = "$RELEASE_VERSION"
+              if filename == "package-lock.json":
+                  data["packages"][""]["version"] = "$RELEASE_VERSION"
+              path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+
+          python - <<PY
+          import json
+          from pathlib import Path
+
+          path = Path("src-tauri/tauri.conf.json")
+          data = json.loads(path.read_text())
+          data["version"] = "$RELEASE_VERSION"
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+
+          python - <<PY
+          import re
+          from pathlib import Path
+
+          path = Path("src-tauri/Cargo.toml")
+          content = path.read_text()
+          content, count = re.subn(
+            r'(?m)^version = ".*"$',
+            'version = "$RELEASE_VERSION"',
+            content,
+            count=1,
+          )
+          if count != 1:
+            raise SystemExit("Failed to update src-tauri/Cargo.toml version")
+          path.write_text(content)
+          PY
+
+          python - <<PY
+          import re
+          from pathlib import Path
+
+          path = Path("src-tauri/Cargo.lock")
+          content = path.read_text()
+          content, count = re.subn(
+            r'(?ms)(\[\[package\]\]\nname = "codex-monitor"\nversion = ")[^"]+(")',
+            r'\g<1>$RELEASE_VERSION\2',
+            content,
+            count=1,
+          )
+          if count != 1:
+            raise SystemExit("Failed to update codex-monitor version in src-tauri/Cargo.lock")
+          path.write_text(content)
+          PY
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -311,14 +565,92 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     needs:
+      - prepare_release
       - build_macos
       - build_linux
       - build_windows
+    env:
+      RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Apply release version
+        run: |
+          set -euo pipefail
+          python3 - <<PY
+          import json
+          from pathlib import Path
+
+          for filename in ("package.json", "package-lock.json"):
+              path = Path(filename)
+              data = json.loads(path.read_text())
+              data["version"] = "$RELEASE_VERSION"
+              if filename == "package-lock.json":
+                  data["packages"][""]["version"] = "$RELEASE_VERSION"
+              path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+
+          python3 - <<PY
+          import json
+          from pathlib import Path
+
+          path = Path("src-tauri/tauri.conf.json")
+          data = json.loads(path.read_text())
+          data["version"] = "$RELEASE_VERSION"
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+
+          python3 - <<PY
+          import re
+          from pathlib import Path
+
+          path = Path("src-tauri/Cargo.toml")
+          content = path.read_text()
+          content, count = re.subn(
+            r'(?m)^version = ".*"$',
+            'version = "$RELEASE_VERSION"',
+            content,
+            count=1,
+          )
+          if count != 1:
+            raise SystemExit("Failed to update src-tauri/Cargo.toml version")
+          path.write_text(content)
+          PY
+
+          python3 - <<PY
+          import re
+          from pathlib import Path
+
+          path = Path("src-tauri/Cargo.lock")
+          content = path.read_text()
+          content, count = re.subn(
+            r'(?ms)(\[\[package\]\]\nname = "codex-monitor"\nversion = ")[^"]+(")',
+            r'\g<1>$RELEASE_VERSION\2',
+            content,
+            count=1,
+          )
+          if count != 1:
+            raise SystemExit("Failed to update codex-monitor version in src-tauri/Cargo.lock")
+          path.write_text(content)
+          PY
+
+          python3 - <<PY
+          import plistlib
+          from pathlib import Path
+
+          path = Path("src-tauri/gen/apple/codex-monitor_iOS/Info.plist")
+          with path.open("rb") as f:
+            data = plistlib.load(f)
+
+          data["CFBundleShortVersionString"] = "$RELEASE_VERSION"
+          data["CFBundleVersion"] = "$RELEASE_VERSION"
+
+          with path.open("wb") as f:
+            plistlib.dump(data, f, sort_keys=False)
+          PY
 
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
@@ -628,7 +960,18 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          npm version "$NEXT_VERSION" --no-git-tag-version
+          python3 - <<PY
+          import json
+          from pathlib import Path
+
+          for filename in ("package.json", "package-lock.json"):
+              path = Path(filename)
+              data = json.loads(path.read_text())
+              data["version"] = "$NEXT_VERSION"
+              if filename == "package-lock.json":
+                  data["packages"][""]["version"] = "$NEXT_VERSION"
+              path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
 
           python3 - <<PY
           import json
