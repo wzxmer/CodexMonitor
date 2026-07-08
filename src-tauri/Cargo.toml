@@ -1,6 +1,6 @@
 [package]
 name = "codex-monitor"
-version = "0.7.76"
+version = "0.7.77"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
