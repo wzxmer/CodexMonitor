@@ -27,7 +27,7 @@ jobs:
               src-tauri/target/release/bundle/nsis/*.exe
           - name: macOS installers
             os: macos-latest
-            command: npm run tauri -- build --bundles dmg
+            command: npm run tauri -- build --config src-tauri/tauri.macos.conf.json --bundles dmg
             artifact: macos-installers
             optional: false
             paths: |
