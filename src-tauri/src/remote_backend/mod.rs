@@ -166,6 +166,7 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "get_agents_settings"
             | "get_codex_status"
             | "get_config_model"
+            | "get_provider_status"
             | "get_git_commit_diff"
             | "get_git_diffs"
             | "get_git_log"

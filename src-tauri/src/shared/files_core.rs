@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use crate::codex::home as codex_home;
 use crate::files::io::TextFileResponse;
 use crate::files::ops::{read_with_policy, write_with_policy};
-use crate::files::policy::{FileKind, FileScope, policy_for};
+use crate::files::policy::{policy_for, FileKind, FileScope};
 use crate::types::{AppSettings, WorkspaceEntry};
 
 fn resolve_global_codex_home(settings: &AppSettings) -> Result<PathBuf, String> {

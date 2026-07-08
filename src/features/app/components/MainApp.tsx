@@ -71,9 +71,8 @@ import { useSystemNotificationThreadLinks } from "@app/hooks/useSystemNotificati
 import { useThreadListSortKey } from "@app/hooks/useThreadListSortKey";
 import { useThreadListActions } from "@app/hooks/useThreadListActions";
 import { useRemoteThreadLiveConnection } from "@app/hooks/useRemoteThreadLiveConnection";
-import { useTrayRecentThreads } from "@app/hooks/useTrayRecentThreads";
+import { useTrayLabels } from "@app/hooks/useTrayLabels";
 import { useTraySessionUsage } from "@app/hooks/useTraySessionUsage";
-import { useTauriEvent } from "@app/hooks/useTauriEvent";
 import { I18nProvider } from "@/features/i18n/I18nProvider";
 import { resolveAppLanguage } from "@/features/i18n/appLanguage";
 import { I18N_STRINGS, type I18nKey } from "@/features/i18n/strings";
@@ -90,7 +89,8 @@ import {
 } from "@app/orchestration/useWorkspaceOrchestration";
 import { useAppShellOrchestration } from "@app/orchestration/useLayoutOrchestration";
 import { normalizeCodexArgsInput } from "@/utils/codexArgsInput";
-import { subscribeTrayOpenThread } from "@services/events";
+import { setCodexPetActivity } from "@/services/tauri";
+import { resolveCodexPetActivity } from "@app/utils/codexPetAnimation";
 
 const SettingsView = lazy(() =>
   import("@settings/components/SettingsView").then((module) => ({
@@ -170,6 +170,18 @@ export default function MainApp() {
       unlimited: t("usage.unlimited"),
       used: t("usage.used"),
       remaining: t("usage.remaining"),
+    }),
+    [t],
+  );
+  const trayLabels = useMemo(
+    () => ({
+      open: t("tray.open"),
+      hide: t("tray.hide"),
+      quit: t("tray.quit"),
+      usageHeader: t("tray.currentUsage"),
+      noActiveSession: t("tray.noActiveSession"),
+      sessionPrefix: t("tray.session"),
+      weeklyPrefix: t("tray.weekly"),
     }),
     [t],
   );
@@ -529,6 +541,7 @@ export default function MainApp() {
     threadListPagingByWorkspace,
     threadListCursorByWorkspace,
     activeTurnIdByThread,
+    turnDiffByThread,
     tokenUsageByThread,
     rateLimitsByWorkspace,
     accountByWorkspace,
@@ -609,18 +622,42 @@ export default function MainApp() {
     threadSortKey: threadListSortKey,
     onThreadCodexMetadataDetected: handleThreadCodexMetadataDetected,
   });
+  const activeThreadIsProcessing = Boolean(
+    activeThreadId && threadStatusById[activeThreadId]?.isProcessing,
+  );
   const { connectionState: remoteThreadConnectionState, reconnectLive } =
     useRemoteThreadLiveConnection({
       backendMode: appSettings.backendMode,
       activeWorkspace,
       activeThreadId,
       activeThreadHasLocalSnapshot: hasLocalThreadSnapshot(activeThreadId),
-      activeThreadIsProcessing: Boolean(
-        activeThreadId && threadStatusById[activeThreadId]?.isProcessing,
-      ),
+      activeThreadIsProcessing,
       refreshThread,
       reconnectWorkspace: connectWorkspace,
     });
+
+  const codexPetActivity = useMemo(
+    () =>
+      resolveCodexPetActivity({
+        hasErrors: errorToasts.length > 0,
+        isWaitingForUser: approvals.length > 0 || userInputRequests.length > 0,
+        hasReviewPrompt: Boolean(reviewPrompt),
+        isProcessing: activeThreadIsProcessing,
+      }),
+    [
+      activeThreadIsProcessing,
+      approvals.length,
+      errorToasts.length,
+      reviewPrompt,
+      userInputRequests.length,
+    ],
+  );
+  useEffect(() => {
+    if (!appSettings.codexPetEnabled) {
+      return;
+    }
+    void setCodexPetActivity(codexPetActivity).catch(() => {});
+  }, [appSettings.codexPetEnabled, codexPetActivity]);
 
   const { mobileThreadRefreshLoading, handleMobileThreadRefresh } =
     useMainAppMobileThreadRefresh({
@@ -834,11 +871,7 @@ export default function MainApp() {
   });
   const { getThreadRows } = useThreadRows(threadParentById);
 
-  useTrayRecentThreads({
-    workspaces,
-    threadsByWorkspace,
-    isSubagentThread,
-  });
+  useTrayLabels({ labels: trayLabels });
 
   useAutoExitEmptyDiff({
     centerMode,
@@ -1535,21 +1568,13 @@ export default function MainApp() {
     [handleOpenThreadLink, setActiveTab],
   );
 
-  const { recordPendingThreadLink, openThreadLinkOrQueue } =
-    useSystemNotificationThreadLinks({
-      hasLoadedWorkspaces: hasLoaded,
-      workspacesById,
-      refreshWorkspaces,
-      connectWorkspace,
-      openThreadLink: handleOpenThreadLinkFromExternal,
-    });
-
-  useTauriEvent(
-    subscribeTrayOpenThread,
-    ({ workspaceId, threadId }: { workspaceId: string; threadId: string }) => {
-      openThreadLinkOrQueue(workspaceId, threadId);
-    },
-  );
+  const { recordPendingThreadLink } = useSystemNotificationThreadLinks({
+    hasLoadedWorkspaces: hasLoaded,
+    workspacesById,
+    refreshWorkspaces,
+    connectWorkspace,
+    openThreadLink: handleOpenThreadLinkFromExternal,
+  });
 
   useEffect(() => {
     recordPendingThreadLinkRef.current = recordPendingThreadLink;
@@ -1771,6 +1796,7 @@ export default function MainApp() {
     threadsByWorkspace,
     threadParentById,
     threadStatusById,
+    turnDiffByThread,
     interruptedThreadById,
     threadResumeLoadingById,
     threadListLoadingByWorkspace,

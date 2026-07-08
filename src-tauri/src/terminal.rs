@@ -216,11 +216,7 @@ fn read_windows_terminal_font_from_settings(settings: &str) -> Option<String> {
         .and_then(Value::as_array)?
         .iter()
         .find(|profile| {
-            profile
-                .get("guid")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                == Some(default_profile)
+            profile.get("guid").and_then(Value::as_str).map(str::trim) == Some(default_profile)
         })
         .and_then(|profile| profile.get("font"))
         .and_then(|font| font.get("face"))

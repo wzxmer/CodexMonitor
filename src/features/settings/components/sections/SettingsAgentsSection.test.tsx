@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AppSettings } from "@/types";
 import type { SettingsAgentsSectionProps } from "@settings/hooks/useSettingsAgentsSection";
 import { SettingsAgentsSection } from "./SettingsAgentsSection";
 
+const baseAppSettings = {
+  nativeAgentMarkdownImportEnabled: true,
+} as AppSettings;
+
 const baseProps = (): SettingsAgentsSectionProps => ({
+  appSettings: baseAppSettings,
+  onUpdateAppSettings: vi.fn(async () => {}),
   settings: {
     configPath: "/Users/me/.codex/config.toml",
     multiAgentEnabled: false,
@@ -74,6 +81,33 @@ describe("SettingsAgentsSection", () => {
 
     fireEvent.change(screen.getByLabelText("名称"), { target: { value: "researcher" } });
     expect(improveButton.disabled).toBe(false);
+  });
+
+  it("toggles native Markdown agent auto import", async () => {
+    const props = baseProps();
+    const onUpdateAppSettings = vi.fn(async () => {});
+    const onRefresh = vi.fn();
+    render(
+      <SettingsAgentsSection
+        {...props}
+        onUpdateAppSettings={onUpdateAppSettings}
+        onRefresh={onRefresh}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "自动导入 Codex 原生 Agents",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith({
+        ...baseAppSettings,
+        nativeAgentMarkdownImportEnabled: false,
+      });
+      expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("applies generated description to create textarea", async () => {

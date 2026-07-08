@@ -92,5 +92,9 @@ pub(crate) fn build_clone_destination_path(copies_folder: &PathBuf, copy_name: &
 }
 
 pub(crate) fn null_device_path() -> &'static str {
-    if cfg!(windows) { "NUL" } else { "/dev/null" }
+    if cfg!(windows) {
+        "NUL"
+    } else {
+        "/dev/null"
+    }
 }

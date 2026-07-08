@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
 use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
-use toml_edit::{Document, Item, Table, value};
+use toml_edit::{value, Document, Item, Table};
 
 use crate::codex::home as codex_home;
 use crate::shared::config_toml_core;
@@ -17,6 +17,8 @@ const MANAGED_AGENTS_DIR: &str = "agents";
 const TEMPLATE_BLANK: &str = "blank";
 const DEFAULT_AGENT_MODEL: &str = "gpt-5-codex";
 const DEFAULT_REASONING_EFFORT: &str = "medium";
+const NATIVE_MARKDOWN_IMPORT_FLAG: &str = "native_markdown_imported";
+const NATIVE_MARKDOWN_SEARCH_ROOT: &str = ".tmp/plugins";
 
 const fn default_agent_max_depth() -> u32 {
     DEFAULT_AGENT_MAX_DEPTH
@@ -81,7 +83,9 @@ pub(crate) struct DeleteAgentInput {
     pub delete_managed_file: Option<bool>,
 }
 
-pub(crate) fn get_agents_settings_core() -> Result<AgentsSettingsDto, String> {
+pub(crate) fn get_agents_settings_core(
+    native_markdown_import_enabled: bool,
+) -> Result<AgentsSettingsDto, String> {
     let codex_home = resolve_codex_home()?;
     let config_path = codex_home.join("config.toml");
     let config_path_string = config_path
@@ -89,6 +93,9 @@ pub(crate) fn get_agents_settings_core() -> Result<AgentsSettingsDto, String> {
         .ok_or_else(|| "Unable to resolve CODEX_HOME".to_string())?
         .to_string();
 
+    if native_markdown_import_enabled {
+        ensure_default_native_markdown_agents_imported(&codex_home)?;
+    }
     let (_, document) = config_toml_core::load_global_config_document(&codex_home)?;
     let multi_agent_enabled = read_multi_agent_enabled(&document);
     let max_threads = read_max_threads(&document);
@@ -107,6 +114,7 @@ pub(crate) fn get_agents_settings_core() -> Result<AgentsSettingsDto, String> {
 
 pub(crate) fn set_agents_core_settings_core(
     input: SetAgentsCoreInput,
+    native_markdown_import_enabled: bool,
 ) -> Result<AgentsSettingsDto, String> {
     validate_max_threads(input.max_threads)?;
     validate_max_depth(input.max_depth)?;
@@ -122,10 +130,13 @@ pub(crate) fn set_agents_core_settings_core(
     agents["max_depth"] = value(input.max_depth as i64);
 
     config_toml_core::persist_global_config_document(&codex_home, &document)?;
-    get_agents_settings_core()
+    get_agents_settings_core(native_markdown_import_enabled)
 }
 
-pub(crate) fn create_agent_core(input: CreateAgentInput) -> Result<AgentsSettingsDto, String> {
+pub(crate) fn create_agent_core(
+    input: CreateAgentInput,
+    native_markdown_import_enabled: bool,
+) -> Result<AgentsSettingsDto, String> {
     let name = normalize_agent_name(input.name.as_str())?;
     let description = normalize_optional_string(input.description.as_deref());
     let developer_instructions = normalize_optional_string(input.developer_instructions.as_deref());
@@ -172,10 +183,13 @@ pub(crate) fn create_agent_core(input: CreateAgentInput) -> Result<AgentsSetting
         return Err(err);
     }
 
-    get_agents_settings_core()
+    get_agents_settings_core(native_markdown_import_enabled)
 }
 
-pub(crate) fn update_agent_core(input: UpdateAgentInput) -> Result<AgentsSettingsDto, String> {
+pub(crate) fn update_agent_core(
+    input: UpdateAgentInput,
+    native_markdown_import_enabled: bool,
+) -> Result<AgentsSettingsDto, String> {
     let original_name = normalize_agent_lookup_name(input.original_name.as_str())?;
     let name = normalize_agent_name(input.name.as_str())?;
     let description = normalize_optional_string(input.description.as_deref());
@@ -310,10 +324,13 @@ pub(crate) fn update_agent_core(input: UpdateAgentInput) -> Result<AgentsSetting
         return Err(err);
     }
 
-    get_agents_settings_core()
+    get_agents_settings_core(native_markdown_import_enabled)
 }
 
-pub(crate) fn delete_agent_core(input: DeleteAgentInput) -> Result<AgentsSettingsDto, String> {
+pub(crate) fn delete_agent_core(
+    input: DeleteAgentInput,
+    native_markdown_import_enabled: bool,
+) -> Result<AgentsSettingsDto, String> {
     let name = normalize_agent_lookup_name(input.name.as_str())?;
     let delete_managed_file = input.delete_managed_file.unwrap_or(false);
 
@@ -361,7 +378,7 @@ pub(crate) fn delete_agent_core(input: DeleteAgentInput) -> Result<AgentsSetting
         return Err(persist_error);
     }
 
-    get_agents_settings_core()
+    get_agents_settings_core(native_markdown_import_enabled)
 }
 
 pub(crate) fn read_agent_config_toml_core(agent_name: &str) -> Result<String, String> {
@@ -422,6 +439,143 @@ fn read_max_depth(document: &Document) -> u32 {
         .ok()
         .filter(|value| *value <= MAX_AGENT_MAX_DEPTH)
         .unwrap_or(DEFAULT_AGENT_MAX_DEPTH)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NativeMarkdownAgentCandidate {
+    name: String,
+    description: Option<String>,
+    developer_instructions: String,
+}
+
+fn ensure_default_native_markdown_agents_imported(codex_home: &Path) -> Result<(), String> {
+    let (_, mut document) = config_toml_core::load_global_config_document(codex_home)?;
+    if document
+        .get("agents")
+        .and_then(Item::as_table_like)
+        .and_then(|table| table.get(NATIVE_MARKDOWN_IMPORT_FLAG))
+        .and_then(Item::as_bool)
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+
+    let candidates = discover_native_markdown_agent_candidates(codex_home);
+    if candidates.is_empty() {
+        return Ok(());
+    }
+    {
+        let agents = config_toml_core::ensure_table(&mut document, "agents")?;
+        agents[NATIVE_MARKDOWN_IMPORT_FLAG] = value(true);
+        for candidate in candidates {
+            if has_agent_name_conflict(agents, candidate.name.as_str(), None) {
+                continue;
+            }
+            let relative_config_path = managed_relative_config_for_name(candidate.name.as_str());
+            let target_path =
+                resolve_safe_managed_abs_path_for_write(codex_home, &relative_config_path)?;
+            if target_path.exists() {
+                continue;
+            }
+            let template_content = build_template_content(
+                Some(TEMPLATE_BLANK),
+                Some(DEFAULT_AGENT_MODEL),
+                Some(DEFAULT_REASONING_EFFORT),
+                Some(candidate.developer_instructions.as_str()),
+            );
+            std::fs::write(&target_path, template_content)
+                .map_err(|err| format!("Failed to import native agent config file: {err}"))?;
+
+            let mut role = Table::new();
+            if let Some(description) = candidate.description {
+                role["description"] = value(description);
+            }
+            role["config_file"] = value(pathbuf_to_string(&relative_config_path)?);
+            agents[&candidate.name] = Item::Table(role);
+        }
+    }
+
+    config_toml_core::persist_global_config_document(codex_home, &document)
+}
+
+fn discover_native_markdown_agent_candidates(
+    codex_home: &Path,
+) -> Vec<NativeMarkdownAgentCandidate> {
+    let root = codex_home.join(NATIVE_MARKDOWN_SEARCH_ROOT);
+    let mut candidates = Vec::new();
+    collect_native_markdown_agent_candidates(&root, &mut candidates);
+    candidates.sort_by(|left, right| left.name.cmp(&right.name));
+    candidates.dedup_by(|left, right| left.name == right.name);
+    candidates
+}
+
+fn collect_native_markdown_agent_candidates(
+    path: &Path,
+    candidates: &mut Vec<NativeMarkdownAgentCandidate>,
+) {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return;
+    };
+    if metadata.is_file() {
+        if path.extension() == Some(OsStr::new("md")) && is_inside_agents_dir(path) {
+            if let Some(candidate) = native_markdown_agent_candidate_from_file(path) {
+                candidates.push(candidate);
+            }
+        }
+        return;
+    }
+    if !metadata.is_dir() {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        collect_native_markdown_agent_candidates(entry.path().as_path(), candidates);
+    }
+}
+
+fn is_inside_agents_dir(path: &Path) -> bool {
+    path.components().any(
+        |component| matches!(component, Component::Normal(value) if value == OsStr::new("agents")),
+    )
+}
+
+fn native_markdown_agent_candidate_from_file(path: &Path) -> Option<NativeMarkdownAgentCandidate> {
+    let stem = path.file_stem()?.to_str()?;
+    let name = normalize_agent_name(stem).ok()?;
+    let developer_instructions = std::fs::read_to_string(path).ok()?;
+    let developer_instructions = normalize_optional_string(Some(developer_instructions.as_str()))?;
+    Some(NativeMarkdownAgentCandidate {
+        name,
+        description: derive_native_markdown_agent_description(developer_instructions.as_str()),
+        developer_instructions,
+    })
+}
+
+fn derive_native_markdown_agent_description(contents: &str) -> Option<String> {
+    let mut after_purpose = false;
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if after_purpose {
+            let description = trimmed.trim_start_matches('-').trim();
+            if !description.is_empty() {
+                return Some(description.chars().take(160).collect());
+            }
+        }
+        if trimmed.eq_ignore_ascii_case("purpose:") {
+            after_purpose = true;
+            continue;
+        }
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        return Some(trimmed.chars().take(160).collect());
+    }
+    None
 }
 
 fn collect_agents(codex_home: &Path, document: &Document) -> Vec<AgentSummaryDto> {
@@ -555,7 +709,7 @@ fn validate_max_depth(value: u32) -> Result<(), String> {
 }
 
 fn is_reserved_agents_key(name: &str) -> bool {
-    name == "max_threads" || name == "max_depth"
+    name == "max_threads" || name == "max_depth" || name == NATIVE_MARKDOWN_IMPORT_FLAG
 }
 
 fn has_agent_name_conflict(agents: &Table, name: &str, excluding: Option<&str>) -> bool {
@@ -991,6 +1145,7 @@ mod tests {
 [agents]
 max_threads = 8
 max_depth = 4
+native_markdown_imported = true
 
 [agents.researcher]
 description = "Research role"
@@ -1002,6 +1157,67 @@ config_file = "agents/researcher.toml"
         let agents = collect_agents(&codex_home, &document);
         assert_eq!(agents.len(), 1);
         assert_eq!(agents[0].name, "researcher");
+
+        let _ = std::fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn default_native_markdown_import_adds_markdown_agents_once() {
+        let codex_home = temp_dir("codex-home-native-agents");
+        let native_agents_dir = codex_home
+            .join(NATIVE_MARKDOWN_SEARCH_ROOT)
+            .join("plugins")
+            .join("figma")
+            .join("agents");
+        std::fs::create_dir_all(&native_agents_dir).expect("create native agents dir");
+        std::fs::write(
+            native_agents_dir.join("figma-implementation-agent.md"),
+            "You are the Figma Implementation Agent.\n\nPurpose:\n- Translate Figma nodes into code.",
+        )
+        .expect("write markdown agent");
+        std::fs::write(
+            native_agents_dir.join("openai.yaml"),
+            "interface:\n  display_name: Figma",
+        )
+        .expect("write yaml agent");
+
+        ensure_default_native_markdown_agents_imported(&codex_home).expect("import native agents");
+        ensure_default_native_markdown_agents_imported(&codex_home)
+            .expect("second import is no-op");
+
+        let config = std::fs::read_to_string(codex_home.join("config.toml")).expect("read config");
+        assert!(config.contains("native_markdown_imported = true"));
+        assert!(config.contains("[agents.figma-implementation-agent]"));
+        assert!(!config.contains("[agents.openai]"));
+
+        let imported = std::fs::read_to_string(
+            codex_home
+                .join("agents")
+                .join("figma-implementation-agent.toml"),
+        )
+        .expect("read imported config");
+        assert!(imported.contains("developer_instructions"));
+        assert!(imported.contains("Figma Implementation Agent"));
+
+        let document: Document = config.parse().expect("parse config");
+        let agents = collect_agents(&codex_home, &document);
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].name, "figma-implementation-agent");
+
+        let _ = std::fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn default_native_markdown_import_does_not_mark_when_no_candidates_exist() {
+        let codex_home = temp_dir("codex-home-no-native-agents");
+
+        ensure_default_native_markdown_agents_imported(&codex_home).expect("empty import is no-op");
+
+        let config_path = codex_home.join("config.toml");
+        if config_path.exists() {
+            let config = std::fs::read_to_string(config_path).expect("read config");
+            assert!(!config.contains("native_markdown_imported"));
+        }
 
         let _ = std::fs::remove_dir_all(codex_home);
     }

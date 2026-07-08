@@ -16,3 +16,17 @@ export function getContextUsedPercent(contextUsage?: ThreadTokenUsage | null) {
   const usedPercent = getContextUsedRawPercent(contextUsage);
   return usedPercent === null ? null : Math.round(usedPercent);
 }
+
+export function getCompactionCyclePercent(
+  contextUsage?: ThreadTokenUsage | null,
+  threshold?: number | null,
+) {
+  if (typeof threshold !== "number" || !Number.isFinite(threshold) || threshold <= 0) {
+    return null;
+  }
+  const lastTokens = contextUsage?.last.totalTokens ?? null;
+  if (lastTokens === null) {
+    return null;
+  }
+  return Math.round(Math.min(Math.max((lastTokens / threshold) * 100, 0), 100));
+}

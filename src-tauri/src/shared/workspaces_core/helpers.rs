@@ -152,8 +152,8 @@ pub(super) fn sort_workspaces(workspaces: &mut [WorkspaceInfo]) {
 #[cfg(test)]
 mod tests {
     use super::{
-        AGENTS_MD_FILE_NAME, copy_agents_md_from_parent_to_worktree,
-        normalize_workspace_path_input, workspace_path_to_string,
+        copy_agents_md_from_parent_to_worktree, normalize_workspace_path_input,
+        workspace_path_to_string, AGENTS_MD_FILE_NAME,
     };
     use std::path::PathBuf;
     use std::sync::Mutex;

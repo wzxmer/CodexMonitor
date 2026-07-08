@@ -45,6 +45,13 @@ pub(super) async fn try_handle(
             };
             Some(state.get_config_model(workspace_id).await)
         }
+        "get_provider_status" => {
+            let workspace_id = match parse_string(params, "workspaceId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(state.get_provider_status(workspace_id).await)
+        }
         "start_thread" => {
             let workspace_id = match parse_string(params, "workspaceId") {
                 Ok(value) => value,

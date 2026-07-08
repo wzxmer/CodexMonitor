@@ -305,8 +305,8 @@ pub(crate) async fn open_workspace_in_core(
 #[cfg(test)]
 mod tests {
     use super::{
-        LineAwareLaunchStrategy, app_cli_command, app_launch_strategy, build_launch_args,
-        command_launch_strategy,
+        app_cli_command, app_launch_strategy, build_launch_args, command_launch_strategy,
+        LineAwareLaunchStrategy,
     };
 
     #[test]

@@ -597,7 +597,8 @@ pub(crate) async fn get_agents_settings(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    agents_config_core::get_agents_settings_core()
+    let settings = state.app_settings.lock().await.clone();
+    agents_config_core::get_agents_settings_core(settings.native_agent_markdown_import_enabled)
 }
 
 #[tauri::command]
@@ -617,7 +618,11 @@ pub(crate) async fn set_agents_core_settings(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    agents_config_core::set_agents_core_settings_core(input)
+    let settings = state.app_settings.lock().await.clone();
+    agents_config_core::set_agents_core_settings_core(
+        input,
+        settings.native_agent_markdown_import_enabled,
+    )
 }
 
 #[tauri::command]
@@ -633,7 +638,8 @@ pub(crate) async fn create_agent(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    agents_config_core::create_agent_core(input)
+    let settings = state.app_settings.lock().await.clone();
+    agents_config_core::create_agent_core(input, settings.native_agent_markdown_import_enabled)
 }
 
 #[tauri::command]
@@ -649,7 +655,8 @@ pub(crate) async fn update_agent(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    agents_config_core::update_agent_core(input)
+    let settings = state.app_settings.lock().await.clone();
+    agents_config_core::update_agent_core(input, settings.native_agent_markdown_import_enabled)
 }
 
 #[tauri::command]
@@ -665,7 +672,8 @@ pub(crate) async fn delete_agent(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    agents_config_core::delete_agent_core(input)
+    let settings = state.app_settings.lock().await.clone();
+    agents_config_core::delete_agent_core(input, settings.native_agent_markdown_import_enabled)
 }
 
 #[tauri::command]
@@ -884,6 +892,26 @@ pub(crate) async fn get_config_model(
     }
 
     codex_core::get_config_model_core(&state.workspaces, workspace_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn get_provider_status(
+    workspace_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "get_provider_status",
+            json!({ "workspaceId": workspace_id }),
+        )
+        .await;
+    }
+
+    let settings = state.app_settings.lock().await.clone();
+    codex_core::get_provider_status_core(&state.workspaces, &settings, workspace_id).await
 }
 
 /// Generates a commit message in the background without showing in the main chat

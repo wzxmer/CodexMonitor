@@ -76,9 +76,14 @@ export type TraySessionUsage = {
   weeklyLabel: string | null;
 };
 
-export type TrayOpenThreadPayload = {
-  workspaceId: string;
-  threadId: string;
+export type TrayLabels = {
+  open: string;
+  hide: string;
+  quit: string;
+  usageHeader: string;
+  noActiveSession: string;
+  sessionPrefix: string;
+  weeklyPrefix: string;
 };
 
 export type Message = {
@@ -142,6 +147,11 @@ export type ConversationItem =
       collabReceivers?: CollabAgentRef[];
       collabStatuses?: CollabAgentStatus[];
     };
+
+export type LineChangeStats = {
+  additions: number;
+  deletions: number;
+};
 
 export type ThreadSummary = {
   id: string;
@@ -252,6 +262,17 @@ export type CodexKeyProfile = {
   baseUrl: string | null;
 };
 
+export type CodexProviderStatus = {
+  providerName: string | null;
+  baseUrl: string | null;
+  source: string;
+  isConfigured: boolean;
+  isThirdParty: boolean;
+  autoCompactTokenLimit: number | null;
+  modelContextWindow: number | null;
+  error: string | null;
+};
+
 export type CodexNativePet = {
   id: string;
   displayName: string;
@@ -260,9 +281,15 @@ export type CodexNativePet = {
   spritesheetPath: string;
 };
 
+export type CodexNativePetWindowPosition = {
+  x: number;
+  y: number;
+};
+
 export type CodexNativePetState = {
   enabled: boolean;
   selectedAvatarId?: string | null;
+  windowPosition?: CodexNativePetWindowPosition | null;
   codexHome: string;
   globalStatePath: string;
   petsDir: string;
@@ -340,6 +367,7 @@ export type AppSettings = {
   codexPetId?: "codex" | "terminal" | "review" | "custom";
   codexPetCustomImagePath?: string | null;
   codexPetWakeVersion?: number;
+  nativeAgentMarkdownImportEnabled: boolean;
   splitChatDiffView: boolean;
   preloadGitDiffs: boolean;
   gitDiffIgnoreWhitespaceChanges: boolean;

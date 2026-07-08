@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { ConversationItem } from "../../../types";
 import {
   buildToolSummary,
+  countDiffLineChanges,
+  getConversationItemSearchText,
   statusToneFromText,
   stripAnsiControlCodes,
 } from "./messageRenderUtils";
@@ -72,5 +74,42 @@ describe("messageRenderUtils", () => {
   it("strips ansi control codes from terminal output", () => {
     const value = "\u001b[31;1mError:\u001b[0m failed\n\u001b[36;1mLine |\u001b[0m";
     expect(stripAnsiControlCodes(value)).toBe("Error: failed\nLine |");
+  });
+
+  it("counts changed diff lines without counting file headers", () => {
+    expect(
+      countDiffLineChanges(
+        [
+          "diff --git a/src/a.ts b/src/a.ts",
+          "--- a/src/a.ts",
+          "+++ b/src/a.ts",
+          "@@ -1,3 +1,4 @@",
+          " unchanged",
+          "-old",
+          "+new",
+          "+added",
+        ].join("\n"),
+      ),
+    ).toEqual({ additions: 2, deletions: 1 });
+  });
+
+  it("collects searchable text from tool changes", () => {
+    const text = getConversationItemSearchText(
+      makeToolItem({
+        title: "Tool: apply_patch",
+        detail: "editing files",
+        changes: [
+          {
+            path: "src/App.tsx",
+            kind: "update",
+            diff: "+Added search keyword",
+          },
+        ],
+      }),
+    );
+
+    expect(text).toContain("Tool: apply_patch");
+    expect(text).toContain("src/App.tsx");
+    expect(text).toContain("Added search keyword");
   });
 });

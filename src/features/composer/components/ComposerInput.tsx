@@ -81,7 +81,7 @@ type ComposerInputProps = {
   onReviewPromptConfirmCommit?: () => Promise<void>;
   onReviewPromptUpdateCustomInstructions?: (value: string) => void;
   onReviewPromptConfirmCustom?: () => Promise<void>;
-  contextUsedPercent?: number | null;
+  contextCyclePercent?: number | null;
   contextCompactionCount?: number;
 };
 
@@ -139,7 +139,7 @@ export function ComposerInput({
   onReviewPromptConfirmCommit,
   onReviewPromptUpdateCustomInstructions,
   onReviewPromptConfirmCustom,
-  contextUsedPercent = null,
+  contextCyclePercent = null,
   contextCompactionCount = 0,
 }: ComposerInputProps) {
   const { t } = useI18n();
@@ -217,39 +217,36 @@ export function ComposerInput({
     onCancelDictation,
     onOpenDictationSettings,
   });
-  const boundedContextUsedPercent =
-    contextUsedPercent === null
+  const boundedContextCyclePercent =
+    contextCyclePercent === null
       ? null
-      : Math.min(100, Math.max(0, Math.round(contextUsedPercent)));
+      : Math.min(100, Math.max(0, Math.round(contextCyclePercent)));
   const contextStatus = useMemo(() => {
-    if (boundedContextUsedPercent === null) {
+    if (boundedContextCyclePercent === null) {
       return {
         className: "is-context-unknown",
         color: "var(--cm-border-heavy)",
-        label: t("composer.contextRemainingEmpty"),
-        usedLabel: "0%",
+        label: t("composer.contextCycleEmpty"),
       };
     }
-    const remaining = 100 - boundedContextUsedPercent;
     const className =
-      boundedContextUsedPercent >= 95
+      boundedContextCyclePercent >= 95
         ? "is-context-danger"
-        : boundedContextUsedPercent >= 80
+        : boundedContextCyclePercent >= 80
           ? "is-context-warning"
           : "is-context-ok";
     const color =
-      boundedContextUsedPercent >= 95
+      boundedContextCyclePercent >= 95
         ? "var(--status-error)"
-        : boundedContextUsedPercent >= 80
+        : boundedContextCyclePercent >= 80
           ? "var(--status-warning)"
           : "var(--status-success)";
     return {
       className,
       color,
-      label: `${t("composer.contextRemainingPrefix")} ${remaining}%`,
-      usedLabel: `${boundedContextUsedPercent}%`,
+      label: `${t("composer.contextCyclePrefix")} ${boundedContextCyclePercent}%`,
     };
-  }, [boundedContextUsedPercent, t]);
+  }, [boundedContextCyclePercent, t]);
   const contextCompactionLabel = `${t("composer.contextCompactionsPrefix")} ${contextCompactionCount}`;
   const progressStrokeInset = 1;
   const progressWidth = Math.max(progressBounds.width, 1);
@@ -307,7 +304,7 @@ export function ComposerInput({
         className={`composer-input-area ${contextStatus.className}${isDragOver ? " is-drag-over" : ""}`}
         style={
           {
-            "--composer-context-used": boundedContextUsedPercent ?? 0,
+            "--composer-context-used": boundedContextCyclePercent ?? 0,
             "--composer-context-color": contextStatus.color,
           } as CSSProperties
         }
@@ -340,7 +337,7 @@ export function ComposerInput({
           data-tooltip-align="start"
           aria-label={`${contextStatus.label}; ${contextCompactionLabel}`}
         >
-          {contextStatus.usedLabel}
+          {contextCompactionCount}
         </div>
         <ComposerAttachments
           attachments={attachments}

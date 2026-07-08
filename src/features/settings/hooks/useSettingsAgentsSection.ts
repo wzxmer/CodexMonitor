@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AgentsSettings, GeneratedAgentConfiguration } from "@services/tauri";
-import type { ModelOption, WorkspaceInfo } from "@/types";
+import type { AppSettings, ModelOption, WorkspaceInfo } from "@/types";
 import {
   connectWorkspace,
   createAgent,
@@ -15,6 +15,8 @@ import {
 import { useSettingsDefaultModels } from "./useSettingsDefaultModels";
 
 type UseSettingsAgentsSectionArgs = {
+  appSettings: AppSettings;
+  onUpdateAppSettings: (next: AppSettings) => Promise<void>;
   projects: WorkspaceInfo[];
 };
 
@@ -28,6 +30,8 @@ export type SettingsAgentsSectionProps = {
   readingConfigAgentName: string | null;
   writingConfigAgentName: string | null;
   error: string | null;
+  appSettings: AppSettings;
+  onUpdateAppSettings: (next: AppSettings) => Promise<void>;
   onRefresh: () => void;
   onSetMultiAgentEnabled: (enabled: boolean) => Promise<boolean>;
   onSetMaxThreads: (maxThreads: number) => Promise<boolean>;
@@ -81,6 +85,8 @@ const toErrorMessage = (value: unknown, fallback: string): string => {
 };
 
 export const useSettingsAgentsSection = ({
+  appSettings,
+  onUpdateAppSettings,
   projects,
 }: UseSettingsAgentsSectionArgs): SettingsAgentsSectionProps => {
   const [settings, setSettings] = useState<AgentsSettings | null>(null);
@@ -351,6 +357,8 @@ export const useSettingsAgentsSection = ({
     readingConfigAgentName,
     writingConfigAgentName,
     error,
+    appSettings,
+    onUpdateAppSettings,
     onRefresh: () => {
       void refresh();
     },

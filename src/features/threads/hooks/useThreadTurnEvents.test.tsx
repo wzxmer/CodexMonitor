@@ -439,6 +439,11 @@ describe("useThreadTurnEvents", () => {
       workspaceId: "ws-1",
       threadId: "thread-1",
     });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadTurnDiff",
+      threadId: "thread-1",
+      diff: "",
+    });
     expect(markProcessing).toHaveBeenCalledWith("thread-1", true);
     expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", "turn-1");
     expect(interruptTurn).not.toHaveBeenCalled();

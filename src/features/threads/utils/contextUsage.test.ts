@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { ThreadTokenUsage } from "@/types";
-import { getContextUsedPercent } from "./contextUsage";
+import {
+  getCompactionCyclePercent,
+  getContextUsedPercent,
+} from "./contextUsage";
 
 function usage(
   totalTokens: number,
@@ -42,5 +45,23 @@ describe("contextUsage", () => {
   it("clamps context usage percent to the 0-100 range", () => {
     expect(getContextUsedPercent(usage(1_200, 0, 1_000))).toBe(100);
     expect(getContextUsedPercent(usage(-20, -10, 1_000))).toBe(0);
+  });
+
+  it("uses last token usage for compaction cycle progress", () => {
+    expect(getCompactionCyclePercent(usage(1_000, 50, 1_000), 200)).toBe(25);
+  });
+
+  it("does not use total token usage for compaction cycle progress", () => {
+    expect(getCompactionCyclePercent(usage(1_000, 50, 1_000), 200)).toBe(25);
+  });
+
+  it("returns null when compaction threshold is missing", () => {
+    expect(getCompactionCyclePercent(usage(0, 20, 1_000))).toBeNull();
+  });
+
+  it("clamps compaction cycle progress to the 0-100 range", () => {
+    expect(getCompactionCyclePercent(usage(0, 400, 1_000), 200)).toBe(100);
+    expect(getCompactionCyclePercent(usage(0, -20, 1_000), 200)).toBe(0);
+    expect(getCompactionCyclePercent(usage(0, 20, 1_000), 0)).toBeNull();
   });
 });

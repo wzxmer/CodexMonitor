@@ -232,6 +232,7 @@ export function useThreadTurnEvents({
         workspaceId,
         threadId,
       });
+      dispatch({ type: "setThreadTurnDiff", threadId, diff: "" });
       if (pendingInterruptsRef.current.has(threadId)) {
         pendingInterruptsRef.current.delete(threadId);
         if (turnId) {

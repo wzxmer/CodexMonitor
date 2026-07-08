@@ -55,6 +55,26 @@ describe("useModels", () => {
     expect(result.current.reasoningSupported).toBe(false);
   });
 
+  it("uses a friendly display name for codex-auto-review from config", async () => {
+    vi.mocked(getModelList).mockResolvedValueOnce({
+      result: { data: [] },
+    });
+    vi.mocked(getConfigModel).mockResolvedValueOnce("codex-auto-review");
+
+    const { result } = renderHook(() =>
+      useModels({ activeWorkspace: workspace }),
+    );
+
+    await waitFor(() => expect(result.current.models.length).toBe(1));
+
+    expect(result.current.models[0]).toMatchObject({
+      id: "codex-auto-review",
+      model: "codex-auto-review",
+      displayName: "Codex Auto Review (config)",
+    });
+    expect(result.current.selectedModel?.model).toBe("codex-auto-review");
+  });
+
   it("prefers the provider entry when the config model matches by slug", async () => {
     vi.mocked(getModelList).mockResolvedValueOnce({
       result: {

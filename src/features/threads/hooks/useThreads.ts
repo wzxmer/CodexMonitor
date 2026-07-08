@@ -106,7 +106,7 @@ export function useThreads({
   onSelectServiceTier,
   reviewDeliveryMode = "inline",
   steerEnabled = false,
-  threadTitleAutogenerationEnabled = false,
+  threadTitleAutogenerationEnabled = true,
   chatHistoryScrollbackItems,
   autoArchiveThreadsEnabled = false,
   autoArchiveThreadsDays = 7,
@@ -980,6 +980,7 @@ export function useThreads({
     updateThreadParent,
     registerDetachedReviewChild,
     renameThread,
+    onUserMessageCreated,
   });
 
   const hasLocalThreadSnapshot = useCallback(

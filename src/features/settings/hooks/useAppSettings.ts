@@ -261,7 +261,7 @@ function buildDefaultSettings(): AppSettings {
     messageAssistantTextColor: DEFAULT_MESSAGE_ASSISTANT_TEXT_COLOR,
     messageFontFamily: "",
     chatHistoryScrollbackItems: CHAT_SCROLLBACK_DEFAULT,
-    threadTitleAutogenerationEnabled: false,
+    threadTitleAutogenerationEnabled: true,
     autoArchiveThreadsEnabled: false,
     autoArchiveThreadsDays: 7,
     automaticAppUpdateChecksEnabled: true,
@@ -281,6 +281,7 @@ function buildDefaultSettings(): AppSettings {
     codexPetId: "codex",
     codexPetCustomImagePath: null,
     codexPetWakeVersion: 0,
+    nativeAgentMarkdownImportEnabled: true,
     splitChatDiffView: false,
     preloadGitDiffs: true,
     gitDiffIgnoreWhitespaceChanges: false,
@@ -464,6 +465,14 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
       Number.isFinite(settings.codexPetWakeVersion)
         ? settings.codexPetWakeVersion
         : 0,
+    nativeAgentMarkdownImportEnabled:
+      typeof settings.nativeAgentMarkdownImportEnabled === "boolean"
+        ? settings.nativeAgentMarkdownImportEnabled
+        : true,
+    threadTitleAutogenerationEnabled:
+      typeof settings.threadTitleAutogenerationEnabled === "boolean"
+        ? settings.threadTitleAutogenerationEnabled
+        : true,
     reviewDeliveryMode:
       settings.reviewDeliveryMode === "detached" ? "detached" : "inline",
     chatHistoryScrollbackItems,

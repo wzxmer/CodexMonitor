@@ -3,7 +3,6 @@ import type {
   AppServerEvent,
   DictationEvent,
   DictationModelStatus,
-  TrayOpenThreadPayload,
 } from "../types";
 
 export type Unsubscribe = () => void;
@@ -92,7 +91,6 @@ const dictationEventHub = createEventHub<DictationEvent>("dictation-event");
 const terminalOutputHub = createEventHub<TerminalOutputEvent>("terminal-output");
 const terminalExitHub = createEventHub<TerminalExitEvent>("terminal-exit");
 const updaterCheckHub = createEventHub<void>("updater-check");
-const trayOpenThreadHub = createEventHub<TrayOpenThreadPayload>("tray-open-thread");
 const menuNewAgentHub = createEventHub<void>("menu-new-agent");
 const menuNewWorktreeAgentHub = createEventHub<void>("menu-new-worktree-agent");
 const menuNewCloneAgentHub = createEventHub<void>("menu-new-clone-agent");
@@ -159,15 +157,6 @@ export function subscribeUpdaterCheck(
 ): Unsubscribe {
   return updaterCheckHub.subscribe(() => {
     onEvent();
-  }, options);
-}
-
-export function subscribeTrayOpenThread(
-  onEvent: (payload: TrayOpenThreadPayload) => void,
-  options?: SubscriptionOptions,
-): Unsubscribe {
-  return trayOpenThreadHub.subscribe((payload) => {
-    onEvent(payload);
   }, options);
 }
 

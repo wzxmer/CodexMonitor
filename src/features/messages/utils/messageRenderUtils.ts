@@ -1,5 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import type { ConversationItem } from "../../../types";
+import type { ConversationItem, LineChangeStats } from "../../../types";
 
 export type ToolSummary = {
   label: string;
@@ -584,6 +584,62 @@ export function scrollKeyForItems(items: ConversationItem[]) {
       return `${last.id}-${last.state}-${last.text.length}`;
     default: {
       const _exhaustive: never = last;
+      return _exhaustive;
+    }
+  }
+}
+
+export function countDiffLineChanges(diff: string | null | undefined): LineChangeStats | null {
+  if (!diff) {
+    return null;
+  }
+  let additions = 0;
+  let deletions = 0;
+  for (const line of diff.split(/\r?\n/)) {
+    if (line.startsWith("+++") || line.startsWith("---")) {
+      continue;
+    }
+    if (line.startsWith("+")) {
+      additions += 1;
+    } else if (line.startsWith("-")) {
+      deletions += 1;
+    }
+  }
+  return additions > 0 || deletions > 0 ? { additions, deletions } : null;
+}
+
+export function getConversationItemSearchText(item: ConversationItem): string {
+  switch (item.kind) {
+    case "message":
+      return item.text;
+    case "userInput":
+      return item.questions
+        .map((question) =>
+          [question.header, question.question, ...question.answers].join("\n"),
+        )
+        .join("\n");
+    case "reasoning":
+      return [item.summary, item.content].join("\n");
+    case "diff":
+      return [item.title, item.diff, item.status ?? ""].join("\n");
+    case "review":
+      return [item.state, item.text].join("\n");
+    case "explore":
+      return item.entries
+        .map((entry) => [entry.kind, entry.label, entry.detail ?? ""].join("\n"))
+        .join("\n");
+    case "tool":
+      return [
+        item.title,
+        item.detail,
+        item.status ?? "",
+        item.output ?? "",
+        ...(item.changes ?? []).map((change) =>
+          [change.kind ?? "", change.path, change.diff ?? ""].join("\n"),
+        ),
+      ].join("\n");
+    default: {
+      const _exhaustive: never = item;
       return _exhaustive;
     }
   }

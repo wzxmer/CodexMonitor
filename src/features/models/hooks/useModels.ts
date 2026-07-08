@@ -15,6 +15,14 @@ type UseModelsOptions = {
 };
 
 const CONFIG_MODEL_DESCRIPTION = "Configured in CODEX_HOME/config.toml";
+const CODEX_AUTO_REVIEW_MODEL = "codex-auto-review";
+
+const formatConfigModelDisplayName = (model: string): string => {
+  if (model === CODEX_AUTO_REVIEW_MODEL) {
+    return "Codex Auto Review (config)";
+  }
+  return `${model} (config)`;
+};
 
 const findModelByIdOrModel = (
   models: ModelOption[],
@@ -216,7 +224,7 @@ export function useModels({
         const configOption: ModelOption = {
           id: configModelFromConfig,
           model: configModelFromConfig,
-          displayName: `${configModelFromConfig} (config)`,
+          displayName: formatConfigModelDisplayName(configModelFromConfig),
           description: CONFIG_MODEL_DESCRIPTION,
           supportedReasoningEfforts: [],
           defaultReasoningEffort: null,

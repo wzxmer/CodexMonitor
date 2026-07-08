@@ -215,6 +215,11 @@ type UseThreadMessagingOptions = {
     childId: string,
   ) => void;
   renameThread?: (workspaceId: string, threadId: string, name: string) => void;
+  onUserMessageCreated?: (
+    workspaceId: string,
+    threadId: string,
+    text: string,
+  ) => void;
 };
 
 export function useThreadMessaging({
@@ -252,6 +257,7 @@ export function useThreadMessaging({
   updateThreadParent,
   registerDetachedReviewChild,
   renameThread,
+  onUserMessageCreated,
 }: UseThreadMessagingOptions) {
   const sendMessageToThread = useCallback(
     async (
@@ -368,6 +374,9 @@ export function useThreadMessaging({
       });
       markProcessing(threadId, true);
       safeMessageActivity();
+      if (!options?.replaceMessageId && requestMode === "start") {
+        void onUserMessageCreated?.(workspace.id, threadId, finalText);
+      }
       onDebug?.({
         id: `${Date.now()}-${shouldSteer ? "client-turn-steer" : "client-turn-start"}`,
         timestamp: Date.now(),
@@ -526,6 +535,7 @@ export function useThreadMessaging({
       steerEnabled,
       threadStatusById,
       tokenUsageByThread,
+      onUserMessageCreated,
     ],
   );
 

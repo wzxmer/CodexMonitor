@@ -77,6 +77,45 @@ describe("Messages", () => {
     expect(screen.getByText(/超过初始加载上限 2 条/)).toBeTruthy();
   });
 
+  it("opens current-session search with Ctrl+F and jumps to matching content", async () => {
+    const scrollIntoViewMock = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+    const items: ConversationItem[] = [
+      {
+        id: "msg-alpha",
+        kind: "message",
+        role: "assistant",
+        text: "Alpha output",
+      },
+      {
+        id: "msg-beta",
+        kind: "message",
+        role: "assistant",
+        text: "Beta target output",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    const input = screen.getByLabelText("搜索当前会话");
+    fireEvent.change(input, { target: { value: "target" } });
+
+    await waitFor(() => {
+      expect(screen.getByText("1/1")).toBeTruthy();
+      expect(scrollIntoViewMock).toHaveBeenCalled();
+    });
+  });
+
   it("renders image grid above message text and opens lightbox", () => {
     const items: ConversationItem[] = [
       {
@@ -1688,6 +1727,60 @@ describe("Messages", () => {
     expect(screen.getByText("git status")).toBeTruthy();
   });
 
+  it("renders turn line changes at the end of process group headers", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "assistant-process-line-stats",
+        kind: "message",
+        role: "assistant",
+        text: "Editing files.",
+      },
+      {
+        id: "tool-process-line-stats",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: apply patch",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+      },
+      {
+        id: "assistant-final-line-stats",
+        kind: "message",
+        role: "assistant",
+        text: "Done.",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        activeTurnDiff={[
+          "diff --git a/src/a.ts b/src/a.ts",
+          "--- a/src/a.ts",
+          "+++ b/src/a.ts",
+          "@@ -1,2 +1,3 @@",
+          "-old",
+          "+new",
+          "+added",
+        ].join("\n")}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("Editing files.")).toBeNull();
+    });
+    const stats = container.querySelector(".tool-group-header .tool-group-line-change-stats");
+    expect(stats?.textContent).toContain("+2");
+    expect(stats?.textContent).toContain("-1");
+    expect(container.querySelector(".message-line-change-stats")).toBeNull();
+  });
+
   it("collapses assistant process messages before a final message without a visible user anchor", async () => {
     const items: ConversationItem[] = [
       {
@@ -1752,7 +1845,7 @@ describe("Messages", () => {
     expect(screen.getByText("npm run test")).toBeTruthy();
   });
 
-  it("hides only the duplicated first CLI timestamp inside expanded process groups", async () => {
+  it("does not show process group timestamps or hide expanded CLI message timestamps", async () => {
     const firstTimestamp = new Date("2026-07-08T19:54:52").getTime();
     const secondTimestamp = new Date("2026-07-08T19:55:44").getTime();
     const items: ConversationItem[] = [
@@ -1791,7 +1884,7 @@ describe("Messages", () => {
     );
 
     expect(screen.getByText("2 条过程消息")).toBeTruthy();
-    expect(screen.getByText("2026-07-08 19:54:52")).toBeTruthy();
+    expect(screen.queryByText("2026-07-08 19:54:52")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "展开过程消息" }));
 
@@ -1803,14 +1896,14 @@ describe("Messages", () => {
       .closest(".message-bubble");
 
     expect(firstBubble?.classList.contains("message-bubble-cli-timestamp-hidden")).toBe(
-      true,
+      false,
     );
     expect(secondBubble?.classList.contains("message-bubble-cli-timestamp-hidden")).toBe(
       false,
     );
     expect(
       container.querySelectorAll(".message-bubble-cli-timestamp-hidden"),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
   });
 
   it("collapses process messages in every completed turn", async () => {
@@ -2101,9 +2194,13 @@ describe("Messages", () => {
       }),
     );
     const firstPresetSettings = onUpdateConversationStyle.mock.calls[0]?.[0];
-    expect(firstPresetSettings).not.toHaveProperty("messageReadingStyle");
-    expect(firstPresetSettings).not.toHaveProperty("theme");
-    expect(firstPresetSettings).not.toHaveProperty("themeAccent");
+    expect(firstPresetSettings).toEqual(
+      expect.objectContaining({
+        theme: "dark",
+        themeAccent: "orange",
+        messageReadingStyle: "cli",
+      }),
+    );
     expect(onUpdateConversationStyle).toHaveBeenCalledWith({
       messageAssistantBubbleColor: "#f0faf6",
       messageAssistantAccentColor: "#4aa389",
@@ -2154,9 +2251,13 @@ describe("Messages", () => {
       }),
     );
     const presetSettings = onUpdateConversationStyle.mock.calls[0]?.[0];
-    expect(presetSettings).not.toHaveProperty("messageReadingStyle");
-    expect(presetSettings).not.toHaveProperty("theme");
-    expect(presetSettings).not.toHaveProperty("themeAccent");
+    expect(presetSettings).toEqual(
+      expect.objectContaining({
+        theme: "light",
+        themeAccent: "orange",
+        messageReadingStyle: "native",
+      }),
+    );
   });
 
   it("closes the conversation style popover when focus leaves it", () => {

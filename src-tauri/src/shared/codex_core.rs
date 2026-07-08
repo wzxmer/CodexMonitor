@@ -1,5 +1,5 @@
-use base64::{Engine as _, engine::general_purpose::STANDARD};
-use serde_json::{Map, Value, json};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -8,9 +8,9 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::oneshot::error::TryRecvError;
-use tokio::sync::{Mutex, oneshot};
-use tokio::time::Instant;
+use tokio::sync::{oneshot, Mutex};
 use tokio::time::timeout;
+use tokio::time::Instant;
 
 use crate::backend::app_server::WorkspaceSession;
 use crate::codex::config as codex_config;
@@ -19,7 +19,7 @@ use crate::codex::home::{
 };
 use crate::rules;
 use crate::shared::account::{build_account_response, read_auth_account};
-use crate::types::WorkspaceEntry;
+use crate::types::{AppSettings, WorkspaceEntry};
 
 const LOGIN_START_TIMEOUT: Duration = Duration::from_secs(30);
 #[allow(dead_code)]
@@ -343,6 +343,10 @@ async fn resolve_codex_home_for_workspace_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     workspace_id: &str,
 ) -> Result<PathBuf, String> {
+    if workspace_id == LOCAL_CODEX_WORKSPACE_ID {
+        return resolve_default_codex_home()
+            .ok_or_else(|| "Unable to resolve CODEX_HOME".to_string());
+    }
     let (entry, parent_entry) = resolve_workspace_and_parent(workspaces, workspace_id).await?;
     resolve_workspace_codex_home(&entry, parent_entry.as_ref())
         .or_else(resolve_default_codex_home)
@@ -1010,6 +1014,32 @@ pub(crate) async fn get_config_model_core(
     let codex_home = resolve_codex_home_for_workspace_core(workspaces, &workspace_id).await?;
     let model = codex_config::read_config_model(Some(codex_home))?;
     Ok(json!({ "model": model }))
+}
+
+pub(crate) async fn get_provider_status_core(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    settings: &AppSettings,
+    workspace_id: String,
+) -> Result<Value, String> {
+    let codex_home = resolve_codex_home_for_workspace_core(workspaces, &workspace_id).await?;
+    let active_profile = settings
+        .active_codex_key_profile_id
+        .as_deref()
+        .and_then(|active_id| {
+            settings
+                .codex_key_profiles
+                .iter()
+                .find(|profile| profile.id == active_id)
+        });
+    let active_profile_base_url = active_profile
+        .as_ref()
+        .and_then(|profile| profile.base_url.as_deref());
+    let status = codex_config::read_provider_status(
+        Some(codex_home),
+        active_profile_base_url,
+        active_profile.is_some(),
+    )?;
+    serde_json::to_value(status).map_err(|err| err.to_string())
 }
 
 #[cfg(test)]

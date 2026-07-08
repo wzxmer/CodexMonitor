@@ -7,13 +7,12 @@ use tauri::AppHandle;
 #[cfg(desktop)]
 use tauri::image::Image;
 #[cfg(desktop)]
-use tauri::menu::{IsMenuItem, Menu, MenuEvent, MenuItemBuilder, PredefinedMenuItem, Submenu};
+use tauri::menu::{Menu, MenuEvent, MenuItemBuilder, PredefinedMenuItem};
 #[cfg(desktop)]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 #[cfg(desktop)]
-use tauri::{Emitter, Manager, Runtime};
+use tauri::{Manager, Runtime};
 
-const RECENT_THREADS_SECTION_LIMIT: usize = 3;
 #[cfg(desktop)]
 const TRAY_ID: &str = "codex-monitor-tray";
 #[cfg(desktop)]
@@ -23,19 +22,11 @@ const TRAY_HIDE_ID: &str = "tray_hide";
 #[cfg(desktop)]
 const TRAY_QUIT_ID: &str = "tray_quit";
 #[cfg(desktop)]
-const TRAY_RECENT_HEADER_ID: &str = "tray_recent_header";
-#[cfg(desktop)]
-const TRAY_EMPTY_ID: &str = "tray_recent_empty";
-#[cfg(desktop)]
-const TRAY_WORKSPACES_HEADER_ID: &str = "tray_workspaces_header";
-#[cfg(desktop)]
 const TRAY_USAGE_HEADER_ID: &str = "tray_usage_header";
 #[cfg(desktop)]
 const TRAY_USAGE_SESSION_ID: &str = "tray_usage_session";
 #[cfg(desktop)]
 const TRAY_USAGE_WEEKLY_ID: &str = "tray_usage_weekly";
-pub(crate) const TRAY_OPEN_THREAD_EVENT: &str = "tray-open-thread";
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TrayRecentThreadEntry {
@@ -48,23 +39,42 @@ pub(crate) struct TrayRecentThreadEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TrayOpenThreadPayload {
-    pub(crate) workspace_id: String,
-    pub(crate) thread_id: String,
+pub(crate) struct TraySessionUsage {
+    pub(crate) session_label: String,
+    pub(crate) weekly_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TraySessionUsage {
-    pub(crate) session_label: String,
-    pub(crate) weekly_label: Option<String>,
+pub(crate) struct TrayLabels {
+    pub(crate) open: String,
+    pub(crate) hide: String,
+    pub(crate) quit: String,
+    pub(crate) usage_header: String,
+    pub(crate) no_active_session: String,
+    pub(crate) session_prefix: String,
+    pub(crate) weekly_prefix: String,
+}
+
+impl Default for TrayLabels {
+    fn default() -> Self {
+        Self {
+            open: "Open Codex Monitor".into(),
+            hide: "Hide Window".into(),
+            quit: "Quit".into(),
+            usage_header: "Current Usage".into(),
+            no_active_session: "No active session".into(),
+            session_prefix: "Session".into(),
+            weekly_prefix: "Weekly".into(),
+        }
+    }
 }
 
 #[derive(Default)]
 pub(crate) struct TrayState {
     tray_threads: Mutex<Vec<TrayRecentThreadEntry>>,
     session_usage: Mutex<Option<TraySessionUsage>>,
-    thread_targets_by_menu_id: Mutex<HashMap<String, TrayOpenThreadPayload>>,
+    labels: Mutex<TrayLabels>,
 }
 
 #[tauri::command]
@@ -144,6 +154,30 @@ pub(crate) fn initialize<R: Runtime>(
     Ok(())
 }
 
+#[tauri::command]
+pub(crate) fn set_tray_labels<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    state: tauri::State<'_, TrayState>,
+    labels: TrayLabels,
+) -> Result<(), String> {
+    let normalized = normalize_tray_labels(labels);
+    {
+        let mut current = state
+            .labels
+            .lock()
+            .map_err(|_| "failed to lock tray labels".to_string())?;
+        if *current == normalized {
+            return Ok(());
+        }
+        *current = normalized;
+    }
+
+    #[cfg(desktop)]
+    update_tray_menu(&app, &state)?;
+
+    Ok(())
+}
+
 #[cfg(not(desktop))]
 pub(crate) fn initialize<R: tauri::Runtime>(
     _app: &tauri::AppHandle<R>,
@@ -196,115 +230,6 @@ fn normalize_tray_threads(entries: Vec<TrayRecentThreadEntry>) -> Vec<TrayRecent
     normalized
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct TrayThreadMenuItem {
-    menu_id: String,
-    label: String,
-    payload: TrayOpenThreadPayload,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct TrayWorkspaceMenuSection {
-    workspace_label: String,
-    newest_updated_at: i64,
-    items: Vec<TrayThreadMenuItem>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct TrayThreadMenuSections {
-    recent: Vec<TrayThreadMenuItem>,
-    workspaces: Vec<TrayWorkspaceMenuSection>,
-}
-
-fn build_thread_menu_item(menu_id: String, entry: &TrayRecentThreadEntry) -> TrayThreadMenuItem {
-    TrayThreadMenuItem {
-        menu_id,
-        label: entry.thread_label.clone(),
-        payload: TrayOpenThreadPayload {
-            workspace_id: entry.workspace_id.clone(),
-            thread_id: entry.thread_id.clone(),
-        },
-    }
-}
-
-fn build_thread_menu_sections(entries: &[TrayRecentThreadEntry]) -> TrayThreadMenuSections {
-    let recent = entries
-        .iter()
-        .take(RECENT_THREADS_SECTION_LIMIT)
-        .enumerate()
-        .map(|(index, entry)| build_thread_menu_item(format!("tray_recent_{index}"), entry))
-        .collect();
-
-    let mut workspace_entries_by_id = HashMap::<String, Vec<TrayRecentThreadEntry>>::new();
-    for entry in entries {
-        workspace_entries_by_id
-            .entry(entry.workspace_id.clone())
-            .or_default()
-            .push(entry.clone());
-    }
-
-    let mut workspaces: Vec<_> = workspace_entries_by_id
-        .into_iter()
-        .map(|(_, mut workspace_entries)| {
-            workspace_entries.sort_by(|left, right| {
-                right
-                    .updated_at
-                    .cmp(&left.updated_at)
-                    .then_with(|| left.thread_label.cmp(&right.thread_label))
-            });
-            let workspace_label = workspace_entries
-                .first()
-                .map(|entry| entry.workspace_label.clone())
-                .unwrap_or_else(|| "Workspace".to_string());
-            let newest_updated_at = workspace_entries
-                .first()
-                .map(|entry| entry.updated_at)
-                .unwrap_or_default();
-            let items = workspace_entries
-                .iter()
-                .enumerate()
-                .map(|(_, entry)| build_thread_menu_item(String::new(), entry))
-                .collect();
-
-            TrayWorkspaceMenuSection {
-                workspace_label,
-                newest_updated_at,
-                items,
-            }
-        })
-        .collect();
-
-    workspaces.sort_by(|left, right| {
-        right
-            .newest_updated_at
-            .cmp(&left.newest_updated_at)
-            .then_with(|| left.workspace_label.cmp(&right.workspace_label))
-    });
-
-    for (workspace_index, workspace) in workspaces.iter_mut().enumerate() {
-        for (thread_index, item) in workspace.items.iter_mut().enumerate() {
-            item.menu_id = format!("tray_workspace_{workspace_index}_{thread_index}");
-        }
-    }
-
-    TrayThreadMenuSections { recent, workspaces }
-}
-
-fn collect_thread_menu_targets(
-    sections: &TrayThreadMenuSections,
-) -> HashMap<String, TrayOpenThreadPayload> {
-    let mut targets = HashMap::new();
-    for item in &sections.recent {
-        targets.insert(item.menu_id.clone(), item.payload.clone());
-    }
-    for workspace in &sections.workspaces {
-        for item in &workspace.items {
-            targets.insert(item.menu_id.clone(), item.payload.clone());
-        }
-    }
-    targets
-}
-
 fn normalize_session_usage(usage: Option<TraySessionUsage>) -> Option<TraySessionUsage> {
     let usage = usage?;
     let session_label = usage.session_label.trim();
@@ -322,6 +247,28 @@ fn normalize_session_usage(usage: Option<TraySessionUsage>) -> Option<TraySessio
         session_label: session_label.to_string(),
         weekly_label,
     })
+}
+
+fn normalize_label(value: String, fallback: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        fallback.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn normalize_tray_labels(labels: TrayLabels) -> TrayLabels {
+    let fallback = TrayLabels::default();
+    TrayLabels {
+        open: normalize_label(labels.open, &fallback.open),
+        hide: normalize_label(labels.hide, &fallback.hide),
+        quit: normalize_label(labels.quit, &fallback.quit),
+        usage_header: normalize_label(labels.usage_header, &fallback.usage_header),
+        no_active_session: normalize_label(labels.no_active_session, &fallback.no_active_session),
+        session_prefix: normalize_label(labels.session_prefix, &fallback.session_prefix),
+        weekly_prefix: normalize_label(labels.weekly_prefix, &fallback.weekly_prefix),
+    }
 }
 
 #[cfg(desktop)]
@@ -342,108 +289,40 @@ fn build_tray_menu<R: Runtime>(
     state: &TrayState,
 ) -> tauri::Result<Menu<R>> {
     let menu = Menu::new(app)?;
-    let tray_threads = state
-        .tray_threads
-        .lock()
-        .map(|entries| entries.clone())
-        .unwrap_or_default();
     let session_usage = state
         .session_usage
         .lock()
         .map(|usage| usage.clone())
         .unwrap_or_default();
-    let thread_sections = build_thread_menu_sections(&tray_threads);
-    let usage_items = build_usage_menu_items(app, session_usage.as_ref())?;
-    if let Ok(mut targets) = state.thread_targets_by_menu_id.lock() {
-        *targets = collect_thread_menu_targets(&thread_sections);
-    }
-
-    let open_item = MenuItemBuilder::with_id(TRAY_OPEN_ID, "Open Codex Monitor").build(app)?;
+    let labels = state
+        .labels
+        .lock()
+        .map(|labels| labels.clone())
+        .unwrap_or_default();
+    let usage_items = build_usage_menu_items(app, session_usage.as_ref(), &labels)?;
+    let open_item = MenuItemBuilder::with_id(TRAY_OPEN_ID, &labels.open).build(app)?;
     menu.append(&open_item)?;
-    let hide_item = MenuItemBuilder::with_id(TRAY_HIDE_ID, "Hide Window").build(app)?;
+    let hide_item = MenuItemBuilder::with_id(TRAY_HIDE_ID, &labels.hide).build(app)?;
     menu.append(&hide_item)?;
     let window_separator = PredefinedMenuItem::separator(app)?;
     menu.append(&window_separator)?;
-
-    let recent_header = MenuItemBuilder::with_id(TRAY_RECENT_HEADER_ID, "Recent Threads")
-        .enabled(false)
-        .build(app)?;
-    menu.append(&recent_header)?;
-
-    if thread_sections.recent.is_empty() {
-        let empty_item = MenuItemBuilder::with_id(TRAY_EMPTY_ID, "No recent threads")
-            .enabled(false)
-            .build(app)?;
-        menu.append(&empty_item)?;
-    } else {
-        append_thread_menu_items(app, &menu, &thread_sections.recent)?;
-    }
-
-    if !thread_sections.workspaces.is_empty() {
-        let thread_separator = PredefinedMenuItem::separator(app)?;
-        menu.append(&thread_separator)?;
-
-        let workspace_header = MenuItemBuilder::with_id(TRAY_WORKSPACES_HEADER_ID, "Workspaces")
-            .enabled(false)
-            .build(app)?;
-        menu.append(&workspace_header)?;
-
-        append_workspace_submenus(app, &menu, &thread_sections.workspaces)?;
-    }
-
-    let usage_separator = PredefinedMenuItem::separator(app)?;
-    menu.append(&usage_separator)?;
     for item in &usage_items {
         menu.append(item)?;
     }
     let quit_separator = PredefinedMenuItem::separator(app)?;
     menu.append(&quit_separator)?;
-    let quit_item = MenuItemBuilder::with_id(TRAY_QUIT_ID, "Quit").build(app)?;
+    let quit_item = MenuItemBuilder::with_id(TRAY_QUIT_ID, &labels.quit).build(app)?;
     menu.append(&quit_item)?;
     Ok(menu)
-}
-
-#[cfg(desktop)]
-fn append_thread_menu_items<R: Runtime>(
-    app: &tauri::AppHandle<R>,
-    menu: &Menu<R>,
-    items: &[TrayThreadMenuItem],
-) -> tauri::Result<()> {
-    for item in items {
-        let menu_item = MenuItemBuilder::with_id(item.menu_id.clone(), &item.label).build(app)?;
-        menu.append(&menu_item)?;
-    }
-    Ok(())
-}
-
-#[cfg(desktop)]
-fn append_workspace_submenus<R: Runtime>(
-    app: &tauri::AppHandle<R>,
-    menu: &Menu<R>,
-    workspaces: &[TrayWorkspaceMenuSection],
-) -> tauri::Result<()> {
-    for workspace in workspaces {
-        let submenu_items = workspace
-            .items
-            .iter()
-            .map(|item| MenuItemBuilder::with_id(item.menu_id.clone(), &item.label).build(app))
-            .collect::<tauri::Result<Vec<_>>>()?;
-        let submenu_refs: Vec<&dyn IsMenuItem<R>> = submenu_items
-            .iter()
-            .map(|item| item as &dyn IsMenuItem<R>)
-            .collect();
-        let submenu = Submenu::with_items(app, &workspace.workspace_label, true, &submenu_refs)?;
-        menu.append(&submenu)?;
-    }
-    Ok(())
 }
 
 #[cfg(desktop)]
 fn build_usage_menu_items<R: Runtime>(
     app: &tauri::AppHandle<R>,
     usage: Option<&TraySessionUsage>,
+    labels: &TrayLabels,
 ) -> tauri::Result<Vec<tauri::menu::MenuItem<R>>> {
-    let labels = build_usage_menu_labels(usage);
+    let labels = build_usage_menu_labels(usage, labels);
     let mut items = Vec::with_capacity(3);
     let header = MenuItemBuilder::with_id(TRAY_USAGE_HEADER_ID, &labels.0)
         .enabled(false)
@@ -462,16 +341,19 @@ fn build_usage_menu_items<R: Runtime>(
     Ok(items)
 }
 
-fn build_usage_menu_labels(usage: Option<&TraySessionUsage>) -> (String, String, Option<String>) {
+fn build_usage_menu_labels(
+    usage: Option<&TraySessionUsage>,
+    labels: &TrayLabels,
+) -> (String, String, Option<String>) {
     (
-        "Current Usage".to_string(),
+        labels.usage_header.clone(),
         usage
-            .map(|usage| format!("Session: {}", usage.session_label))
-            .unwrap_or_else(|| "No active session".to_string()),
+            .map(|usage| format!("{}: {}", labels.session_prefix, usage.session_label))
+            .unwrap_or_else(|| labels.no_active_session.clone()),
         usage
             .map(|usage| usage.weekly_label.clone())
             .unwrap_or(None)
-            .map(|label| format!("Weekly: {label}")),
+            .map(|label| format!("{}: {label}", labels.weekly_prefix)),
     )
 }
 
@@ -481,18 +363,7 @@ fn handle_tray_menu_event<R: Runtime>(app: &tauri::AppHandle<R>, event: MenuEven
         TRAY_OPEN_ID => show_main_window(app),
         TRAY_HIDE_ID => hide_main_window(app),
         TRAY_QUIT_ID => app.exit(0),
-        id => {
-            let state = app.state::<TrayState>();
-            let payload = state
-                .thread_targets_by_menu_id
-                .lock()
-                .ok()
-                .and_then(|targets| targets.get(id).cloned());
-            if let Some(payload) = payload {
-                show_main_window(app);
-                emit_open_thread_event(app, payload);
-            }
-        }
+        _ => {}
     }
 }
 
@@ -541,15 +412,6 @@ fn toggle_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
 }
 
 #[cfg(desktop)]
-fn emit_open_thread_event<R: Runtime>(app: &tauri::AppHandle<R>, payload: TrayOpenThreadPayload) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.emit(TRAY_OPEN_THREAD_EVENT, payload);
-    } else {
-        let _ = app.emit(TRAY_OPEN_THREAD_EVENT, payload);
-    }
-}
-
-#[cfg(desktop)]
 fn load_tray_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../icons/tray-icon.png")).map(|image| image.to_owned())
 }
@@ -557,9 +419,8 @@ fn load_tray_icon() -> tauri::Result<Image<'static>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_thread_menu_sections, build_usage_menu_labels, collect_thread_menu_targets,
-        normalize_session_usage, normalize_tray_threads, TrayOpenThreadPayload,
-        TrayRecentThreadEntry, TraySessionUsage, RECENT_THREADS_SECTION_LIMIT,
+        build_usage_menu_labels, normalize_session_usage, normalize_tray_labels,
+        normalize_tray_threads, TrayLabels, TrayRecentThreadEntry, TraySessionUsage,
     };
 
     fn recent_entry(
@@ -610,114 +471,6 @@ mod tests {
     }
 
     #[test]
-    fn build_thread_menu_sections_groups_recent_threads_and_workspaces() {
-        let normalized = normalize_tray_threads(vec![
-            recent_entry("ws-1", "One", "t-1", "Alpha", 100),
-            recent_entry("ws-2", "Two", "t-2", "Beta", 110),
-            recent_entry("ws-1", "One", "t-3", "Gamma", 90),
-            recent_entry("ws-3", "Three", "t-4", "Delta", 105),
-            recent_entry("ws-2", "Two", "t-5", "Epsilon", 95),
-        ]);
-
-        let sections = build_thread_menu_sections(&normalized);
-
-        assert_eq!(sections.recent.len(), RECENT_THREADS_SECTION_LIMIT);
-        assert_eq!(
-            sections
-                .recent
-                .iter()
-                .map(|item| item.payload.thread_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["t-2", "t-4", "t-1"]
-        );
-        assert_eq!(
-            sections
-                .workspaces
-                .iter()
-                .map(|workspace| workspace.workspace_label.as_str())
-                .collect::<Vec<_>>(),
-            vec!["Two", "Three", "One"]
-        );
-        assert_eq!(
-            sections.workspaces[0]
-                .items
-                .iter()
-                .map(|item| item.payload.thread_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["t-2", "t-5"]
-        );
-        assert_eq!(
-            sections.workspaces[1]
-                .items
-                .iter()
-                .map(|item| item.payload.thread_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["t-4"]
-        );
-        assert_eq!(
-            sections.workspaces[2]
-                .items
-                .iter()
-                .map(|item| item.payload.thread_id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["t-1", "t-3"]
-        );
-    }
-
-    #[test]
-    fn collect_thread_menu_targets_maps_recent_and_workspace_items() {
-        let normalized = normalize_tray_threads(vec![
-            recent_entry("ws-1", "One", "t-1", "Alpha", 100),
-            recent_entry("ws-2", "Two", "t-2", "Beta", 110),
-            recent_entry("ws-1", "One", "t-3", "Gamma", 90),
-            recent_entry("ws-3", "Three", "t-4", "Delta", 105),
-        ]);
-
-        let sections = build_thread_menu_sections(&normalized);
-        let targets = collect_thread_menu_targets(&sections);
-
-        assert_eq!(
-            targets.get("tray_recent_0"),
-            Some(&TrayOpenThreadPayload {
-                workspace_id: "ws-2".into(),
-                thread_id: "t-2".into(),
-            })
-        );
-        assert_eq!(
-            targets.get("tray_workspace_0_0"),
-            Some(&TrayOpenThreadPayload {
-                workspace_id: "ws-2".into(),
-                thread_id: "t-2".into(),
-            })
-        );
-        assert_eq!(
-            targets.get("tray_workspace_1_0"),
-            Some(&TrayOpenThreadPayload {
-                workspace_id: "ws-3".into(),
-                thread_id: "t-4".into(),
-            })
-        );
-        assert_eq!(
-            targets.get("tray_workspace_2_1"),
-            Some(&TrayOpenThreadPayload {
-                workspace_id: "ws-1".into(),
-                thread_id: "t-3".into(),
-            })
-        );
-    }
-
-    #[test]
-    fn tray_open_payload_round_trips_expected_fields() {
-        let payload = TrayOpenThreadPayload {
-            workspace_id: "ws-1".into(),
-            thread_id: "thread-1".into(),
-        };
-
-        assert_eq!(payload.workspace_id, "ws-1");
-        assert_eq!(payload.thread_id, "thread-1");
-    }
-
-    #[test]
     fn normalize_session_usage_discards_blank_labels() {
         assert_eq!(normalize_session_usage(None), None);
         assert_eq!(
@@ -742,10 +495,13 @@ mod tests {
     #[test]
     fn build_usage_menu_labels_include_current_usage_section() {
         assert_eq!(
-            build_usage_menu_labels(Some(&TraySessionUsage {
-                session_label: "12% used · Resets 2 hours".into(),
-                weekly_label: Some("67% used · Resets in 2 days".into()),
-            })),
+            build_usage_menu_labels(
+                Some(&TraySessionUsage {
+                    session_label: "12% used · Resets 2 hours".into(),
+                    weekly_label: Some("67% used · Resets in 2 days".into()),
+                }),
+                &TrayLabels::default(),
+            ),
             (
                 "Current Usage".into(),
                 "Session: 12% used · Resets 2 hours".into(),
@@ -753,8 +509,32 @@ mod tests {
             )
         );
         assert_eq!(
-            build_usage_menu_labels(None),
+            build_usage_menu_labels(None, &TrayLabels::default()),
             ("Current Usage".into(), "No active session".into(), None)
+        );
+    }
+
+    #[test]
+    fn normalize_tray_labels_uses_defaults_for_blank_values() {
+        assert_eq!(
+            normalize_tray_labels(TrayLabels {
+                open: " 打开 ".into(),
+                hide: " ".into(),
+                quit: "退出".into(),
+                usage_header: "当前用量".into(),
+                no_active_session: "".into(),
+                session_prefix: "本次".into(),
+                weekly_prefix: "每周".into(),
+            }),
+            TrayLabels {
+                open: "打开".into(),
+                hide: "Hide Window".into(),
+                quit: "退出".into(),
+                usage_header: "当前用量".into(),
+                no_active_session: "No active session".into(),
+                session_prefix: "本次".into(),
+                weekly_prefix: "每周".into(),
+            }
         );
     }
 }

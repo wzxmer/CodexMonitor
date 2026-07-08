@@ -11,6 +11,7 @@ const GLOBAL_STATE_FILE: &str = ".codex-global-state.json";
 const PERSISTED_ATOM_STATE_KEY: &str = "electron-persisted-atom-state";
 const OVERLAY_OPEN_KEY: &str = "electron-avatar-overlay-open";
 const SELECTED_AVATAR_ID_KEY: &str = "selected-avatar-id";
+const OVERLAY_POSITION_KEY: &str = "electron-avatar-overlay-position";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -25,10 +26,19 @@ pub(crate) struct CodexNativePet {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct CodexNativePetWindowPosition {
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct CodexNativePetState {
     pub(crate) enabled: bool,
     #[serde(default)]
     pub(crate) selected_avatar_id: Option<String>,
+    #[serde(default)]
+    pub(crate) window_position: Option<CodexNativePetWindowPosition>,
     pub(crate) codex_home: String,
     pub(crate) global_state_path: String,
     pub(crate) pets_dir: String,
@@ -116,6 +126,17 @@ fn read_selected_avatar_id(value: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+fn read_window_position(value: &Value) -> Option<CodexNativePetWindowPosition> {
+    let position = persisted_state(value)?
+        .get(OVERLAY_POSITION_KEY)?
+        .as_object()?;
+    let x = position.get("x")?.as_i64()?;
+    let y = position.get("y")?.as_i64()?;
+    let x = i32::try_from(x).ok()?;
+    let y = i32::try_from(y).ok()?;
+    Some(CodexNativePetWindowPosition { x, y })
+}
+
 fn set_enabled(value: &mut Value, enabled: bool) {
     persisted_state_mut(value).insert(OVERLAY_OPEN_KEY.to_string(), Value::Bool(enabled));
 }
@@ -125,6 +146,13 @@ fn set_selected_avatar_id(value: &mut Value, avatar_id: &str) {
         SELECTED_AVATAR_ID_KEY.to_string(),
         Value::String(avatar_id.to_string()),
     );
+}
+
+fn set_window_position(value: &mut Value, position: CodexNativePetWindowPosition) {
+    let mut object = Map::new();
+    object.insert("x".to_string(), Value::Number(position.x.into()));
+    object.insert("y".to_string(), Value::Number(position.y.into()));
+    persisted_state_mut(value).insert(OVERLAY_POSITION_KEY.to_string(), Value::Object(object));
 }
 
 fn pet_display_name_from_dir(path: &Path) -> String {
@@ -180,6 +208,7 @@ pub(crate) fn get_codex_native_pet_state_core(
     Ok(CodexNativePetState {
         enabled: read_enabled(&state),
         selected_avatar_id: read_selected_avatar_id(&state),
+        window_position: read_window_position(&state),
         codex_home: codex_home.to_string_lossy().to_string(),
         global_state_path: state_path.to_string_lossy().to_string(),
         pets_dir: pets_dir.to_string_lossy().to_string(),
@@ -209,6 +238,17 @@ pub(crate) fn set_codex_native_pet_selected_core(
     let state_path = global_state_path(settings)?;
     let mut state = read_global_state(&state_path)?;
     set_selected_avatar_id(&mut state, trimmed);
+    write_global_state(&state_path, &state)?;
+    get_codex_native_pet_state_core(settings)
+}
+
+pub(crate) fn set_codex_native_pet_position_core(
+    settings: &AppSettings,
+    position: CodexNativePetWindowPosition,
+) -> Result<CodexNativePetState, String> {
+    let state_path = global_state_path(settings)?;
+    let mut state = read_global_state(&state_path)?;
+    set_window_position(&mut state, position);
     write_global_state(&state_path, &state)?;
     get_codex_native_pet_state_core(settings)
 }
@@ -304,11 +344,16 @@ mod tests {
         let state = serde_json::json!({
             "electron-persisted-atom-state": {
                 "electron-avatar-overlay-open": true,
-                "selected-avatar-id": "eve"
+                "selected-avatar-id": "eve",
+                "electron-avatar-overlay-position": { "x": 100, "y": 200 }
             }
         });
         assert!(read_enabled(&state));
         assert_eq!(read_selected_avatar_id(&state), Some("eve".to_string()));
+        assert_eq!(
+            read_window_position(&state),
+            Some(CodexNativePetWindowPosition { x: 100, y: 200 })
+        );
     }
 
     #[test]
@@ -316,7 +361,12 @@ mod tests {
         let mut state = Value::Object(Map::new());
         set_enabled(&mut state, true);
         set_selected_avatar_id(&mut state, "codex");
+        set_window_position(&mut state, CodexNativePetWindowPosition { x: 12, y: 34 });
         assert!(read_enabled(&state));
         assert_eq!(read_selected_avatar_id(&state), Some("codex".to_string()));
+        assert_eq!(
+            read_window_position(&state),
+            Some(CodexNativePetWindowPosition { x: 12, y: 34 })
+        );
     }
 }

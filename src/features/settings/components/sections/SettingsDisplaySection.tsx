@@ -37,6 +37,7 @@ import {
 } from "@/features/design-system/components/settings/SettingsPrimitives";
 import { RoundedSelect } from "@/features/design-system/components/select/RoundedSelect";
 import { useI18n } from "@/features/i18n/I18nProvider";
+import { CONVERSATION_STYLE_PRESETS } from "@/features/messages/utils/conversationStylePresets";
 
 const THEME_ACCENT_OPTIONS: Array<{
   value: AppSettings["themeAccent"];
@@ -61,69 +62,6 @@ const THEME_ACCENT_OPTIONS: Array<{
   {
     value: "orange",
     swatch: "linear-gradient(135deg, #ffb269, #f5a65c)",
-  },
-];
-
-const STYLE_PRESETS: Array<{
-  id: string;
-  swatch: string;
-  settings: Pick<
-    AppSettings,
-    | "messageCanvasColor"
-    | "messageUserBubbleColor"
-    | "messageUserTextColor"
-    | "messageAssistantBubbleColor"
-    | "messageAssistantAccentColor"
-    | "messageAssistantTextColor"
-  >;
-}> = [
-  {
-    id: "native-white",
-    swatch: "linear-gradient(135deg, #ffffff 0%, #ffffff 62%, #f28b3c 100%)",
-    settings: {
-      messageCanvasColor: "#ffffff",
-      messageUserBubbleColor: "#fff7ed",
-      messageUserTextColor: "#2e2118",
-      messageAssistantBubbleColor: "#ffffff",
-      messageAssistantAccentColor: "#f28b3c",
-      messageAssistantTextColor: "#201a16",
-    },
-  },
-  {
-    id: "native-light",
-    swatch: "linear-gradient(135deg, #fffaf5 0%, #f4efe8 58%, #f28b3c 100%)",
-    settings: {
-      messageCanvasColor: "#fffaf5",
-      messageUserBubbleColor: "#fff4e8",
-      messageUserTextColor: "#332519",
-      messageAssistantBubbleColor: "#ffffff",
-      messageAssistantAccentColor: "#f28b3c",
-      messageAssistantTextColor: "#2d241d",
-    },
-  },
-  {
-    id: "native-dark",
-    swatch: "linear-gradient(135deg, #171513 0%, #25201b 62%, #f28b3c 100%)",
-    settings: {
-      messageCanvasColor: "#12100e",
-      messageUserBubbleColor: "#3a2617",
-      messageUserTextColor: "#fff1df",
-      messageAssistantBubbleColor: "#181512",
-      messageAssistantAccentColor: "#f28b3c",
-      messageAssistantTextColor: "#f1e7dc",
-    },
-  },
-  {
-    id: "cli-ember",
-    swatch: "linear-gradient(135deg, #151719 0%, #24211d 58%, #ff9f43 100%)",
-    settings: {
-      messageCanvasColor: "#111315",
-      messageUserBubbleColor: "#3a2a1d",
-      messageUserTextColor: "#fff3df",
-      messageAssistantBubbleColor: "#1b1b1c",
-      messageAssistantAccentColor: "#ff9f43",
-      messageAssistantTextColor: "#f6e7cf",
-    },
   },
 ];
 
@@ -321,7 +259,7 @@ export function SettingsDisplaySection({
         preset.messageFontWeight === appSettings.messageFontWeight,
     )?.id ?? null;
   const activeStylePresetId =
-    STYLE_PRESETS.find((preset) =>
+    CONVERSATION_STYLE_PRESETS.find((preset) =>
       Object.entries(preset.settings).every(
         ([key, value]) => appSettings[key as keyof typeof preset.settings] === value,
       ),
@@ -361,7 +299,7 @@ export function SettingsDisplaySection({
       <div className="settings-field">
         <div className="settings-field-label">{t("settings.display.stylePresets")}</div>
         <div className="settings-style-presets" role="radiogroup" aria-label={t("settings.display.stylePresets")}>
-          {STYLE_PRESETS.map((preset) => (
+          {CONVERSATION_STYLE_PRESETS.map((preset) => (
             <button
               key={preset.id}
               type="button"

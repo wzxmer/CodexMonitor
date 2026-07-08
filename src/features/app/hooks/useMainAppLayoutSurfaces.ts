@@ -1,12 +1,14 @@
-import type { RefObject } from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 import type {
   AppSettings,
+  CodexProviderStatus,
   ComposerEditorSettings,
   ComposerSendShortcut,
   ComposerTriggerMode,
   ConversationItem,
   WorkspaceInfo,
 } from "@/types";
+import { getProviderStatus } from "@/services/tauri";
 import type { ThreadState } from "@/features/threads/hooks/useThreadsReducer";
 import type { WorkspaceLaunchScriptsState } from "@app/hooks/useWorkspaceLaunchScripts";
 import { REMOTE_THREAD_POLL_INTERVAL_MS } from "@app/hooks/useRemoteThreadRefreshOnFocus";
@@ -44,6 +46,7 @@ type UseMainAppLayoutSurfacesArgs = {
   threadsByWorkspace: SidebarProps["threadsByWorkspace"];
   threadParentById: SidebarProps["threadParentById"];
   threadStatusById: ThreadState["threadStatusById"];
+  turnDiffByThread: ThreadState["turnDiffByThread"];
   interruptedThreadById: ThreadState["interruptedThreadById"];
   threadResumeLoadingById: Record<string, boolean>;
   threadListLoadingByWorkspace: SidebarProps["threadListLoadingByWorkspace"];
@@ -237,6 +240,8 @@ type UseMainAppLayoutSurfacesArgs = {
 type MainAppLayoutSurfacesContext = UseMainAppLayoutSurfacesArgs & {
   sidebarRateLimits: SidebarProps["accountRateLimits"];
   sidebarAccount: SidebarProps["accountInfo"];
+  codexProviderStatus: CodexProviderStatus | null;
+  contextCompactionTokenLimit: number | null;
 };
 
 function buildPrimarySurface({
@@ -252,6 +257,7 @@ function buildPrimarySurface({
   threadsByWorkspace,
   threadParentById,
   threadStatusById,
+  turnDiffByThread,
   interruptedThreadById,
   threadResumeLoadingById,
   threadListLoadingByWorkspace,
@@ -271,6 +277,8 @@ function buildPrimarySurface({
   approvals,
   sidebarRateLimits,
   sidebarAccount,
+  codexProviderStatus,
+  contextCompactionTokenLimit,
   homeRateLimits,
   homeAccount,
   accountSwitching,
@@ -432,7 +440,14 @@ function buildPrimarySurface({
       accountRateLimits: sidebarRateLimits,
       activeTokenUsage: activeTokenUsage ?? null,
       usageShowRemaining: appSettings.usageShowRemaining,
-      useTokenUsageStats: Boolean(appSettings.activeCodexKeyProfileId),
+      useTokenUsageStats:
+        codexProviderStatus?.isConfigured === true &&
+        codexProviderStatus.isThirdParty,
+      usageConfigurationWarning:
+        activeWorkspaceId &&
+        (!codexProviderStatus || !codexProviderStatus.isConfigured)
+          ? (codexProviderStatus?.error ?? "Codex provider status is not ready")
+          : null,
       accountInfo: sidebarAccount,
       onSwitchAccount,
       onCancelSwitchAccount,
@@ -495,6 +510,7 @@ function buildPrimarySurface({
       interruptedStatus: activeThreadId
         ? interruptedThreadById[activeThreadId] ?? null
         : null,
+      activeTurnDiff: activeThreadId ? turnDiffByThread[activeThreadId] ?? null : null,
       onUpdateConversationStyle: (next) => {
         void onUpdateAppSettings({
           ...appSettings,
@@ -536,6 +552,7 @@ function buildPrimarySurface({
           disabled: composerWorkspaceState.isReviewing,
           onFileAutocompleteActiveChange: composerWorkspaceState.setFileAutocompleteActive,
           contextUsage: activeTokenUsage,
+          contextCompactionTokenLimit,
           contextCompactionCount: countContextCompactions(activeItems),
           queuedMessages: composerWorkspaceState.activeQueue,
           queuePausedReason: composerWorkspaceState.queuePausedReason,
@@ -1041,6 +1058,7 @@ export function useMainAppLayoutSurfaces({
   threadsByWorkspace,
   threadParentById,
   threadStatusById,
+  turnDiffByThread,
   interruptedThreadById,
   threadResumeLoadingById,
   threadListLoadingByWorkspace,
@@ -1196,6 +1214,57 @@ export function useMainAppLayoutSurfaces({
 }: UseMainAppLayoutSurfacesArgs): LayoutNodesOptions {
   const sidebarRateLimits = activeWorkspace ? activeRateLimits : homeRateLimits;
   const sidebarAccount = activeWorkspace ? activeAccount : homeAccount;
+  const activeProfileBaseUrl = useMemo(
+    () =>
+      appSettings.codexKeyProfiles.find(
+        (profile) => profile.id === appSettings.activeCodexKeyProfileId,
+      )?.baseUrl ?? null,
+    [appSettings.activeCodexKeyProfileId, appSettings.codexKeyProfiles],
+  );
+  const [codexProviderStatus, setCodexProviderStatus] =
+    useState<CodexProviderStatus | null>(null);
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setCodexProviderStatus(null);
+      return;
+    }
+    let canceled = false;
+    getProviderStatus(activeWorkspaceId)
+      .then((status) => {
+        if (!canceled) {
+          setCodexProviderStatus(status);
+        }
+      })
+      .catch((error) => {
+        if (!canceled) {
+          setCodexProviderStatus({
+            providerName: null,
+            baseUrl: null,
+            source: "error",
+            isConfigured: false,
+            isThirdParty: false,
+            autoCompactTokenLimit: null,
+            modelContextWindow: null,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [
+    activeWorkspaceId,
+    appSettings.codexHome,
+    appSettings.activeCodexKeyProfileId,
+    activeProfileBaseUrl,
+  ]);
+  const contextCompactionTokenLimit =
+    codexProviderStatus?.autoCompactTokenLimit ??
+    codexProviderStatus?.modelContextWindow ??
+    activeTokenUsage?.modelContextWindow ??
+    null;
+
   const context: MainAppLayoutSurfacesContext = {
     appSettings,
     onUpdateAppSettings,
@@ -1209,6 +1278,7 @@ export function useMainAppLayoutSurfaces({
     threadsByWorkspace,
     threadParentById,
     threadStatusById,
+    turnDiffByThread,
     interruptedThreadById,
     threadResumeLoadingById,
     threadListLoadingByWorkspace,
@@ -1362,6 +1432,8 @@ export function useMainAppLayoutSurfaces({
     handleDebugClick,
     sidebarRateLimits,
     sidebarAccount,
+    codexProviderStatus,
+    contextCompactionTokenLimit,
   };
 
   return {

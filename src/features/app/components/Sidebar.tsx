@@ -186,6 +186,7 @@ type SidebarProps = {
   activeTokenUsage: ThreadTokenUsage | null;
   usageShowRemaining: boolean;
   useTokenUsageStats: boolean;
+  usageConfigurationWarning?: string | null;
   accountInfo: AccountSnapshot | null;
   onSwitchAccount: () => void;
   onCancelSwitchAccount: () => void;
@@ -250,6 +251,7 @@ export const Sidebar = memo(function Sidebar({
   activeTokenUsage,
   usageShowRemaining,
   useTokenUsageStats,
+  usageConfigurationWarning = null,
   accountInfo,
   onSwitchAccount,
   onCancelSwitchAccount,
@@ -374,12 +376,23 @@ export const Sidebar = memo(function Sidebar({
     unlimited: t("usage.unlimited"),
   });
   const tokenUsagePercent = getContextUsedPercent(activeTokenUsage);
-  const sidebarSessionPercent = useTokenUsageStats ? tokenUsagePercent : sessionPercent;
-  const sidebarWeeklyPercent = useTokenUsageStats ? null : weeklyPercent;
-  const sidebarSessionResetLabel = useTokenUsageStats ? null : sessionResetLabel;
-  const sidebarWeeklyResetLabel = useTokenUsageStats ? null : weeklyResetLabel;
-  const sidebarCreditsLabel = useTokenUsageStats ? null : creditsLabel;
-  const sidebarShowWeekly = useTokenUsageStats ? false : showWeekly;
+  const sidebarSessionPercent = usageConfigurationWarning
+    ? null
+    : useTokenUsageStats
+      ? tokenUsagePercent
+      : sessionPercent;
+  const sidebarWeeklyPercent =
+    usageConfigurationWarning || useTokenUsageStats ? null : weeklyPercent;
+  const sidebarSessionResetLabel = usageConfigurationWarning
+    ? t("usage.providerBaseUrlRequired")
+    : useTokenUsageStats
+      ? null
+      : sessionResetLabel;
+  const sidebarWeeklyResetLabel =
+    usageConfigurationWarning || useTokenUsageStats ? null : weeklyResetLabel;
+  const sidebarCreditsLabel =
+    usageConfigurationWarning || useTokenUsageStats ? null : creditsLabel;
+  const sidebarShowWeekly = usageConfigurationWarning || useTokenUsageStats ? false : showWeekly;
   const debouncedQuery = useDebouncedValue(searchQuery, 150);
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
   const isSearchActive = Boolean(normalizedQuery);

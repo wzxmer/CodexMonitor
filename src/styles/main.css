@@ -1049,6 +1049,78 @@
   }
 }
 
+.codex-native-pet-window {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  user-select: none;
+  overflow: hidden;
+}
+
+.codex-native-pet-card {
+  width: 150px;
+  height: 150px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+}
+
+.codex-native-pet-card:active {
+  cursor: grabbing;
+}
+
+.codex-native-pet-sprite {
+  width: 128px;
+  height: 128px;
+  display: block;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+  background-size: 800% 900%;
+  filter: drop-shadow(0 18px 22px rgb(0 0 0 / 28%));
+  animation: codex-native-pet-bob 2.4s ease-in-out infinite;
+  image-rendering: auto;
+  will-change: background-position, transform;
+}
+
+.codex-native-pet-sprite--running {
+  animation-duration: 1.7s;
+}
+
+.codex-native-pet-sprite--waiting,
+.codex-native-pet-sprite--failed {
+  animation-duration: 1.15s;
+}
+
+.codex-native-pet-fallback {
+  width: 96px;
+  height: 96px;
+  border-radius: 24px;
+  display: grid;
+  place-items: center;
+  color: white;
+  background:
+    linear-gradient(145deg, rgb(40 44 52), rgb(18 20 24)),
+    radial-gradient(circle at 35% 30%, rgb(255 255 255 / 32%), transparent 38%);
+  box-shadow: 0 18px 36px rgb(0 0 0 / 28%);
+  font-weight: 800;
+}
+
+@keyframes codex-native-pet-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
 .content {
   display: flex;
   min-height: 0;

@@ -47,7 +47,7 @@ import { ComposerQueue } from "./ComposerQueue";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { isMacPlatform } from "../../../utils/platformPaths";
 import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
-import { getContextUsedPercent } from "@/features/threads/utils/contextUsage";
+import { getCompactionCyclePercent } from "@/features/threads/utils/contextUsage";
 
 type ComposerProps = {
   onSend: (
@@ -88,6 +88,7 @@ type ComposerProps = {
   prompts: CustomPromptOption[];
   files: string[];
   contextUsage?: ThreadTokenUsage | null;
+  contextCompactionTokenLimit?: number | null;
   contextCompactionCount?: number;
   queuedMessages?: QueuedMessage[];
   queuePausedReason?: string | null;
@@ -203,6 +204,7 @@ export const Composer = memo(function Composer({
   prompts,
   files,
   contextUsage = null,
+  contextCompactionTokenLimit = null,
   contextCompactionCount = 0,
   queuedMessages = [],
   queuePausedReason = null,
@@ -261,7 +263,10 @@ export const Composer = memo(function Composer({
   contextActions = [],
 }: ComposerProps) {
   const { t } = useI18n();
-  const contextUsedPercent = getContextUsedPercent(contextUsage);
+  const contextCyclePercent = getCompactionCyclePercent(
+    contextUsage,
+    contextCompactionTokenLimit,
+  );
   const [text, setText] = useState(draftText);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [appMentionBindings, setAppMentionBindings] = useState<AppMentionBinding[]>([]);
@@ -673,7 +678,7 @@ export const Composer = memo(function Composer({
         onReviewPromptConfirmCommit={onReviewPromptConfirmCommit}
         onReviewPromptUpdateCustomInstructions={onReviewPromptUpdateCustomInstructions}
         onReviewPromptConfirmCustom={onReviewPromptConfirmCustom}
-        contextUsedPercent={contextUsedPercent}
+        contextCyclePercent={contextCyclePercent}
         contextCompactionCount={contextCompactionCount}
       />
       <ComposerMetaBar

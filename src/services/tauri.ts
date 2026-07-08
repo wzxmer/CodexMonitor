@@ -1,10 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
+import { emitTo } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { Options as NotificationOptions } from "@tauri-apps/plugin-notification";
 import type {
   AppSettings,
+  CodexProviderStatus,
   CodexSyncDiagnostics,
   CodexNativePetState,
+  CodexNativePetWindowPosition,
   CodexStatus,
   CodexUpdateResult,
   CodexDoctorResult,
@@ -14,12 +17,14 @@ import type {
   TcpDaemonStatus,
   TailscaleDaemonCommandPreview,
   TailscaleStatus,
+  TrayLabels,
   TrayRecentThreadEntry,
   TraySessionUsage,
   WorkspaceInfo,
   AppMention,
   WorkspaceSettings,
 } from "../types";
+import type { CodexPetActivity } from "@app/utils/codexPetAnimation";
 import type {
   GitFileDiff,
   GitFileStatus,
@@ -283,6 +288,30 @@ export async function getConfigModel(workspaceId: string): Promise<string | null
   }
   const trimmed = model.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+export async function getProviderStatus(workspaceId: string): Promise<CodexProviderStatus> {
+  const response = await invoke<CodexProviderStatus>("get_provider_status", {
+    workspaceId,
+  });
+  const normalizePositiveNumber = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+  return {
+    providerName:
+      typeof response.providerName === "string" && response.providerName.trim()
+        ? response.providerName.trim()
+        : null,
+    baseUrl:
+      typeof response.baseUrl === "string" && response.baseUrl.trim()
+        ? response.baseUrl.trim()
+        : null,
+    source: typeof response.source === "string" ? response.source : "unknown",
+    isConfigured: Boolean(response.isConfigured),
+    isThirdParty: Boolean(response.isThirdParty),
+    autoCompactTokenLimit: normalizePositiveNumber(response.autoCompactTokenLimit),
+    modelContextWindow: normalizePositiveNumber(response.modelContextWindow),
+    error: typeof response.error === "string" && response.error.trim() ? response.error : null,
+  };
 }
 
 export async function addWorkspace(path: string): Promise<WorkspaceInfo> {
@@ -929,6 +958,12 @@ export async function setCodexNativePetSelected(
   return invoke<CodexNativePetState>("set_codex_native_pet_selected", { avatarId });
 }
 
+export async function setCodexNativePetPosition(
+  position: CodexNativePetWindowPosition,
+): Promise<CodexNativePetState> {
+  return invoke<CodexNativePetState>("set_codex_native_pet_position", { position });
+}
+
 export async function wakeCodexNativePet(): Promise<CodexNativePetState> {
   return invoke<CodexNativePetState>("wake_codex_native_pet");
 }
@@ -937,6 +972,10 @@ export async function importCodexNativePet(
   sourceDir: string,
 ): Promise<CodexNativePetState> {
   return invoke<CodexNativePetState>("import_codex_native_pet", { sourceDir });
+}
+
+export async function setCodexPetActivity(activity: CodexPetActivity): Promise<void> {
+  return emitTo("codex-pet", "codex-pet-activity", { activity });
 }
 
 export async function listSystemFonts(): Promise<string[]> {
@@ -1168,6 +1207,10 @@ export async function setThreadName(
 
 export async function setTrayRecentThreads(entries: TrayRecentThreadEntry[]) {
   return invoke<void>("set_tray_recent_threads", { entries });
+}
+
+export async function setTrayLabels(labels: TrayLabels) {
+  return invoke<void>("set_tray_labels", { labels });
 }
 
 export async function setTraySessionUsage(usage: TraySessionUsage | null) {

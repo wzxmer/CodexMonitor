@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use toml_edit::{Document, Item, Table, value};
+use toml_edit::{value, Document, Item, Table};
 
 use crate::files::ops::{read_with_policy, write_with_policy};
-use crate::files::policy::{FileKind, FileScope, policy_for};
+use crate::files::policy::{policy_for, FileKind, FileScope};
 
 pub(crate) fn load_global_config_document(codex_home: &Path) -> Result<(bool, Document), String> {
     let policy = policy_for(FileScope::Global, FileKind::Config)?;
@@ -71,6 +71,26 @@ pub(crate) fn set_feature_flag(
 
 pub(crate) fn read_top_level_string(document: &Document, key: &str) -> Option<String> {
     let value = document.get(key).and_then(Item::as_str)?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+pub(crate) fn read_top_level_positive_integer(document: &Document, key: &str) -> Option<u64> {
+    let value = document.get(key).and_then(Item::as_integer)?;
+    u64::try_from(value).ok().filter(|value| *value > 0)
+}
+
+pub(crate) fn read_nested_string(document: &Document, path: &[&str]) -> Option<String> {
+    let (last, parents) = path.split_last()?;
+    let mut item = document.get(parents.first()?)?;
+    for key in parents.iter().skip(1) {
+        item = item.as_table_like()?.get(key)?;
+    }
+    let value = item.as_table_like()?.get(last)?.as_str()?;
     let trimmed = value.trim();
     if trimmed.is_empty() {
         None

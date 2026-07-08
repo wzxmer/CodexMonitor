@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { ModelOption } from "@/types";
 import {
@@ -38,6 +38,8 @@ const MIN_MAX_DEPTH = 1;
 const MAX_MAX_DEPTH = 4;
 
 export function SettingsAgentsSection({
+  appSettings,
+  onUpdateAppSettings,
   settings,
   isLoading,
   isUpdatingCore,
@@ -89,6 +91,15 @@ export function SettingsAgentsSection({
   const [configEditorDirty, setConfigEditorDirty] = useState(false);
   const canGenerateCreateFromName = createName.trim().length > 0;
   const effectiveModelOptions = modelOptions.length > 0 ? modelOptions : FALLBACK_AGENT_MODELS;
+
+  const handleToggleNativeMarkdownImport = useCallback(async () => {
+    await onUpdateAppSettings({
+      ...appSettings,
+      nativeAgentMarkdownImportEnabled:
+        !appSettings.nativeAgentMarkdownImportEnabled,
+    });
+    onRefresh();
+  }, [appSettings, onRefresh, onUpdateAppSettings]);
 
   useEffect(() => {
     if (!settings) {
@@ -384,6 +395,19 @@ export function SettingsAgentsSection({
             {openInFileManagerLabel()}
           </button>
         </div>
+      </SettingsToggleRow>
+
+      <SettingsToggleRow
+        title={t("settings.agents.importNativeMarkdown")}
+        subtitle={t("settings.agents.importNativeMarkdownHelp")}
+      >
+        <SettingsToggleSwitch
+          aria-label={t("settings.agents.importNativeMarkdown")}
+          pressed={appSettings.nativeAgentMarkdownImportEnabled}
+          onClick={() => {
+            void handleToggleNativeMarkdownImport();
+          }}
+        />
       </SettingsToggleRow>
 
       <SettingsToggleRow

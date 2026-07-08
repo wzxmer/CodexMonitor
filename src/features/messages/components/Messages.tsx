@@ -1,6 +1,19 @@
-import { memo, useCallback, useMemo, useState, type CSSProperties } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+import ArrowDown from "lucide-react/dist/esm/icons/arrow-down";
+import ArrowUp from "lucide-react/dist/esm/icons/arrow-up";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import Search from "lucide-react/dist/esm/icons/search";
+import X from "lucide-react/dist/esm/icons/x";
 import type {
   ConversationItem,
   MessageReadingStyle,
@@ -15,16 +28,19 @@ import { RequestUserInputMessage } from "../../app/components/RequestUserInputMe
 import { useFileLinkOpener } from "../hooks/useFileLinkOpener";
 import {
   formatCount,
+  countDiffLineChanges,
+  getConversationItemSearchText,
   parseReasoning,
   type MessageListBaseEntry,
+  type MessageListEntry,
   type ProcessGroup,
   type ToolGroup,
 } from "../utils/messageRenderUtils";
+import { CONVERSATION_STYLE_PRESETS } from "../utils/conversationStylePresets";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import {
   DiffRow,
   ExploreRow,
-  formatCliTimestamp,
   MessageRow,
   ReasoningRow,
   ReviewRow,
@@ -34,47 +50,37 @@ import {
 } from "./MessageRows";
 import { useMessagesViewState } from "./useMessagesViewState";
 
-function timestampFromItem(item: ConversationItem) {
-  if (
-    item.kind === "message" &&
-    typeof item.createdAt === "number" &&
-    Number.isFinite(item.createdAt)
-  ) {
-    return item.createdAt;
-  }
-  const match = item.id.match(/\d{13}/);
-  if (!match) {
-    return null;
-  }
-  const timestamp = Number(match[0]);
-  return Number.isFinite(timestamp) ? timestamp : null;
+function getToolGroupSearchText(group: ToolGroup) {
+  return group.items.map(getConversationItemSearchText).join("\n");
 }
 
-function timestampFromToolGroup(group: ToolGroup) {
-  for (const item of group.items) {
-    const timestamp = timestampFromItem(item);
-    if (timestamp !== null) {
-      return timestamp;
-    }
-  }
-  return null;
+function getBaseEntrySearchText(entry: MessageListBaseEntry) {
+  return entry.kind === "toolGroup"
+    ? getToolGroupSearchText(entry.group)
+    : getConversationItemSearchText(entry.item);
 }
 
-function timestampFromBaseEntry(entry: MessageListBaseEntry) {
-  if (entry.kind === "item") {
-    return timestampFromItem(entry.item);
-  }
-  return timestampFromToolGroup(entry.group);
+function getProcessGroupSearchText(group: ProcessGroup) {
+  return group.entries.map(getBaseEntrySearchText).join("\n");
 }
 
-function timestampFromProcessGroup(group: ProcessGroup) {
-  for (const entry of group.entries) {
-    const timestamp = timestampFromBaseEntry(entry);
-    if (timestamp !== null) {
-      return timestamp;
-    }
+function getSearchTargetForEntry(entry: MessageListEntry) {
+  if (entry.kind === "processGroup") {
+    return {
+      id: `process-group-${entry.group.id}`,
+      text: getProcessGroupSearchText(entry.group),
+    };
   }
-  return null;
+  if (entry.kind === "toolGroup") {
+    return {
+      id: `tool-group-${entry.group.id}`,
+      text: getToolGroupSearchText(entry.group),
+    };
+  }
+  return {
+    id: `item-${entry.item.id}`,
+    text: getConversationItemSearchText(entry.item),
+  };
 }
 
 type MessagesProps = {
@@ -105,6 +111,7 @@ type MessagesProps = {
   messageFontWeight?: number;
   chatHistoryScrollbackItems?: number | null;
   interruptedStatus?: { timestamp: number } | null;
+  activeTurnDiff?: string | null;
   onUpdateConversationStyle?: (next: {
     theme?: ThemePreference;
     themeAccent?: ThemeAccentPreference;
@@ -136,79 +143,6 @@ type MessagesProps = {
   ) => void;
 };
 
-const CONVERSATION_STYLE_PRESETS: Array<{
-  id: string;
-  titleKey:
-    | "stylePreset.nativeWhite.title"
-    | "stylePreset.nativeLight.title"
-    | "stylePreset.nativeDark.title"
-    | "stylePreset.cliEmber.title";
-  subtitleKey:
-    | "stylePreset.nativeWhite.subtitle"
-    | "stylePreset.nativeLight.subtitle"
-    | "stylePreset.nativeDark.subtitle"
-    | "stylePreset.cliEmber.subtitle";
-  swatch: string;
-  settings: Parameters<NonNullable<MessagesProps["onUpdateConversationStyle"]>>[0];
-}> = [
-  {
-    id: "native-white",
-    titleKey: "stylePreset.nativeWhite.title",
-    subtitleKey: "stylePreset.nativeWhite.subtitle",
-    swatch: "linear-gradient(135deg, #ffffff 0%, #ffffff 62%, #f28b3c 100%)",
-    settings: {
-      messageCanvasColor: "#ffffff",
-      messageUserBubbleColor: "#fff7ed",
-      messageUserTextColor: "#2e2118",
-      messageAssistantBubbleColor: "#ffffff",
-      messageAssistantAccentColor: "#f28b3c",
-      messageAssistantTextColor: "#201a16",
-    },
-  },
-  {
-    id: "native-light",
-    titleKey: "stylePreset.nativeLight.title",
-    subtitleKey: "stylePreset.nativeLight.subtitle",
-    swatch: "linear-gradient(135deg, #fffaf5 0%, #f4efe8 58%, #f28b3c 100%)",
-    settings: {
-      messageCanvasColor: "#fffaf5",
-      messageUserBubbleColor: "#fff4e8",
-      messageUserTextColor: "#332519",
-      messageAssistantBubbleColor: "#ffffff",
-      messageAssistantAccentColor: "#f28b3c",
-      messageAssistantTextColor: "#2d241d",
-    },
-  },
-  {
-    id: "native-dark",
-    titleKey: "stylePreset.nativeDark.title",
-    subtitleKey: "stylePreset.nativeDark.subtitle",
-    swatch: "linear-gradient(135deg, #171513 0%, #25201b 62%, #f28b3c 100%)",
-    settings: {
-      messageCanvasColor: "#12100e",
-      messageUserBubbleColor: "#3a2617",
-      messageUserTextColor: "#fff1df",
-      messageAssistantBubbleColor: "#181512",
-      messageAssistantAccentColor: "#f28b3c",
-      messageAssistantTextColor: "#f1e7dc",
-    },
-  },
-  {
-    id: "cli-ember",
-    titleKey: "stylePreset.cliEmber.title",
-    subtitleKey: "stylePreset.cliEmber.subtitle",
-    swatch: "linear-gradient(135deg, #151719 0%, #24211d 58%, #ff9f43 100%)",
-    settings: {
-      messageCanvasColor: "#111315",
-      messageUserBubbleColor: "#3a2a1d",
-      messageUserTextColor: "#fff3df",
-      messageAssistantBubbleColor: "#1b1b1c",
-      messageAssistantAccentColor: "#ff9f43",
-      messageAssistantTextColor: "#f6e7cf",
-    },
-  },
-];
-
 export const Messages = memo(function Messages({
   items,
   threadId,
@@ -237,6 +171,7 @@ export const Messages = memo(function Messages({
   messageFontWeight = 500,
   chatHistoryScrollbackItems = null,
   interruptedStatus = null,
+  activeTurnDiff = null,
   onUpdateConversationStyle,
   userInputRequests = [],
   onUserInputSubmit,
@@ -248,6 +183,11 @@ export const Messages = memo(function Messages({
 }: MessagesProps) {
   const { t } = useI18n();
   const [stylePanelOpen, setStylePanelOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchTargetRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const activeUserInputRequestId =
     threadId && userInputRequests.length
       ? (userInputRequests.find(
@@ -311,6 +251,107 @@ export const Messages = memo(function Messages({
     onPlanSubmitChanges,
     onQuoteMessage,
   });
+  const searchTargets = useMemo(
+    () => groupedItems.map(getSearchTargetForEntry),
+    [groupedItems],
+  );
+  const searchMatches = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return [];
+    }
+    return searchTargets.filter((target) =>
+      target.text.toLowerCase().includes(query),
+    );
+  }, [searchQuery, searchTargets]);
+  const activeSearchMatch =
+    searchMatches.length > 0
+      ? searchMatches[Math.min(activeSearchIndex, searchMatches.length - 1)]
+      : null;
+  const activeSearchDisplayIndex =
+    searchMatches.length > 0
+      ? Math.min(activeSearchIndex, searchMatches.length - 1) + 1
+      : 0;
+
+  useEffect(() => {
+    setActiveSearchIndex(0);
+  }, [searchQuery, threadId]);
+
+  useEffect(() => {
+    if (!searchOpen) {
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    });
+  }, [searchOpen]);
+
+  useEffect(() => {
+    if (!activeSearchMatch) {
+      return;
+    }
+    const node = searchTargetRefs.current[activeSearchMatch.id];
+    if (!node) {
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      node.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  }, [activeSearchMatch]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && key === "f") {
+        event.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+      if (event.key === "Escape" && searchOpen) {
+        event.preventDefault();
+        setSearchOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [searchOpen]);
+
+  const registerSearchTarget = useCallback(
+    (id: string) => (node: HTMLDivElement | null) => {
+      if (node) {
+        searchTargetRefs.current[id] = node;
+      } else {
+        delete searchTargetRefs.current[id];
+      }
+    },
+    [],
+  );
+
+  const moveSearch = useCallback(
+    (direction: 1 | -1) => {
+      if (searchMatches.length === 0) {
+        return;
+      }
+      setActiveSearchIndex((current) =>
+        (current + direction + searchMatches.length) % searchMatches.length,
+      );
+    },
+    [searchMatches.length],
+  );
+
+  const handleSearchInputKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        moveSearch(event.shiftKey ? -1 : 1);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        setSearchOpen(false);
+      }
+    },
+    [moveSearch],
+  );
   const messagesStyle = useMemo(
     () =>
       ({
@@ -404,6 +445,41 @@ export const Messages = memo(function Messages({
   const toolAutoCollapseStatus = isToolGroupsAutoCollapsed
     ? t("messages.on")
     : t("messages.off");
+  const activeTurnLineChangeStats = useMemo(
+    () => countDiffLineChanges(activeTurnDiff),
+    [activeTurnDiff],
+  );
+  const lineChangeStatsGroupId = useMemo(() => {
+    if (!activeTurnLineChangeStats) {
+      return null;
+    }
+    for (let index = groupedItems.length - 1; index >= 0; index -= 1) {
+      const entry = groupedItems[index];
+      if (entry?.kind === "processGroup" || entry?.kind === "toolGroup") {
+        return entry.group.id;
+      }
+    }
+    return null;
+  }, [activeTurnLineChangeStats, groupedItems]);
+  const renderLineChangeStats = useCallback(() => {
+    if (!activeTurnLineChangeStats) {
+      return null;
+    }
+    return (
+      <span className="tool-group-line-change-stats" aria-label="Line changes">
+        {activeTurnLineChangeStats.additions > 0 && (
+          <span className="tool-group-line-change-stat tool-group-line-change-stat-add">
+            +{activeTurnLineChangeStats.additions}
+          </span>
+        )}
+        {activeTurnLineChangeStats.deletions > 0 && (
+          <span className="tool-group-line-change-stat tool-group-line-change-stat-delete">
+            -{activeTurnLineChangeStats.deletions}
+          </span>
+        )}
+      </span>
+    );
+  }, [activeTurnLineChangeStats]);
   const showScrollbackNotice =
     typeof chatHistoryScrollbackItems === "number" &&
     chatHistoryScrollbackItems > 0 &&
@@ -422,18 +498,6 @@ export const Messages = memo(function Messages({
     { label: t("color.lightPurple"), color: "#eadcf8", text: "#2e2140" },
     { label: t("color.lightPink"), color: "#f6e2e2", text: "#3a2222" },
   ];
-
-  const shouldSuppressGroupedCliTimestamp = (
-    item: ConversationItem,
-    groupTimestampText: string,
-    isFirstInGroup: boolean,
-  ) => {
-    if (!isFirstInGroup || !groupTimestampText || item.kind !== "message") {
-      return false;
-    }
-    const itemTimestamp = timestampFromItem(item);
-    return itemTimestamp !== null && formatCliTimestamp(itemTimestamp) === groupTimestampText;
-  };
 
   const renderItem = (
     item: ConversationItem,
@@ -549,6 +613,58 @@ export const Messages = memo(function Messages({
       style={messagesStyle}
     >
       <div className="messages-inner">
+        {searchOpen && (
+          <div className="messages-session-search" role="search">
+            <Search size={14} aria-hidden />
+            <input
+              ref={searchInputRef}
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={handleSearchInputKeyDown}
+              aria-label={t("messages.searchCurrentSession")}
+              placeholder={t("messages.searchCurrentSession")}
+            />
+            <span className="messages-session-search-count" aria-live="polite">
+              {searchQuery.trim()
+                ? t("messages.searchCount")
+                    .replace(
+                      "{current}",
+                      String(activeSearchDisplayIndex),
+                    )
+                    .replace("{total}", String(searchMatches.length))
+                : t("messages.searchHint")}
+            </span>
+            <button
+              type="button"
+              className="ghost messages-session-search-icon-button"
+              onClick={() => moveSearch(-1)}
+              disabled={searchMatches.length === 0}
+              aria-label={t("messages.searchPrevious")}
+              title={t("messages.searchPrevious")}
+            >
+              <ArrowUp size={14} />
+            </button>
+            <button
+              type="button"
+              className="ghost messages-session-search-icon-button"
+              onClick={() => moveSearch(1)}
+              disabled={searchMatches.length === 0}
+              aria-label={t("messages.searchNext")}
+              title={t("messages.searchNext")}
+            >
+              <ArrowDown size={14} />
+            </button>
+            <button
+              type="button"
+              className="ghost messages-session-search-icon-button"
+              onClick={() => setSearchOpen(false)}
+              aria-label={t("messages.searchClose")}
+              title={t("messages.searchClose")}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
         {(toolGroupCount > 0 || threadId || items.length > 0) && (
           <div className="messages-tool-controls" aria-label={t("messages.readingStyle")}>
             <div
@@ -636,10 +752,10 @@ export const Messages = memo(function Messages({
                           />
                           <span className="messages-scheme-preset-copy">
                             <span className="messages-scheme-preset-title">
-                              {t(preset.titleKey)}
+                              {t(preset.messageTitleKey)}
                             </span>
                             <span className="messages-scheme-preset-subtitle">
-                              {t(preset.subtitleKey)}
+                              {t(preset.messageSubtitleKey)}
                             </span>
                           </span>
                         </button>
@@ -814,6 +930,11 @@ export const Messages = memo(function Messages({
           </div>
         )}
         {groupedItems.map((entry) => {
+          const searchTarget = getSearchTargetForEntry(entry);
+          const isActiveSearchMatch = activeSearchMatch?.id === searchTarget.id;
+          const searchTargetClassName = `messages-search-target${
+            isActiveSearchMatch ? " is-active-search-match" : ""
+          }`;
           if (entry.kind === "processGroup") {
             const { group } = entry;
             const isCollapsed = collapsedToolGroups.has(group.id);
@@ -838,15 +959,13 @@ export const Messages = memo(function Messages({
             }
             const summaryText =
               summaryParts.length > 0 ? summaryParts.join(", ") : t("messages.processMessages");
-            const groupTimestamp = timestampFromProcessGroup(group);
-            const groupTimestampText =
-              groupTimestamp === null ? "" : formatCliTimestamp(groupTimestamp);
             const groupBodyId = `tool-group-${group.id}`;
             const ChevronIcon = isCollapsed ? ChevronRight : ChevronDown;
             return (
               <div
                 key={`process-group-${group.id}`}
-                className={`tool-group process-group ${
+                ref={registerSearchTarget(searchTarget.id)}
+                className={`tool-group process-group ${searchTargetClassName} ${
                   isCollapsed ? "tool-group-collapsed" : ""
                 }`}
               >
@@ -866,13 +985,11 @@ export const Messages = memo(function Messages({
                     </span>
                     <span className="tool-group-summary">{summaryText}</span>
                   </button>
-                  {groupTimestampText && (
-                    <span className="tool-group-timestamp">{groupTimestampText}</span>
-                  )}
+                  {group.id === lineChangeStatsGroupId && renderLineChangeStats()}
                 </div>
                 {!isCollapsed && (
                   <div className="tool-group-body" id={groupBodyId}>
-                    {group.entries.map((processEntry, processEntryIndex) => {
+                    {group.entries.map((processEntry) => {
                       if (processEntry.kind === "toolGroup") {
                         return (
                           <div
@@ -880,26 +997,14 @@ export const Messages = memo(function Messages({
                             className="tool-group process-group-nested"
                           >
                             <div className="tool-group-body">
-                              {processEntry.group.items.map((nestedItem, nestedIndex) =>
-                                renderItem(nestedItem, {
-                                  suppressCliTimestamp: shouldSuppressGroupedCliTimestamp(
-                                    nestedItem,
-                                    groupTimestampText,
-                                    processEntryIndex === 0 && nestedIndex === 0,
-                                  ),
-                                }),
+                              {processEntry.group.items.map((nestedItem) =>
+                                renderItem(nestedItem),
                               )}
                             </div>
                           </div>
                         );
                       }
-                      return renderItem(processEntry.item, {
-                        suppressCliTimestamp: shouldSuppressGroupedCliTimestamp(
-                          processEntry.item,
-                          groupTimestampText,
-                          processEntryIndex === 0,
-                        ),
-                      });
+                      return renderItem(processEntry.item);
                     })}
                   </div>
                 )}
@@ -930,15 +1035,15 @@ export const Messages = memo(function Messages({
             }
             const summaryText =
               summaryParts.length > 0 ? summaryParts.join(", ") : t("messages.processMessages");
-            const groupTimestamp = timestampFromToolGroup(group);
-            const groupTimestampText =
-              groupTimestamp === null ? "" : formatCliTimestamp(groupTimestamp);
             const groupBodyId = `tool-group-${group.id}`;
             const ChevronIcon = isCollapsed ? ChevronRight : ChevronDown;
             return (
               <div
                 key={`tool-group-${group.id}`}
-                className={`tool-group ${isCollapsed ? "tool-group-collapsed" : ""}`}
+                ref={registerSearchTarget(searchTarget.id)}
+                className={`tool-group ${searchTargetClassName} ${
+                  isCollapsed ? "tool-group-collapsed" : ""
+                }`}
               >
                 <div className="tool-group-header">
                   <button
@@ -956,27 +1061,25 @@ export const Messages = memo(function Messages({
                     </span>
                     <span className="tool-group-summary">{summaryText}</span>
                   </button>
-                  {groupTimestampText && (
-                    <span className="tool-group-timestamp">{groupTimestampText}</span>
-                  )}
+                  {group.id === lineChangeStatsGroupId && renderLineChangeStats()}
                 </div>
                 {!isCollapsed && (
                   <div className="tool-group-body" id={groupBodyId}>
-                    {group.items.map((item, index) =>
-                      renderItem(item, {
-                        suppressCliTimestamp: shouldSuppressGroupedCliTimestamp(
-                          item,
-                          groupTimestampText,
-                          index === 0,
-                        ),
-                      }),
-                    )}
+                    {group.items.map((item) => renderItem(item))}
                   </div>
                 )}
               </div>
             );
           }
-          return renderItem(entry.item);
+          return (
+            <div
+              key={`item-search-${entry.item.id}`}
+              ref={registerSearchTarget(searchTarget.id)}
+              className={searchTargetClassName}
+            >
+              {renderItem(entry.item)}
+            </div>
+          );
         })}
         {planFollowupNode}
         {userInputNode}

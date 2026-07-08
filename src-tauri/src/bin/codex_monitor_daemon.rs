@@ -61,7 +61,7 @@ mod files {
 }
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::File;
@@ -73,9 +73,9 @@ use std::sync::Arc;
 use ignore::WalkBuilder;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{Mutex, Semaphore, broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, Mutex, Semaphore};
 
-use backend::app_server::{WorkspaceSession, spawn_workspace_session};
+use backend::app_server::{spawn_workspace_session, WorkspaceSession};
 use backend::events::{AppServerEvent, EventSink, TerminalExit, TerminalOutput};
 use shared::codex_core::CodexLoginCancelState;
 use shared::process_core::kill_child_process_tree;
@@ -607,35 +607,43 @@ impl DaemonState {
     }
 
     async fn get_agents_settings(&self) -> Result<agents_config_core::AgentsSettingsDto, String> {
-        agents_config_core::get_agents_settings_core()
+        let settings = self.app_settings.lock().await.clone();
+        agents_config_core::get_agents_settings_core(settings.native_agent_markdown_import_enabled)
     }
 
     async fn set_agents_core_settings(
         &self,
         input: agents_config_core::SetAgentsCoreInput,
     ) -> Result<agents_config_core::AgentsSettingsDto, String> {
-        agents_config_core::set_agents_core_settings_core(input)
+        let settings = self.app_settings.lock().await.clone();
+        agents_config_core::set_agents_core_settings_core(
+            input,
+            settings.native_agent_markdown_import_enabled,
+        )
     }
 
     async fn create_agent(
         &self,
         input: agents_config_core::CreateAgentInput,
     ) -> Result<agents_config_core::AgentsSettingsDto, String> {
-        agents_config_core::create_agent_core(input)
+        let settings = self.app_settings.lock().await.clone();
+        agents_config_core::create_agent_core(input, settings.native_agent_markdown_import_enabled)
     }
 
     async fn update_agent(
         &self,
         input: agents_config_core::UpdateAgentInput,
     ) -> Result<agents_config_core::AgentsSettingsDto, String> {
-        agents_config_core::update_agent_core(input)
+        let settings = self.app_settings.lock().await.clone();
+        agents_config_core::update_agent_core(input, settings.native_agent_markdown_import_enabled)
     }
 
     async fn delete_agent(
         &self,
         input: agents_config_core::DeleteAgentInput,
     ) -> Result<agents_config_core::AgentsSettingsDto, String> {
-        agents_config_core::delete_agent_core(input)
+        let settings = self.app_settings.lock().await.clone();
+        agents_config_core::delete_agent_core(input, settings.native_agent_markdown_import_enabled)
     }
 
     async fn read_agent_config_toml(&self, agent_name: String) -> Result<String, String> {
@@ -969,6 +977,11 @@ impl DaemonState {
 
     async fn get_config_model(&self, workspace_id: String) -> Result<Value, String> {
         codex_core::get_config_model_core(&self.workspaces, workspace_id).await
+    }
+
+    async fn get_provider_status(&self, workspace_id: String) -> Result<Value, String> {
+        let settings = self.app_settings.lock().await.clone();
+        codex_core::get_provider_status_core(&self.workspaces, &settings, workspace_id).await
     }
 
     async fn add_clone(
@@ -1595,8 +1608,8 @@ mod tests {
     use std::future::Future;
     use std::path::PathBuf;
     use std::process::Stdio;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicU64};
+    use std::sync::Arc;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
 

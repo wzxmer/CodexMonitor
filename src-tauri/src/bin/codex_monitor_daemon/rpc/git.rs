@@ -1,7 +1,7 @@
 use super::*;
 use crate::shared::git_rpc;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::future::Future;
 
 fn parse_git_request<T: DeserializeOwned>(params: &Value) -> Result<T, String> {

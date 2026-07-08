@@ -160,8 +160,8 @@ mod tests {
 
     use std::collections::{HashMap, HashSet};
     use std::process::Stdio;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+    use std::sync::Arc;
 
     use tokio::process::Command;
     use tokio::sync::Mutex;

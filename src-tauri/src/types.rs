@@ -571,7 +571,10 @@ pub(crate) struct AppSettings {
         rename = "chatHistoryScrollbackItems"
     )]
     pub(crate) chat_history_scrollback_items: Option<u32>,
-    #[serde(default, rename = "threadTitleAutogenerationEnabled")]
+    #[serde(
+        default = "default_thread_title_autogeneration_enabled",
+        rename = "threadTitleAutogenerationEnabled"
+    )]
     pub(crate) thread_title_autogeneration_enabled: bool,
     #[serde(default, rename = "autoArchiveThreadsEnabled")]
     pub(crate) auto_archive_threads_enabled: bool,
@@ -644,6 +647,11 @@ pub(crate) struct AppSettings {
     pub(crate) codex_pet_custom_image_path: Option<String>,
     #[serde(default, rename = "codexPetWakeVersion")]
     pub(crate) codex_pet_wake_version: u64,
+    #[serde(
+        default = "default_native_agent_markdown_import_enabled",
+        rename = "nativeAgentMarkdownImportEnabled"
+    )]
+    pub(crate) native_agent_markdown_import_enabled: bool,
     #[serde(
         default = "default_collaboration_modes_enabled",
         rename = "collaborationModesEnabled"
@@ -865,6 +873,10 @@ fn default_chat_history_scrollback_items() -> Option<u32> {
     Some(200)
 }
 
+fn default_thread_title_autogeneration_enabled() -> bool {
+    true
+}
+
 fn default_auto_archive_threads_days() -> u32 {
     7
 }
@@ -1070,6 +1082,10 @@ fn default_system_notifications_enabled() -> bool {
 }
 
 fn default_subagent_system_notifications_enabled() -> bool {
+    true
+}
+
+fn default_native_agent_markdown_import_enabled() -> bool {
     true
 }
 
@@ -1406,7 +1422,7 @@ impl Default for AppSettings {
             message_assistant_accent_color: default_message_assistant_accent_color(),
             message_assistant_text_color: default_message_assistant_text_color(),
             chat_history_scrollback_items: default_chat_history_scrollback_items(),
-            thread_title_autogeneration_enabled: false,
+            thread_title_autogeneration_enabled: default_thread_title_autogeneration_enabled(),
             auto_archive_threads_enabled: false,
             auto_archive_threads_days: default_auto_archive_threads_days(),
             automatic_app_update_checks_enabled: true,
@@ -1427,6 +1443,7 @@ impl Default for AppSettings {
             codex_pet_id: default_codex_pet_id(),
             codex_pet_custom_image_path: None,
             codex_pet_wake_version: 0,
+            native_agent_markdown_import_enabled: default_native_agent_markdown_import_enabled(),
             split_chat_diff_view: default_split_chat_diff_view(),
             preload_git_diffs: default_preload_git_diffs(),
             git_diff_ignore_whitespace_changes: default_git_diff_ignore_whitespace_changes(),
@@ -1588,7 +1605,7 @@ mod tests {
         assert!(!settings.usage_show_remaining);
         assert!(settings.show_message_file_path);
         assert_eq!(settings.chat_history_scrollback_items, Some(200));
-        assert!(!settings.thread_title_autogeneration_enabled);
+        assert!(settings.thread_title_autogeneration_enabled);
         assert!(settings.automatic_app_update_checks_enabled);
         assert!(settings.ui_font_family.contains("system-ui"));
         assert!(settings.code_font_family.contains("ui-monospace"));
@@ -1596,6 +1613,7 @@ mod tests {
         assert!(settings.notification_sounds_enabled);
         assert!(settings.system_notifications_enabled);
         assert!(settings.subagent_system_notifications_enabled);
+        assert!(settings.native_agent_markdown_import_enabled);
         assert!(!settings.codex_pet_enabled);
         assert_eq!(settings.codex_pet_id, "codex");
         assert!(settings.codex_pet_custom_image_path.is_none());

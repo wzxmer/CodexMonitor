@@ -139,6 +139,79 @@
   white-space: nowrap;
 }
 
+.messages-session-search {
+  position: sticky;
+  top: 8px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-end;
+  width: min(520px, 100%);
+  padding: 6px;
+  border: 1px solid var(--cm-border-strong);
+  border-radius: 16px;
+  background: var(--messages-solid-panel);
+  color: var(--text-muted);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}
+
+.messages-session-search input {
+  min-width: 120px;
+  flex: 1 1 auto;
+  height: 28px;
+  border: 1px solid var(--cm-border-default);
+  border-radius: 10px;
+  background: var(--messages-solid-control);
+  color: var(--text-stronger);
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.messages-session-search input:focus {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--border-accent) 18%, transparent);
+}
+
+.messages-session-search-count {
+  min-width: 54px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.messages-session-search-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 10px;
+}
+
+.messages-session-search-icon-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.messages-search-target {
+  scroll-margin: 92px 0 120px;
+  border-radius: 16px;
+}
+
+.messages-search-target.is-active-search-match {
+  outline: 2px solid color-mix(in srgb, var(--border-accent) 72%, transparent);
+  outline-offset: 4px;
+}
+
 .messages-toggle-pill {
   max-width: 100%;
 }
@@ -966,6 +1039,10 @@
   white-space: nowrap;
 }
 
+.messages-reading-cli .tool-group-line-change-stats {
+  font-size: 12px;
+}
+
 .messages-reading-cli .tool-inline {
   border-radius: 10px;
   background: var(--messages-process-bg);
@@ -1671,6 +1748,9 @@
 }
 
 .tool-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 0 4px;
 }
 
@@ -1678,7 +1758,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
   background: none;
   border: none;
   padding: 0;
@@ -1701,12 +1783,38 @@
 }
 
 .tool-group-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-muted);
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tool-group-timestamp {
   display: none;
+}
+
+.tool-group-line-change-stats {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-family: var(--code-font-family);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.tool-group-line-change-stat-add {
+  color: #22863a;
+}
+
+.tool-group-line-change-stat-delete {
+  color: #cb2431;
 }
 
 .tool-group-body {

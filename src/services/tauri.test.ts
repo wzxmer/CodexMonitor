@@ -32,6 +32,7 @@ import {
   sendNotification,
   setCodexFeatureFlag,
   setAgentsCoreSettings,
+  setTrayLabels,
   setTrayRecentThreads,
   setTraySessionUsage,
   startReview,
@@ -359,6 +360,25 @@ describe("tauri invoke wrappers", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("set_tray_recent_threads", {
       entries,
+    });
+  });
+
+  it("maps labels for set_tray_labels", async () => {
+    const invokeMock = vi.mocked(invoke);
+    const labels = {
+      open: "打开 Codex Monitor",
+      hide: "隐藏窗口",
+      quit: "退出",
+      usageHeader: "当前用量",
+      noActiveSession: "无活动会话",
+      sessionPrefix: "本次",
+      weeklyPrefix: "每周",
+    };
+
+    await setTrayLabels(labels);
+
+    expect(invokeMock).toHaveBeenCalledWith("set_tray_labels", {
+      labels,
     });
   });
 

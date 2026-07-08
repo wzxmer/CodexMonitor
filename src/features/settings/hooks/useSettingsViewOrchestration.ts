@@ -212,7 +212,11 @@ export function useSettingsViewOrchestration({
     onUpdateAppSettings,
   });
 
-  const agentsSectionProps = useSettingsAgentsSection({ projects });
+  const agentsSectionProps = useSettingsAgentsSection({
+    appSettings,
+    onUpdateAppSettings,
+    projects,
+  });
 
   return {
     aboutSectionProps: {
