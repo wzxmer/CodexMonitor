@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::backend::app_server::WorkspaceSession;
 use crate::codex::args::resolve_workspace_codex_args;
-use crate::codex::home::resolve_workspace_codex_home;
+use crate::codex::home::resolve_settings_codex_home;
 use crate::shared::process_core::kill_child_process_tree;
 use crate::shared::{git_core, worktree_core};
 use crate::storage::write_workspaces;
@@ -58,14 +58,14 @@ where
     let (session, spawned_new_session) = if let Some(existing_session) = existing_session {
         (existing_session, false)
     } else {
-        let (default_bin, codex_args) = {
+        let (default_bin, codex_args, codex_home) = {
             let settings = app_settings.lock().await;
             (
                 settings.codex_bin.clone(),
                 resolve_workspace_codex_args(&entry, None, Some(&settings)),
+                resolve_settings_codex_home(&settings),
             )
         };
-        let codex_home = resolve_workspace_codex_home(&entry, None);
         (
             spawn_session(entry.clone(), default_bin, codex_args, codex_home).await?,
             true,
@@ -209,14 +209,14 @@ where
     let (session, spawned_new_session) = if let Some(existing_session) = existing_session {
         (existing_session, false)
     } else {
-        let (default_bin, codex_args) = {
+        let (default_bin, codex_args, codex_home) = {
             let settings = app_settings.lock().await;
             (
                 settings.codex_bin.clone(),
                 resolve_workspace_codex_args(&entry, None, Some(&settings)),
+                resolve_settings_codex_home(&settings),
             )
         };
-        let codex_home = resolve_workspace_codex_home(&entry, None);
         match spawn_session(entry.clone(), default_bin, codex_args, codex_home).await {
             Ok(session) => (session, true),
             Err(error) => {
@@ -374,14 +374,14 @@ where
     let (session, spawned_new_session) = if let Some(existing_session) = existing_session {
         (existing_session, false)
     } else {
-        let (default_bin, codex_args) = {
+        let (default_bin, codex_args, codex_home) = {
             let settings = app_settings.lock().await;
             (
                 settings.codex_bin.clone(),
                 resolve_workspace_codex_args(&entry, None, Some(&settings)),
+                resolve_settings_codex_home(&settings),
             )
         };
-        let codex_home = resolve_workspace_codex_home(&entry, None);
         match spawn_session(entry.clone(), default_bin, codex_args, codex_home).await {
             Ok(session) => (session, true),
             Err(error) => {

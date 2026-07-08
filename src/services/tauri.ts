@@ -3,6 +3,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import type { Options as NotificationOptions } from "@tauri-apps/plugin-notification";
 import type {
   AppSettings,
+  CodexSyncDiagnostics,
   CodexStatus,
   CodexUpdateResult,
   CodexDoctorResult,
@@ -130,6 +131,10 @@ export async function getCodexConfigPath(): Promise<string> {
 
 export async function getCodexStatus(): Promise<CodexStatus> {
   return invoke<CodexStatus>("get_codex_status");
+}
+
+export async function getCodexSyncDiagnostics(): Promise<CodexSyncDiagnostics> {
+  return invoke<CodexSyncDiagnostics>("get_codex_sync_diagnostics");
 }
 
 export type TextFileResponse = {

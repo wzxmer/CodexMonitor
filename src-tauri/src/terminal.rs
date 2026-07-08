@@ -129,7 +129,10 @@ fn spawn_external_terminal(cwd: &Path) -> Result<(), String> {
         .map(String::from)
         .collect();
     let candidates: Vec<(String, Vec<String>)> = vec![
-        ("wt.exe".to_string(), vec!["-d".to_string(), cwd.to_string_lossy().to_string()]),
+        (
+            "wt.exe".to_string(),
+            vec!["-d".to_string(), cwd.to_string_lossy().to_string()],
+        ),
         (shell, shell_args),
         (
             std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string()),
@@ -167,7 +170,13 @@ fn spawn_external_terminal(cwd: &Path) -> Result<(), String> {
 
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 fn spawn_external_terminal(cwd: &Path) -> Result<(), String> {
-    let candidates = ["x-terminal-emulator", "gnome-terminal", "konsole", "alacritty", "kitty"];
+    let candidates = [
+        "x-terminal-emulator",
+        "gnome-terminal",
+        "konsole",
+        "alacritty",
+        "kitty",
+    ];
     let mut last_error = None;
     for program in candidates {
         match Command::new(program).current_dir(cwd).spawn() {

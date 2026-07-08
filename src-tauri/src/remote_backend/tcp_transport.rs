@@ -15,6 +15,7 @@ impl RemoteTransport for TcpTransport {
             let stream = TcpStream::connect(host.clone())
                 .await
                 .map_err(|err| format!("Failed to connect to remote backend at {host}: {err}"))?;
+            let _ = stream.set_nodelay(true);
             let (reader, writer) = stream.into_split();
             Ok(spawn_transport_io(app, reader, writer))
         })

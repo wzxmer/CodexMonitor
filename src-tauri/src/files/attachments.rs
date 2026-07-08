@@ -32,10 +32,15 @@ fn image_extension_for_mime(mime: &str) -> Option<&'static str> {
 }
 
 fn image_extension_for_path(path: &Path) -> Option<String> {
-    let extension = path.extension()?.to_string_lossy().trim().to_ascii_lowercase();
+    let extension = path
+        .extension()?
+        .to_string_lossy()
+        .trim()
+        .to_ascii_lowercase();
     match extension.as_str() {
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tiff" | "tif" | "heic"
-        | "heif" => Some(extension),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tiff" | "tif" | "heic" | "heif" => {
+            Some(extension)
+        }
         _ => None,
     }
 }
@@ -211,8 +216,7 @@ mod tests {
 
     #[test]
     fn parses_png_data_url() {
-        let parsed =
-            parse_data_url_image("data:image/png;base64,aGVsbG8=").expect("parse result");
+        let parsed = parse_data_url_image("data:image/png;base64,aGVsbG8=").expect("parse result");
         let (mime, bytes) = parsed.expect("image data");
         assert_eq!(mime, "image/png");
         assert_eq!(bytes, b"hello");

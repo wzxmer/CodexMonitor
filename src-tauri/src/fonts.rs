@@ -12,11 +12,7 @@ fn normalize_font_name(raw: &str) -> Option<String> {
         .chars()
         .filter(|character| !character.is_control() && *character != '\u{feff}')
         .collect();
-    let mut name = cleaned
-        .trim()
-        .trim_start_matches('.')
-        .trim()
-        .to_string();
+    let mut name = cleaned.trim().trim_start_matches('.').trim().to_string();
     for suffix in [
         "(TrueType)",
         "(OpenType)",
@@ -44,8 +40,7 @@ fn normalize_font_name(raw: &str) -> Option<String> {
 
 #[cfg(target_os = "windows")]
 fn read_windows_fonts_from(root: RegKey) -> Vec<String> {
-    let Ok(fonts_key) =
-        root.open_subkey("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts")
+    let Ok(fonts_key) = root.open_subkey("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts")
     else {
         return Vec::new();
     };

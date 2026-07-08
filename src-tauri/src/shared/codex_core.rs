@@ -261,7 +261,9 @@ fn parse_text_attachment_data_url(input: &str) -> Result<Option<(String, String)
         ));
     }
     if bytes.iter().any(|byte| *byte == 0) {
-        return Err(format!("Attachment is binary and cannot be inlined as text: {name}"));
+        return Err(format!(
+            "Attachment is binary and cannot be inlined as text: {name}"
+        ));
     }
     let content = String::from_utf8(bytes)
         .map_err(|_| format!("Attachment is not valid UTF-8 text: {name}"))?;

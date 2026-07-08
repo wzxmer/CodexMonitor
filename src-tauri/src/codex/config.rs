@@ -1,48 +1,61 @@
 use std::path::PathBuf;
 
 use crate::shared::config_toml_core;
+use crate::types::AppSettings;
 
-pub(crate) fn read_steer_enabled() -> Result<Option<bool>, String> {
-    read_feature_flag("steer")
+pub(crate) fn read_steer_enabled(settings: &AppSettings) -> Result<Option<bool>, String> {
+    read_feature_flag(settings, "steer")
 }
 
-pub(crate) fn read_collaboration_modes_enabled() -> Result<Option<bool>, String> {
-    read_feature_flag("collaboration_modes")
+pub(crate) fn read_collaboration_modes_enabled(
+    settings: &AppSettings,
+) -> Result<Option<bool>, String> {
+    read_feature_flag(settings, "collaboration_modes")
 }
 
-pub(crate) fn read_unified_exec_enabled() -> Result<Option<bool>, String> {
-    read_feature_flag("unified_exec")
+pub(crate) fn read_unified_exec_enabled(settings: &AppSettings) -> Result<Option<bool>, String> {
+    read_feature_flag(settings, "unified_exec")
 }
 
-pub(crate) fn read_apps_enabled() -> Result<Option<bool>, String> {
-    read_feature_flag("apps")
+pub(crate) fn read_apps_enabled(settings: &AppSettings) -> Result<Option<bool>, String> {
+    read_feature_flag(settings, "apps")
 }
 
-pub(crate) fn read_personality() -> Result<Option<String>, String> {
-    let Some(root) = resolve_default_codex_home() else {
+pub(crate) fn read_personality(settings: &AppSettings) -> Result<Option<String>, String> {
+    let Some(root) = resolve_settings_codex_home(settings) else {
         return Ok(None);
     };
     let (_, document) = config_toml_core::load_global_config_document(&root)?;
     Ok(read_personality_from_document(&document))
 }
 
-pub(crate) fn write_steer_enabled(enabled: bool) -> Result<(), String> {
-    write_feature_flag("steer", enabled)
+pub(crate) fn write_steer_enabled(settings: &AppSettings, enabled: bool) -> Result<(), String> {
+    write_feature_flag(settings, "steer", enabled)
 }
 
-pub(crate) fn write_collaboration_modes_enabled(enabled: bool) -> Result<(), String> {
-    write_feature_flag("collaboration_modes", enabled)
+pub(crate) fn write_collaboration_modes_enabled(
+    settings: &AppSettings,
+    enabled: bool,
+) -> Result<(), String> {
+    write_feature_flag(settings, "collaboration_modes", enabled)
 }
 
-pub(crate) fn write_unified_exec_enabled(enabled: bool) -> Result<(), String> {
-    write_feature_flag("unified_exec", enabled)
+pub(crate) fn write_unified_exec_enabled(
+    settings: &AppSettings,
+    enabled: bool,
+) -> Result<(), String> {
+    write_feature_flag(settings, "unified_exec", enabled)
 }
 
-pub(crate) fn write_apps_enabled(enabled: bool) -> Result<(), String> {
-    write_feature_flag("apps", enabled)
+pub(crate) fn write_apps_enabled(settings: &AppSettings, enabled: bool) -> Result<(), String> {
+    write_feature_flag(settings, "apps", enabled)
 }
 
-pub(crate) fn write_feature_enabled(feature_key: &str, enabled: bool) -> Result<(), String> {
+pub(crate) fn write_feature_enabled(
+    settings: &AppSettings,
+    feature_key: &str,
+    enabled: bool,
+) -> Result<(), String> {
     let key = feature_key.trim();
     if key.is_empty() {
         return Err("feature key is empty".to_string());
@@ -50,11 +63,11 @@ pub(crate) fn write_feature_enabled(feature_key: &str, enabled: bool) -> Result<
     if key.eq_ignore_ascii_case("collab") {
         return Err("feature key `collab` is no longer supported; use `multi_agent`".to_string());
     }
-    write_feature_flag(key, enabled)
+    write_feature_flag(settings, key, enabled)
 }
 
-pub(crate) fn write_personality(personality: &str) -> Result<(), String> {
-    let Some(root) = resolve_default_codex_home() else {
+pub(crate) fn write_personality(settings: &AppSettings, personality: &str) -> Result<(), String> {
+    let Some(root) = resolve_settings_codex_home(settings) else {
         return Ok(());
     };
     let (_, mut document) = config_toml_core::load_global_config_document(&root)?;
@@ -63,25 +76,21 @@ pub(crate) fn write_personality(personality: &str) -> Result<(), String> {
     config_toml_core::persist_global_config_document(&root, &document)
 }
 
-fn read_feature_flag(key: &str) -> Result<Option<bool>, String> {
-    let Some(root) = resolve_default_codex_home() else {
+fn read_feature_flag(settings: &AppSettings, key: &str) -> Result<Option<bool>, String> {
+    let Some(root) = resolve_settings_codex_home(settings) else {
         return Ok(None);
     };
     let (_, document) = config_toml_core::load_global_config_document(&root)?;
     Ok(config_toml_core::read_feature_flag(&document, key))
 }
 
-fn write_feature_flag(key: &str, enabled: bool) -> Result<(), String> {
-    let Some(root) = resolve_default_codex_home() else {
+fn write_feature_flag(settings: &AppSettings, key: &str, enabled: bool) -> Result<(), String> {
+    let Some(root) = resolve_settings_codex_home(settings) else {
         return Ok(());
     };
     let (_, mut document) = config_toml_core::load_global_config_document(&root)?;
     config_toml_core::set_feature_flag(&mut document, key, enabled)?;
     config_toml_core::persist_global_config_document(&root, &document)
-}
-
-pub(crate) fn config_toml_path() -> Option<PathBuf> {
-    resolve_default_codex_home().map(|home| home.join("config.toml"))
 }
 
 pub(crate) fn read_config_model(codex_home: Option<PathBuf>) -> Result<Option<String>, String> {
@@ -95,6 +104,10 @@ pub(crate) fn read_config_model(codex_home: Option<PathBuf>) -> Result<Option<St
 
 fn resolve_default_codex_home() -> Option<PathBuf> {
     crate::codex::home::resolve_default_codex_home()
+}
+
+fn resolve_settings_codex_home(settings: &AppSettings) -> Option<PathBuf> {
+    crate::codex::home::resolve_settings_codex_home(settings)
 }
 
 fn read_personality_from_document(document: &toml_edit::Document) -> Option<String> {

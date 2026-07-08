@@ -99,19 +99,28 @@ const DAEMON_NAME: &str = "codex-monitor-daemon";
 fn spawn_with_client(
     event_sink: DaemonEventSink,
     client_version: String,
+    app_settings: &Mutex<AppSettings>,
     entry: WorkspaceEntry,
     default_bin: Option<String>,
     codex_args: Option<String>,
     codex_home: Option<PathBuf>,
-) -> impl std::future::Future<Output = Result<Arc<WorkspaceSession>, String>> {
-    spawn_workspace_session(
-        entry,
-        default_bin,
-        codex_args,
-        codex_home,
-        client_version,
-        event_sink,
-    )
+) -> impl std::future::Future<Output = Result<Arc<WorkspaceSession>, String>> + '_ {
+    async move {
+        let codex_env = {
+            let settings = app_settings.lock().await;
+            settings.active_codex_key_env()
+        };
+        spawn_workspace_session(
+            entry,
+            default_bin,
+            codex_args,
+            codex_env,
+            codex_home,
+            client_version,
+            event_sink,
+        )
+        .await
+    }
 }
 
 #[derive(Clone)]
@@ -263,6 +272,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    &self.app_settings,
                     entry,
                     default_bin,
                     codex_args,
@@ -293,6 +303,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    &self.app_settings,
                     entry,
                     default_bin,
                     codex_args,
@@ -341,6 +352,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    &self.app_settings,
                     entry,
                     default_bin,
                     codex_args,
@@ -442,6 +454,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    &self.app_settings,
                     entry,
                     default_bin,
                     codex_args,
@@ -515,6 +528,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    &self.app_settings,
                     entry,
                     default_bin,
                     codex_args,
@@ -543,6 +557,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    &self.app_settings,
                     entry,
                     default_bin,
                     codex_args,
@@ -569,6 +584,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    &self.app_settings,
                     entry,
                     default_bin,
                     next_args,
@@ -593,7 +609,8 @@ impl DaemonState {
         feature_key: String,
         enabled: bool,
     ) -> Result<(), String> {
-        codex_config::write_feature_enabled(feature_key.as_str(), enabled)
+        let settings = self.app_settings.lock().await.clone();
+        codex_config::write_feature_enabled(&settings, feature_key.as_str(), enabled)
     }
 
     async fn get_agents_settings(&self) -> Result<agents_config_core::AgentsSettingsDto, String> {
@@ -667,7 +684,14 @@ impl DaemonState {
         kind: file_policy::FileKind,
         workspace_id: Option<String>,
     ) -> Result<file_io::TextFileResponse, String> {
-        files_core::file_read_core(&self.workspaces, scope, kind, workspace_id).await
+        files_core::file_read_core(
+            &self.workspaces,
+            &self.app_settings,
+            scope,
+            kind,
+            workspace_id,
+        )
+        .await
     }
 
     async fn file_write(
@@ -677,7 +701,15 @@ impl DaemonState {
         workspace_id: Option<String>,
         content: String,
     ) -> Result<(), String> {
-        files_core::file_write_core(&self.workspaces, scope, kind, workspace_id, content).await
+        files_core::file_write_core(
+            &self.workspaces,
+            &self.app_settings,
+            scope,
+            kind,
+            workspace_id,
+            content,
+        )
+        .await
     }
 
     async fn start_thread(&self, workspace_id: String) -> Result<Value, String> {
@@ -692,11 +724,7 @@ impl DaemonState {
         codex_core::resume_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
-    async fn read_thread(
-        &self,
-        workspace_id: String,
-        thread_id: String,
-    ) -> Result<Value, String> {
+    async fn read_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
         codex_core::read_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
@@ -765,8 +793,7 @@ impl DaemonState {
         limit: Option<u32>,
         sort_key: Option<String>,
     ) -> Result<Value, String> {
-        codex_core::list_threads_core(&self.sessions, workspace_id, cursor, limit, sort_key)
-            .await
+        codex_core::list_threads_core(&self.sessions, workspace_id, cursor, limit, sort_key).await
     }
 
     async fn list_mcp_server_status(
@@ -970,6 +997,7 @@ impl DaemonState {
                 spawn_with_client(
                     self.event_sink.clone(),
                     client_version.clone(),
+                    &self.app_settings,
                     entry,
                     default_bin,
                     codex_args,
@@ -1675,6 +1703,7 @@ mod tests {
             pending: Mutex::new(HashMap::new()),
             request_context: Mutex::new(HashMap::new()),
             thread_workspace: Mutex::new(HashMap::new()),
+            active_turns: Mutex::new(HashMap::new()),
             hidden_thread_ids: Mutex::new(HashSet::new()),
             next_id: AtomicU64::new(0),
             background_thread_callbacks: Mutex::new(HashMap::new()),

@@ -375,12 +375,33 @@ pub(crate) struct RemoteBackendTarget {
     pub(crate) last_connected_at_ms: Option<i64>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CodexKeyProfile {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    #[serde(default = "default_codex_key_env_var")]
+    pub(crate) key_env_var: String,
+    #[serde(default)]
+    pub(crate) key: String,
+    #[serde(default = "default_codex_base_url_env_var")]
+    pub(crate) base_url_env_var: String,
+    #[serde(default)]
+    pub(crate) base_url: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct AppSettings {
     #[serde(default, rename = "codexBin")]
     pub(crate) codex_bin: Option<String>,
     #[serde(default, rename = "codexArgs")]
     pub(crate) codex_args: Option<String>,
+    #[serde(default, rename = "codexHome")]
+    pub(crate) codex_home: Option<String>,
+    #[serde(default, rename = "codexKeyProfiles")]
+    pub(crate) codex_key_profiles: Vec<CodexKeyProfile>,
+    #[serde(default, rename = "activeCodexKeyProfileId")]
+    pub(crate) active_codex_key_profile_id: Option<String>,
     #[serde(default, rename = "backendMode")]
     pub(crate) backend_mode: BackendMode,
     #[serde(default, rename = "remoteBackendProvider")]
@@ -1276,11 +1297,57 @@ fn default_selected_open_app_id() -> String {
     }
 }
 
+fn default_codex_key_env_var() -> String {
+    "OPENAI_API_KEY".to_string()
+}
+
+fn default_codex_base_url_env_var() -> String {
+    "OPENAI_BASE_URL".to_string()
+}
+
+impl AppSettings {
+    pub(crate) fn active_codex_key_env(&self) -> Vec<(String, String)> {
+        let Some(active_id) = self
+            .active_codex_key_profile_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return Vec::new();
+        };
+        let Some(profile) = self
+            .codex_key_profiles
+            .iter()
+            .find(|profile| profile.id == active_id)
+        else {
+            return Vec::new();
+        };
+
+        let key_env_var = profile.key_env_var.trim();
+        let key = profile.key.trim();
+        if key_env_var.is_empty() || key.is_empty() {
+            return Vec::new();
+        }
+
+        let mut env = vec![(key_env_var.to_string(), key.to_string())];
+        if let Some(base_url) = profile.base_url.as_deref().map(str::trim) {
+            let base_url_env_var = profile.base_url_env_var.trim();
+            if !base_url.is_empty() && !base_url_env_var.is_empty() {
+                env.push((base_url_env_var.to_string(), base_url.to_string()));
+            }
+        }
+        env
+    }
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
             codex_bin: None,
             codex_args: None,
+            codex_home: None,
+            codex_key_profiles: Vec::new(),
+            active_codex_key_profile_id: None,
             backend_mode: default_backend_mode(),
             remote_backend_provider: RemoteBackendProvider::Tcp,
             remote_backend_host: default_remote_backend_host(),
@@ -1386,8 +1453,8 @@ impl Default for AppSettings {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppSettings, BackendMode, RemoteBackendProvider, WorkspaceEntry, WorkspaceGroup,
-        WorkspaceKind, WorkspaceSettings,
+        AppSettings, BackendMode, CodexKeyProfile, RemoteBackendProvider, WorkspaceEntry,
+        WorkspaceGroup, WorkspaceKind, WorkspaceSettings,
     };
 
     #[test]
@@ -1551,6 +1618,31 @@ mod tests {
         assert_eq!(settings.selected_open_app_id, expected_open_id);
         assert_eq!(settings.open_app_targets.len(), 6);
         assert_eq!(settings.open_app_targets[0].id, "vscode");
+    }
+
+    #[test]
+    fn active_codex_key_env_returns_selected_key_profile_env() {
+        let mut settings = AppSettings::default();
+        settings.codex_key_profiles = vec![CodexKeyProfile {
+            id: "work".to_string(),
+            name: "Work".to_string(),
+            key_env_var: "OPENAI_API_KEY".to_string(),
+            key: "sk-test".to_string(),
+            base_url_env_var: "OPENAI_BASE_URL".to_string(),
+            base_url: Some("https://api.example.com/v1".to_string()),
+        }];
+        settings.active_codex_key_profile_id = Some("work".to_string());
+
+        assert_eq!(
+            settings.active_codex_key_env(),
+            vec![
+                ("OPENAI_API_KEY".to_string(), "sk-test".to_string()),
+                (
+                    "OPENAI_BASE_URL".to_string(),
+                    "https://api.example.com/v1".to_string()
+                ),
+            ]
+        );
     }
 
     #[test]

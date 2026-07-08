@@ -243,9 +243,21 @@ export type OpenAppTarget = {
   args: string[];
 };
 
+export type CodexKeyProfile = {
+  id: string;
+  name: string;
+  keyEnvVar: string;
+  key: string;
+  baseUrlEnvVar: string;
+  baseUrl: string | null;
+};
+
 export type AppSettings = {
   codexBin: string | null;
   codexArgs: string | null;
+  codexHome: string | null;
+  codexKeyProfiles: CodexKeyProfile[];
+  activeCodexKeyProfileId: string | null;
   backendMode: BackendMode;
   remoteBackendProvider: RemoteBackendProvider;
   remoteBackendHost: string;
@@ -415,6 +427,18 @@ export type CodexStatus = {
   agentsSkillsCount: number;
   model: string | null;
   modelError: string | null;
+};
+
+export type CodexSyncDiagnostics = {
+  username: string | null;
+  userProfile: string | null;
+  codexHomePath: string | null;
+  codexHomeSource: string;
+  sessionsPath: string | null;
+  sessionsExists: boolean;
+  sessionFileCount: number;
+  latestSessionPath: string | null;
+  latestSessionModifiedMs: number | null;
 };
 
 export type CodexUpdateMethod = "brew_formula" | "brew_cask" | "npm" | "unknown";

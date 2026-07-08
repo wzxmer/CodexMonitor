@@ -79,14 +79,12 @@ fn extract_related_thread_ids(value: &Value) -> Vec<String> {
         push_thread_id(out, record.get("id"));
         push_thread_id(
             out,
-            record
-                .get("thread")
-                .and_then(|thread| {
-                    thread
-                        .get("id")
-                        .or_else(|| thread.get("threadId"))
-                        .or_else(|| thread.get("thread_id"))
-                }),
+            record.get("thread").and_then(|thread| {
+                thread
+                    .get("id")
+                    .or_else(|| thread.get("threadId"))
+                    .or_else(|| thread.get("thread_id"))
+            }),
         );
     }
 
@@ -94,12 +92,15 @@ fn extract_related_thread_ids(value: &Value) -> Vec<String> {
         let Some(container) = container.and_then(|value| value.as_object()) else {
             return;
         };
-        push_thread_id(out, container.get("threadId").or_else(|| container.get("thread_id")));
         push_thread_id(
             out,
             container
-                .get("thread")
-                .and_then(|thread| thread.get("id")),
+                .get("threadId")
+                .or_else(|| container.get("thread_id")),
+        );
+        push_thread_id(
+            out,
+            container.get("thread").and_then(|thread| thread.get("id")),
         );
         push_thread_id(
             out,
@@ -149,7 +150,10 @@ fn extract_related_thread_ids(value: &Value) -> Vec<String> {
                 .or_else(|| container.get("agent_statuses")),
             out,
         );
-        if let Some(status_map) = container.get("statuses").and_then(|value| value.as_object()) {
+        if let Some(status_map) = container
+            .get("statuses")
+            .and_then(|value| value.as_object())
+        {
             out.extend(
                 status_map
                     .keys()
@@ -192,10 +196,8 @@ fn normalize_root_path(value: &str) -> String {
     }
 
     let bytes = normalized.as_bytes();
-    let is_drive_path = bytes.len() >= 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && bytes[2] == b'/';
+    let is_drive_path =
+        bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'/';
     if is_drive_path || normalized.starts_with("//") {
         normalized.to_ascii_lowercase()
     } else {
@@ -414,6 +416,111 @@ fn should_broadcast_global_workspace_notification(
 pub(crate) struct RequestContext {
     workspace_id: String,
     method: String,
+    thread_id: Option<String>,
+}
+
+fn extract_turn_id(value: &Value) -> Option<String> {
+    value
+        .get("params")
+        .and_then(|params| {
+            params
+                .get("turn")
+                .and_then(|turn| turn.get("id"))
+                .or_else(|| params.get("turnId"))
+                .or_else(|| params.get("turn_id"))
+        })
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+fn build_turn_error_event(thread_id: &str, turn_id: &str, message: &str) -> Value {
+    json!({
+        "method": "error",
+        "params": {
+            "threadId": thread_id,
+            "turnId": turn_id,
+            "error": { "message": message },
+            "willRetry": false,
+        }
+    })
+}
+
+async fn track_active_turn_event(
+    session: &WorkspaceSession,
+    method_name: Option<&str>,
+    thread_id: Option<&String>,
+    value: &Value,
+) {
+    let Some(thread_id) = thread_id else {
+        return;
+    };
+    match method_name {
+        Some("turn/started") => {
+            if let Some(turn_id) = extract_turn_id(value) {
+                session
+                    .active_turns
+                    .lock()
+                    .await
+                    .insert(thread_id.clone(), turn_id);
+            }
+        }
+        Some("turn/completed") | Some("error") => {
+            session.active_turns.lock().await.remove(thread_id);
+        }
+        _ => {}
+    }
+}
+
+async fn fail_pending_and_active_turns_after_output_end<E: EventSink>(
+    session: &WorkspaceSession,
+    event_sink: &E,
+    fallback_workspace_id: &str,
+) {
+    let message = "Codex app-server stopped unexpectedly.";
+    let pending = {
+        let mut pending = session.pending.lock().await;
+        pending.drain().collect::<Vec<_>>()
+    };
+    let mut request_context = {
+        let mut request_context = session.request_context.lock().await;
+        request_context.drain().collect::<HashMap<_, _>>()
+    };
+
+    for (id, sender) in pending {
+        if let Some(context) = request_context.remove(&id) {
+            if matches!(context.method.as_str(), "turn/start" | "turn/steer") {
+                if let Some(thread_id) = context.thread_id.as_deref() {
+                    event_sink.emit_app_server_event(AppServerEvent {
+                        workspace_id: context.workspace_id.clone(),
+                        message: build_turn_error_event(thread_id, "", message),
+                    });
+                }
+            }
+        }
+        let _ = sender.send(json!({
+            "id": id,
+            "error": { "message": message }
+        }));
+    }
+
+    let active_turns = {
+        let mut active_turns = session.active_turns.lock().await;
+        active_turns.drain().collect::<Vec<_>>()
+    };
+    if active_turns.is_empty() {
+        return;
+    }
+    let thread_workspace = session.thread_workspace.lock().await.clone();
+    for (thread_id, turn_id) in active_turns {
+        let workspace_id = thread_workspace
+            .get(&thread_id)
+            .cloned()
+            .unwrap_or_else(|| fallback_workspace_id.to_string());
+        event_sink.emit_app_server_event(AppServerEvent {
+            workspace_id,
+            message: build_turn_error_event(&thread_id, &turn_id, message),
+        });
+    }
 }
 
 fn build_initialize_params(client_version: &str) -> Value {
@@ -438,6 +545,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) pending: Mutex<HashMap<u64, oneshot::Sender<Value>>>,
     pub(crate) request_context: Mutex<HashMap<u64, RequestContext>>,
     pub(crate) thread_workspace: Mutex<HashMap<String, String>>,
+    pub(crate) active_turns: Mutex<HashMap<String, String>>,
     pub(crate) hidden_thread_ids: Mutex<HashSet<String>>,
     pub(crate) next_id: AtomicU64,
     /// Callbacks for background threads - events for these threadIds are sent through the channel
@@ -511,6 +619,7 @@ impl WorkspaceSession {
             RequestContext {
                 workspace_id: workspace_id.to_string(),
                 method: method.to_string(),
+                thread_id: extract_thread_id(&json!({ "params": params.clone() })),
             },
         );
         if let Some(thread_id) = extract_thread_id(&json!({ "params": params.clone() })) {
@@ -750,6 +859,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
     entry: WorkspaceEntry,
     default_codex_bin: Option<String>,
     codex_args: Option<String>,
+    codex_env: Vec<(String, String)>,
     codex_home: Option<PathBuf>,
     client_version: String,
     event_sink: E,
@@ -765,6 +875,9 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
     command.current_dir(&entry.path);
     if let Some(path) = codex_home.as_ref() {
         command.env("CODEX_HOME", path);
+    }
+    for (key, value) in &codex_env {
+        command.env(key, value);
     }
     command.stdin(std::process::Stdio::piped());
     command.stdout(std::process::Stdio::piped());
@@ -782,6 +895,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
         pending: Mutex::new(HashMap::new()),
         request_context: Mutex::new(HashMap::new()),
         thread_workspace: Mutex::new(HashMap::new()),
+        active_turns: Mutex::new(HashMap::new()),
         hidden_thread_ids: Mutex::new(HashSet::new()),
         next_id: AtomicU64::new(1),
         background_thread_callbacks: Mutex::new(HashMap::new()),
@@ -894,6 +1008,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
             let routed_workspace_id = mapped_thread_workspace
                 .or_else(|| request_workspace.clone())
                 .unwrap_or_else(|| fallback_workspace_id.clone());
+            track_active_turn_event(&session_clone, method_name, thread_id.as_ref(), &value).await;
 
             if let Some(ref tid) = thread_id {
                 if method_name == Some("codex/backgroundThread") {
@@ -903,12 +1018,20 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                         .and_then(Value::as_str)
                         .unwrap_or("hide");
                     if action.eq_ignore_ascii_case("hide") {
-                        session_clone.hidden_thread_ids.lock().await.insert(tid.clone());
+                        session_clone
+                            .hidden_thread_ids
+                            .lock()
+                            .await
+                            .insert(tid.clone());
                     }
                 } else if method_name == Some("thread/started")
                     && thread_started_is_memory_consolidation(&value)
                 {
-                    session_clone.hidden_thread_ids.lock().await.insert(tid.clone());
+                    session_clone
+                        .hidden_thread_ids
+                        .lock()
+                        .await
+                        .insert(tid.clone());
                     let payload = AppServerEvent {
                         workspace_id: routed_workspace_id.clone(),
                         message: json!({
@@ -1046,9 +1169,12 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
             }
         }
 
-        // Ensure pending foreground requests cannot accumulate after process output ends.
-        session_clone.pending.lock().await.clear();
-        session_clone.request_context.lock().await.clear();
+        fail_pending_and_active_turns_after_output_end(
+            &session_clone,
+            &event_sink_clone,
+            &fallback_workspace_id,
+        )
+        .await;
     });
 
     let workspace_id = entry.id.clone();
@@ -1105,13 +1231,13 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_initialize_params, extract_related_thread_ids, extract_thread_entries_from_thread_list_result,
-        extract_thread_id, normalize_root_path, resolve_workspace_for_cwd,
-        should_suppress_hidden_thread_event, source_subagent_kind,
+        build_initialize_params, build_turn_error_event, extract_related_thread_ids,
+        extract_thread_entries_from_thread_list_result, extract_thread_id, normalize_root_path,
+        resolve_workspace_for_cwd, should_suppress_hidden_thread_event, source_subagent_kind,
         thread_started_is_memory_consolidation,
     };
-    use std::collections::HashMap;
     use serde_json::json;
+    use std::collections::HashMap;
 
     #[test]
     fn extract_thread_id_reads_camel_case() {
@@ -1365,9 +1491,25 @@ mod tests {
 
     #[test]
     fn hidden_thread_suppression_allows_rpc_responses() {
-        assert!(!should_suppress_hidden_thread_event(Some("thread/archived"), true));
-        assert!(!should_suppress_hidden_thread_event(Some("thread/updated"), true));
+        assert!(!should_suppress_hidden_thread_event(
+            Some("thread/archived"),
+            true
+        ));
+        assert!(!should_suppress_hidden_thread_event(
+            Some("thread/updated"),
+            true
+        ));
         assert!(!should_suppress_hidden_thread_event(None, true));
+    }
+
+    #[test]
+    fn build_turn_error_event_matches_frontend_error_shape() {
+        let value = build_turn_error_event("thread-1", "turn-1", "stopped");
+        assert_eq!(value["method"], "error");
+        assert_eq!(value["params"]["threadId"], "thread-1");
+        assert_eq!(value["params"]["turnId"], "turn-1");
+        assert_eq!(value["params"]["error"]["message"], "stopped");
+        assert_eq!(value["params"]["willRetry"], false);
     }
 
     #[test]

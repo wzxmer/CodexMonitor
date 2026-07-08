@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::backend::app_server::WorkspaceSession;
 use crate::codex::args::resolve_workspace_codex_args;
-use crate::codex::home::resolve_workspace_codex_home;
+use crate::codex::home::resolve_settings_codex_home;
 use crate::storage::write_workspaces;
 use crate::types::{
     AppSettings, WorkspaceEntry, WorkspaceInfo, WorkspaceKind, WorkspaceSettings, WorktreeInfo,
@@ -225,14 +225,14 @@ where
     let session = if let Some(existing_session) = existing_session {
         existing_session
     } else {
-        let (default_bin, codex_args) = {
+        let (default_bin, codex_args, codex_home) = {
             let settings = app_settings.lock().await;
             (
                 settings.codex_bin.clone(),
                 resolve_workspace_codex_args(&entry, Some(&parent_entry), Some(&settings)),
+                resolve_settings_codex_home(&settings),
             )
         };
-        let codex_home = resolve_workspace_codex_home(&entry, Some(&parent_entry));
         spawn_session(entry.clone(), default_bin, codex_args, codex_home).await?
     };
 

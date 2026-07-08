@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
 use tokio::sync::Mutex;
@@ -27,6 +28,20 @@ pub(crate) struct CodexStatusDto {
     pub(crate) model_error: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CodexSyncDiagnosticsDto {
+    pub(crate) username: Option<String>,
+    pub(crate) user_profile: Option<String>,
+    pub(crate) codex_home_path: Option<String>,
+    pub(crate) codex_home_source: String,
+    pub(crate) sessions_path: Option<String>,
+    pub(crate) sessions_exists: bool,
+    pub(crate) session_file_count: usize,
+    pub(crate) latest_session_path: Option<String>,
+    pub(crate) latest_session_modified_ms: Option<u64>,
+}
+
 fn normalize_personality(value: &str) -> Option<&'static str> {
     match value.trim() {
         "friendly" => Some("friendly"),
@@ -37,20 +52,21 @@ fn normalize_personality(value: &str) -> Option<&'static str> {
 
 pub(crate) async fn get_app_settings_core(app_settings: &Mutex<AppSettings>) -> AppSettings {
     let mut settings = app_settings.lock().await.clone();
-    if let Ok(Some(collaboration_modes_enabled)) = codex_config::read_collaboration_modes_enabled()
+    if let Ok(Some(collaboration_modes_enabled)) =
+        codex_config::read_collaboration_modes_enabled(&settings)
     {
         settings.collaboration_modes_enabled = collaboration_modes_enabled;
     }
-    if let Ok(Some(steer_enabled)) = codex_config::read_steer_enabled() {
+    if let Ok(Some(steer_enabled)) = codex_config::read_steer_enabled(&settings) {
         settings.steer_enabled = steer_enabled;
     }
-    if let Ok(Some(unified_exec_enabled)) = codex_config::read_unified_exec_enabled() {
+    if let Ok(Some(unified_exec_enabled)) = codex_config::read_unified_exec_enabled(&settings) {
         settings.unified_exec_enabled = unified_exec_enabled;
     }
-    if let Ok(Some(apps_enabled)) = codex_config::read_apps_enabled() {
+    if let Ok(Some(apps_enabled)) = codex_config::read_apps_enabled(&settings) {
         settings.experimental_apps_enabled = apps_enabled;
     }
-    if let Ok(personality) = codex_config::read_personality() {
+    if let Ok(personality) = codex_config::read_personality(&settings) {
         settings.personality = personality
             .as_deref()
             .and_then(normalize_personality)
@@ -68,19 +84,23 @@ pub(crate) async fn update_app_settings_core(
     settings.global_worktrees_folder = settings
         .global_worktrees_folder
         .map(|path| normalize_windows_namespace_path(&path));
-    let _ = codex_config::write_collaboration_modes_enabled(settings.collaboration_modes_enabled);
-    let _ = codex_config::write_steer_enabled(settings.steer_enabled);
-    let _ = codex_config::write_unified_exec_enabled(settings.unified_exec_enabled);
-    let _ = codex_config::write_apps_enabled(settings.experimental_apps_enabled);
-    let _ = codex_config::write_personality(settings.personality.as_str());
+    let _ = codex_config::write_collaboration_modes_enabled(
+        &settings,
+        settings.collaboration_modes_enabled,
+    );
+    let _ = codex_config::write_steer_enabled(&settings, settings.steer_enabled);
+    let _ = codex_config::write_unified_exec_enabled(&settings, settings.unified_exec_enabled);
+    let _ = codex_config::write_apps_enabled(&settings, settings.experimental_apps_enabled);
+    let _ = codex_config::write_personality(&settings, settings.personality.as_str());
     write_settings(settings_path, &settings)?;
     let mut current = app_settings.lock().await;
     *current = settings.clone();
     Ok(settings)
 }
 
-pub(crate) fn get_codex_config_path_core() -> Result<String, String> {
-    codex_config::config_toml_path()
+pub(crate) fn get_codex_config_path_core(settings: &AppSettings) -> Result<String, String> {
+    codex_home::resolve_settings_codex_home(settings)
+        .map(|home| home.join("config.toml"))
         .ok_or_else(|| "Unable to resolve CODEX_HOME".to_string())
         .and_then(|path| {
             path.to_str()
@@ -89,18 +109,27 @@ pub(crate) fn get_codex_config_path_core() -> Result<String, String> {
         })
 }
 
-pub(crate) fn get_codex_status_core() -> CodexStatusDto {
-    let codex_home = codex_home::resolve_default_codex_home();
-    let codex_home_source = match std::env::var("CODEX_HOME") {
-        Ok(value) if !value.trim().is_empty() => "CODEX_HOME",
-        _ => "默认路径",
+pub(crate) fn get_codex_status_core(settings: &AppSettings) -> CodexStatusDto {
+    let configured_codex_home = settings
+        .codex_home
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let codex_home = codex_home::resolve_settings_codex_home(settings);
+    let codex_home_source = if configured_codex_home.is_some() {
+        "设置"
+    } else {
+        match std::env::var("CODEX_HOME") {
+            Ok(value) if !value.trim().is_empty() => "CODEX_HOME",
+            _ => "默认路径",
+        }
     }
     .to_string();
     let config_path = codex_home.as_ref().map(|home| home.join("config.toml"));
     let global_agents_path = codex_home.as_ref().map(|home| home.join("AGENTS.md"));
     let codex_skills_path = codex_home.as_ref().map(|home| home.join("skills"));
-    let agents_skills_path = codex_home::resolve_home_dir()
-        .map(|home| home.join(".agents").join("skills"));
+    let agents_skills_path =
+        codex_home::resolve_home_dir().map(|home| home.join(".agents").join("skills"));
     let (model, model_error) = match codex_config::read_config_model(codex_home.clone()) {
         Ok(model) => (model, None),
         Err(error) => (None, Some(error)),
@@ -122,6 +151,53 @@ pub(crate) fn get_codex_status_core() -> CodexStatusDto {
     }
 }
 
+pub(crate) fn get_codex_sync_diagnostics_core(settings: &AppSettings) -> CodexSyncDiagnosticsDto {
+    let configured_codex_home = settings
+        .codex_home
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let codex_home = codex_home::resolve_settings_codex_home(settings);
+    let codex_home_source = if configured_codex_home.is_some() {
+        "设置"
+    } else {
+        match std::env::var("CODEX_HOME") {
+            Ok(value) if !value.trim().is_empty() => "CODEX_HOME",
+            _ => "默认路径",
+        }
+    }
+    .to_string();
+    let sessions_path = codex_home.as_ref().map(|home| home.join("sessions"));
+    let (session_file_count, latest_session_path, latest_session_modified_ms) =
+        collect_session_file_stats(sessions_path.as_deref());
+
+    CodexSyncDiagnosticsDto {
+        username: std::env::var("USERNAME")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                std::env::var("USER")
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+            }),
+        user_profile: std::env::var("USERPROFILE")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+            }),
+        codex_home_path: path_to_string(codex_home.as_deref()),
+        codex_home_source,
+        sessions_exists: path_exists(sessions_path.as_deref()),
+        sessions_path: path_to_string(sessions_path.as_deref()),
+        session_file_count,
+        latest_session_path,
+        latest_session_modified_ms,
+    }
+}
+
 fn path_exists(path: Option<&Path>) -> bool {
     path.is_some_and(|path| path.exists())
 }
@@ -139,6 +215,55 @@ fn count_skill_dirs(path: Option<&Path>) -> usize {
     };
     entries
         .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().map(|file_type| file_type.is_dir()).unwrap_or(false))
+        .filter(|entry| {
+            entry
+                .file_type()
+                .map(|file_type| file_type.is_dir())
+                .unwrap_or(false)
+        })
         .count()
+}
+
+fn collect_session_file_stats(path: Option<&Path>) -> (usize, Option<String>, Option<u64>) {
+    let Some(root) = path else {
+        return (0, None, None);
+    };
+    let mut stack = vec![root.to_path_buf()];
+    let mut count = 0;
+    let mut latest_path: Option<PathBuf> = None;
+    let mut latest_ms: Option<u64> = None;
+
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if !file_type.is_file()
+                || path.extension().and_then(|value| value.to_str()) != Some("jsonl")
+            {
+                continue;
+            }
+            count += 1;
+            let modified_ms = entry
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+                .map(|duration| duration.as_millis() as u64);
+            if modified_ms.is_some() && (latest_ms.is_none() || modified_ms > latest_ms) {
+                latest_ms = modified_ms;
+                latest_path = Some(path);
+            }
+        }
+    }
+
+    (count, path_to_string(latest_path.as_deref()), latest_ms)
 }

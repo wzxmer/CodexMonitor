@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
-use std::sync::OnceLock;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 use tokio::sync::Mutex;
 
 use crate::backend::app_server::WorkspaceSession;
 use crate::codex::args::resolve_workspace_codex_args;
-use crate::codex::home::resolve_workspace_codex_home;
+use crate::codex::home::resolve_settings_codex_home;
 use crate::shared::process_core::kill_child_process_tree;
 use crate::types::{AppSettings, WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
 
@@ -115,14 +115,14 @@ where
             .insert(entry.id.clone(), existing_session);
         return Ok(());
     }
-    let (default_bin, codex_args) = {
+    let (default_bin, codex_args, codex_home) = {
         let settings = app_settings.lock().await;
         (
             settings.codex_bin.clone(),
             resolve_workspace_codex_args(&entry, parent_entry.as_ref(), Some(&settings)),
+            resolve_settings_codex_home(&settings),
         )
     };
-    let codex_home = resolve_workspace_codex_home(&entry, parent_entry.as_ref());
     let session = spawn_session(entry.clone(), default_bin, codex_args, codex_home).await?;
     session
         .register_workspace_with_path(&entry.id, Some(&entry.path))
@@ -206,6 +206,7 @@ mod tests {
             pending: Mutex::new(HashMap::new()),
             request_context: Mutex::new(HashMap::new()),
             thread_workspace: Mutex::new(HashMap::new()),
+            active_turns: Mutex::new(HashMap::new()),
             hidden_thread_ids: Mutex::new(HashSet::new()),
             next_id: AtomicU64::new(0),
             background_thread_callbacks: Mutex::new(HashMap::new()),

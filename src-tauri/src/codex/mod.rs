@@ -2,7 +2,7 @@ use serde_json::{json, Map, Value};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 pub(crate) mod args;
 pub(crate) mod config;
@@ -39,11 +39,17 @@ pub(crate) async fn spawn_workspace_session(
     codex_home: Option<PathBuf>,
 ) -> Result<Arc<WorkspaceSession>, String> {
     let client_version = app_handle.package_info().version.to_string();
+    let codex_env = {
+        let state = app_handle.state::<AppState>();
+        let settings = state.app_settings.lock().await;
+        settings.active_codex_key_env()
+    };
     let event_sink = TauriEventSink::new(app_handle);
     spawn_workspace_session_inner(
         entry,
         default_codex_bin,
         codex_args,
+        codex_env,
         codex_home,
         client_version,
         event_sink,
@@ -508,14 +514,7 @@ pub(crate) async fn start_review(
         .await;
     }
 
-    codex_core::start_review_core(
-        &state.sessions,
-        workspace_id,
-        thread_id,
-        target,
-        delivery,
-    )
-    .await
+    codex_core::start_review_core(&state.sessions, workspace_id, thread_id, target, delivery).await
 }
 
 #[tauri::command]
@@ -583,7 +582,8 @@ pub(crate) async fn set_codex_feature_flag(
         return Ok(());
     }
 
-    config::write_feature_enabled(feature_key.as_str(), enabled)
+    let settings = state.app_settings.lock().await.clone();
+    config::write_feature_enabled(&settings, feature_key.as_str(), enabled)
 }
 
 #[tauri::command]

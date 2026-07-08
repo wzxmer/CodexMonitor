@@ -19,6 +19,7 @@ use self::tcp_transport::TcpTransport;
 use self::transport::{PendingMap, RemoteTransport, RemoteTransportConfig, RemoteTransportKind};
 
 const REMOTE_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+const REMOTE_LONG_RUNNING_REQUEST_TIMEOUT: Duration = Duration::from_secs(3600);
 const REMOTE_SEND_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub(crate) fn normalize_path_for_remote(path: String) -> String {
@@ -93,17 +94,26 @@ impl RemoteBackend {
             }
         }
 
-        match timeout(REMOTE_REQUEST_TIMEOUT, rx).await {
+        let request_timeout = request_timeout_for_method(method);
+        match timeout(request_timeout, rx).await {
             Ok(Ok(result)) => result,
             Ok(Err(_)) => Err(DISCONNECTED_MESSAGE.to_string()),
             Err(_) => {
                 self.inner.pending.lock().await.remove(&id);
                 Err(format!(
                     "remote backend request timed out after {} seconds",
-                    REMOTE_REQUEST_TIMEOUT.as_secs()
+                    request_timeout.as_secs()
                 ))
             }
         }
+    }
+}
+
+fn request_timeout_for_method(method: &str) -> Duration {
+    if matches!(method, "send_user_message" | "start_review") {
+        REMOTE_LONG_RUNNING_REQUEST_TIMEOUT
+    } else {
+        REMOTE_REQUEST_TIMEOUT
     }
 }
 
@@ -247,7 +257,10 @@ fn resolve_transport_config(
 
 #[cfg(test)]
 mod tests {
-    use super::{can_retry_after_disconnect, resolve_transport_config};
+    use super::{
+        can_retry_after_disconnect, request_timeout_for_method, resolve_transport_config,
+        REMOTE_LONG_RUNNING_REQUEST_TIMEOUT, REMOTE_REQUEST_TIMEOUT,
+    };
     use crate::remote_backend::transport::RemoteTransportConfig;
     use crate::types::AppSettings;
 
@@ -257,9 +270,7 @@ mod tests {
         settings.remote_backend_host = "tcp.example:4732".to_string();
 
         let config = resolve_transport_config(&settings).expect("transport config");
-        let RemoteTransportConfig::Tcp { host, .. } = config else {
-            panic!("expected tcp transport config");
-        };
+        let RemoteTransportConfig::Tcp { host, .. } = config;
         assert_eq!(host, "tcp.example:4732");
     }
 
@@ -271,5 +282,21 @@ mod tests {
         assert!(!can_retry_after_disconnect("send_user_message"));
         assert!(!can_retry_after_disconnect("start_thread"));
         assert!(!can_retry_after_disconnect("remove_workspace"));
+    }
+
+    #[test]
+    fn long_running_remote_methods_use_extended_timeout() {
+        assert_eq!(
+            request_timeout_for_method("send_user_message"),
+            REMOTE_LONG_RUNNING_REQUEST_TIMEOUT
+        );
+        assert_eq!(
+            request_timeout_for_method("start_review"),
+            REMOTE_LONG_RUNNING_REQUEST_TIMEOUT
+        );
+        assert_eq!(
+            request_timeout_for_method("list_threads"),
+            REMOTE_REQUEST_TIMEOUT
+        );
     }
 }

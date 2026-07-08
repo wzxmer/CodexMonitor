@@ -1,7 +1,7 @@
 use std::env;
 use std::path::PathBuf;
 
-use crate::types::WorkspaceEntry;
+use crate::types::{AppSettings, WorkspaceEntry};
 
 pub(crate) fn resolve_workspace_codex_home(
     _entry: &WorkspaceEntry,
@@ -17,6 +17,14 @@ pub(crate) fn resolve_default_codex_home() -> Option<PathBuf> {
         }
     }
     resolve_home_dir().map(|home| home.join(".codex"))
+}
+
+pub(crate) fn resolve_settings_codex_home(settings: &AppSettings) -> Option<PathBuf> {
+    settings
+        .codex_home
+        .as_deref()
+        .and_then(normalize_codex_home)
+        .or_else(resolve_default_codex_home)
 }
 
 fn normalize_codex_home(value: &str) -> Option<PathBuf> {

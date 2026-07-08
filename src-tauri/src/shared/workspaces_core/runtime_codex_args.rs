@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::backend::app_server::WorkspaceSession;
 use crate::codex::args::resolve_workspace_codex_args;
-use crate::codex::home::resolve_workspace_codex_home;
+use crate::codex::home::resolve_settings_codex_home;
 use crate::shared::process_core::kill_child_process_tree;
 use crate::types::{AppSettings, WorkspaceEntry};
 
@@ -37,11 +37,12 @@ where
     let (entry, parent_entry) = resolve_entry_and_parent(workspaces, &workspace_id).await?;
     let _spawn_guard = workspace_session_spawn_lock().lock().await;
 
-    let (default_bin, resolved_args) = {
+    let (default_bin, resolved_args, codex_home) = {
         let settings = app_settings.lock().await;
         (
             settings.codex_bin.clone(),
             resolve_workspace_codex_args(&entry, parent_entry.as_ref(), Some(&settings)),
+            resolve_settings_codex_home(&settings),
         )
     };
 
@@ -82,7 +83,6 @@ where
         });
     }
 
-    let codex_home = resolve_workspace_codex_home(&entry, parent_entry.as_ref());
     let new_session =
         spawn_session(entry.clone(), default_bin, target_args.clone(), codex_home).await?;
     let workspace_ids = {
@@ -129,8 +129,8 @@ where
 mod tests {
     use super::*;
 
-    use std::process::Stdio;
     use std::collections::HashSet;
+    use std::process::Stdio;
     use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
     use tokio::process::Command;
@@ -174,6 +174,7 @@ mod tests {
             pending: Mutex::new(HashMap::new()),
             request_context: Mutex::new(HashMap::new()),
             thread_workspace: Mutex::new(HashMap::new()),
+            active_turns: Mutex::new(HashMap::new()),
             hidden_thread_ids: Mutex::new(HashSet::new()),
             next_id: AtomicU64::new(0),
             background_thread_callbacks: Mutex::new(HashMap::new()),

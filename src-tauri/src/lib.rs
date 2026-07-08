@@ -193,6 +193,7 @@ pub fn run() {
             settings::update_app_settings,
             settings::get_codex_config_path,
             settings::get_codex_status,
+            settings::get_codex_sync_diagnostics,
             files::file_read,
             files::file_write,
             files::read_image_as_data_url,

@@ -108,11 +108,15 @@ where
 }
 
 fn normalize_app_settings(settings: AppSettings) -> (AppSettings, bool) {
-    let (global_worktrees_folder, changed) =
+    let (global_worktrees_folder, mut changed) =
         normalize_optional_windows_namespace_path(settings.global_worktrees_folder.clone());
+    let (codex_home, codex_home_changed) =
+        normalize_optional_windows_namespace_path(settings.codex_home.clone());
+    changed |= codex_home_changed;
     (
         AppSettings {
             global_worktrees_folder,
+            codex_home,
             ..settings
         },
         changed,
@@ -320,7 +324,10 @@ mod tests {
         let persisted_entries: Vec<WorkspaceEntry> =
             serde_json::from_str(&persisted).expect("deserialize persisted workspaces");
         assert_eq!(persisted_entries.len(), 1);
-        assert_eq!(persisted_entries[0].path, r"\\?\I:\gpt-projects\json-composer");
+        assert_eq!(
+            persisted_entries[0].path,
+            r"\\?\I:\gpt-projects\json-composer"
+        );
     }
 
     #[test]

@@ -10,6 +10,7 @@ pub(super) async fn handle_client(
     state: Arc<DaemonState>,
     events: broadcast::Sender<DaemonEvent>,
 ) {
+    let _ = socket.set_nodelay(true);
     let (reader, mut writer) = socket.into_split();
     let mut lines = BufReader::new(reader).lines();
 
@@ -27,6 +28,25 @@ pub(super) async fn handle_client(
 
     let mut authenticated = config.token.is_none();
     let mut events_task: Option<tokio::task::JoinHandle<()>> = None;
+    let heartbeat_task = {
+        let out_tx_heartbeat = out_tx.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
+            loop {
+                interval.tick().await;
+                let payload = json!({
+                    "method": "remote/heartbeat",
+                    "params": {}
+                });
+                let Ok(message) = serde_json::to_string(&payload) else {
+                    continue;
+                };
+                if out_tx_heartbeat.send(message).is_err() {
+                    break;
+                }
+            }
+        })
+    };
     let request_limiter = Arc::new(Semaphore::new(MAX_IN_FLIGHT_RPC_PER_CONNECTION));
     let client_version = format!("daemon-{}", env!("CARGO_PKG_VERSION"));
 
@@ -99,5 +119,6 @@ pub(super) async fn handle_client(
     if let Some(task) = events_task {
         task.abort();
     }
+    heartbeat_task.abort();
     write_task.abort();
 }
