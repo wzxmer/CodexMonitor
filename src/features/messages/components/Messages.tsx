@@ -103,6 +103,7 @@ type MessagesProps = {
   messageFontFamily?: string;
   messageFontSize?: number;
   messageFontWeight?: number;
+  chatHistoryScrollbackItems?: number | null;
   interruptedStatus?: { timestamp: number } | null;
   onUpdateConversationStyle?: (next: {
     theme?: ThemePreference;
@@ -234,6 +235,7 @@ export const Messages = memo(function Messages({
   messageFontFamily = "",
   messageFontSize = 13,
   messageFontWeight = 500,
+  chatHistoryScrollbackItems = null,
   interruptedStatus = null,
   onUpdateConversationStyle,
   userInputRequests = [],
@@ -282,6 +284,8 @@ export const Messages = memo(function Messages({
     containerRef,
     updateAutoScroll,
     requestAutoScroll,
+    showScrollToLatest,
+    scrollToLatest,
     expandedItems,
     toggleExpanded,
     collapsedToolGroups,
@@ -400,6 +404,10 @@ export const Messages = memo(function Messages({
   const toolAutoCollapseStatus = isToolGroupsAutoCollapsed
     ? t("messages.on")
     : t("messages.off");
+  const showScrollbackNotice =
+    typeof chatHistoryScrollbackItems === "number" &&
+    chatHistoryScrollbackItems > 0 &&
+    items.length > chatHistoryScrollbackItems;
   const statusSeparator = t("messages.statusSeparator");
   const assistantColorPresets = [
     { label: t("color.defaultBlue"), bg: "#f7f9fc", accent: "#7dadff", text: "#263040" },
@@ -532,18 +540,14 @@ export const Messages = memo(function Messages({
               role="group"
               aria-label={t("messages.readingStyleShort")}
             >
-              {(["bubble", "codex", "cli"] as const).map((style) => (
+              {(["bubble", "cli"] as const).map((style) => (
                 <button
                   key={style}
                   type="button"
                   className={messageReadingStyle === style ? "is-selected" : ""}
                   onClick={() => updateConversationStyle({ messageReadingStyle: style })}
                 >
-                  {style === "bubble"
-                    ? t("messages.style.bubble")
-                    : style === "codex"
-                      ? t("messages.style.native")
-                      : "CLI"}
+                  {style === "bubble" ? t("messages.style.bubble") : "CLI"}
                 </button>
               ))}
             </div>
@@ -782,6 +786,13 @@ export const Messages = memo(function Messages({
             </div>
           </div>
         )}
+        {showScrollbackNotice && (
+          <div className="messages-history-notice" role="note">
+            {t("messages.historyLimitNotice")
+              .replace("{count}", String(chatHistoryScrollbackItems))
+              .replace("{total}", String(items.length))}
+          </div>
+        )}
         {groupedItems.map((entry) => {
           if (entry.kind === "processGroup") {
             const { group } = entry;
@@ -951,6 +962,18 @@ export const Messages = memo(function Messages({
         )}
         <div ref={bottomRef} />
       </div>
+      {showScrollToLatest && (
+        <button
+          type="button"
+          className="messages-scroll-latest-button"
+          onClick={scrollToLatest}
+          aria-label={t("messages.scrollToLatest")}
+          title={t("messages.scrollToLatest")}
+        >
+          <span aria-hidden>↓</span>
+          <span>{t("messages.latest")}</span>
+        </button>
+      )}
     </div>
   );
 });

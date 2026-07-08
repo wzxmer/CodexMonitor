@@ -161,6 +161,8 @@ pub(crate) struct LocalUsageDay {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LocalUsageTotals {
+    #[serde(default)]
+    pub(crate) last_hour_tokens: i64,
     pub(crate) last7_days_tokens: i64,
     pub(crate) last30_days_tokens: i64,
     pub(crate) average_daily_tokens: i64,
@@ -571,6 +573,13 @@ pub(crate) struct AppSettings {
     pub(crate) chat_history_scrollback_items: Option<u32>,
     #[serde(default, rename = "threadTitleAutogenerationEnabled")]
     pub(crate) thread_title_autogeneration_enabled: bool,
+    #[serde(default, rename = "autoArchiveThreadsEnabled")]
+    pub(crate) auto_archive_threads_enabled: bool,
+    #[serde(
+        default = "default_auto_archive_threads_days",
+        rename = "autoArchiveThreadsDays"
+    )]
+    pub(crate) auto_archive_threads_days: u32,
     #[serde(
         default = "default_automatic_app_update_checks_enabled",
         rename = "automaticAppUpdateChecksEnabled"
@@ -854,6 +863,10 @@ fn default_message_assistant_text_color() -> String {
 
 fn default_chat_history_scrollback_items() -> Option<u32> {
     Some(200)
+}
+
+fn default_auto_archive_threads_days() -> u32 {
+    7
 }
 
 fn default_automatic_app_update_checks_enabled() -> bool {
@@ -1305,6 +1318,9 @@ fn default_codex_base_url_env_var() -> String {
     "OPENAI_BASE_URL".to_string()
 }
 
+const CODEX_KEY_ENV_VAR: &str = "OPENAI_API_KEY";
+const CODEX_BASE_URL_ENV_VAR: &str = "OPENAI_BASE_URL";
+
 impl AppSettings {
     pub(crate) fn active_codex_key_env(&self) -> Vec<(String, String)> {
         let Some(active_id) = self
@@ -1323,17 +1339,15 @@ impl AppSettings {
             return Vec::new();
         };
 
-        let key_env_var = profile.key_env_var.trim();
         let key = profile.key.trim();
-        if key_env_var.is_empty() || key.is_empty() {
+        if key.is_empty() {
             return Vec::new();
         }
 
-        let mut env = vec![(key_env_var.to_string(), key.to_string())];
+        let mut env = vec![(CODEX_KEY_ENV_VAR.to_string(), key.to_string())];
         if let Some(base_url) = profile.base_url.as_deref().map(str::trim) {
-            let base_url_env_var = profile.base_url_env_var.trim();
-            if !base_url.is_empty() && !base_url_env_var.is_empty() {
-                env.push((base_url_env_var.to_string(), base_url.to_string()));
+            if !base_url.is_empty() {
+                env.push((CODEX_BASE_URL_ENV_VAR.to_string(), base_url.to_string()));
             }
         }
         env
@@ -1393,6 +1407,8 @@ impl Default for AppSettings {
             message_assistant_text_color: default_message_assistant_text_color(),
             chat_history_scrollback_items: default_chat_history_scrollback_items(),
             thread_title_autogeneration_enabled: false,
+            auto_archive_threads_enabled: false,
+            auto_archive_threads_days: default_auto_archive_threads_days(),
             automatic_app_update_checks_enabled: true,
             ui_font_family: default_ui_font_family(),
             ui_latin_font_family: default_ui_latin_font_family(),
@@ -1626,9 +1642,9 @@ mod tests {
         settings.codex_key_profiles = vec![CodexKeyProfile {
             id: "work".to_string(),
             name: "Work".to_string(),
-            key_env_var: "OPENAI_API_KEY".to_string(),
+            key_env_var: "LEGACY_KEY_ENV".to_string(),
             key: "sk-test".to_string(),
-            base_url_env_var: "OPENAI_BASE_URL".to_string(),
+            base_url_env_var: "LEGACY_BASE_URL_ENV".to_string(),
             base_url: Some("https://api.example.com/v1".to_string()),
         }];
         settings.active_codex_key_profile_id = Some("work".to_string());
@@ -1643,6 +1659,13 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn active_codex_key_env_is_empty_without_selected_profile() {
+        let settings = AppSettings::default();
+
+        assert!(settings.active_codex_key_env().is_empty());
     }
 
     #[test]

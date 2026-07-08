@@ -8,7 +8,8 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::time::timeout;
 
 use crate::backend::app_server::{
-    build_codex_command_with_bin, build_codex_path_env, check_codex_installation, WorkspaceSession,
+    build_codex_command_with_bin, build_codex_path_env, check_codex_installation,
+    resolve_codex_command_path, WorkspaceSession,
 };
 use crate::shared::process_core::tokio_command;
 use crate::types::{AppSettings, WorkspaceEntry};
@@ -304,6 +305,7 @@ pub(crate) async fn codex_doctor_core(
         .filter(|value| !value.trim().is_empty())
         .or(default_args);
     let path_env = build_codex_path_env(resolved.as_deref());
+    let resolved_bin_path = resolve_codex_command_path(resolved.as_deref());
     let version = check_codex_installation(resolved.clone()).await?;
     let mut command = build_codex_command_with_bin(
         resolved.clone(),
@@ -379,10 +381,13 @@ pub(crate) async fn codex_doctor_core(
     } else {
         Some("Failed to run `codex app-server --help`.".to_string())
     };
+    let npm_global_codex_version = resolve_global_codex_npm_version(path_env.as_deref()).await;
     Ok(json!({
         "ok": version.is_some() && app_server_ok,
         "codexBin": resolved,
+        "resolvedCodexBin": resolved_bin_path,
         "version": version,
+        "npmGlobalCodexVersion": npm_global_codex_version,
         "appServerOk": app_server_ok,
         "details": details,
         "path": path_env,
@@ -390,6 +395,30 @@ pub(crate) async fn codex_doctor_core(
         "nodeVersion": node_version,
         "nodeDetails": node_details,
     }))
+}
+
+async fn resolve_global_codex_npm_version(path_env: Option<&str>) -> Option<String> {
+    let mut command = tokio_command("npm");
+    if let Some(path_env) = path_env {
+        command.env("PATH", path_env);
+    }
+    command.args(["list", "-g", "@openai/codex", "--depth=0", "--json"]);
+    command.stdout(std::process::Stdio::piped());
+    command.stderr(std::process::Stdio::null());
+    let output = timeout(Duration::from_secs(5), command.output())
+        .await
+        .ok()?
+        .ok()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let value = serde_json::from_str::<Value>(&stdout).ok()?;
+    value
+        .get("dependencies")
+        .and_then(|dependencies| dependencies.get("@openai/codex"))
+        .and_then(|package| package.get("version"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|version| !version.is_empty())
+        .map(str::to_string)
 }
 
 pub(crate) async fn run_background_prompt_core<F>(

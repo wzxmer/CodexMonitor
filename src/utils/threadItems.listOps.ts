@@ -54,18 +54,28 @@ function sameMessageAttachments(
   );
 }
 
+function isMatchingLocalUserEcho(
+  remote: ConversationItem,
+  local: ConversationItem,
+) {
+  return (
+    remote.kind === "message" &&
+    remote.role === "user" &&
+    local.kind === "message" &&
+    local.role === "user" &&
+    local.id.startsWith("local-user-") &&
+    remote.text === local.text &&
+    sameMessageImages(remote.images, local.images) &&
+    sameMessageAttachments(remote.attachments, local.attachments)
+  );
+}
+
 export function upsertItem(list: ConversationItem[], item: ConversationItem) {
   const index = list.findIndex((entry) => entry.id === item.id);
   if (index === -1) {
     if (item.kind === "message" && item.role === "user") {
       const localIndex = list.findIndex(
-        (entry) =>
-          entry.kind === "message" &&
-          entry.role === "user" &&
-          entry.id.startsWith("local-user-") &&
-          entry.text === item.text &&
-          sameMessageImages(entry.images, item.images) &&
-          sameMessageAttachments(entry.attachments, item.attachments),
+        (entry) => isMatchingLocalUserEcho(item, entry),
       );
       if (localIndex >= 0) {
         const next = [...list];
@@ -265,7 +275,12 @@ export function mergeThreadItems(
     return local ? chooseRicherItem(item, local) : item;
   });
   localItems.forEach((item) => {
-    if (!byId.has(item.id)) {
+    const hasRemoteEcho =
+      item.kind === "message" &&
+      item.role === "user" &&
+      item.id.startsWith("local-user-") &&
+      remoteItems.some((remote) => isMatchingLocalUserEcho(remote, item));
+    if (!byId.has(item.id) && !hasRemoteEcho) {
       merged.push(item);
     }
   });

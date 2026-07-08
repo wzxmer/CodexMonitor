@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { AppSettings } from "@/types";
 import {
   getAppBuildType,
@@ -12,6 +13,8 @@ import {
   SettingsToggleSwitch,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
 import { useI18n } from "@/features/i18n/I18nProvider";
+
+const PROJECT_REPOSITORY_URL = "https://github.com/wzxmer/CodexMonitor";
 
 type SettingsAboutSectionProps = {
   appSettings: AppSettings;
@@ -108,6 +111,16 @@ export function SettingsAboutSection({
         </div>
         <div className="settings-help">
           {t("about.buildTime")}：<code>{buildDateLabel}</code>
+        </div>
+        <div className="settings-help">
+          {t("about.repository")}：
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => void openUrl(PROJECT_REPOSITORY_URL)}
+          >
+            {PROJECT_REPOSITORY_URL}
+          </button>
         </div>
       </div>
       <div className="settings-field">

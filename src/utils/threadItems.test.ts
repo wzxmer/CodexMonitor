@@ -653,6 +653,28 @@ describe("threadItems", () => {
     expect(next[0]).toEqual(incoming);
   });
 
+  it("drops matching local user echoes when merging refreshed thread items", () => {
+    const local: ConversationItem = {
+      id: "local-user-refresh",
+      kind: "message",
+      role: "user",
+      text: "refresh without duplicates",
+      attachments: ['data:text/plain;name="trace.log";base64,AAA'],
+    };
+    const remote: ConversationItem = {
+      id: "server-user-refresh",
+      kind: "message",
+      role: "user",
+      text: "refresh without duplicates",
+      attachments: ["trace.log"],
+    };
+
+    const merged = mergeThreadItems([remote], [local]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toEqual(remote);
+  });
+
   it("preserves streamed reasoning content when completion item is empty", () => {
     const existing: ConversationItem = {
       id: "reasoning-1",

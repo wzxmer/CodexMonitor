@@ -807,6 +807,36 @@ describe("threadReducer", () => {
     expect(trimmed.itemsByThread["thread-1"]?.[0]?.id).toBe("msg-2");
   });
 
+  it("does not trim live thread items when scrollback cap is exceeded", () => {
+    const items: ConversationItem[] = Array.from({ length: 3 }, (_, index) => ({
+      id: `msg-${index}`,
+      kind: "message",
+      role: "assistant",
+      text: `message ${index}`,
+    }));
+
+    const base = {
+      ...initialState,
+      maxItemsPerThread: 3,
+      itemsByThread: { "thread-1": items },
+    };
+
+    const next = threadReducer(base, {
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      item: {
+        id: "msg-3",
+        kind: "message",
+        role: "assistant",
+        text: "message 3",
+      },
+    });
+
+    expect(next.itemsByThread["thread-1"]).toHaveLength(4);
+    expect(next.itemsByThread["thread-1"]?.[0]?.id).toBe("msg-0");
+  });
+
   it("replaces the edited user message when the server echoes the resent message", () => {
     const base = threadReducer(
       {

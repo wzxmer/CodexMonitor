@@ -91,6 +91,7 @@ type SidebarWorkspaceGroupsProps = {
   onShowWorkspaceMenu: (event: MouseEvent, workspaceId: string) => void;
   onShowWorktreeMenu: (event: MouseEvent, worktree: WorkspaceInfo) => void;
   onShowCloneMenu: (event: MouseEvent, worktree: WorkspaceInfo) => void;
+  isWorkspaceFolderPinned: (workspaceId: string) => boolean;
   onToggleExpanded: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
   onToggleAddMenu: (anchor: SidebarWorkspaceAddMenuAnchor | null) => void;
@@ -584,6 +585,7 @@ function SidebarWorkspaceEntry({
   onShowWorkspaceMenu,
   onShowWorktreeMenu,
   onShowCloneMenu,
+  isWorkspaceFolderPinned,
   onToggleExpanded,
   onLoadOlderThreads,
   onToggleAddMenu,
@@ -642,6 +644,7 @@ function SidebarWorkspaceEntry({
         onShowWorkspaceMenu={onShowWorkspaceMenu}
         onShowWorktreeMenu={onShowWorktreeMenu}
         onShowCloneMenu={onShowCloneMenu}
+        isWorkspaceFolderPinned={isWorkspaceFolderPinned}
         onToggleExpanded={onToggleExpanded}
         onLoadOlderThreads={onLoadOlderThreads}
         onToggleAddMenu={onToggleAddMenu}
@@ -717,6 +720,7 @@ function SidebarWorkspaceEntry({
       }
       isActive={workspace.id === activeWorkspaceId}
       isCollapsed={isCollapsed}
+      isPinned={isWorkspaceFolderPinned(workspace.id)}
       addMenuOpen={addMenuOpen}
       addMenuWidth={addMenuWidth}
       onAddAgent={onAddAgent}

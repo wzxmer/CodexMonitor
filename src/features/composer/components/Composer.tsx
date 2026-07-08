@@ -87,6 +87,7 @@ type ComposerProps = {
   prompts: CustomPromptOption[];
   files: string[];
   contextUsage?: ThreadTokenUsage | null;
+  contextCompactionCount?: number;
   queuedMessages?: QueuedMessage[];
   queuePausedReason?: string | null;
   canSteerQueued?: boolean;
@@ -201,6 +202,7 @@ export const Composer = memo(function Composer({
   prompts,
   files,
   contextUsage = null,
+  contextCompactionCount = 0,
   queuedMessages = [],
   queuePausedReason = null,
   canSteerQueued = false,
@@ -693,6 +695,7 @@ export const Composer = memo(function Composer({
         composerTriggerMode={composerTriggerMode}
         onSelectComposerTriggerMode={onSelectComposerTriggerMode}
         contextUsage={contextUsage}
+        contextCompactionCount={contextCompactionCount}
       />
     </footer>
   );

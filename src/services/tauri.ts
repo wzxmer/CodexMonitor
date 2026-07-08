@@ -4,6 +4,7 @@ import type { Options as NotificationOptions } from "@tauri-apps/plugin-notifica
 import type {
   AppSettings,
   CodexSyncDiagnostics,
+  CodexNativePetState,
   CodexStatus,
   CodexUpdateResult,
   CodexDoctorResult,
@@ -898,6 +899,32 @@ export async function updateAppSettings(settings: AppSettings): Promise<AppSetti
   return invoke<AppSettings>("update_app_settings", { settings });
 }
 
+export async function getCodexNativePetState(): Promise<CodexNativePetState> {
+  return invoke<CodexNativePetState>("get_codex_native_pet_state");
+}
+
+export async function setCodexNativePetEnabled(
+  enabled: boolean,
+): Promise<CodexNativePetState> {
+  return invoke<CodexNativePetState>("set_codex_native_pet_enabled", { enabled });
+}
+
+export async function setCodexNativePetSelected(
+  avatarId: string,
+): Promise<CodexNativePetState> {
+  return invoke<CodexNativePetState>("set_codex_native_pet_selected", { avatarId });
+}
+
+export async function wakeCodexNativePet(): Promise<CodexNativePetState> {
+  return invoke<CodexNativePetState>("wake_codex_native_pet");
+}
+
+export async function importCodexNativePet(
+  sourceDir: string,
+): Promise<CodexNativePetState> {
+  return invoke<CodexNativePetState>("import_codex_native_pet", { sourceDir });
+}
+
 export async function listSystemFonts(): Promise<string[]> {
   return invoke<string[]>("list_system_fonts");
 }
@@ -1074,6 +1101,10 @@ export async function closeTerminalSession(
 
 export async function openExternalTerminal(workspaceId: string): Promise<void> {
   return invoke("terminal_open_external", { workspaceId });
+}
+
+export async function getSystemTerminalFont(): Promise<string | null> {
+  return invoke<string | null>("get_system_terminal_font");
 }
 
 export async function listThreads(

@@ -10,7 +10,6 @@ type ComposerPreset = AppSettings["composerEditorPreset"];
 
 type SettingsComposerSectionProps = {
   appSettings: AppSettings;
-  optionKeyLabel: string;
   composerPresetLabels: Record<ComposerPreset, string>;
   onComposerPresetChange: (preset: ComposerPreset) => void;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
@@ -18,7 +17,6 @@ type SettingsComposerSectionProps = {
 
 export function SettingsComposerSection({
   appSettings,
-  optionKeyLabel,
   composerPresetLabels,
   onComposerPresetChange,
   onUpdateAppSettings,
@@ -158,7 +156,7 @@ export function SettingsComposerSection({
         title={t("settings.composer.copyWithoutFenceTitle")}
         subtitle={
           <>
-            {t("settings.composer.copyWithoutFencePrefix")} {optionKeyLabel}{" "}
+            {t("settings.composer.copyWithoutFencePrefix")} Ctrl{" "}
             {t("settings.composer.copyWithoutFenceSuffix")}
           </>
         }

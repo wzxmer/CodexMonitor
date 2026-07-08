@@ -586,6 +586,7 @@ export default function MainApp() {
     refreshAccountRateLimits,
   } = useThreads({
     activeWorkspace,
+    workspaces,
     onWorkspaceConnected: markWorkspaceConnected,
     onDebug: addDebugEntry,
     model: resolvedModel,
@@ -601,6 +602,8 @@ export default function MainApp() {
     chatHistoryScrollbackItems: appSettingsLoading
       ? null
       : appSettings.chatHistoryScrollbackItems,
+    autoArchiveThreadsEnabled: appSettings.autoArchiveThreadsEnabled,
+    autoArchiveThreadsDays: appSettings.autoArchiveThreadsDays,
     customPrompts: prompts,
     onMessageActivity: handleThreadMessageActivity,
     threadSortKey: threadListSortKey,
@@ -818,6 +821,7 @@ export default function MainApp() {
   const {
     newAgentDraftWorkspaceId,
     startingDraftThreadWorkspaceId,
+    startingDraftMessageByWorkspace,
     isDraftModeForActiveWorkspace: isNewAgentDraftMode,
     startNewAgentDraft,
     clearDraftState,
@@ -1763,6 +1767,7 @@ export default function MainApp() {
     deletingWorktreeIds,
     newAgentDraftWorkspaceId,
     startingDraftThreadWorkspaceId,
+    startingDraftMessageByWorkspace,
     threadsByWorkspace,
     threadParentById,
     threadStatusById,
@@ -1990,12 +1995,6 @@ export default function MainApp() {
       appModalsProps,
       showMobileSetupWizard,
       mobileSetupWizardProps,
-      codexPetProps: {
-        enabled: appSettings.codexPetEnabled,
-        petId: appSettings.codexPetId,
-        customImagePath: appSettings.codexPetCustomImagePath,
-        wakeVersion: appSettings.codexPetWakeVersion,
-      },
     },
     gitHubPanelDataProps: {
       activeWorkspace,

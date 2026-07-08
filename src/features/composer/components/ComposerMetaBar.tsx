@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { BrainCog, Repeat2, SlidersHorizontal, Zap } from "lucide-react";
 import { RoundedSelect } from "@/features/design-system/components/select/RoundedSelect";
 import { useI18n } from "@/features/i18n/I18nProvider";
+import { formatReasoningEffortLabel } from "@/features/models/utils/reasoningEffortLabels";
 import type {
   AccessMode,
   ComposerTriggerMode,
@@ -34,6 +35,7 @@ type ComposerMetaBarProps = {
   selectedCodexArgsOverride?: string | null;
   onSelectCodexArgsOverride?: (value: string | null) => void;
   contextUsage?: ThreadTokenUsage | null;
+  contextCompactionCount?: number;
 };
 
 export function ComposerMetaBar({
@@ -59,6 +61,7 @@ export function ComposerMetaBar({
   selectedCodexArgsOverride = null,
   onSelectCodexArgsOverride,
   contextUsage = null,
+  contextCompactionCount = 0,
 }: ComposerMetaBarProps) {
   const { t } = useI18n();
   const selectedModel =
@@ -80,6 +83,21 @@ export function ComposerMetaBar({
             Math.min(Math.max((usedTokens / contextWindow) * 100, 0), 100),
         )
       : null;
+  const contextUsedPercent =
+    contextFreePercent === null ? null : 100 - contextFreePercent;
+  const contextRingColor =
+    contextUsedPercent === null
+      ? "var(--border-accent)"
+      : contextUsedPercent >= 95
+        ? "#ef4444"
+        : contextUsedPercent >= 80
+          ? "#f59e0b"
+          : "#22c55e";
+  const contextLabel =
+    contextFreePercent === null
+      ? t("composer.contextRemainingEmpty")
+      : `${t("composer.contextRemainingPrefix")} ${Math.round(contextFreePercent)}%`;
+  const contextCompactionLabel = `${t("composer.contextCompactionsPrefix")} ${contextCompactionCount}`;
   const planMode =
     collaborationModes.find((mode) => mode.id === "plan") ?? null;
   const defaultMode =
@@ -103,7 +121,10 @@ export function ComposerMetaBar({
       : [{ value: "", label: t("composer.noModel"), disabled: true }];
   const reasoningSelectOptions =
     reasoningOptions.length > 0
-      ? reasoningOptions.map((effort) => ({ value: effort, label: effort }))
+      ? reasoningOptions.map((effort) => ({
+          value: effort,
+          label: formatReasoningEffortLabel(effort, t),
+        }))
       : [{ value: "", label: t("composer.default"), disabled: true }];
   const codexArgsSelectOptions = codexArgsOptions.map((option) => ({
     value: option.value,
@@ -345,23 +366,16 @@ export function ComposerMetaBar({
       <div className="composer-context">
         <div
           className="composer-context-ring"
-          data-tooltip={
-            contextFreePercent === null
-              ? t("composer.contextRemainingEmpty")
-              : `${t("composer.contextRemainingPrefix")} ${Math.round(contextFreePercent)}%`
-          }
-          aria-label={
-            contextFreePercent === null
-              ? t("composer.contextRemainingEmpty")
-              : `${t("composer.contextRemainingPrefix")} ${Math.round(contextFreePercent)}%`
-          }
+          data-tooltip={`${contextLabel} · ${contextCompactionLabel}`}
+          aria-label={`${contextLabel}; ${contextCompactionLabel}`}
           style={
             {
               "--context-free": contextFreePercent ?? 0,
+              "--context-ring-color": contextRingColor,
             } as CSSProperties
           }
         >
-          <span className="composer-context-value">●</span>
+          <span className="composer-context-value">{contextCompactionCount}</span>
         </div>
       </div>
     </div>

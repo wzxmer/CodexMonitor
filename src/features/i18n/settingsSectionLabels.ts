@@ -4,6 +4,7 @@ import type { I18nKey } from "./strings";
 export const SETTINGS_SECTION_LABEL_KEYS: Record<CodexSection, I18nKey> = {
   projects: "settings.section.projects",
   environments: "settings.section.environments",
+  session: "settings.section.session",
   display: "settings.section.display",
   about: "settings.section.about",
   composer: "settings.section.composer",

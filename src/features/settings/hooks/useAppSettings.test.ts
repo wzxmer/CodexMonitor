@@ -57,6 +57,33 @@ describe("useAppSettings", () => {
     expect(result.current.settings.remoteBackendHost).toBe("example:1234");
   });
 
+  it("migrates retired message reading styles to bubble", async () => {
+    getAppSettingsMock.mockResolvedValue(
+      ({
+        messageReadingStyle: "comfortable",
+      } as unknown) as AppSettings,
+    );
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.messageReadingStyle).toBe("bubble");
+
+    await act(async () => {
+      await result.current.saveSettings({
+        ...result.current.settings,
+        messageReadingStyle: "codex" as unknown as AppSettings["messageReadingStyle"],
+      });
+    });
+
+    expect(updateAppSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageReadingStyle: "bubble",
+      }),
+    );
+  });
+
   it("keeps defaults when getAppSettings fails", async () => {
     getAppSettingsMock.mockRejectedValue(new Error("boom"));
 

@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
 #[cfg(desktop)]
 use tauri::RunEvent;
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 use tauri::WindowEvent;
 
 mod backend;
@@ -108,7 +108,7 @@ pub fn run() {
             if window.label() != "main" {
                 return;
             }
-            #[cfg(target_os = "macos")]
+            #[cfg(desktop)]
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
@@ -117,7 +117,7 @@ pub fn run() {
         .setup(|app| {
             let state = state::AppState::load(&app.handle());
             app.manage(state);
-            #[cfg(target_os = "macos")]
+            #[cfg(desktop)]
             {
                 let tray_state = app.state::<tray::TrayState>();
                 tray::initialize(&app.handle(), tray_state.inner())?;
@@ -194,6 +194,11 @@ pub fn run() {
             settings::get_codex_config_path,
             settings::get_codex_status,
             settings::get_codex_sync_diagnostics,
+            settings::get_codex_native_pet_state,
+            settings::set_codex_native_pet_enabled,
+            settings::set_codex_native_pet_selected,
+            settings::wake_codex_native_pet,
+            settings::import_codex_native_pet,
             files::file_read,
             files::file_write,
             files::read_image_as_data_url,
@@ -301,6 +306,7 @@ pub fn run() {
             terminal::terminal_resize,
             terminal::terminal_close,
             terminal::terminal_open_external,
+            terminal::get_system_terminal_font,
             dictation::dictation_model_status,
             dictation::dictation_download_model,
             dictation::dictation_cancel_download,

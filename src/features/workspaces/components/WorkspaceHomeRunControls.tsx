@@ -16,6 +16,8 @@ import {
   INSTANCE_OPTIONS,
   resolveModelLabel,
 } from "./workspaceHomeHelpers";
+import { useI18n } from "@/features/i18n/I18nProvider";
+import { formatReasoningEffortLabel } from "@/features/models/utils/reasoningEffortLabels";
 
 type WorkspaceHomeRunControlsProps = {
   workspaceKind: WorkspaceInfo["kind"];
@@ -56,6 +58,7 @@ export function WorkspaceHomeRunControls({
   reasoningSupported,
   isSubmitting,
 }: WorkspaceHomeRunControlsProps) {
+  const { t } = useI18n();
   const runModeMenu = useMenuController();
   const modelsMenu = useMenuController();
   const {
@@ -295,10 +298,10 @@ export function WorkspaceHomeRunControls({
             onChange={(event) => onSelectEffort(event.target.value)}
             disabled={isSubmitting || !reasoningSupported}
           >
-            {reasoningOptions.length === 0 && <option value="">Default</option>}
+            {reasoningOptions.length === 0 && <option value="">{t("common.default")}</option>}
             {reasoningOptions.map((effortOption) => (
               <option key={effortOption} value={effortOption}>
-                {effortOption}
+                {formatReasoningEffortLabel(effortOption, t)}
               </option>
             ))}
           </select>

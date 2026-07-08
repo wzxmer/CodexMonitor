@@ -210,7 +210,7 @@ export type RemoteBackendTarget = {
 };
 export type ThemePreference = "system" | "light" | "dark" | "dim";
 export type ThemeAccentPreference = "codex" | "blue" | "green" | "pink" | "orange";
-export type MessageReadingStyle = "bubble" | "cli" | "codex";
+export type MessageReadingStyle = "bubble" | "cli";
 export type AppLanguagePreference = "system" | "zh" | "en";
 export type PersonalityPreference = "friendly" | "pragmatic";
 export type FollowUpMessageBehavior = "queue" | "steer";
@@ -250,6 +250,23 @@ export type CodexKeyProfile = {
   key: string;
   baseUrlEnvVar: string;
   baseUrl: string | null;
+};
+
+export type CodexNativePet = {
+  id: string;
+  displayName: string;
+  description?: string | null;
+  directory: string;
+  spritesheetPath: string;
+};
+
+export type CodexNativePetState = {
+  enabled: boolean;
+  selectedAvatarId?: string | null;
+  codexHome: string;
+  globalStatePath: string;
+  petsDir: string;
+  pets: CodexNativePet[];
 };
 
 export type AppSettings = {
@@ -304,6 +321,8 @@ export type AppSettings = {
   messageFontFamily: string;
   chatHistoryScrollbackItems: number | null;
   threadTitleAutogenerationEnabled: boolean;
+  autoArchiveThreadsEnabled: boolean;
+  autoArchiveThreadsDays: number;
   automaticAppUpdateChecksEnabled: boolean;
   uiFontFamily: string;
   uiLatinFontFamily: string;
@@ -405,7 +424,9 @@ export type TailscaleDaemonCommandPreview = {
 export type CodexDoctorResult = {
   ok: boolean;
   codexBin: string | null;
+  resolvedCodexBin?: string | null;
   version: string | null;
+  npmGlobalCodexVersion?: string | null;
   appServerOk: boolean;
   details: string | null;
   path: string | null;
@@ -619,6 +640,7 @@ export type LocalUsageDay = {
 };
 
 export type LocalUsageTotals = {
+  lastHourTokens: number;
   last7DaysTokens: number;
   last30DaysTokens: number;
   averageDailyTokens: number;

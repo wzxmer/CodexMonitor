@@ -33,7 +33,7 @@ import { DEFAULT_COMMIT_MESSAGE_PROMPT } from "@utils/commitMessagePrompt";
 const allowedThemes = new Set(["system", "light", "dark", "dim"]);
 const allowedAppLanguages = new Set(["system", "zh", "en"]);
 const allowedThemeAccents = new Set(["codex", "blue", "green", "pink", "orange"]);
-const allowedMessageReadingStyles = new Set(["bubble", "cli", "codex"]);
+const allowedMessageReadingStyles = new Set(["bubble", "cli"]);
 const allowedCodexPetIds = new Set(["codex", "terminal", "review", "custom"]);
 const allowedPersonality = new Set(["friendly", "pragmatic"]);
 const allowedFollowUpMessageBehavior = new Set(["queue", "steer"]);
@@ -252,6 +252,8 @@ function buildDefaultSettings(): AppSettings {
     messageFontFamily: "",
     chatHistoryScrollbackItems: CHAT_SCROLLBACK_DEFAULT,
     threadTitleAutogenerationEnabled: false,
+    autoArchiveThreadsEnabled: false,
+    autoArchiveThreadsDays: 7,
     automaticAppUpdateChecksEnabled: true,
     uiFontFamily: DEFAULT_UI_FONT_FAMILY,
     uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
@@ -411,6 +413,13 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
       `${settings.uiLatinFontFamily}, ${settings.uiCjkFontFamily}, ${settings.uiFontFamily}`,
     ),
     codeFontSize: clampCodeFontSize(settings.codeFontSize),
+    autoArchiveThreadsEnabled:
+      typeof settings.autoArchiveThreadsEnabled === "boolean"
+        ? settings.autoArchiveThreadsEnabled
+        : false,
+    autoArchiveThreadsDays: [3, 5, 7, 15, 30].includes(settings.autoArchiveThreadsDays)
+      ? settings.autoArchiveThreadsDays
+      : 7,
     personality: allowedPersonality.has(settings.personality)
       ? settings.personality
       : "friendly",

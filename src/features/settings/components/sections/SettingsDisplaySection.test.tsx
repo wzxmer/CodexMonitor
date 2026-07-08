@@ -1,20 +1,65 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings } from "@/types";
+import {
+  getCodexNativePetState,
+  setCodexNativePetEnabled,
+  setCodexNativePetSelected,
+  wakeCodexNativePet,
+} from "@services/tauri";
 import {
   DEFAULT_UI_CJK_FONT_FAMILY,
   DEFAULT_UI_LATIN_FONT_FAMILY,
 } from "@utils/fonts";
 import { SettingsDisplaySection } from "./SettingsDisplaySection";
 
+const nativePetState = {
+  enabled: true,
+  selectedAvatarId: "codex",
+  codexHome: "/tmp/codex",
+  globalStatePath: "/tmp/codex/.codex-global-state.json",
+  petsDir: "/tmp/codex-pets",
+  pets: [
+    {
+      id: "codex",
+      displayName: "Codex",
+      directory: "/tmp/codex-pets/codex",
+      spritesheetPath: "/tmp/codex-pets/codex/spritesheet.webp",
+    },
+  ],
+};
+
+vi.mock("@services/tauri", () => ({
+  listSystemFonts: vi.fn(async () => []),
+  getCodexNativePetState: vi.fn(async () => nativePetState),
+  setCodexNativePetEnabled: vi.fn(async (enabled: boolean) => ({
+    ...nativePetState,
+    enabled,
+  })),
+  setCodexNativePetSelected: vi.fn(async (selectedAvatarId: string) => ({
+    ...nativePetState,
+    selectedAvatarId,
+  })),
+  wakeCodexNativePet: vi.fn(async () => nativePetState),
+  importCodexNativePet: vi.fn(async () => nativePetState),
+}));
+
 describe("SettingsDisplaySection", () => {
   afterEach(() => {
     cleanup();
+    vi.clearAllMocks();
   });
 
-  it("applies a style preset to theme, accent, and message style", () => {
-    const onUpdateAppSettings = vi.fn(async () => {});
+  it("applies a style preset to message colors only", () => {
+    const onUpdateAppSettings = vi.fn(async (_next: AppSettings) => {});
 
     render(
       <SettingsDisplaySection
@@ -22,7 +67,7 @@ describe("SettingsDisplaySection", () => {
           ({
             theme: "system",
             themeAccent: "codex",
-            messageReadingStyle: "codex",
+            messageReadingStyle: "bubble",
             messageCanvasColor: "#ffffff",
             messageUserBubbleColor: "#ffffff",
             messageUserTextColor: "#102033",
@@ -63,14 +108,19 @@ describe("SettingsDisplaySection", () => {
 
     expect(onUpdateAppSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: "dark",
-        themeAccent: "orange",
-        messageReadingStyle: "cli",
         messageCanvasColor: "#111315",
         messageUserBubbleColor: "#3a2a1d",
         messageUserTextColor: "#fff3df",
         messageAssistantBubbleColor: "#1b1b1c",
         messageAssistantAccentColor: "#ff9f43",
+      }),
+    );
+    const presetSettings = onUpdateAppSettings.mock.calls[0]?.[0];
+    expect(presetSettings).toEqual(
+      expect.objectContaining({
+        theme: "system",
+        themeAccent: "codex",
+        messageReadingStyle: "bubble",
       }),
     );
   });
@@ -84,7 +134,7 @@ describe("SettingsDisplaySection", () => {
           ({
             theme: "system",
             themeAccent: "codex",
-            messageReadingStyle: "codex",
+            messageReadingStyle: "bubble",
             messageCanvasColor: "#fffaf5",
             messageUserBubbleColor: "#fff4e8",
             messageUserTextColor: "#332519",
@@ -125,213 +175,12 @@ describe("SettingsDisplaySection", () => {
 
     expect(onUpdateAppSettings).toHaveBeenCalledWith(
       expect.objectContaining({
-        theme: "light",
+        theme: "system",
+        themeAccent: "codex",
+        messageReadingStyle: "bubble",
         messageCanvasColor: "#ffffff",
         messageAssistantBubbleColor: "#ffffff",
       }),
-    );
-  });
-
-  it("toggles auto-generated thread titles", () => {
-    const onUpdateAppSettings = vi.fn(async () => {});
-
-    render(
-      <SettingsDisplaySection
-        appSettings={
-          ({
-            theme: "system",
-            usageShowRemaining: false,
-            showMessageFilePath: true,
-            threadTitleAutogenerationEnabled: false,
-            uiFontFamily: "",
-            codeFontFamily: "",
-            codeFontSize: 11,
-            notificationSoundsEnabled: true,
-            systemNotificationsEnabled: true,
-          } as unknown) as AppSettings
-        }
-        reduceTransparency={false}
-        scaleShortcutTitle=""
-        scaleShortcutText=""
-        scaleDraft="100%"
-        codeFontDraft=""
-        codeFontSizeDraft={11}
-        onUpdateAppSettings={onUpdateAppSettings}
-        onToggleTransparency={vi.fn()}
-        onSetScaleDraft={vi.fn() as any}
-        onCommitScale={vi.fn(async () => {})}
-        onResetScale={vi.fn(async () => {})}
-        onSetCodeFontDraft={vi.fn() as any}
-        onCommitCodeFont={vi.fn(async () => {})}
-        onSetCodeFontSizeDraft={vi.fn() as any}
-        onCommitCodeFontSize={vi.fn(async () => {})}
-        onTestNotificationSound={vi.fn()}
-        onTestSystemNotification={vi.fn()}
-      />,
-    );
-
-    const row = screen
-      .getByText("自动生成标题")
-      .closest(".settings-toggle-row");
-    expect(row).toBeTruthy();
-    const button = within(row as HTMLElement).getByRole("button");
-
-    fireEvent.click(button);
-
-    expect(onUpdateAppSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ threadTitleAutogenerationEnabled: true }),
-    );
-  });
-  it("toggles unlimited chat history", () => {
-    const onUpdateAppSettings = vi.fn(async () => {});
-
-    render(
-      <SettingsDisplaySection
-        appSettings={
-          ({
-            theme: "system",
-            usageShowRemaining: false,
-            showMessageFilePath: true,
-            chatHistoryScrollbackItems: 200,
-            threadTitleAutogenerationEnabled: false,
-            uiFontFamily: "",
-            codeFontFamily: "",
-            codeFontSize: 11,
-            notificationSoundsEnabled: true,
-            systemNotificationsEnabled: true,
-          } as unknown) as AppSettings
-        }
-        reduceTransparency={false}
-        scaleShortcutTitle=""
-        scaleShortcutText=""
-        scaleDraft="100%"
-        codeFontDraft=""
-        codeFontSizeDraft={11}
-        onUpdateAppSettings={onUpdateAppSettings}
-        onToggleTransparency={vi.fn()}
-        onSetScaleDraft={vi.fn() as any}
-        onCommitScale={vi.fn(async () => {})}
-        onResetScale={vi.fn(async () => {})}
-        onSetCodeFontDraft={vi.fn() as any}
-        onCommitCodeFont={vi.fn(async () => {})}
-        onSetCodeFontSizeDraft={vi.fn() as any}
-        onCommitCodeFontSize={vi.fn(async () => {})}
-        onTestNotificationSound={vi.fn()}
-        onTestSystemNotification={vi.fn()}
-      />,
-    );
-
-    const row = screen.getByText("不限聊天历史").closest(".settings-toggle-row");
-    expect(row).toBeTruthy();
-    const button = within(row as HTMLElement).getByRole("button");
-
-    fireEvent.click(button);
-
-    expect(onUpdateAppSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ chatHistoryScrollbackItems: null }),
-    );
-  });
-
-  it("disables scrollback controls when unlimited chat history is enabled", () => {
-    const onUpdateAppSettings = vi.fn(async () => {});
-
-    render(
-      <SettingsDisplaySection
-        appSettings={
-          ({
-            theme: "system",
-            usageShowRemaining: false,
-            showMessageFilePath: true,
-            chatHistoryScrollbackItems: null,
-            threadTitleAutogenerationEnabled: false,
-            uiFontFamily: "",
-            codeFontFamily: "",
-            codeFontSize: 11,
-            notificationSoundsEnabled: true,
-            systemNotificationsEnabled: true,
-          } as unknown) as AppSettings
-        }
-        reduceTransparency={false}
-        scaleShortcutTitle=""
-        scaleShortcutText=""
-        scaleDraft="100%"
-        codeFontDraft=""
-        codeFontSizeDraft={11}
-        onUpdateAppSettings={onUpdateAppSettings}
-        onToggleTransparency={vi.fn()}
-        onSetScaleDraft={vi.fn() as any}
-        onCommitScale={vi.fn(async () => {})}
-        onResetScale={vi.fn(async () => {})}
-        onSetCodeFontDraft={vi.fn() as any}
-        onCommitCodeFont={vi.fn(async () => {})}
-        onSetCodeFontSizeDraft={vi.fn() as any}
-        onCommitCodeFontSize={vi.fn(async () => {})}
-        onTestNotificationSound={vi.fn()}
-        onTestSystemNotification={vi.fn()}
-      />,
-    );
-
-    const presetSelect = screen.getByLabelText("历史消息数量");
-    expect((presetSelect as HTMLSelectElement).disabled).toBe(true);
-
-    const maxItemsInput = screen.getByLabelText("最大消息数");
-    expect((maxItemsInput as HTMLInputElement).disabled).toBe(true);
-
-    const maxItemsRow = maxItemsInput.closest(".settings-field-row");
-    expect(maxItemsRow).toBeTruthy();
-    const resetButton = within(maxItemsRow as HTMLElement).getByRole("button", {
-      name: "重置",
-    });
-    expect((resetButton as HTMLButtonElement).disabled).toBe(true);
-
-    fireEvent.change(presetSelect, { target: { value: "1000" } });
-    expect(onUpdateAppSettings).not.toHaveBeenCalled();
-  });
-
-  it("applies scrollback presets", () => {
-    const onUpdateAppSettings = vi.fn(async () => {});
-
-    render(
-      <SettingsDisplaySection
-        appSettings={
-          ({
-            theme: "system",
-            usageShowRemaining: false,
-            showMessageFilePath: true,
-            chatHistoryScrollbackItems: 200,
-            threadTitleAutogenerationEnabled: false,
-            uiFontFamily: "",
-            codeFontFamily: "",
-            codeFontSize: 11,
-            notificationSoundsEnabled: true,
-            systemNotificationsEnabled: true,
-          } as unknown) as AppSettings
-        }
-        reduceTransparency={false}
-        scaleShortcutTitle=""
-        scaleShortcutText=""
-        scaleDraft="100%"
-        codeFontDraft=""
-        codeFontSizeDraft={11}
-        onUpdateAppSettings={onUpdateAppSettings}
-        onToggleTransparency={vi.fn()}
-        onSetScaleDraft={vi.fn() as any}
-        onCommitScale={vi.fn(async () => {})}
-        onResetScale={vi.fn(async () => {})}
-        onSetCodeFontDraft={vi.fn() as any}
-        onCommitCodeFont={vi.fn(async () => {})}
-        onSetCodeFontSizeDraft={vi.fn() as any}
-        onCommitCodeFontSize={vi.fn(async () => {})}
-        onTestNotificationSound={vi.fn()}
-        onTestSystemNotification={vi.fn()}
-      />,
-    );
-
-    const select = screen.getByLabelText("历史消息数量");
-    fireEvent.change(select, { target: { value: "1000" } });
-
-    expect(onUpdateAppSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ chatHistoryScrollbackItems: 1000 }),
     );
   });
 
@@ -411,121 +260,7 @@ describe("SettingsDisplaySection", () => {
     );
   });
 
-  it("does not persist scrollback draft on blur when toggling unlimited", () => {
-    const onUpdateAppSettings = vi.fn(async () => {});
-
-    render(
-      <SettingsDisplaySection
-        appSettings={
-          ({
-            theme: "system",
-            usageShowRemaining: false,
-            showMessageFilePath: true,
-            chatHistoryScrollbackItems: 200,
-            threadTitleAutogenerationEnabled: false,
-            uiFontFamily: "",
-            codeFontFamily: "",
-            codeFontSize: 11,
-            notificationSoundsEnabled: true,
-            systemNotificationsEnabled: true,
-          } as unknown) as AppSettings
-        }
-        reduceTransparency={false}
-        scaleShortcutTitle=""
-        scaleShortcutText=""
-        scaleDraft="100%"
-        codeFontDraft=""
-        codeFontSizeDraft={11}
-        onUpdateAppSettings={onUpdateAppSettings}
-        onToggleTransparency={vi.fn()}
-        onSetScaleDraft={vi.fn() as any}
-        onCommitScale={vi.fn(async () => {})}
-        onResetScale={vi.fn(async () => {})}
-        onSetCodeFontDraft={vi.fn() as any}
-        onCommitCodeFont={vi.fn(async () => {})}
-        onSetCodeFontSizeDraft={vi.fn() as any}
-        onCommitCodeFontSize={vi.fn(async () => {})}
-        onTestNotificationSound={vi.fn()}
-        onTestSystemNotification={vi.fn()}
-      />,
-    );
-
-    const maxItemsInput = screen.getByLabelText("最大消息数");
-    fireEvent.change(maxItemsInput, { target: { value: "50" } });
-
-    const unlimitedRow = screen
-      .getByText("不限聊天历史")
-      .closest(".settings-toggle-row");
-    expect(unlimitedRow).toBeTruthy();
-    const unlimitedButton = within(unlimitedRow as HTMLElement).getByRole("button");
-
-    fireEvent.blur(maxItemsInput, { relatedTarget: unlimitedButton });
-    fireEvent.click(unlimitedButton);
-
-    expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
-    expect(onUpdateAppSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ chatHistoryScrollbackItems: null }),
-    );
-  });
-
-  it("does not persist scrollback draft on blur when clicking Reset", () => {
-    const onUpdateAppSettings = vi.fn(async () => {});
-
-    render(
-      <SettingsDisplaySection
-        appSettings={
-          ({
-            theme: "system",
-            usageShowRemaining: false,
-            showMessageFilePath: true,
-            chatHistoryScrollbackItems: 200,
-            threadTitleAutogenerationEnabled: false,
-            uiFontFamily: "",
-            codeFontFamily: "",
-            codeFontSize: 11,
-            notificationSoundsEnabled: true,
-            systemNotificationsEnabled: true,
-          } as unknown) as AppSettings
-        }
-        reduceTransparency={false}
-        scaleShortcutTitle=""
-        scaleShortcutText=""
-        scaleDraft="100%"
-        codeFontDraft=""
-        codeFontSizeDraft={11}
-        onUpdateAppSettings={onUpdateAppSettings}
-        onToggleTransparency={vi.fn()}
-        onSetScaleDraft={vi.fn() as any}
-        onCommitScale={vi.fn(async () => {})}
-        onResetScale={vi.fn(async () => {})}
-        onSetCodeFontDraft={vi.fn() as any}
-        onCommitCodeFont={vi.fn(async () => {})}
-        onSetCodeFontSizeDraft={vi.fn() as any}
-        onCommitCodeFontSize={vi.fn(async () => {})}
-        onTestNotificationSound={vi.fn()}
-        onTestSystemNotification={vi.fn()}
-      />,
-    );
-
-    const maxItemsInput = screen.getByLabelText("最大消息数");
-    fireEvent.change(maxItemsInput, { target: { value: "50" } });
-
-    const maxItemsRow = maxItemsInput.closest(".settings-field-row");
-    expect(maxItemsRow).toBeTruthy();
-    const resetButton = within(maxItemsRow as HTMLElement).getByRole("button", {
-      name: "重置",
-    });
-
-    fireEvent.blur(maxItemsInput, { relatedTarget: resetButton });
-    fireEvent.click(resetButton);
-
-    expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
-    expect(onUpdateAppSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ chatHistoryScrollbackItems: 200 }),
-    );
-  });
-
-  it("updates desktop pet type and controls visibility", () => {
+  it("updates desktop pet type and controls visibility", async () => {
     const onUpdateAppSettings = vi.fn(async () => {});
 
     render(
@@ -567,38 +302,44 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("radio", { name: /默认助手宠物/ }));
+    const petGroup = await screen.findByRole("radiogroup", {
+      name: "Codex 宠物选择",
+    });
+    await waitFor(() => {
+      expect(getCodexNativePetState).toHaveBeenCalledTimes(1);
+    });
+    fireEvent.click(within(petGroup).getByRole("radio", { name: /Codex/ }));
+    await waitFor(() => {
+      expect(setCodexNativePetSelected).toHaveBeenCalledWith("codex");
+    });
+
     fireEvent.click(screen.getByRole("button", { name: "唤醒" }));
-    fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+    await waitFor(() => {
+      expect(wakeCodexNativePet).toHaveBeenCalled();
+    });
+
+    const petPanel = petGroup.closest(".settings-codex-pet-panel");
+    expect(petPanel).toBeTruthy();
+    fireEvent.click(within(petPanel as HTMLElement).getByRole("button", { name: "刷新" }));
+    await waitFor(() => {
+      expect(getCodexNativePetState).toHaveBeenCalledTimes(2);
+    });
+
     const petRow = screen.getByText("Codex 宠物").closest(".settings-toggle-row");
     expect(petRow).toBeTruthy();
     fireEvent.click(within(petRow as HTMLElement).getByRole("button"));
 
-    expect(onUpdateAppSettings).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        codexPetId: "codex",
-        codexPetWakeVersion: expect.any(Number),
-      }),
-    );
-    expect(onUpdateAppSettings).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        codexPetWakeVersion: expect.any(Number),
-      }),
-    );
-    expect(onUpdateAppSettings).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({
-        codexPetWakeVersion: 3,
-      }),
-    );
-    expect(onUpdateAppSettings).toHaveBeenNthCalledWith(
-      4,
-      expect.objectContaining({
-        codexPetEnabled: false,
-      }),
-    );
+    await waitFor(() => {
+      expect(setCodexNativePetEnabled).toHaveBeenCalledWith(false);
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          codexPetEnabled: false,
+          codexPetId: "custom",
+          codexPetCustomImagePath: "/tmp/codex-pets",
+          codexPetWakeVersion: expect.any(Number),
+        }),
+      );
+    });
   });
 
 });

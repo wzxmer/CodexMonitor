@@ -155,6 +155,40 @@ describe("useThreadTitleAutogeneration", () => {
     expect(generateRunMetadata).not.toHaveBeenCalled();
   });
 
+  it("still generates when the first user message was already echoed locally", async () => {
+    vi.mocked(generateRunMetadata).mockResolvedValue({
+      title: "Generated Title",
+      worktreeName: "feat/generated-title",
+    });
+    const { result, renameThread } = setup({
+      existingItems: [
+        { id: "local-user-1", kind: "message", role: "user", text: "Hello there" },
+      ],
+    });
+
+    await act(async () => {
+      await result.current.onUserMessageCreated("ws-1", "thread-1", "Hello there");
+    });
+
+    expect(generateRunMetadata).toHaveBeenCalledWith("ws-1", "Hello there");
+    expect(renameThread).toHaveBeenCalledWith("ws-1", "thread-1", "Generated Title");
+  });
+
+  it("does not treat a matching old message in an existing conversation as local echo", async () => {
+    const { result } = setup({
+      existingItems: [
+        { id: "user-1", kind: "message", role: "user", text: "Hello there" },
+        { id: "assistant-1", kind: "message", role: "assistant", text: "Hi" },
+      ],
+    });
+
+    await act(async () => {
+      await result.current.onUserMessageCreated("ws-1", "thread-1", "Hello there");
+    });
+
+    expect(generateRunMetadata).not.toHaveBeenCalled();
+  });
+
   it("treats UUID placeholder thread names as auto-generated", async () => {
     vi.mocked(generateRunMetadata).mockResolvedValue({
       title: "Commit review summary",

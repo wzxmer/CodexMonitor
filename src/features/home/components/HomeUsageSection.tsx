@@ -83,6 +83,7 @@ export function HomeUsageSection({
     dailyAverage: t("home.usage.dailyAverage"),
     total: t("home.usage.total"),
     cacheHitRate: t("home.usage.cacheHitRate"),
+    lastHour: t("home.usage.lastHour"),
     cacheTokens: t("home.usage.cacheTokens"),
     saved: t("home.usage.saved"),
     promptShare: t("home.usage.promptShare"),

@@ -35,6 +35,7 @@ type HomeUsageViewModel = {
 export type HomeUsageViewModelText = HomeFormatterText &
   UsageLabelText & {
     today: string;
+    lastHour: string;
     last7Days: string;
     last30Days: string;
     tokens: string;
@@ -166,6 +167,12 @@ export function buildHomeUsageViewModel({
                   .replace("{input}", formatCount(latestUsageDay.inputTokens))
                   .replace("{output}", formatCount(latestUsageDay.outputTokens))
               : labels.latestAvailableDate,
+          },
+          {
+            label: labels.lastHour,
+            value: formatCompactNumber(usageTotals?.lastHourTokens ?? 0),
+            suffix: labels.tokens,
+            caption: buildWindowCaption(null, 60, labels.currentWindow, labels),
           },
           {
             label: labels.last7Days,

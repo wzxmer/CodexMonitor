@@ -12,12 +12,15 @@ import {
   type TerminalOutputEvent,
 } from "../../../services/events";
 import {
+  getSystemTerminalFont,
   openTerminalSession,
   resizeTerminalSession,
   writeTerminalSession,
 } from "../../../services/tauri";
 
 const MAX_BUFFER_CHARS = 200_000;
+const TERMINAL_FONT_FALLBACK =
+  '"Cascadia Mono", "Cascadia Code", "CaskaydiaCove Nerd Font", "Cascadia Mono NF", Consolas, "Segoe UI Symbol", "Segoe UI Emoji", monospace';
 
 type UseTerminalSessionOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -77,7 +80,7 @@ function getTerminalAppearance(container: HTMLElement | null): TerminalAppearanc
         foreground: "#d9dee7",
         cursor: "#d9dee7",
       },
-      fontFamily: "Menlo, Monaco, \"Courier New\", monospace",
+      fontFamily: TERMINAL_FONT_FALLBACK,
     };
   }
 
@@ -98,7 +101,7 @@ function getTerminalAppearance(container: HTMLElement | null): TerminalAppearanc
   const fontFamily =
     styles.getPropertyValue("--terminal-font-family").trim() ||
     styles.getPropertyValue("--code-font-family").trim() ||
-    "Menlo, Monaco, \"Courier New\", monospace";
+    TERMINAL_FONT_FALLBACK;
 
   return {
     theme: {
@@ -136,6 +139,7 @@ export function useTerminalSession({
   const [hasSession, setHasSession] = useState(false);
   const [readyKey, setReadyKey] = useState<string | null>(null);
   const [sessionResetCounter, setSessionResetCounter] = useState(0);
+  const [systemTerminalFont, setSystemTerminalFont] = useState<string | null>(null);
   const cleanupTerminalSession = useCallback((workspaceId: string, terminalId: string) => {
     const key = `${workspaceId}:${terminalId}`;
     outputBuffersRef.current.delete(key);
@@ -232,6 +236,14 @@ export function useTerminalSession({
     focusTerminalIfRequested();
   }, [focusTerminalIfRequested]);
 
+  const resolveTerminalFontFamily = useCallback(
+    (appearanceFontFamily: string) =>
+      systemTerminalFont
+        ? `"${systemTerminalFont.replace(/"/g, '\\"')}", ${TERMINAL_FONT_FALLBACK}`
+        : appearanceFontFamily,
+    [systemTerminalFont],
+  );
+
   const syncActiveBuffer = useCallback(
     (key: string) => {
       const term = terminalRef.current;
@@ -307,7 +319,7 @@ export function useTerminalSession({
       const terminal = new Terminal({
         cursorBlink: true,
         fontSize: 12,
-        fontFamily: appearance.fontFamily,
+        fontFamily: resolveTerminalFontFamily(appearance.fontFamily),
         allowTransparency: true,
         theme: appearance.theme,
         scrollback: 5000,
@@ -367,7 +379,46 @@ export function useTerminalSession({
         sendInputToActiveSession(data);
       });
     }
-  }, [copyTerminalSelection, isVisible, pasteClipboardToTerminal, sendInputToActiveSession]);
+  }, [
+    copyTerminalSelection,
+    isVisible,
+    pasteClipboardToTerminal,
+    resolveTerminalFontFamily,
+    sendInputToActiveSession,
+  ]);
+
+  useEffect(() => {
+    if (!isVisible || systemTerminalFont !== null) {
+      return;
+    }
+    let cancelled = false;
+    getSystemTerminalFont()
+      .then((font) => {
+        if (!cancelled) {
+          setSystemTerminalFont(font?.trim() || "");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSystemTerminalFont("");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isVisible, systemTerminalFont]);
+
+  useEffect(() => {
+    if (!isVisible || !terminalRef.current || systemTerminalFont === null) {
+      return;
+    }
+    const appearance = getTerminalAppearance(containerRef.current);
+    terminalRef.current.options.fontFamily = resolveTerminalFontFamily(
+      appearance.fontFamily,
+    );
+    fitAddonRef.current?.fit();
+    refreshTerminal();
+  }, [isVisible, refreshTerminal, resolveTerminalFontFamily, systemTerminalFont]);
 
   useEffect(() => {
     return () => {

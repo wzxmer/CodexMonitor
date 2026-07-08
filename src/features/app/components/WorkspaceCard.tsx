@@ -11,6 +11,7 @@ type WorkspaceCardProps = {
   summary?: string | null;
   isActive: boolean;
   isCollapsed: boolean;
+  isPinned?: boolean;
   addMenuOpen: boolean;
   addMenuWidth: number;
   hideAddButton?: boolean;
@@ -34,6 +35,7 @@ export function WorkspaceCard({
   summary = null,
   isActive,
   isCollapsed,
+  isPinned = false,
   addMenuOpen,
   addMenuWidth,
   hideAddButton = false,
@@ -54,7 +56,7 @@ export function WorkspaceCard({
   return (
     <div className="workspace-card">
       <div
-        className={`workspace-row ${isActive ? "active" : ""}`}
+        className={`workspace-row ${isActive ? "active" : ""}${isPinned ? " is-pinned" : ""}`}
         role="button"
         tabIndex={0}
         onClick={toggleWorkspace}

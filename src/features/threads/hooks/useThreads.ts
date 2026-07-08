@@ -27,23 +27,34 @@ import { useThreadTitleAutogeneration } from "./useThreadTitleAutogeneration";
 import { useDetachedReviewTracking } from "./useDetachedReviewTracking";
 import {
   archiveThread as archiveThreadService,
+  listThreads as listThreadsService,
   readThread as readThreadService,
   setThreadName as setThreadNameService,
 } from "@services/tauri";
+import { getThreadTimestamp } from "@utils/threadItems";
 import {
   makeCustomNameKey,
   saveCustomName,
 } from "@threads/utils/threadStorage";
-import { getParentThreadIdFromThread } from "@threads/utils/threadRpc";
+import {
+  getParentThreadIdFromThread,
+  shouldHideSubagentThreadFromSidebar,
+} from "@threads/utils/threadRpc";
 import {
   buildThreadSummaryFromThread,
   extractThreadFromResponse,
   getThreadDisplayTitle,
 } from "@threads/utils/threadSummary";
 import { getSubagentDescendantThreadIds } from "@threads/utils/subagentTree";
+import {
+  buildWorkspacePathLookup,
+  getThreadListNextCursor,
+  resolveWorkspaceIdForThreadPath,
+} from "@threads/utils/threadActionHelpers";
 
 type UseThreadsOptions = {
   activeWorkspace: WorkspaceInfo | null;
+  workspaces?: WorkspaceInfo[];
   onWorkspaceConnected: (id: string) => void;
   onDebug?: (entry: DebugEntry) => void;
   ensureWorkspaceRuntimeCodexArgs?: (
@@ -60,6 +71,8 @@ type UseThreadsOptions = {
   steerEnabled?: boolean;
   threadTitleAutogenerationEnabled?: boolean;
   chatHistoryScrollbackItems?: number | null;
+  autoArchiveThreadsEnabled?: boolean;
+  autoArchiveThreadsDays?: number;
   customPrompts?: CustomPromptOption[];
   onMessageActivity?: () => void;
   threadSortKey?: ThreadListSortKey;
@@ -75,9 +88,33 @@ function buildWorkspaceThreadKey(workspaceId: string, threadId: string) {
 }
 
 const CASCADE_ARCHIVE_SKIP_TTL_MS = 120_000;
+const AUTO_ARCHIVE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const AUTO_ARCHIVE_PAGE_SIZE = 100;
+const AUTO_ARCHIVE_MAX_PAGES_PER_WORKSPACE = 50;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const RECOVERABLE_TURN_RETRY_PROMPT = "继续前面的任务";
+const RECOVERABLE_TURN_RETRY_BLOCKED_MESSAGE =
+  "recoverable continuation turn did not start";
+const RECOVERABLE_TURN_RETRY_BASE_DELAY_MS = 2_000;
+const RECOVERABLE_TURN_RETRY_MAX_DELAY_MS = 30_000;
+
+function isRecoverableTurnErrorMessage(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("bad gateway") ||
+    normalized.includes("gateway timeout") ||
+    normalized.includes("temporarily unavailable") ||
+    normalized.includes(RECOVERABLE_TURN_RETRY_BLOCKED_MESSAGE) ||
+    normalized.includes("unexpected status 502") ||
+    normalized.includes("unexpected status 503") ||
+    normalized.includes("unexpected status 504") ||
+    /\b50[2-4]\b/.test(normalized)
+  );
+}
 
 export function useThreads({
   activeWorkspace,
+  workspaces = activeWorkspace ? [activeWorkspace] : [],
   onWorkspaceConnected,
   onDebug,
   ensureWorkspaceRuntimeCodexArgs,
@@ -91,6 +128,8 @@ export function useThreads({
   steerEnabled = false,
   threadTitleAutogenerationEnabled = false,
   chatHistoryScrollbackItems,
+  autoArchiveThreadsEnabled = false,
+  autoArchiveThreadsDays = 7,
   customPrompts = [],
   onMessageActivity,
   threadSortKey = "updated_at",
@@ -118,15 +157,29 @@ export function useThreads({
   const planByThreadRef = useRef(state.planByThread);
   const itemsByThreadRef = useRef(state.itemsByThread);
   const threadsByWorkspaceRef = useRef(state.threadsByWorkspace);
+  const activeThreadIdByWorkspaceRef = useRef(state.activeThreadIdByWorkspace);
   const activeTurnIdByThreadRef = useRef(state.activeTurnIdByThread);
+  const threadStatusByIdRef = useRef(state.threadStatusById);
   const subagentThreadByWorkspaceThreadRef = useRef<Record<string, true>>({});
   const threadParentByIdRef = useRef(state.threadParentById);
   const cascadeArchiveSkipRef = useRef<Record<string, number>>({});
   const subagentHydrationInFlightRef = useRef<Record<string, true>>({});
+  const autoArchiveInFlightRef = useRef(false);
+  const workspacesRef = useRef(workspaces);
+  const recoverableTurnRetryTimersRef = useRef<
+    Record<string, ReturnType<typeof setTimeout>>
+  >({});
+  const recoverableTurnRetryAttemptRef = useRef<Record<string, number>>({});
+  const recoverableTurnRetrySendRef = useRef<
+    ((workspaceId: string, threadId: string, attempt: number) => Promise<boolean>) | null
+  >(null);
+  workspacesRef.current = workspaces;
   planByThreadRef.current = state.planByThread;
   itemsByThreadRef.current = state.itemsByThread;
   threadsByWorkspaceRef.current = state.threadsByWorkspace;
+  activeThreadIdByWorkspaceRef.current = state.activeThreadIdByWorkspace;
   activeTurnIdByThreadRef.current = state.activeTurnIdByThread;
+  threadStatusByIdRef.current = state.threadStatusById;
   threadParentByIdRef.current = state.threadParentById;
   const rateLimitsByWorkspaceRef = useRef(state.rateLimitsByWorkspace);
   rateLimitsByWorkspaceRef.current = state.rateLimitsByWorkspace;
@@ -197,6 +250,85 @@ export function useThreads({
       // Ignore refresh errors to avoid breaking the UI.
     }
   }, [onMessageActivity]);
+
+  const clearRecoverableTurnRetry = useCallback(
+    (workspaceId: string, threadId: string, resetAttempt = true) => {
+      const key = buildWorkspaceThreadKey(workspaceId, threadId);
+      const timer = recoverableTurnRetryTimersRef.current[key];
+      if (timer) {
+        clearTimeout(timer);
+        delete recoverableTurnRetryTimersRef.current[key];
+      }
+      if (resetAttempt) {
+        delete recoverableTurnRetryAttemptRef.current[key];
+      }
+    },
+    [],
+  );
+
+  const scheduleRecoverableTurnRetry = useCallback(
+    (workspaceId: string, threadId: string, message: string) => {
+      if (!isRecoverableTurnErrorMessage(message)) {
+        return;
+      }
+      const key = buildWorkspaceThreadKey(workspaceId, threadId);
+      if (recoverableTurnRetryTimersRef.current[key]) {
+        return;
+      }
+      const attempt = (recoverableTurnRetryAttemptRef.current[key] ?? 0) + 1;
+      recoverableTurnRetryAttemptRef.current[key] = attempt;
+      const delay = Math.min(
+        RECOVERABLE_TURN_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1),
+        RECOVERABLE_TURN_RETRY_MAX_DELAY_MS,
+      );
+      onDebug?.({
+        id: `${Date.now()}-client-turn-recoverable-retry-scheduled`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "turn/recoverable retry scheduled",
+        payload: { workspaceId, threadId, attempt, delay, message },
+      });
+      recoverableTurnRetryTimersRef.current[key] = setTimeout(() => {
+        delete recoverableTurnRetryTimersRef.current[key];
+        void recoverableTurnRetrySendRef.current?.(workspaceId, threadId, attempt)
+          .then((retryStarted) => {
+            if (!retryStarted) {
+              scheduleRecoverableTurnRetry(
+                workspaceId,
+                threadId,
+                RECOVERABLE_TURN_RETRY_BLOCKED_MESSAGE,
+              );
+            }
+          })
+          .catch((error) => {
+            onDebug?.({
+              id: `${Date.now()}-client-turn-recoverable-retry-error`,
+              timestamp: Date.now(),
+              source: "error",
+              label: "turn/recoverable retry error",
+              payload: error instanceof Error ? error.message : String(error),
+            });
+            scheduleRecoverableTurnRetry(
+              workspaceId,
+              threadId,
+              error instanceof Error ? error.message : String(error),
+            );
+          });
+      }, delay);
+    },
+    [onDebug],
+  );
+
+  useEffect(
+    () => () => {
+      Object.values(recoverableTurnRetryTimersRef.current).forEach((timer) => {
+        clearTimeout(timer);
+      });
+      recoverableTurnRetryTimersRef.current = {};
+      recoverableTurnRetryAttemptRef.current = {};
+    },
+    [],
+  );
 
   useThreadStallWarnings({
     threadStatusById: state.threadStatusById,
@@ -469,6 +601,7 @@ export function useThreads({
       if (!workspaceId || !threadId) {
         return;
       }
+      clearRecoverableTurnRetry(workspaceId, threadId);
       threadHandlers.onThreadArchived?.(workspaceId, threadId);
       unpinThread(workspaceId, threadId);
 
@@ -534,7 +667,7 @@ export function useThreads({
         }
       })();
     },
-    [isSubagentThread, onDebug, threadHandlers, unpinThread],
+    [clearRecoverableTurnRetry, isSubagentThread, onDebug, threadHandlers, unpinThread],
   );
 
   const handleThreadUnarchived = useCallback(
@@ -544,12 +677,46 @@ export function useThreads({
     [threadHandlers],
   );
 
+  const handleTurnStarted = useCallback(
+    (workspaceId: string, threadId: string, turnId: string) => {
+      clearRecoverableTurnRetry(workspaceId, threadId, false);
+      threadHandlers.onTurnStarted?.(workspaceId, threadId, turnId);
+    },
+    [clearRecoverableTurnRetry, threadHandlers],
+  );
+
+  const handleTurnCompleted = useCallback(
+    (workspaceId: string, threadId: string, turnId: string) => {
+      clearRecoverableTurnRetry(workspaceId, threadId);
+      threadHandlers.onTurnCompleted?.(workspaceId, threadId, turnId);
+    },
+    [clearRecoverableTurnRetry, threadHandlers],
+  );
+
+  const handleTurnError = useCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+      turnId: string,
+      payload: { message: string; willRetry: boolean },
+    ) => {
+      threadHandlers.onTurnError?.(workspaceId, threadId, turnId, payload);
+      if (!payload.willRetry) {
+        scheduleRecoverableTurnRetry(workspaceId, threadId, payload.message);
+      }
+    },
+    [scheduleRecoverableTurnRetry, threadHandlers],
+  );
+
   const handlers = useMemo(
     () => ({
       ...threadHandlers,
       onThreadStarted: handleThreadStarted,
       onThreadArchived: handleThreadArchived,
       onThreadUnarchived: handleThreadUnarchived,
+      onTurnStarted: handleTurnStarted,
+      onTurnCompleted: handleTurnCompleted,
+      onTurnError: handleTurnError,
       onAccountUpdated: handleAccountUpdated,
       onAccountLoginCompleted: handleAccountLoginCompleted,
     }),
@@ -558,6 +725,9 @@ export function useThreads({
       handleThreadStarted,
       handleThreadArchived,
       handleThreadUnarchived,
+      handleTurnStarted,
+      handleTurnCompleted,
+      handleTurnError,
       handleAccountUpdated,
       handleAccountLoginCompleted,
     ],
@@ -595,6 +765,127 @@ export function useThreads({
     onSubagentThreadDetected,
     onThreadCodexMetadataDetected,
   });
+
+  useEffect(() => {
+    if (!autoArchiveThreadsEnabled) {
+      return;
+    }
+    const normalizedDays = [3, 5, 7, 15, 30].includes(autoArchiveThreadsDays)
+      ? autoArchiveThreadsDays
+      : 7;
+    const connectedWorkspaces = workspaces.filter(
+      (workspace) => workspace.id && workspace.connected,
+    );
+    if (connectedWorkspaces.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    const workspacePathLookup = buildWorkspacePathLookup(connectedWorkspaces);
+    const workspaceIds = new Set(connectedWorkspaces.map((workspace) => workspace.id));
+
+    const runAutoArchive = async () => {
+      if (autoArchiveInFlightRef.current || cancelled) {
+        return;
+      }
+      autoArchiveInFlightRef.current = true;
+      const cutoff = Date.now() - normalizedDays * DAY_MS;
+      let archivedCount = 0;
+      try {
+        for (const workspace of connectedWorkspaces) {
+          if (cancelled) {
+            break;
+          }
+          let cursor: string | null = null;
+          let pagesFetched = 0;
+          do {
+            pagesFetched += 1;
+            const response = (await listThreadsService(
+              workspace.id,
+              cursor,
+              AUTO_ARCHIVE_PAGE_SIZE,
+              "updated_at",
+            )) as Record<string, unknown>;
+            const result = (response.result ?? response) as Record<string, unknown>;
+            const data = Array.isArray(result.data)
+              ? (result.data as Record<string, unknown>[])
+              : [];
+            cursor = getThreadListNextCursor(result);
+            for (const thread of data) {
+              if (cancelled) {
+                break;
+              }
+              const threadId = String(thread.id ?? "");
+              if (!threadId || shouldHideSubagentThreadFromSidebar(thread.source)) {
+                continue;
+              }
+              const updatedAt = getThreadTimestamp(thread);
+              if (!updatedAt || updatedAt > cutoff) {
+                continue;
+              }
+              const owningWorkspaceId = resolveWorkspaceIdForThreadPath(
+                String(thread.cwd ?? ""),
+                workspacePathLookup,
+                workspaceIds,
+              );
+              if (owningWorkspaceId !== workspace.id) {
+                continue;
+              }
+              if (activeThreadIdByWorkspaceRef.current[workspace.id] === threadId) {
+                continue;
+              }
+              if (
+                threadStatusByIdRef.current[threadId]?.isProcessing ||
+                activeTurnIdByThreadRef.current[threadId]
+              ) {
+                continue;
+              }
+              if (isThreadPinned(workspace.id, threadId)) {
+                continue;
+              }
+              await archiveThread(workspace.id, threadId);
+              archivedCount += 1;
+            }
+            if (pagesFetched >= AUTO_ARCHIVE_MAX_PAGES_PER_WORKSPACE) {
+              break;
+            }
+          } while (cursor && !cancelled);
+        }
+        if (archivedCount > 0) {
+          onDebug?.({
+            id: `${Date.now()}-client-auto-archive-threads`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "thread/auto-archive",
+            payload: { archivedCount, days: normalizedDays },
+          });
+        }
+      } catch (error) {
+        onDebug?.({
+          id: `${Date.now()}-client-auto-archive-threads-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "thread/auto-archive error",
+          payload: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        autoArchiveInFlightRef.current = false;
+      }
+    };
+
+    void runAutoArchive();
+    const interval = window.setInterval(runAutoArchive, AUTO_ARCHIVE_CHECK_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [
+    archiveThread,
+    autoArchiveThreadsDays,
+    autoArchiveThreadsEnabled,
+    isThreadPinned,
+    onDebug,
+    workspaces,
+  ]);
 
   const ensureWorkspaceRuntimeCodexArgsBestEffort = useCallback(
     async (workspaceId: string, threadId: string | null, phase: string) => {
@@ -801,6 +1092,52 @@ export function useThreads({
     registerDetachedReviewChild,
     renameThread,
   });
+
+  recoverableTurnRetrySendRef.current = async (
+    workspaceId: string,
+    threadId: string,
+    attempt: number,
+  ) => {
+    if (threadStatusByIdRef.current[threadId]?.isProcessing) {
+      return true;
+    }
+    const workspace = workspacesRef.current.find((entry) => entry.id === workspaceId);
+    if (!workspace) {
+      onDebug?.({
+        id: `${Date.now()}-client-turn-recoverable-retry-missing-workspace`,
+        timestamp: Date.now(),
+        source: "error",
+        label: "turn/recoverable retry missing workspace",
+        payload: { workspaceId, threadId, attempt },
+      });
+      return true;
+    }
+    onDebug?.({
+      id: `${Date.now()}-client-turn-recoverable-retry`,
+      timestamp: Date.now(),
+      source: "client",
+      label: "turn/recoverable retry",
+      payload: { workspaceId, threadId, attempt },
+    });
+    const result = await sendUserMessageToThread(
+      workspace,
+      threadId,
+      RECOVERABLE_TURN_RETRY_PROMPT,
+      [],
+      { skipPromptExpansion: true },
+    );
+    if (result.status !== "sent") {
+      onDebug?.({
+        id: `${Date.now()}-client-turn-recoverable-retry-blocked`,
+        timestamp: Date.now(),
+        source: "error",
+        label: "turn/recoverable retry blocked",
+        payload: { workspaceId, threadId, attempt, status: result.status },
+      });
+      return false;
+    }
+    return true;
+  };
 
   const hasLocalThreadSnapshot = useCallback(
     (threadId: string | null) => {

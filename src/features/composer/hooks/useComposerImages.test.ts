@@ -84,6 +84,29 @@ describe("useComposerImages", () => {
     hook.unmount();
   });
 
+  it("keeps at most ten attachments in one composer draft", async () => {
+    const hook = renderComposerImages({
+      activeThreadId: "thread-limit",
+      activeWorkspaceId: "ws-1",
+    });
+    const attachments = Array.from(
+      { length: 12 },
+      (_, index) => `/tmp/file-${index + 1}.md`,
+    );
+
+    await act(async () => {
+      hook.result.attachImages(attachments);
+      await Promise.resolve();
+    });
+
+    expect(hook.result.activeImages).toHaveLength(10);
+    expect(hook.result.activeImages[hook.result.activeImages.length - 1]).toBe(
+      "/tmp/file-10.md",
+    );
+
+    hook.unmount();
+  });
+
   it("attaches images and deduplicates paths", async () => {
     const hook = renderComposerImages({
       activeThreadId: "thread-1",

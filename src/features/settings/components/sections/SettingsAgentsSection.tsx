@@ -14,6 +14,7 @@ import {
   SettingsToggleSwitch,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
 import { useI18n } from "@/features/i18n/I18nProvider";
+import { formatReasoningEffortLabel } from "@/features/models/utils/reasoningEffortLabels";
 
 const FALLBACK_AGENT_MODELS: ModelOption[] = [
   {
@@ -593,7 +594,7 @@ export function SettingsAgentsSection({
               )}
               {createReasoningOptions.map((effort) => (
                 <option key={effort} value={effort}>
-                  {effort}
+                  {formatReasoningEffortLabel(effort, t)}
                 </option>
               ))}
             </select>

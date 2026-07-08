@@ -92,6 +92,7 @@ describe("Home", () => {
             },
           ],
           totals: {
+            lastHourTokens: 0,
             last7DaysTokens: 15,
             last30DaysTokens: 15,
             averageDailyTokens: 15,
@@ -248,6 +249,7 @@ describe("Home", () => {
             },
           ],
           totals: {
+            lastHourTokens: 12,
             last7DaysTokens: 248,
             last30DaysTokens: 343,
             averageDailyTokens: 35,

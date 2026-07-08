@@ -16,6 +16,7 @@ import {
 } from "@/features/design-system/components/settings/SettingsPrimitives";
 import { FileEditorCard } from "@/features/shared/components/FileEditorCard";
 import { useI18n } from "@/features/i18n/I18nProvider";
+import { formatReasoningEffortLabel } from "@/features/models/utils/reasoningEffortLabels";
 
 type SettingsCodexSectionProps = {
   appSettings: AppSettings;
@@ -243,19 +244,16 @@ export function SettingsCodexSection({
     return reasoningOptions[0] ?? "";
   }, [reasoningOptions, reasoningSupported, savedEffort, selectedModel]);
   const [keyProfileNameDraft, setKeyProfileNameDraft] = useState("");
-  const [keyProfileEnvDraft, setKeyProfileEnvDraft] = useState(DEFAULT_CODEX_KEY_ENV_VAR);
   const [keyProfileKeyDraft, setKeyProfileKeyDraft] = useState("");
+  const [keyProfileKeyVisible, setKeyProfileKeyVisible] = useState(false);
   const [keyProfileBaseUrlDraft, setKeyProfileBaseUrlDraft] = useState("");
-  const [keyProfileBaseUrlEnvDraft, setKeyProfileBaseUrlEnvDraft] = useState(
-    DEFAULT_CODEX_BASE_URL_ENV_VAR,
-  );
+  const [editingKeyProfileId, setEditingKeyProfileId] = useState<string | null>(null);
   const keyProfiles = appSettings.codexKeyProfiles ?? [];
   const selectedKeyProfile = keyProfiles.find(
     (profile) => profile.id === appSettings.activeCodexKeyProfileId,
   );
   const keyProfileDraftValid =
     keyProfileNameDraft.trim().length > 0 &&
-    keyProfileEnvDraft.trim().length > 0 &&
     keyProfileKeyDraft.trim().length > 0;
 
   const updateCodexKeySettings = (patch: Partial<AppSettings>) => {
@@ -278,20 +276,41 @@ export function SettingsCodexSection({
     const profile: CodexKeyProfile = {
       id: createCodexKeyProfileId(),
       name: keyProfileNameDraft.trim(),
-      keyEnvVar: keyProfileEnvDraft.trim(),
+      keyEnvVar: DEFAULT_CODEX_KEY_ENV_VAR,
       key: keyProfileKeyDraft.trim(),
-      baseUrlEnvVar: keyProfileBaseUrlEnvDraft.trim() || DEFAULT_CODEX_BASE_URL_ENV_VAR,
+      baseUrlEnvVar: DEFAULT_CODEX_BASE_URL_ENV_VAR,
       baseUrl: keyProfileBaseUrlDraft.trim() || null,
     };
+    if (editingKeyProfileId) {
+      updateCodexKeySettings({
+        codexKeyProfiles: keyProfiles.map((existing) =>
+          existing.id === editingKeyProfileId ? { ...profile, id: existing.id } : existing,
+        ),
+        activeCodexKeyProfileId: editingKeyProfileId,
+      });
+      setEditingKeyProfileId(null);
+      setKeyProfileNameDraft("");
+      setKeyProfileKeyDraft("");
+      setKeyProfileKeyVisible(false);
+      setKeyProfileBaseUrlDraft("");
+      return;
+    }
     updateCodexKeySettings({
       codexKeyProfiles: [...keyProfiles, profile],
       activeCodexKeyProfileId: profile.id,
     });
     setKeyProfileNameDraft("");
-    setKeyProfileEnvDraft(DEFAULT_CODEX_KEY_ENV_VAR);
     setKeyProfileKeyDraft("");
+    setKeyProfileKeyVisible(false);
     setKeyProfileBaseUrlDraft("");
-    setKeyProfileBaseUrlEnvDraft(DEFAULT_CODEX_BASE_URL_ENV_VAR);
+  };
+
+  const handleEditKeyProfile = (profile: CodexKeyProfile) => {
+    setEditingKeyProfileId(profile.id);
+    setKeyProfileNameDraft(profile.name);
+    setKeyProfileKeyDraft(profile.key);
+    setKeyProfileKeyVisible(false);
+    setKeyProfileBaseUrlDraft(profile.baseUrl ?? "");
   };
 
   const handleDeleteKeyProfile = (profileId: string) => {
@@ -651,7 +670,13 @@ export function SettingsCodexSection({
                 : t("settings.codex.doctorIssue")}
             </div>
             <div className="settings-doctor-body">
+              <div>
+                Codex: {doctorState.result.resolvedCodexBin ?? doctorState.result.codexBin ?? "codex"}
+              </div>
               <div>{t("settings.codex.version")}: {doctorState.result.version ?? unknownLabel}</div>
+              <div>
+                npm @openai/codex: {doctorState.result.npmGlobalCodexVersion ?? unknownLabel}
+              </div>
               <div>App-server: {doctorState.result.appServerOk ? okLabel : failedLabel}</div>
               <div>
                 Node:{" "}
@@ -709,7 +734,7 @@ export function SettingsCodexSection({
 
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="codex-key-profile">
-          API Key Profile
+          {t("settings.codex.keyProfile")}
         </label>
         <div className="settings-help">
           {t("settings.codex.keyProfileHelp")}
@@ -729,22 +754,31 @@ export function SettingsCodexSection({
             ))}
           </select>
           {selectedKeyProfile && (
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => handleDeleteKeyProfile(selectedKeyProfile.id)}
-            >
-              {t("common.delete")}
-            </button>
+            <>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => handleEditKeyProfile(selectedKeyProfile)}
+              >
+                {t("common.edit")}
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => handleDeleteKeyProfile(selectedKeyProfile.id)}
+              >
+                {t("common.delete")}
+              </button>
+            </>
           )}
         </div>
         {selectedKeyProfile && (
           <div className="settings-help">
-            {t("settings.codex.currentInject")} <code>{selectedKeyProfile.keyEnvVar}</code>
+            {t("settings.codex.currentInject")} <code>{DEFAULT_CODEX_KEY_ENV_VAR}</code>
             {selectedKeyProfile.baseUrl ? (
               <>
                 {" "}
-                {t("common.and")} <code>{selectedKeyProfile.baseUrlEnvVar}</code>
+                {t("common.and")} <code>{DEFAULT_CODEX_BASE_URL_ENV_VAR}</code>
               </>
             ) : null}
             .
@@ -758,21 +792,23 @@ export function SettingsCodexSection({
             onChange={(event) => setKeyProfileNameDraft(event.target.value)}
             aria-label={t("settings.codex.keyProfileNameAria")}
           />
-          <input
-            className="settings-input"
-            placeholder={t("settings.codex.keyEnvPlaceholder")}
-            value={keyProfileEnvDraft}
-            onChange={(event) => setKeyProfileEnvDraft(event.target.value)}
-            aria-label={t("settings.codex.keyEnvAria")}
-          />
-          <input
-            className="settings-input"
-            type="password"
-            placeholder="API key"
-            value={keyProfileKeyDraft}
-            onChange={(event) => setKeyProfileKeyDraft(event.target.value)}
-            aria-label="API key"
-          />
+          <div className="settings-field-row">
+            <input
+              className="settings-input"
+              type={keyProfileKeyVisible ? "text" : "password"}
+              placeholder="API key"
+              value={keyProfileKeyDraft}
+              onChange={(event) => setKeyProfileKeyDraft(event.target.value)}
+              aria-label="API key"
+            />
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={() => setKeyProfileKeyVisible((visible) => !visible)}
+            >
+              {keyProfileKeyVisible ? t("common.hide") : t("common.show")}
+            </button>
+          </div>
           <input
             className="settings-input"
             placeholder={t("settings.codex.baseUrlPlaceholder")}
@@ -780,21 +816,29 @@ export function SettingsCodexSection({
             onChange={(event) => setKeyProfileBaseUrlDraft(event.target.value)}
             aria-label="Base URL"
           />
-          <input
-            className="settings-input"
-            placeholder={t("settings.codex.baseUrlEnvPlaceholder")}
-            value={keyProfileBaseUrlEnvDraft}
-            onChange={(event) => setKeyProfileBaseUrlEnvDraft(event.target.value)}
-            aria-label={t("settings.codex.baseUrlEnvAria")}
-          />
           <button
             type="button"
             className="settings-button-compact"
             disabled={!keyProfileDraftValid}
             onClick={handleAddKeyProfile}
           >
-            {t("settings.codex.addAndEnable")}
+            {editingKeyProfileId ? t("common.save") : t("settings.codex.addAndEnable")}
           </button>
+          {editingKeyProfileId ? (
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              onClick={() => {
+                setEditingKeyProfileId(null);
+                setKeyProfileNameDraft("");
+                setKeyProfileKeyDraft("");
+                setKeyProfileKeyVisible(false);
+                setKeyProfileBaseUrlDraft("");
+              }}
+            >
+              {t("common.cancel")}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -873,7 +917,7 @@ export function SettingsCodexSection({
           {!reasoningSupported && <option value="">{t("settings.codex.unsupported")}</option>}
           {reasoningOptions.map((effort) => (
             <option key={effort} value={effort}>
-              {effort}
+              {formatReasoningEffortLabel(effort, t)}
             </option>
           ))}
         </select>

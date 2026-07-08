@@ -806,6 +806,38 @@ pub(crate) fn build_codex_command_with_bin(
     Ok(command)
 }
 
+pub(crate) fn resolve_codex_command_path(codex_bin: Option<&str>) -> String {
+    let bin = codex_bin
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("codex")
+        .trim();
+    let path_env = build_codex_path_env(Some(bin));
+
+    #[cfg(target_os = "windows")]
+    {
+        return resolve_windows_executable(bin, path_env.as_deref())
+            .map(|path| path.to_string_lossy().to_string())
+            .unwrap_or_else(|| bin.to_string());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if Path::new(bin).components().count() > 1 {
+            return bin.to_string();
+        }
+        let Some(path_env) = path_env else {
+            return bin.to_string();
+        };
+        for entry in env::split_paths(&path_env) {
+            let candidate = entry.join(bin);
+            if candidate.is_file() {
+                return candidate.to_string_lossy().to_string();
+            }
+        }
+        bin.to_string()
+    }
+}
+
 pub(crate) async fn check_codex_installation(
     codex_bin: Option<String>,
 ) -> Result<Option<String>, String> {

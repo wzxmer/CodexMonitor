@@ -18,6 +18,12 @@ function cleanPromptText(text: string) {
     : normalized;
 }
 
+function isUserMessage(
+  item: ConversationItem,
+): item is Extract<ConversationItem, { kind: "message" }> {
+  return item.kind === "message" && item.role === "user";
+}
+
 type UseThreadTitleAutogenerationOptions = {
   enabled: boolean;
   itemsByThreadRef: MutableRefObject<Record<string, ConversationItem[]>>;
@@ -55,17 +61,19 @@ export function useThreadTitleAutogeneration({
         return;
       }
 
+      const cleaned = cleanPromptText(text);
       const existingItems = itemsByThreadRef.current[threadId] ?? [];
-      const alreadyHasUserMessage = existingItems.some(
-        (item) => item.kind === "message" && item.role === "user",
-      );
-      if (alreadyHasUserMessage) {
+      const existingUserMessages = existingItems.filter(isUserMessage);
+      const hasPriorConversation =
+        existingUserMessages.length > 1 ||
+        existingItems.some((item) => item.kind === "message" && item.role === "assistant") ||
+        existingUserMessages.some((item) => cleanPromptText(item.text) !== cleaned);
+      if (hasPriorConversation) {
         return;
       }
 
       const threads = threadsByWorkspaceRef.current[workspaceId] ?? [];
       const thread = threads.find((entry) => entry.id === threadId) ?? null;
-      const cleaned = cleanPromptText(text);
       if (!cleaned) {
         return;
       }

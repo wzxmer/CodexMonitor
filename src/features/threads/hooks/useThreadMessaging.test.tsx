@@ -10,6 +10,7 @@ import {
   getAppsList as getAppsListService,
   listMcpServerStatus as listMcpServerStatusService,
   compactThread as compactThreadService,
+  readWorkspaceFile,
 } from "@services/tauri";
 import type { WorkspaceInfo } from "@/types";
 import { useThreadMessaging } from "./useThreadMessaging";
@@ -28,6 +29,7 @@ vi.mock("@services/tauri", () => ({
   getAppsList: vi.fn(),
   listMcpServerStatus: vi.fn(),
   compactThread: vi.fn(),
+  readWorkspaceFile: vi.fn(),
 }));
 
 vi.mock("./useReviewPrompt", () => ({
@@ -95,6 +97,10 @@ describe("useThreadMessaging telemetry", () => {
     vi.mocked(compactThreadService).mockResolvedValue(
       {} as Awaited<ReturnType<typeof compactThreadService>>,
     );
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: "file body",
+      truncated: false,
+    });
   });
 
   it("records prompt_sent once for one message send", async () => {
@@ -744,6 +750,122 @@ describe("useThreadMessaging telemetry", () => {
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
       "thread-1",
       "Turn steer failed: no active turn to steer",
+    );
+  });
+
+  it("inlines UTF-8 workspace text attachments before sending", async () => {
+    const dispatch = vi.fn();
+    vi.mocked(readWorkspaceFile).mockResolvedValueOnce({
+      content: "# Notes\nhello",
+      truncated: false,
+    });
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "please read",
+        ["/tmp/workspace/docs/notes.md"],
+      );
+    });
+
+    expect(readWorkspaceFile).toHaveBeenCalledWith("ws-1", "docs/notes.md");
+    expect(sendUserMessageService).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      expect.stringContaining('<attached_file path="docs/notes.md" name="notes.md">'),
+      expect.objectContaining({ images: [] }),
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upsertItem",
+        item: expect.objectContaining({
+          text: "please read",
+          attachments: ["/tmp/workspace/docs/notes.md"],
+        }),
+      }),
+    );
+  });
+
+  it("blocks unsupported binary attachments instead of dropping them silently", async () => {
+    const pushThreadErrorMessage = vi.fn();
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch: vi.fn(),
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage,
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      const sendResult = await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "please read",
+        ["/tmp/workspace/archive.zip"],
+      );
+      expect(sendResult).toEqual({ status: "blocked" });
+    });
+
+    expect(sendUserMessageService).not.toHaveBeenCalled();
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "thread-1",
+      expect.stringContaining("Unsupported attachment"),
     );
   });
 

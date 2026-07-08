@@ -53,6 +53,9 @@ describe("useSidebarMenus", () => {
     const onReloadWorkspaceThreads = vi.fn();
     const onDeleteWorkspace = vi.fn();
     const onDeleteWorktree = vi.fn();
+    const isWorkspaceFolderPinned = vi.fn(() => false);
+    const onPinWorkspaceFolder = vi.fn();
+    const onUnpinWorkspaceFolder = vi.fn();
 
     const { result } = renderHook(() =>
       useSidebarMenus({
@@ -65,6 +68,9 @@ describe("useSidebarMenus", () => {
         onReloadWorkspaceThreads,
         onDeleteWorkspace,
         onDeleteWorktree,
+        isWorkspaceFolderPinned,
+        onPinWorkspaceFolder,
+        onUnpinWorkspaceFolder,
       }),
     );
 
@@ -98,5 +104,42 @@ describe("useSidebarMenus", () => {
     expect(revealItem).toBeDefined();
     await revealItem.action();
     expect(revealItemInDir).toHaveBeenCalledWith("/tmp/worktree-1");
+  });
+
+  it("adds a pin option for workspace folders", async () => {
+    const onPinWorkspaceFolder = vi.fn();
+    const onUnpinWorkspaceFolder = vi.fn();
+    const { result } = renderHook(() =>
+      useSidebarMenus({
+        onDeleteThread: vi.fn(),
+        onSyncThread: vi.fn(),
+        onPinThread: vi.fn(),
+        onUnpinThread: vi.fn(),
+        isThreadPinned: vi.fn(() => false),
+        onRenameThread: vi.fn(),
+        onReloadWorkspaceThreads: vi.fn(),
+        onDeleteWorkspace: vi.fn(),
+        onDeleteWorktree: vi.fn(),
+        isWorkspaceFolderPinned: vi.fn(() => false),
+        onPinWorkspaceFolder,
+        onUnpinWorkspaceFolder,
+      }),
+    );
+
+    const event = {
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+      clientX: 12,
+      clientY: 34,
+    } as unknown as ReactMouseEvent;
+
+    await result.current.showWorkspaceMenu(event, "ws-1");
+
+    const menuArgs = menuNew.mock.calls[menuNew.mock.calls.length - 1]?.[0];
+    const pinItem = menuArgs.items.find((item: { text: string }) => item.text === "置顶");
+    expect(pinItem).toBeDefined();
+    pinItem.action();
+    expect(onPinWorkspaceFolder).toHaveBeenCalledWith("ws-1");
+    expect(onUnpinWorkspaceFolder).not.toHaveBeenCalled();
   });
 });

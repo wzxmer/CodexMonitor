@@ -15,6 +15,7 @@ afterEach(() => {
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
   }
+  window.localStorage.removeItem("codexmonitor.pinnedWorkspaceFolders");
   cleanup();
 });
 
@@ -625,6 +626,65 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: "新建 Agent" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "新建 worktree Agent" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "新建副本 Agent" })).toBeTruthy();
+  });
+
+  it("moves pinned workspace session folders to the top of their group", () => {
+    window.localStorage.setItem(
+      "codexmonitor.pinnedWorkspaceFolders",
+      JSON.stringify({ "ws-2": 200 }),
+    );
+    const { container } = render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[
+          {
+            id: "ws-1",
+            name: "Alpha Project",
+            path: "/tmp/alpha",
+            connected: true,
+            settings: { sidebarCollapsed: false },
+          },
+          {
+            id: "ws-2",
+            name: "Beta Project",
+            path: "/tmp/beta",
+            connected: true,
+            settings: { sidebarCollapsed: false },
+          },
+        ]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Workspaces",
+            workspaces: [
+              {
+                id: "ws-1",
+                name: "Alpha Project",
+                path: "/tmp/alpha",
+                connected: true,
+                settings: { sidebarCollapsed: false },
+              },
+              {
+                id: "ws-2",
+                name: "Beta Project",
+                path: "/tmp/beta",
+                connected: true,
+                settings: { sidebarCollapsed: false },
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    const names = Array.from(container.querySelectorAll(".workspace-row .workspace-name")).map(
+      (entry) => entry.textContent,
+    );
+    expect(names).toEqual(["Beta Project", "Alpha Project"]);
+    expect(container.querySelector(".workspace-row.is-pinned .workspace-name")?.textContent).toBe(
+      "Beta Project",
+    );
+    window.localStorage.removeItem("codexmonitor.pinnedWorkspaceFolders");
   });
 
   it("refreshes all workspace threads from the header button", () => {

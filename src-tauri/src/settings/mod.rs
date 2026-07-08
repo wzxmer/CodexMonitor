@@ -1,5 +1,10 @@
 use tauri::{State, Window};
 
+use crate::shared::codex_native_pet_core::{
+    get_codex_native_pet_state_core, import_codex_native_pet_core,
+    set_codex_native_pet_enabled_core, set_codex_native_pet_selected_core,
+    wake_codex_native_pet_core, CodexNativePetState,
+};
 use crate::shared::settings_core::{
     get_app_settings_core, get_codex_config_path_core, get_codex_status_core,
     get_codex_sync_diagnostics_core, update_app_settings_core, CodexStatusDto,
@@ -54,6 +59,49 @@ pub(crate) async fn get_codex_sync_diagnostics(
 ) -> Result<CodexSyncDiagnosticsDto, String> {
     let settings = state.app_settings.lock().await.clone();
     Ok(get_codex_sync_diagnostics_core(&settings))
+}
+
+#[tauri::command]
+pub(crate) async fn get_codex_native_pet_state(
+    state: State<'_, AppState>,
+) -> Result<CodexNativePetState, String> {
+    let settings = state.app_settings.lock().await.clone();
+    get_codex_native_pet_state_core(&settings)
+}
+
+#[tauri::command]
+pub(crate) async fn set_codex_native_pet_enabled(
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<CodexNativePetState, String> {
+    let settings = state.app_settings.lock().await.clone();
+    set_codex_native_pet_enabled_core(&settings, enabled)
+}
+
+#[tauri::command]
+pub(crate) async fn set_codex_native_pet_selected(
+    avatar_id: String,
+    state: State<'_, AppState>,
+) -> Result<CodexNativePetState, String> {
+    let settings = state.app_settings.lock().await.clone();
+    set_codex_native_pet_selected_core(&settings, &avatar_id)
+}
+
+#[tauri::command]
+pub(crate) async fn wake_codex_native_pet(
+    state: State<'_, AppState>,
+) -> Result<CodexNativePetState, String> {
+    let settings = state.app_settings.lock().await.clone();
+    wake_codex_native_pet_core(&settings)
+}
+
+#[tauri::command]
+pub(crate) async fn import_codex_native_pet(
+    source_dir: String,
+    state: State<'_, AppState>,
+) -> Result<CodexNativePetState, String> {
+    let settings = state.app_settings.lock().await.clone();
+    import_codex_native_pet_core(&settings, &source_dir)
 }
 
 fn should_reset_remote_backend(previous: &AppSettings, updated: &AppSettings) -> bool {

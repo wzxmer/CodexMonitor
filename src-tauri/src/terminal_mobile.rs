@@ -66,3 +66,8 @@ pub(crate) async fn terminal_open_external(
 ) -> Result<(), String> {
     Err(UNSUPPORTED_MESSAGE.to_string())
 }
+
+#[tauri::command]
+pub(crate) async fn get_system_terminal_font() -> Result<Option<String>, String> {
+    Ok(None)
+}

@@ -29,6 +29,7 @@ struct UsageTotals {
 }
 
 const MAX_ACTIVITY_GAP_MS: i64 = 2 * 60 * 1000;
+const ONE_HOUR_MS: i64 = 60 * 60 * 1000;
 
 pub(crate) async fn local_usage_snapshot_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
@@ -72,9 +73,17 @@ fn scan_local_usage(
         .map(|key| (key.clone(), DailyTotals::default()))
         .collect();
     let mut model_totals: HashMap<String, i64> = HashMap::new();
+    let mut rolling_hour_tokens = 0;
+    let rolling_hour_start_ms = updated_at - ONE_HOUR_MS;
 
     if sessions_roots.is_empty() {
-        return Ok(build_snapshot(updated_at, day_keys, daily, HashMap::new()));
+        return Ok(build_snapshot(
+            updated_at,
+            day_keys,
+            daily,
+            HashMap::new(),
+            rolling_hour_tokens,
+        ));
     }
 
     for root in sessions_roots {
@@ -92,12 +101,25 @@ fn scan_local_usage(
                 if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
                     continue;
                 }
-                scan_file(&path, &mut daily, &mut model_totals, workspace_path)?;
+                scan_file(
+                    &path,
+                    &mut daily,
+                    &mut model_totals,
+                    &mut rolling_hour_tokens,
+                    rolling_hour_start_ms,
+                    workspace_path,
+                )?;
             }
         }
     }
 
-    Ok(build_snapshot(updated_at, day_keys, daily, model_totals))
+    Ok(build_snapshot(
+        updated_at,
+        day_keys,
+        daily,
+        model_totals,
+        rolling_hour_tokens,
+    ))
 }
 
 fn build_snapshot(
@@ -105,6 +127,7 @@ fn build_snapshot(
     day_keys: Vec<String>,
     daily: HashMap<String, DailyTotals>,
     model_totals: HashMap<String, i64>,
+    rolling_hour_tokens: i64,
 ) -> LocalUsageSnapshot {
     let mut days: Vec<LocalUsageDay> = Vec::with_capacity(day_keys.len());
     let mut total_tokens = 0;
@@ -168,6 +191,7 @@ fn build_snapshot(
         updated_at,
         days,
         totals: LocalUsageTotals {
+            last_hour_tokens: rolling_hour_tokens,
             last7_days_tokens: last7_tokens,
             last30_days_tokens: total_tokens,
             average_daily_tokens,
@@ -183,6 +207,8 @@ fn scan_file(
     path: &Path,
     daily: &mut HashMap<String, DailyTotals>,
     model_totals: &mut HashMap<String, i64>,
+    rolling_hour_tokens: &mut i64,
+    rolling_hour_start_ms: i64,
     workspace_path: Option<&Path>,
 ) -> Result<(), String> {
     let file = match File::open(path) {
@@ -365,6 +391,9 @@ fn scan_file(
                     entry.input += delta.input;
                     entry.cached += cached;
                     entry.output += delta.output;
+                    if timestamp_ms.is_some_and(|ms| ms >= rolling_hour_start_ms) {
+                        *rolling_hour_tokens += delta.input + delta.output;
+                    }
 
                     let model = current_model
                         .clone()
@@ -645,7 +674,16 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
-        scan_file(&path, &mut daily, &mut model_totals, None).expect("scan file");
+        let mut rolling_hour_tokens = 0;
+        scan_file(
+            &path,
+            &mut daily,
+            &mut model_totals,
+            &mut rolling_hour_tokens,
+            0,
+            None,
+        )
+        .expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.input, 10);
@@ -663,7 +701,16 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
-        scan_file(&path, &mut daily, &mut model_totals, None).expect("scan file");
+        let mut rolling_hour_tokens = 0;
+        scan_file(
+            &path,
+            &mut daily,
+            &mut model_totals,
+            &mut rolling_hour_tokens,
+            0,
+            None,
+        )
+        .expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.input, 20);
@@ -682,11 +729,51 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
-        scan_file(&path, &mut daily, &mut model_totals, None).expect("scan file");
+        let mut rolling_hour_tokens = 0;
+        scan_file(
+            &path,
+            &mut daily,
+            &mut model_totals,
+            &mut rolling_hour_tokens,
+            0,
+            None,
+        )
+        .expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.input, 12);
         assert_eq!(totals.output, 6);
+    }
+
+    #[test]
+    fn scan_file_tracks_tokens_in_recent_hour() {
+        let day_key = "2026-01-19";
+        let path = write_temp_jsonl(&[
+            r#"{"timestamp":"2026-01-19T11:00:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":0,"output_tokens":5}}}}"#,
+            r#"{"timestamp":"2026-01-19T12:00:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":20,"cached_input_tokens":0,"output_tokens":10}}}}"#,
+        ]);
+
+        let mut daily: HashMap<String, DailyTotals> = HashMap::new();
+        daily.insert(day_key.to_string(), DailyTotals::default());
+        let mut model_totals: HashMap<String, i64> = HashMap::new();
+        let mut rolling_hour_tokens = 0;
+        let rolling_hour_start_ms = DateTime::parse_from_rfc3339("2026-01-19T11:30:00.000Z")
+            .expect("parse timestamp")
+            .timestamp_millis();
+        scan_file(
+            &path,
+            &mut daily,
+            &mut model_totals,
+            &mut rolling_hour_tokens,
+            rolling_hour_start_ms,
+            None,
+        )
+        .expect("scan file");
+
+        let totals = daily.get(day_key).copied().unwrap_or_default();
+        assert_eq!(totals.input, 30);
+        assert_eq!(totals.output, 15);
+        assert_eq!(rolling_hour_tokens, 30);
     }
 
     #[test]
@@ -700,7 +787,16 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
-        scan_file(&path, &mut daily, &mut model_totals, None).expect("scan file");
+        let mut rolling_hour_tokens = 0;
+        scan_file(
+            &path,
+            &mut daily,
+            &mut model_totals,
+            &mut rolling_hour_tokens,
+            0,
+            None,
+        )
+        .expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.agent_ms, 5_000);
@@ -717,7 +813,16 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
-        scan_file(&path, &mut daily, &mut model_totals, None).expect("scan file");
+        let mut rolling_hour_tokens = 0;
+        scan_file(
+            &path,
+            &mut daily,
+            &mut model_totals,
+            &mut rolling_hour_tokens,
+            0,
+            None,
+        )
+        .expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.agent_runs, 2);
@@ -735,7 +840,16 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
-        scan_file(&path, &mut daily, &mut model_totals, None).expect("scan file");
+        let mut rolling_hour_tokens = 0;
+        scan_file(
+            &path,
+            &mut daily,
+            &mut model_totals,
+            &mut rolling_hour_tokens,
+            0,
+            None,
+        )
+        .expect("scan file");
 
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.agent_ms, 10_000);
@@ -753,10 +867,13 @@ mod tests {
         let mut daily: HashMap<String, DailyTotals> = HashMap::new();
         daily.insert(day_key.to_string(), DailyTotals::default());
         let mut model_totals: HashMap<String, i64> = HashMap::new();
+        let mut rolling_hour_tokens = 0;
         scan_file(
             &path,
             &mut daily,
             &mut model_totals,
+            &mut rolling_hour_tokens,
+            0,
             Some(Path::new("/tmp/other-project")),
         )
         .expect("scan file");

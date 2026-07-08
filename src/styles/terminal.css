@@ -11,7 +11,8 @@
   --terminal-foreground: var(--text-stronger);
   --terminal-cursor: var(--text-stronger);
   --terminal-selection: rgba(100, 200, 255, 0.25);
-  --terminal-font-family: var(--code-font-family);
+  --terminal-font-family: "Cascadia Mono", "Cascadia Code", "CaskaydiaCove Nerd Font",
+    "Cascadia Mono NF", Consolas, "Segoe UI Symbol", "Segoe UI Emoji", monospace;
 }
 
 .terminal-panel-resizer {

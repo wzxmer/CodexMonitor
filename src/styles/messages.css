@@ -60,6 +60,35 @@
   scroll-padding-bottom: 18px;
 }
 
+.messages-scroll-latest-button {
+  position: sticky;
+  bottom: 16px;
+  z-index: 7;
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  max-width: min(220px, 90%);
+  margin: -52px max(8px, calc((100% - var(--conversation-column-width, 1120px)) / 2)) 0 auto;
+  padding: 7px 12px;
+  border: 1px solid var(--cm-border-strong);
+  border-radius: 999px;
+  background: var(--messages-solid-panel);
+  color: var(--text-stronger);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.messages-scroll-latest-button:hover {
+  background: var(--messages-solid-control);
+}
+
 .main .messages-full {
   margin-top: calc(-1 * var(--main-topbar-height));
   padding-top: calc(14px + var(--main-topbar-height));
@@ -112,6 +141,19 @@
 
 .messages-toggle-pill {
   max-width: 100%;
+}
+
+.messages-history-notice {
+  align-self: center;
+  max-width: min(720px, 100%);
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--border-accent) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-accent-soft) 72%, transparent);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .messages-reading-segmented {
@@ -736,7 +778,11 @@
   border: 1px solid var(--cm-border-default);
   border-left: 5px solid var(--conversation-assistant-accent);
   border-radius: 16px;
-  background: var(--conversation-assistant-bg);
+  background: color-mix(
+    in srgb,
+    var(--conversation-assistant-bg) 92%,
+    var(--messages-solid-panel)
+  );
   box-shadow: 0 14px 30px rgba(47, 65, 96, 0.12);
   padding: 48px 18px 18px;
   line-height: 1.62;
@@ -815,6 +861,9 @@
 }
 
 .messages-reading-cli .tool-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-family: var(--code-font-family);
   font-size: 12px;
   flex: 1 1 auto;
@@ -828,7 +877,17 @@
   color: var(--messages-process-text);
 }
 
+.messages-reading-cli .tool-group-chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  color: var(--conversation-assistant-accent);
+}
+
 .messages-reading-cli .tool-group-summary {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--messages-process-text);
@@ -889,126 +948,6 @@
 .messages-reading-cli .tool-inline-detail,
 .messages-reading-cli .explore-inline-item {
   font-family: var(--code-font-family);
-}
-
-.messages-reading-codex .messages-inner {
-  width: min(100%, 840px);
-  gap: 16px;
-  padding-top: clamp(18px, 2.2vw, 34px);
-}
-
-.messages-reading-codex .message.user {
-  justify-content: flex-end;
-}
-
-.messages-reading-codex .message.user .bubble {
-  width: fit-content;
-  max-width: min(70%, 620px);
-  padding: 7px 13px;
-  border: none;
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--conversation-user-color) 76%, var(--messages-solid-panel));
-  color: var(--conversation-user-text);
-  box-shadow: none;
-}
-
-.messages-reading-codex .message.assistant {
-  justify-content: flex-start;
-}
-
-.messages-reading-codex .message.assistant .bubble {
-  width: 100%;
-  max-width: 100%;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: var(--conversation-assistant-text);
-}
-
-.messages-reading-codex .message.assistant .markdown {
-  max-width: 100%;
-  line-height: 1.68;
-  color: var(--conversation-assistant-text);
-}
-
-.messages-reading-codex .message.assistant .bubble:hover,
-.messages-reading-codex .message.assistant .bubble:focus-within {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-}
-
-.messages-reading-codex .message-copy-button,
-.messages-reading-codex .message-quote-button,
-.messages-reading-codex .message-edit-button {
-  bottom: -16px;
-  background: var(--messages-solid-panel);
-}
-
-.messages-reading-codex .tool-group {
-  margin: -2px 0 0;
-  max-width: 100%;
-}
-
-.messages-reading-codex .tool-group-toggle {
-  min-height: 26px;
-  padding: 3px 4px;
-  border: none;
-  background: var(--messages-process-bg);
-  color: var(--messages-process-text);
-  box-shadow: none;
-}
-
-.messages-reading-codex .tool-group-toggle:hover {
-  color: var(--messages-process-text-soft);
-  background: var(--messages-solid-control);
-}
-
-.messages-reading-codex .tool-group-summary {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--messages-process-text);
-}
-
-.messages-reading-codex .tool-group-body {
-  margin-top: 8px;
-  padding-left: 18px;
-  border-left: 1px solid var(--messages-process-border);
-}
-
-.messages-reading-codex .tool-inline {
-  border: none;
-  border-radius: 8px;
-  background: var(--messages-process-bg);
-  box-shadow: none;
-  color: var(--messages-process-text);
-}
-
-.messages-reading-codex .tool-inline.tool-inline-row,
-.messages-reading-codex .tool-inline.explore-inline,
-.messages-reading-codex .tool-inline.reasoning-inline,
-.messages-reading-codex .tool-inline.user-input-inline {
-  padding: 6px 10px 6px 34px;
-}
-
-.messages-reading-codex .tool-inline-icon,
-.messages-reading-codex .tool-inline-dot {
-  display: none !important;
-}
-
-.messages-reading-codex .tool-inline .tool-inline-bar-toggle {
-  left: 4px;
-  top: 6px;
-}
-
-.messages-reading-codex .working {
-  border: none;
-  background: transparent;
-  padding-left: 0;
-  color: var(--messages-process-text);
 }
 
 .message-image-grid {
@@ -1836,22 +1775,6 @@
 .tool-inline-bar-toggle:hover,
 .tool-group-toggle:hover {
   color: var(--text-muted);
-}
-
-.messages-reading-codex .tool-inline,
-.messages-reading-codex .tool-inline.tool-inline-row,
-.messages-reading-codex .tool-inline.explore-inline,
-.messages-reading-codex .tool-inline.reasoning-inline,
-.messages-reading-codex .tool-inline.user-input-inline {
-  background: var(--messages-process-bg);
-}
-
-.messages-reading-codex .tool-group-toggle {
-  width: fit-content;
-}
-
-.messages-reading-codex .tool-inline-command {
-  background: var(--messages-solid-control);
 }
 
 @media (max-width: 720px) {

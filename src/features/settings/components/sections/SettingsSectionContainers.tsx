@@ -8,6 +8,7 @@ import { SettingsGitSection } from "./SettingsGitSection";
 import { SettingsOpenAppsSection } from "./SettingsOpenAppsSection";
 import { SettingsProjectsSection } from "./SettingsProjectsSection";
 import { SettingsServerSection } from "./SettingsServerSection";
+import { SettingsSessionSection } from "./SettingsSessionSection";
 import { SettingsShortcutsSection } from "./SettingsShortcutsSection";
 import { SettingsAgentsSection } from "./SettingsAgentsSection";
 import { SettingsAboutSection } from "./SettingsAboutSection";
@@ -28,6 +29,9 @@ export function SettingsSectionContainers({
   }
   if (activeSection === "environments") {
     return <SettingsEnvironmentsSection {...orchestration.environmentsSectionProps} />;
+  }
+  if (activeSection === "session") {
+    return <SettingsSessionSection {...orchestration.sessionSectionProps} />;
   }
   if (activeSection === "display") {
     return <SettingsDisplaySection {...orchestration.displaySectionProps} />;

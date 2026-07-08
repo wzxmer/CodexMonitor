@@ -1,11 +1,10 @@
 import {
   useEffect,
   useState,
-  type CSSProperties,
   type Dispatch,
   type SetStateAction,
 } from "react";
-import type { AppSettings } from "@/types";
+import type { AppSettings, CodexNativePetState } from "@/types";
 import {
   CODE_FONT_SIZE_MAX,
   CODE_FONT_SIZE_MIN,
@@ -29,17 +28,16 @@ import {
   UI_FONT_WEIGHT_MIN,
   UI_LATIN_FONT_FAMILY_PRESETS,
 } from "@utils/fonts";
-import { listSystemFonts } from "@services/tauri";
+import {
+  getCodexNativePetState,
+  importCodexNativePet,
+  listSystemFonts,
+  setCodexNativePetEnabled,
+  setCodexNativePetSelected,
+  wakeCodexNativePet,
+} from "@services/tauri";
 import { open } from "@tauri-apps/plugin-dialog";
 
-import {
-  CHAT_SCROLLBACK_DEFAULT,
-  CHAT_SCROLLBACK_MAX,
-  CHAT_SCROLLBACK_MIN,
-  CHAT_SCROLLBACK_PRESETS,
-  clampChatScrollbackItems,
-  isChatScrollbackPreset,
-} from "@utils/chatScrollback";
 import {
   SettingsSection,
   SettingsToggleRow,
@@ -79,9 +77,6 @@ const STYLE_PRESETS: Array<{
   swatch: string;
   settings: Pick<
     AppSettings,
-    | "theme"
-    | "themeAccent"
-    | "messageReadingStyle"
     | "messageCanvasColor"
     | "messageUserBubbleColor"
     | "messageUserTextColor"
@@ -94,9 +89,6 @@ const STYLE_PRESETS: Array<{
     id: "native-white",
     swatch: "linear-gradient(135deg, #ffffff 0%, #ffffff 62%, #f28b3c 100%)",
     settings: {
-      theme: "light",
-      themeAccent: "codex",
-      messageReadingStyle: "codex",
       messageCanvasColor: "#ffffff",
       messageUserBubbleColor: "#fff7ed",
       messageUserTextColor: "#2e2118",
@@ -109,9 +101,6 @@ const STYLE_PRESETS: Array<{
     id: "native-light",
     swatch: "linear-gradient(135deg, #fffaf5 0%, #f4efe8 58%, #f28b3c 100%)",
     settings: {
-      theme: "light",
-      themeAccent: "codex",
-      messageReadingStyle: "codex",
       messageCanvasColor: "#fffaf5",
       messageUserBubbleColor: "#fff4e8",
       messageUserTextColor: "#332519",
@@ -124,9 +113,6 @@ const STYLE_PRESETS: Array<{
     id: "native-dark",
     swatch: "linear-gradient(135deg, #171513 0%, #25201b 62%, #f28b3c 100%)",
     settings: {
-      theme: "dark",
-      themeAccent: "codex",
-      messageReadingStyle: "codex",
       messageCanvasColor: "#12100e",
       messageUserBubbleColor: "#3a2617",
       messageUserTextColor: "#fff1df",
@@ -139,9 +125,6 @@ const STYLE_PRESETS: Array<{
     id: "cli-ember",
     swatch: "linear-gradient(135deg, #151719 0%, #24211d 58%, #ff9f43 100%)",
     settings: {
-      theme: "dark",
-      themeAccent: "orange",
-      messageReadingStyle: "cli",
       messageCanvasColor: "#111315",
       messageUserBubbleColor: "#3a2a1d",
       messageUserTextColor: "#fff3df",
@@ -186,30 +169,6 @@ const FONT_CLARITY_PRESETS: Array<{
     uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
     uiFontWeight: 400,
     messageFontWeight: 450,
-  },
-];
-
-type CodexPetId = NonNullable<AppSettings["codexPetId"]>;
-
-const CODEX_PET_OPTIONS: Array<{
-  id: Exclude<CodexPetId, "custom">;
-  title: string;
-  tone: string;
-}> = [
-  {
-    id: "codex",
-    title: "Codex",
-    tone: "linear-gradient(135deg, #f28b3c, #ffd4a3)",
-  },
-  {
-    id: "terminal",
-    title: "Terminal",
-    tone: "linear-gradient(135deg, #58d68d, #9af5c4)",
-  },
-  {
-    id: "review",
-    title: "Review",
-    tone: "linear-gradient(135deg, #7dadff, #c7d8ff)",
   },
 ];
 
@@ -296,21 +255,7 @@ export function SettingsDisplaySection({
     { value: "zh", label: t("language.zh") },
     { value: "en", label: t("language.en") },
   ] satisfies Array<{ value: AppSettings["appLanguage"]; label: string }>;
-  const scrollbackUnlimited = appSettings.chatHistoryScrollbackItems === null;
-  const [scrollbackDraft, setScrollbackDraft] = useState(() => {
-    const value = appSettings.chatHistoryScrollbackItems;
-    return typeof value === "number" && Number.isFinite(value)
-      ? String(value)
-      : String(CHAT_SCROLLBACK_DEFAULT);
-  });
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
-
-  useEffect(() => {
-    const value = appSettings.chatHistoryScrollbackItems;
-    if (typeof value === "number" && Number.isFinite(value)) {
-      setScrollbackDraft(String(value));
-    }
-  }, [appSettings.chatHistoryScrollbackItems]);
 
   useEffect(() => {
     let active = true;
@@ -361,121 +306,85 @@ export function SettingsDisplaySection({
       options.findIndex((candidate) => candidate.value === option.value) === index,
   );
 
-  const scrollbackPresetValue = (() => {
-    const value = appSettings.chatHistoryScrollbackItems;
-    if (typeof value === "number" && isChatScrollbackPreset(value)) {
-      return String(value);
-    }
-    return "custom";
-  })();
-  const codexPetId = appSettings.codexPetId ?? "codex";
-  const codexPetWakeVersion = appSettings.codexPetWakeVersion ?? 0;
-  const customPetAvailable = Boolean(appSettings.codexPetCustomImagePath);
+  const [nativePetState, setNativePetState] = useState<CodexNativePetState | null>(null);
+  const [nativePetError, setNativePetError] = useState<string | null>(null);
+  const [nativePetBusy, setNativePetBusy] = useState(false);
+  const selectedNativePetId =
+    nativePetState?.selectedAvatarId ?? appSettings.codexPetId ?? "codex";
 
-  const updateCodexPet = (next: Partial<AppSettings>) => {
+  const syncLegacyCodexPet = (state: CodexNativePetState) => {
     void onUpdateAppSettings({
       ...appSettings,
-      ...next,
-    });
-  };
-
-  const wakeCodexPet = () => {
-    updateCodexPet({
+      codexPetEnabled: state.enabled,
+      codexPetId: "custom",
+      codexPetCustomImagePath: state.petsDir,
       codexPetWakeVersion: Date.now(),
     });
   };
 
-  const refreshCodexPet = () => {
-    updateCodexPet({
-      codexPetWakeVersion: codexPetWakeVersion + 1,
+  const refreshNativePetState = async () => {
+    setNativePetError(null);
+    try {
+      const state = await getCodexNativePetState();
+      setNativePetState(state);
+      if (appSettings.codexPetEnabled !== state.enabled) {
+        syncLegacyCodexPet(state);
+      }
+    } catch (error) {
+      setNativePetError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  useEffect(() => {
+    void refreshNativePetState();
+  }, []);
+
+  const runNativePetAction = async (
+    action: () => Promise<CodexNativePetState>,
+    syncLegacy = true,
+  ) => {
+    setNativePetBusy(true);
+    setNativePetError(null);
+    try {
+      const nextState = await action();
+      setNativePetState(nextState);
+      if (syncLegacy) {
+        syncLegacyCodexPet(nextState);
+      }
+    } catch (error) {
+      setNativePetError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setNativePetBusy(false);
+    }
+  };
+
+  const toggleCodexPet = () => {
+    void runNativePetAction(() => setCodexNativePetEnabled(!nativePetState?.enabled));
+  };
+
+  const selectCodexPet = (avatarId: string) => {
+    void runNativePetAction(async () => {
+      const selected = await setCodexNativePetSelected(avatarId);
+      if (selected.enabled) {
+        return selected;
+      }
+      return setCodexNativePetEnabled(true);
     });
+  };
+
+  const wakeNativeCodexPet = () => {
+    void runNativePetAction(() => wakeCodexNativePet());
   };
 
   const importCodexPet = async () => {
     const selection = await open({
       multiple: false,
-      directory: false,
-      filters: [
-        {
-          name: "Image",
-          extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"],
-        },
-      ],
+      directory: true,
     });
     if (!selection || Array.isArray(selection)) {
       return;
     }
-    updateCodexPet({
-      codexPetId: "custom",
-      codexPetCustomImagePath: selection,
-      codexPetWakeVersion: Date.now(),
-    });
-  };
-
-  const commitScrollback = () => {
-    if (scrollbackUnlimited) {
-      return;
-    }
-    const trimmed = scrollbackDraft.trim();
-    const parsed = trimmed ? Number(trimmed) : Number.NaN;
-    if (!Number.isFinite(parsed)) {
-      const current = appSettings.chatHistoryScrollbackItems;
-      const fallback =
-        typeof current === "number" && Number.isFinite(current)
-          ? current
-          : CHAT_SCROLLBACK_DEFAULT;
-      setScrollbackDraft(String(fallback));
-      return;
-    }
-    const nextValue = clampChatScrollbackItems(parsed);
-    setScrollbackDraft(String(nextValue));
-    if (appSettings.chatHistoryScrollbackItems === nextValue) {
-      return;
-    }
-    void onUpdateAppSettings({
-      ...appSettings,
-      chatHistoryScrollbackItems: nextValue,
-    });
-  };
-
-  const toggleUnlimitedScrollback = () => {
-    const nextUnlimited = !scrollbackUnlimited;
-    if (nextUnlimited) {
-      void onUpdateAppSettings({
-        ...appSettings,
-        chatHistoryScrollbackItems: null,
-      });
-      return;
-    }
-    const trimmed = scrollbackDraft.trim();
-    const parsed = trimmed ? Number(trimmed) : Number.NaN;
-    const nextValue = Number.isFinite(parsed)
-      ? clampChatScrollbackItems(parsed)
-      : CHAT_SCROLLBACK_DEFAULT;
-    setScrollbackDraft(String(nextValue));
-    void onUpdateAppSettings({
-      ...appSettings,
-      chatHistoryScrollbackItems: nextValue,
-    });
-  };
-
-  const selectScrollbackPreset = (rawValue: string) => {
-    if (scrollbackUnlimited) {
-      return;
-    }
-    if (rawValue === "custom") {
-      return;
-    }
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed)) {
-      return;
-    }
-    const nextValue = clampChatScrollbackItems(parsed);
-    setScrollbackDraft(String(nextValue));
-    void onUpdateAppSettings({
-      ...appSettings,
-      chatHistoryScrollbackItems: nextValue,
-    });
+    void runNativePetAction(() => importCodexNativePet(selection));
   };
 
   const applyFontClarityPreset = (preset: (typeof FONT_CLARITY_PRESETS)[number]) => {
@@ -689,112 +598,6 @@ export function SettingsDisplaySection({
           }
         />
       </SettingsToggleRow>
-      <SettingsToggleRow
-        title={t("settings.display.autoTitleTitle")}
-        subtitle={t("settings.display.autoTitleSubtitle")}
-      >
-        <SettingsToggleSwitch
-          pressed={appSettings.threadTitleAutogenerationEnabled}
-          onClick={() =>
-            void onUpdateAppSettings({
-              ...appSettings,
-              threadTitleAutogenerationEnabled:
-                !appSettings.threadTitleAutogenerationEnabled,
-            })
-          }
-        />
-      </SettingsToggleRow>
-      <div className="settings-subsection-title">{t("settings.display.chat")}</div>
-      <div className="settings-subsection-subtitle">
-        {t("settings.display.chatSubtitle")}
-      </div>
-      <SettingsToggleRow
-        title={t("settings.display.unlimitedHistoryTitle")}
-        subtitle={t("settings.display.unlimitedHistorySubtitle")}
-      >
-        <SettingsToggleSwitch
-          pressed={scrollbackUnlimited}
-          onClick={toggleUnlimitedScrollback}
-          data-scrollback-control="true"
-        />
-      </SettingsToggleRow>
-      <div className="settings-field">
-        <label className="settings-field-label" htmlFor="chat-scrollback-preset">
-          {t("settings.display.historyPreset")}
-        </label>
-        <select
-          id="chat-scrollback-preset"
-          className="settings-select"
-          value={scrollbackPresetValue}
-          onChange={(event) => selectScrollbackPreset(event.target.value)}
-          data-scrollback-control="true"
-          disabled={scrollbackUnlimited}
-        >
-          <option value="custom">{t("common.custom")}</option>
-          {CHAT_SCROLLBACK_PRESETS.map((value) => (
-            <option key={value} value={value}>
-              {value === CHAT_SCROLLBACK_DEFAULT
-                ? t("settings.display.defaultValue").replace("{value}", String(value))
-                : value}
-            </option>
-          ))}
-        </select>
-        <div className="settings-help">
-          {t("settings.display.historyPresetHelp")}
-        </div>
-      </div>
-      <div className="settings-field">
-        <label className="settings-field-label" htmlFor="chat-scrollback-items">
-          {t("settings.display.maxEntries")}
-        </label>
-        <div className="settings-field-row">
-          <input
-            id="chat-scrollback-items"
-            type="text"
-            inputMode="numeric"
-            className="settings-input"
-            value={scrollbackDraft}
-            disabled={scrollbackUnlimited}
-            onChange={(event) => setScrollbackDraft(event.target.value)}
-            onBlur={(event) => {
-              const nextTarget = event.relatedTarget;
-              if (
-                nextTarget instanceof HTMLElement &&
-                nextTarget.dataset.scrollbackControl === "true"
-              ) {
-                return;
-              }
-              commitScrollback();
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commitScrollback();
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="ghost settings-button-compact"
-            data-scrollback-control="true"
-            disabled={scrollbackUnlimited}
-            onClick={() => {
-              setScrollbackDraft(String(CHAT_SCROLLBACK_DEFAULT));
-              void onUpdateAppSettings({
-                ...appSettings,
-                chatHistoryScrollbackItems: CHAT_SCROLLBACK_DEFAULT,
-              });
-            }}
-          >
-            {t("common.reset")}
-          </button>
-        </div>
-        <div className="settings-help">
-          {t("settings.display.maxEntriesHelp")
-            .replace("{min}", String(CHAT_SCROLLBACK_MIN))
-            .replace("{max}", String(CHAT_SCROLLBACK_MAX))}
-        </div>
-      </div>
       <SettingsToggleRow
         title={t("settings.display.reduceTransparencyTitle")}
         subtitle={t("settings.display.reduceTransparencySubtitle")}
@@ -1218,48 +1021,47 @@ export function SettingsDisplaySection({
         subtitle={t("settings.display.codexPetSubtitle")}
       >
         <SettingsToggleSwitch
-          pressed={Boolean(appSettings.codexPetEnabled)}
-          onClick={() =>
-            void onUpdateAppSettings({
-              ...appSettings,
-              codexPetEnabled: !appSettings.codexPetEnabled,
-            })
-          }
+          pressed={Boolean(nativePetState?.enabled)}
+          disabled={nativePetBusy}
+          onClick={toggleCodexPet}
         />
       </SettingsToggleRow>
       <div className="settings-codex-pet-panel">
+        <div className="settings-help">
+          {nativePetState
+            ? `${nativePetState.pets.length} pets · ${nativePetState.petsDir}`
+            : t("common.loading")}
+        </div>
+        {nativePetError ? (
+          <div className="settings-help settings-error-text">{nativePetError}</div>
+        ) : null}
         <div
           className="settings-codex-pet-options"
           role="radiogroup"
           aria-label={t("settings.display.codexPetChoice")}
         >
-          {CODEX_PET_OPTIONS.map((pet) => (
+          {(nativePetState?.pets ?? []).map((pet) => (
             <button
               key={pet.id}
               type="button"
               role="radio"
-              aria-checked={codexPetId === pet.id}
+              aria-checked={selectedNativePetId === pet.id}
               className={`settings-codex-pet-option ${
-                codexPetId === pet.id ? "is-selected" : ""
+                selectedNativePetId === pet.id ? "is-selected" : ""
               }`}
-              onClick={() =>
-                updateCodexPet({
-                  codexPetId: pet.id,
-                  codexPetWakeVersion: Date.now(),
-                })
-              }
+              disabled={nativePetBusy}
+              onClick={() => selectCodexPet(pet.id)}
             >
               <span
-                className={`settings-codex-pet-avatar settings-codex-pet-avatar--${pet.id}`}
-                style={{ "--pet-tone": pet.tone } as CSSProperties}
+                className="settings-codex-pet-avatar settings-codex-pet-avatar--custom"
                 aria-hidden
               >
                 <span />
               </span>
               <span className="settings-codex-pet-copy">
-                <span className="settings-codex-pet-title">{pet.title}</span>
+                <span className="settings-codex-pet-title">{pet.displayName}</span>
                 <span className="settings-codex-pet-subtitle">
-                  {t(`settings.display.codexPet.${pet.id}.subtitle` as any)}
+                  {pet.id}
                 </span>
               </span>
             </button>
@@ -1267,18 +1069,10 @@ export function SettingsDisplaySection({
           <button
             type="button"
             role="radio"
-            aria-checked={codexPetId === "custom"}
-            className={`settings-codex-pet-option ${
-              codexPetId === "custom" ? "is-selected" : ""
-            }`}
-            onClick={() =>
-              customPetAvailable
-                ? updateCodexPet({
-                    codexPetId: "custom",
-                    codexPetWakeVersion: Date.now(),
-                  })
-                : void importCodexPet()
-            }
+            aria-checked={false}
+            className="settings-codex-pet-option"
+            disabled={nativePetBusy}
+            onClick={() => void importCodexPet()}
           >
             <span
               className="settings-codex-pet-avatar settings-codex-pet-avatar--custom"
@@ -1291,40 +1085,38 @@ export function SettingsDisplaySection({
                 {t("settings.display.importPet")}
               </span>
               <span className="settings-codex-pet-subtitle">
-                {customPetAvailable
-                  ? t("settings.display.useCustomImage")
-                  : t("settings.display.petFormats")}
+                pet.json + spritesheet.webp
               </span>
             </span>
           </button>
         </div>
-        {appSettings.codexPetCustomImagePath && (
+        {nativePetState?.selectedAvatarId && (
           <div className="settings-help settings-codex-pet-path">
-            {t("settings.display.importedPetPath").replace(
-              "{path}",
-              appSettings.codexPetCustomImagePath,
-            )}
+            selected-avatar-id: {nativePetState.selectedAvatarId}
           </div>
         )}
         <div className="settings-sound-actions">
           <button
             type="button"
             className="ghost settings-button-compact"
-          onClick={wakeCodexPet}
+            disabled={nativePetBusy}
+            onClick={wakeNativeCodexPet}
           >
             {t("settings.display.wakePet")}
           </button>
           <button
             type="button"
             className="ghost settings-button-compact"
-          onClick={refreshCodexPet}
+            disabled={nativePetBusy}
+            onClick={() => void refreshNativePetState()}
           >
             {t("common.refresh")}
           </button>
           <button
             type="button"
             className="ghost settings-button-compact"
-          onClick={() => void importCodexPet()}
+            disabled={nativePetBusy}
+            onClick={() => void importCodexPet()}
           >
             {t("settings.display.importPetAction")}
           </button>

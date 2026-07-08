@@ -10,6 +10,7 @@ import {
 } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { AppSettings, WorkspaceInfo } from "@/types";
 import {
   connectWorkspace,
@@ -28,6 +29,10 @@ import { SettingsView } from "./SettingsView";
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   ask: vi.fn(),
   open: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: vi.fn(),
 }));
 
 vi.mock("@services/tauri", async () => {
@@ -57,6 +62,7 @@ const getAgentsSettingsMock = vi.mocked(getAgentsSettings);
 const getCodexStatusMock = vi.mocked(getCodexStatus);
 const isMobileRuntimeMock = vi.mocked(isMobileRuntime);
 const listWorkspacesMock = vi.mocked(listWorkspaces);
+const openUrlMock = vi.mocked(openUrl);
 connectWorkspaceMock.mockResolvedValue(undefined);
 getAppBuildTypeMock.mockResolvedValue("release");
 getConfigModelMock.mockResolvedValue(null);
@@ -143,6 +149,8 @@ const baseSettings: AppSettings = {
   messageAssistantTextColor: "#263040",
   chatHistoryScrollbackItems: 200,
   threadTitleAutogenerationEnabled: false,
+  autoArchiveThreadsEnabled: false,
+  autoArchiveThreadsDays: 7,
   automaticAppUpdateChecksEnabled: true,
   uiFontFamily:
     'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
@@ -311,6 +319,49 @@ const renderComposerSection = (
     onCancelDictationDownload: vi.fn(),
     onRemoveDictationModel: vi.fn(),
     initialSection: "composer",
+  };
+
+  render(<SettingsView {...props} />);
+  return { onUpdateAppSettings };
+};
+
+const renderCodexSection = (
+  options: {
+    appSettings?: Partial<AppSettings>;
+    onUpdateAppSettings?: ComponentProps<typeof SettingsView>["onUpdateAppSettings"];
+  } = {},
+) => {
+  cleanup();
+  const onUpdateAppSettings =
+    options.onUpdateAppSettings ?? vi.fn().mockResolvedValue(undefined);
+  const props: ComponentProps<typeof SettingsView> = {
+    reduceTransparency: false,
+    onToggleTransparency: vi.fn(),
+    appSettings: { ...baseSettings, ...options.appSettings },
+    openAppIconById: {},
+    onUpdateAppSettings,
+    workspaceGroups: [],
+    groupedWorkspaces: [],
+    ungroupedLabel: "Ungrouped",
+    onClose: vi.fn(),
+    onMoveWorkspace: vi.fn(),
+    onDeleteWorkspace: vi.fn(),
+    onCreateWorkspaceGroup: vi.fn().mockResolvedValue(null),
+    onRenameWorkspaceGroup: vi.fn().mockResolvedValue(null),
+    onMoveWorkspaceGroup: vi.fn().mockResolvedValue(null),
+    onDeleteWorkspaceGroup: vi.fn().mockResolvedValue(null),
+    onAssignWorkspaceGroup: vi.fn().mockResolvedValue(null),
+    onRunDoctor: vi.fn().mockResolvedValue(createDoctorResult()),
+    onUpdateWorkspaceSettings: vi.fn().mockResolvedValue(undefined),
+    scaleShortcutTitle: "Scale shortcut",
+    scaleShortcutText: "Use Command +/-",
+    onTestNotificationSound: vi.fn(),
+    onTestSystemNotification: vi.fn(),
+    dictationModelStatus: null,
+    onDownloadDictationModel: vi.fn(),
+    onCancelDictationDownload: vi.fn(),
+    onRemoveDictationModel: vi.fn(),
+    initialSection: "codex",
   };
 
   render(<SettingsView {...props} />);
@@ -548,7 +599,41 @@ const renderEnvironmentsSection = (
   };
 };
 
+describe("SettingsView About", () => {
+  it("shows localized update source text and opens the project repository", async () => {
+    openUrlMock.mockClear();
+
+    renderAboutSection();
+
+    expect(
+      screen.getByText(
+        "启用后，汉化版 CodexMonitor 启动时会检查新版本。更新来源为项目 GitHub Releases。",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("项目仓库：")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "https://github.com/wzxmer/CodexMonitor",
+      }),
+    );
+
+    expect(openUrlMock).toHaveBeenCalledWith(
+      "https://github.com/wzxmer/CodexMonitor",
+    );
+  });
+});
+
 describe("SettingsView Display", () => {
+  it("opens the session section from the settings navigation", async () => {
+    renderDisplaySection();
+
+    fireEvent.click(screen.getByRole("button", { name: "会话" }));
+
+    expect(screen.getByText("管理会话生命周期、标题和历史加载。")).toBeTruthy();
+    expect(screen.getByText("自动归档旧会话")).toBeTruthy();
+  });
+
   it("updates the app language preference", async () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
@@ -1566,6 +1651,20 @@ describe("SettingsView Codex section", () => {
 describe("SettingsView Codex defaults", () => {
   const createModelListResponse = (models: Array<Record<string, unknown>>) => ({
     result: { data: models },
+  });
+
+  it("explains that key profiles only affect CodexMonitor-launched sessions", () => {
+    renderCodexSection();
+
+    expect((screen.getByLabelText("Key 配置") as HTMLSelectElement).value).toBe(
+      "__codex_default__",
+    );
+    expect(screen.getByText("使用 Codex 默认配置")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /仅对 CodexMonitor 启动的会话注入 API key，不会修改本机 Codex 配置/,
+      ),
+    ).toBeTruthy();
   });
 
   it("uses the latest model and medium effort by default (no Default option)", async () => {

@@ -4,31 +4,35 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 use tauri::image::Image;
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 use tauri::menu::{IsMenuItem, Menu, MenuEvent, MenuItemBuilder, PredefinedMenuItem, Submenu};
-#[cfg(target_os = "macos")]
-use tauri::tray::TrayIconBuilder;
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+#[cfg(desktop)]
 use tauri::{Emitter, Manager, Runtime};
 
 const RECENT_THREADS_SECTION_LIMIT: usize = 3;
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 const TRAY_ID: &str = "codex-monitor-tray";
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
+const TRAY_OPEN_ID: &str = "tray_open";
+#[cfg(desktop)]
+const TRAY_HIDE_ID: &str = "tray_hide";
+#[cfg(desktop)]
 const TRAY_QUIT_ID: &str = "tray_quit";
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 const TRAY_RECENT_HEADER_ID: &str = "tray_recent_header";
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 const TRAY_EMPTY_ID: &str = "tray_recent_empty";
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 const TRAY_WORKSPACES_HEADER_ID: &str = "tray_workspaces_header";
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 const TRAY_USAGE_HEADER_ID: &str = "tray_usage_header";
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 const TRAY_USAGE_SESSION_ID: &str = "tray_usage_session";
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 const TRAY_USAGE_WEEKLY_ID: &str = "tray_usage_weekly";
 pub(crate) const TRAY_OPEN_THREAD_EVENT: &str = "tray-open-thread";
 
@@ -81,7 +85,7 @@ pub(crate) fn set_tray_recent_threads<R: tauri::Runtime>(
         *tray_threads = normalized;
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(desktop)]
     update_tray_menu(&app, &state)?;
 
     Ok(())
@@ -105,31 +109,42 @@ pub(crate) fn set_tray_session_usage<R: tauri::Runtime>(
         *session_usage = normalized;
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(desktop)]
     update_tray_menu(&app, &state)?;
 
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 pub(crate) fn initialize<R: Runtime>(
     app: &tauri::AppHandle<R>,
     state: &TrayState,
 ) -> tauri::Result<()> {
     let menu = build_tray_menu(app, state)?;
+    #[cfg(target_os = "macos")]
     let builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
         .tooltip("Codex Monitor")
-        .show_menu_on_left_click(true)
+        .show_menu_on_left_click(false)
         .icon(load_tray_icon()?)
         .icon_as_template(true)
+        .on_tray_icon_event(handle_tray_icon_event::<R>)
+        .on_menu_event(handle_tray_menu_event::<R>);
+
+    #[cfg(not(target_os = "macos"))]
+    let builder = TrayIconBuilder::with_id(TRAY_ID)
+        .menu(&menu)
+        .tooltip("Codex Monitor")
+        .show_menu_on_left_click(false)
+        .icon(load_tray_icon()?)
+        .on_tray_icon_event(handle_tray_icon_event::<R>)
         .on_menu_event(handle_tray_menu_event::<R>);
 
     builder.build(app)?;
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(desktop))]
 pub(crate) fn initialize<R: tauri::Runtime>(
     _app: &tauri::AppHandle<R>,
     _state: &TrayState,
@@ -309,7 +324,7 @@ fn normalize_session_usage(usage: Option<TraySessionUsage>) -> Option<TraySessio
     })
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 fn update_tray_menu<R: Runtime>(
     app: &tauri::AppHandle<R>,
     state: &TrayState,
@@ -321,7 +336,7 @@ fn update_tray_menu<R: Runtime>(
     tray.set_menu(Some(menu)).map_err(|error| error.to_string())
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 fn build_tray_menu<R: Runtime>(
     app: &tauri::AppHandle<R>,
     state: &TrayState,
@@ -342,6 +357,13 @@ fn build_tray_menu<R: Runtime>(
     if let Ok(mut targets) = state.thread_targets_by_menu_id.lock() {
         *targets = collect_thread_menu_targets(&thread_sections);
     }
+
+    let open_item = MenuItemBuilder::with_id(TRAY_OPEN_ID, "Open Codex Monitor").build(app)?;
+    menu.append(&open_item)?;
+    let hide_item = MenuItemBuilder::with_id(TRAY_HIDE_ID, "Hide Window").build(app)?;
+    menu.append(&hide_item)?;
+    let window_separator = PredefinedMenuItem::separator(app)?;
+    menu.append(&window_separator)?;
 
     let recent_header = MenuItemBuilder::with_id(TRAY_RECENT_HEADER_ID, "Recent Threads")
         .enabled(false)
@@ -381,7 +403,7 @@ fn build_tray_menu<R: Runtime>(
     Ok(menu)
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 fn append_thread_menu_items<R: Runtime>(
     app: &tauri::AppHandle<R>,
     menu: &Menu<R>,
@@ -394,7 +416,7 @@ fn append_thread_menu_items<R: Runtime>(
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 fn append_workspace_submenus<R: Runtime>(
     app: &tauri::AppHandle<R>,
     menu: &Menu<R>,
@@ -416,7 +438,7 @@ fn append_workspace_submenus<R: Runtime>(
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 fn build_usage_menu_items<R: Runtime>(
     app: &tauri::AppHandle<R>,
     usage: Option<&TraySessionUsage>,
@@ -453,9 +475,11 @@ fn build_usage_menu_labels(usage: Option<&TraySessionUsage>) -> (String, String,
     )
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 fn handle_tray_menu_event<R: Runtime>(app: &tauri::AppHandle<R>, event: MenuEvent) {
     match event.id().as_ref() {
+        TRAY_OPEN_ID => show_main_window(app),
+        TRAY_HIDE_ID => hide_main_window(app),
         TRAY_QUIT_ID => app.exit(0),
         id => {
             let state = app.state::<TrayState>();
@@ -472,7 +496,21 @@ fn handle_tray_menu_event<R: Runtime>(app: &tauri::AppHandle<R>, event: MenuEven
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
+fn handle_tray_icon_event<R: Runtime>(tray: &tauri::tray::TrayIcon<R>, event: TrayIconEvent) {
+    if matches!(
+        event,
+        TrayIconEvent::Click {
+            button: MouseButton::Left,
+            button_state: MouseButtonState::Up,
+            ..
+        }
+    ) {
+        toggle_main_window(&tray.app_handle());
+    }
+}
+
+#[cfg(desktop)]
 fn show_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -481,7 +519,28 @@ fn show_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
+fn hide_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+}
+
+#[cfg(desktop)]
+fn toggle_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let is_visible = window.is_visible().unwrap_or(false);
+        if is_visible {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+#[cfg(desktop)]
 fn emit_open_thread_event<R: Runtime>(app: &tauri::AppHandle<R>, payload: TrayOpenThreadPayload) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.emit(TRAY_OPEN_THREAD_EVENT, payload);
@@ -490,7 +549,7 @@ fn emit_open_thread_event<R: Runtime>(app: &tauri::AppHandle<R>, payload: TrayOp
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(desktop)]
 fn load_tray_icon() -> tauri::Result<Image<'static>> {
     Image::from_bytes(include_bytes!("../icons/tray-icon.png")).map(|image| image.to_owned())
 }

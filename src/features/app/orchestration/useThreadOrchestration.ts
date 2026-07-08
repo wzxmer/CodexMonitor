@@ -96,7 +96,10 @@ type UseThreadUiOrchestrationParams = {
   selectedCollaborationModeId: string | null;
   selectedCodexArgsOverride?: string | null;
   pendingNewThreadSeedRef: MutableRefObject<PendingNewThreadSeed | null>;
-  runWithDraftStart: (runner: () => Promise<void>) => Promise<void>;
+  runWithDraftStart: (
+    runner: () => Promise<void>,
+    preview?: { text: string; images: string[] },
+  ) => Promise<void>;
   handleComposerSend: SendOrQueueHandler;
   clearDraftState: () => void;
   exitDiffView: () => void;
@@ -440,6 +443,7 @@ export function useThreadUiOrchestration({
         appMentions && appMentions.length > 0
           ? handleComposerSend(text, images, appMentions, submitIntent)
           : handleComposerSend(text, images, undefined, submitIntent),
+        { text, images },
       );
     },
     [handleComposerSend, rememberPendingNewThreadSeed, runWithDraftStart],

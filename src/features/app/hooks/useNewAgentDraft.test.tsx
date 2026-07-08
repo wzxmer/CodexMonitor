@@ -43,6 +43,40 @@ describe("useNewAgentDraft", () => {
     expect(result.current.startingDraftThreadWorkspaceId).toBeNull();
   });
 
+  it("exposes a temporary user message preview while a draft thread is starting", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+
+    const { result } = renderHook(() =>
+      useNewAgentDraft({
+        activeWorkspace: workspace,
+        activeWorkspaceId: workspace.id,
+        activeThreadId: null,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.runWithDraftStart(
+        async () => {
+          await Promise.resolve();
+        },
+        { text: "first draft message", images: ["image-a"] },
+      );
+    });
+
+    expect(result.current.startingDraftMessageByWorkspace[workspace.id]).toEqual({
+      text: "first draft message",
+      images: ["image-a"],
+      createdAt: 1_700_000_000_000,
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(4000);
+    });
+
+    expect(result.current.startingDraftMessageByWorkspace[workspace.id]).toBeUndefined();
+  });
+
   it("serializes draft-start sends and does not drop concurrent submits", async () => {
     let resolveRunner!: () => void;
     let callCount = 0;

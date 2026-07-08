@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, createEvent, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectOpenedFileTarget } from "../test/fileLinkAssertions";
 import { Markdown } from "./Markdown";
@@ -555,6 +555,55 @@ describe("Markdown file-like href behavior", () => {
     expect(container.querySelector(".markdown-table")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Name" })).toBeTruthy();
     expect(screen.getByText("Ready")).toBeTruthy();
+  });
+
+  it("copies code block content without markdown fences by default", async () => {
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <Markdown
+        value={["```text", "Build Installers", "event: push", "success", "```"].join("\n")}
+        className="markdown"
+        codeBlockStyle="message"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy code block" }));
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith("Build Installers\nevent: push\nsuccess");
+    });
+  });
+
+  it("copies code block markdown fences with Ctrl when modifier copy is enabled", async () => {
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <Markdown
+        value={["```text", "Build Installers", "event: push", "success", "```"].join("\n")}
+        className="markdown"
+        codeBlockStyle="message"
+        codeBlockCopyUseModifier
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy code block" }), {
+      ctrlKey: true,
+    });
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        "```text\nBuild Installers\nevent: push\nsuccess\n```",
+      );
+    });
   });
 
 });

@@ -4,6 +4,7 @@ import type {
   ComposerEditorSettings,
   ComposerSendShortcut,
   ComposerTriggerMode,
+  ConversationItem,
   WorkspaceInfo,
 } from "@/types";
 import type { ThreadState } from "@/features/threads/hooks/useThreadsReducer";
@@ -15,6 +16,7 @@ import type { useMainAppGitState } from "@app/hooks/useMainAppGitState";
 import type { useMainAppPromptActions } from "@app/hooks/useMainAppPromptActions";
 import type { useMainAppSidebarMenuOrchestration } from "@app/hooks/useMainAppSidebarMenuOrchestration";
 import type { useMainAppWorktreeState } from "@app/hooks/useMainAppWorktreeState";
+import type { StartingDraftMessagePreview } from "@app/hooks/useNewAgentDraft";
 import type { LayoutNodesOptions } from "@/features/layout/hooks/layoutNodes/types";
 import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 
@@ -22,6 +24,12 @@ type SidebarProps = LayoutNodesOptions["primary"]["sidebarProps"];
 type ComposerProps = NonNullable<LayoutNodesOptions["primary"]["composerProps"]>;
 type MainHeaderProps = NonNullable<LayoutNodesOptions["primary"]["mainHeaderProps"]>;
 type GitDiffPanelProps = LayoutNodesOptions["git"]["gitDiffPanelProps"];
+
+function countContextCompactions(items: ConversationItem[]) {
+  return items.filter(
+    (item) => item.kind === "tool" && item.toolType === "contextCompaction",
+  ).length;
+}
 
 type UseMainAppLayoutSurfacesArgs = {
   appSettings: AppSettings;
@@ -32,6 +40,7 @@ type UseMainAppLayoutSurfacesArgs = {
   deletingWorktreeIds: Set<string>;
   newAgentDraftWorkspaceId: string | null;
   startingDraftThreadWorkspaceId: string | null;
+  startingDraftMessageByWorkspace: Record<string, StartingDraftMessagePreview>;
   threadsByWorkspace: SidebarProps["threadsByWorkspace"];
   threadParentById: SidebarProps["threadParentById"];
   threadStatusById: ThreadState["threadStatusById"];
@@ -239,6 +248,7 @@ function buildPrimarySurface({
   deletingWorktreeIds,
   newAgentDraftWorkspaceId,
   startingDraftThreadWorkspaceId,
+  startingDraftMessageByWorkspace,
   threadsByWorkspace,
   threadParentById,
   threadStatusById,
@@ -376,6 +386,26 @@ function buildPrimarySurface({
   showDebugButton,
   handleDebugClick,
 }: MainAppLayoutSurfacesContext): LayoutNodesOptions["primary"] {
+  const startingDraftMessage =
+    !activeThreadId &&
+    activeWorkspaceId &&
+    startingDraftThreadWorkspaceId === activeWorkspaceId
+      ? startingDraftMessageByWorkspace[activeWorkspaceId]
+      : null;
+  const messagesItems: ConversationItem[] = startingDraftMessage
+    ? [
+        {
+          id: `draft-user-${startingDraftMessage.createdAt}`,
+          kind: "message",
+          role: "user",
+          text: startingDraftMessage.text,
+          createdAt: startingDraftMessage.createdAt,
+          images: startingDraftMessage.images,
+          attachments: [],
+        },
+      ]
+    : activeItems;
+
   return {
     sidebarProps: {
       workspaces,
@@ -439,7 +469,7 @@ function buildPrimarySurface({
       onWorkspaceDrop: workspaceDrop.onWorkspaceDrop,
     },
     messagesProps: {
-      items: activeItems,
+      items: messagesItems,
       threadId: activeThreadId ?? null,
       workspaceId: activeWorkspace?.id ?? null,
       workspacePath: activeWorkspace?.path ?? null,
@@ -459,6 +489,7 @@ function buildPrimarySurface({
       messageFontFamily: appSettings.messageFontFamily,
       messageFontSize: appSettings.messageFontSize,
       messageFontWeight: appSettings.messageFontWeight,
+      chatHistoryScrollbackItems: appSettings.chatHistoryScrollbackItems,
       interruptedStatus: activeThreadId
         ? interruptedThreadById[activeThreadId] ?? null
         : null,
@@ -503,6 +534,7 @@ function buildPrimarySurface({
           disabled: composerWorkspaceState.isReviewing,
           onFileAutocompleteActiveChange: composerWorkspaceState.setFileAutocompleteActive,
           contextUsage: activeTokenUsage,
+          contextCompactionCount: countContextCompactions(activeItems),
           queuedMessages: composerWorkspaceState.activeQueue,
           queuePausedReason: composerWorkspaceState.queuePausedReason,
           canSteerQueued: composerWorkspaceState.steerAvailable,
@@ -1003,6 +1035,7 @@ export function useMainAppLayoutSurfaces({
   deletingWorktreeIds,
   newAgentDraftWorkspaceId,
   startingDraftThreadWorkspaceId,
+  startingDraftMessageByWorkspace,
   threadsByWorkspace,
   threadParentById,
   threadStatusById,
@@ -1170,6 +1203,7 @@ export function useMainAppLayoutSurfaces({
     deletingWorktreeIds,
     newAgentDraftWorkspaceId,
     startingDraftThreadWorkspaceId,
+    startingDraftMessageByWorkspace,
     threadsByWorkspace,
     threadParentById,
     threadStatusById,

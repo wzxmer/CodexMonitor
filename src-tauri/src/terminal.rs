@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::Serialize;
+use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::Mutex;
 
@@ -101,6 +102,169 @@ fn find_executable_in_path(exe: &str) -> Option<String> {
         .map(|dir| dir.join(exe))
         .find(|candidate| candidate.exists())
         .map(|candidate| candidate.to_string_lossy().to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn strip_jsonc_comments(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    let mut in_string = false;
+    let mut escaped = false;
+    while let Some(ch) = chars.next() {
+        if in_string {
+            output.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        if ch == '"' {
+            in_string = true;
+            output.push(ch);
+            continue;
+        }
+        if ch == '/' && chars.peek() == Some(&'/') {
+            let _ = chars.next();
+            for next in chars.by_ref() {
+                if next == '\n' {
+                    output.push('\n');
+                    break;
+                }
+            }
+            continue;
+        }
+        if ch == '/' && chars.peek() == Some(&'*') {
+            let _ = chars.next();
+            let mut previous = '\0';
+            for next in chars.by_ref() {
+                if previous == '*' && next == '/' {
+                    break;
+                }
+                previous = next;
+            }
+            continue;
+        }
+        output.push(ch);
+    }
+    output
+}
+
+#[cfg(target_os = "windows")]
+fn strip_jsonc_trailing_commas(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    let mut in_string = false;
+    let mut escaped = false;
+    while let Some(ch) = chars.next() {
+        if in_string {
+            output.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        if ch == '"' {
+            in_string = true;
+            output.push(ch);
+            continue;
+        }
+        if ch == ',' {
+            let mut lookahead = chars.clone();
+            while matches!(lookahead.peek(), Some(next) if next.is_whitespace()) {
+                let _ = lookahead.next();
+            }
+            if matches!(lookahead.peek(), Some('}' | ']')) {
+                continue;
+            }
+        }
+        output.push(ch);
+    }
+    output
+}
+
+#[cfg(target_os = "windows")]
+fn read_windows_terminal_font_from_settings(settings: &str) -> Option<String> {
+    let normalized = strip_jsonc_trailing_commas(&strip_jsonc_comments(settings));
+    let value: Value = serde_json::from_str(&normalized).ok()?;
+    let profiles = value.get("profiles")?;
+    let defaults_font = profiles
+        .get("defaults")
+        .and_then(|defaults| defaults.get("font"))
+        .and_then(|font| font.get("face"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|font| !font.is_empty());
+    if defaults_font.is_some() {
+        return defaults_font.map(ToOwned::to_owned);
+    }
+
+    let default_profile = value
+        .get("defaultProfile")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|profile| !profile.is_empty())?;
+    profiles
+        .get("list")
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|profile| {
+            profile
+                .get("guid")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                == Some(default_profile)
+        })
+        .and_then(|profile| profile.get("font"))
+        .and_then(|font| font.get("face"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|font| !font.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_terminal_settings_candidates() -> Vec<PathBuf> {
+    let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") else {
+        return Vec::new();
+    };
+    let base = PathBuf::from(local_app_data);
+    vec![
+        base.join(r"Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"),
+        base.join(
+            r"Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
+        ),
+    ]
+}
+
+#[cfg(target_os = "windows")]
+fn read_windows_terminal_font() -> Option<String> {
+    windows_terminal_settings_candidates()
+        .into_iter()
+        .find_map(|path| std::fs::read_to_string(path).ok())
+        .and_then(|settings| read_windows_terminal_font_from_settings(&settings))
+}
+
+#[tauri::command]
+pub(crate) async fn get_system_terminal_font() -> Result<Option<String>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        return tokio::task::spawn_blocking(read_windows_terminal_font)
+            .await
+            .map_err(|e| format!("Terminal font read task failed: {e}"));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(None)
+    }
 }
 
 fn unix_shell_args() -> Vec<&'static str> {
@@ -489,7 +653,10 @@ pub(crate) async fn terminal_open_external(
 
 #[cfg(test)]
 mod tests {
-    use super::{unix_shell_args, windows_pwsh_candidates, windows_shell_args};
+    use super::{
+        read_windows_terminal_font_from_settings, unix_shell_args, windows_pwsh_candidates,
+        windows_shell_args,
+    };
 
     #[test]
     fn windows_shell_args_match_powershell_variants() {
@@ -531,6 +698,42 @@ mod tests {
         assert_eq!(
             windows_pwsh_candidates()[0],
             r"C:\Program Files\PowerShell\7\pwsh.exe"
+        );
+    }
+
+    #[test]
+    fn windows_terminal_font_prefers_profile_defaults() {
+        let settings = r#"
+        {
+          // jsonc comment
+          "profiles": {
+            "defaults": { "font": { "face": "Cascadia Mono" } },
+            "list": []
+          }
+        }
+        "#;
+        assert_eq!(
+            read_windows_terminal_font_from_settings(settings).as_deref(),
+            Some("Cascadia Mono")
+        );
+    }
+
+    #[test]
+    fn windows_terminal_font_reads_default_profile_font() {
+        let settings = r#"
+        {
+          "defaultProfile": "{pwsh}",
+          "profiles": {
+            "list": [
+              { "guid": "{cmd}", "font": { "face": "Consolas" } },
+              { "guid": "{pwsh}", "font": { "face": "CaskaydiaCove Nerd Font" } },
+            ],
+          },
+        }
+        "#;
+        assert_eq!(
+            read_windows_terminal_font_from_settings(settings).as_deref(),
+            Some("CaskaydiaCove Nerd Font")
         );
     }
 }

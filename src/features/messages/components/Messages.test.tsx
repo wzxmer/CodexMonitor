@@ -54,6 +54,29 @@ describe("Messages", () => {
     exportMarkdownFileMock.mockReset();
   });
 
+  it("shows a notice when loaded messages exceed the initial history limit", () => {
+    const items: ConversationItem[] = Array.from({ length: 3 }, (_, index) => ({
+      id: `msg-${index}`,
+      kind: "message",
+      role: "assistant",
+      text: `Message ${index}`,
+    }));
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        chatHistoryScrollbackItems={2}
+      />,
+    );
+
+    expect(screen.getByText(/超过初始加载上限 2 条/)).toBeTruthy();
+  });
+
   it("renders image grid above message text and opens lightbox", () => {
     const items: ConversationItem[] = [
       {
@@ -1883,10 +1906,7 @@ describe("Messages", () => {
     );
 
     expect(screen.queryByRole("button", { name: "舒适" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "原生" }));
-    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
-      messageReadingStyle: "codex",
-    });
+    expect(screen.queryByRole("button", { name: "原生" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "CLI" }));
 

@@ -59,7 +59,8 @@
   border-radius: 8px;
   background: var(--surface-item);
   color: var(--text-quiet);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .composer-queue-text {
@@ -688,7 +689,7 @@
   color: var(--text-stronger);
   border-radius: 999px;
   padding: 3px 9px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.2;
   cursor: pointer;
 }
@@ -716,8 +717,9 @@
 
 .composer-context-ring {
   --context-free: 0;
-  width: 20px;
-  height: 20px;
+  --context-ring-color: var(--border-accent);
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
   display: grid;
   place-items: center;
@@ -726,8 +728,7 @@
     radial-gradient(circle, var(--surface-context-core) 54%, transparent 56%),
     conic-gradient(
       from 180deg,
-      hsl(calc(120deg * var(--context-free) / 100), 80%, 55%)
-        calc(var(--context-free) * 1%),
+      var(--context-ring-color) calc(var(--context-free) * 1%),
       var(--border-strong) 0
     );
   transition: background 0.2s ease;
@@ -758,8 +759,13 @@
 
 .composer-context-value {
   font-weight: 600;
-  font-size: 6px;
+  font-size: 8.5px;
+  line-height: 1;
   color: var(--text-quiet);
+  font-variant-numeric: tabular-nums;
+  max-width: 18px;
+  overflow: hidden;
+  text-align: center;
 }
 
 

@@ -67,6 +67,7 @@ export function useMessagesViewState({
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [collapsedToolGroups, setCollapsedToolGroups] = useState<Set<string>>(new Set());
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const [dismissedPlanFollowupByThread, setDismissedPlanFollowupByThread] =
     useState<Record<string, string>>({});
 
@@ -82,7 +83,9 @@ export function useMessagesViewState({
     if (!containerRef.current) {
       return;
     }
-    autoScrollRef.current = isNearBottom(containerRef.current);
+    const nearBottom = isNearBottom(containerRef.current);
+    autoScrollRef.current = nearBottom;
+    setShowScrollToLatest(!nearBottom);
   }, [isNearBottom]);
 
   const requestAutoScroll = useCallback(() => {
@@ -94,10 +97,23 @@ export function useMessagesViewState({
     }
     if (container) {
       container.scrollTop = container.scrollHeight;
+      setShowScrollToLatest(false);
       return;
     }
     bottomRef.current?.scrollIntoView({ block: "end" });
+    setShowScrollToLatest(false);
   }, [isNearBottom]);
+
+  const scrollToLatest = useCallback(() => {
+    autoScrollRef.current = true;
+    const container = containerRef.current;
+    if (container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    } else {
+      bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+    }
+    setShowScrollToLatest(false);
+  }, []);
 
   useLayoutEffect(() => {
     autoScrollRef.current = true;
@@ -119,9 +135,11 @@ export function useMessagesViewState({
     }
     if (container) {
       container.scrollTop = container.scrollHeight;
+      setShowScrollToLatest(false);
       return;
     }
     bottomRef.current?.scrollIntoView({ block: "end" });
+    setShowScrollToLatest(false);
   }, [scrollKey, isThinking, isNearBottom, threadId]);
 
   useEffect(() => {
@@ -562,6 +580,8 @@ export function useMessagesViewState({
     containerRef,
     updateAutoScroll,
     requestAutoScroll,
+    showScrollToLatest,
+    scrollToLatest,
     expandedItems,
     toggleExpanded,
     collapsedToolGroups: isToolGroupsAutoCollapsed

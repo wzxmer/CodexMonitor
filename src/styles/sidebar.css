@@ -1289,6 +1289,13 @@
   background: var(--cm-surface-panel-strong);
 }
 
+.workspace-row.is-pinned {
+  border-color: rgba(255, 185, 92, 0.42);
+  box-shadow:
+    0 10px 24px rgba(255, 176, 72, 0.1),
+    inset 0 0 0 1px rgba(255, 185, 92, 0.14);
+}
+
 .thread-row.is-nested {
   margin-left: 2px;
   gap: 8px;

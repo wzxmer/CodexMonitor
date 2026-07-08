@@ -1,4 +1,5 @@
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
+import Archive from "lucide-react/dist/esm/icons/archive";
 import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
 import Mic from "lucide-react/dist/esm/icons/mic";
 import Keyboard from "lucide-react/dist/esm/icons/keyboard";
@@ -48,6 +49,15 @@ export function SettingsNav({
           onClick={() => onSelectSection("environments")}
         >
           {t(SETTINGS_SECTION_LABEL_KEYS.environments)}
+        </PanelNavItem>
+        <PanelNavItem
+          className="settings-nav"
+          icon={<Archive aria-hidden />}
+          active={activeSection === "session"}
+          showDisclosure={showDisclosure}
+          onClick={() => onSelectSection("session")}
+        >
+          {t(SETTINGS_SECTION_LABEL_KEYS.session)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"

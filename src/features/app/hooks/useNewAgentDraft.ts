@@ -4,6 +4,12 @@ import type { WorkspaceInfo } from "../../../types";
 const STARTING_DRAFT_CLEAR_MS = 1500;
 const STARTING_DRAFT_FALLBACK_MS = 4000;
 
+export type StartingDraftMessagePreview = {
+  text: string;
+  images: string[];
+  createdAt: number;
+};
+
 type UseNewAgentDraftOptions = {
   activeWorkspace: WorkspaceInfo | null;
   activeWorkspaceId: string | null;
@@ -23,6 +29,8 @@ export function useNewAgentDraft({
   const [startingDraftThreadWorkspaceId, setStartingDraftThreadWorkspaceId] = useState<
     string | null
   >(null);
+  const [startingDraftMessageByWorkspace, setStartingDraftMessageByWorkspace] =
+    useState<Record<string, StartingDraftMessagePreview>>({});
 
   const clearStartingTimeout = useCallback(() => {
     if (clearStartingTimeoutRef.current !== null) {
@@ -35,6 +43,7 @@ export function useNewAgentDraft({
     clearStartingTimeout();
     setNewAgentDraftWorkspaceId(null);
     setStartingDraftThreadWorkspaceId(null);
+    setStartingDraftMessageByWorkspace({});
   }, [clearStartingTimeout]);
 
   useEffect(() => () => clearStartingTimeout(), [clearStartingTimeout]);
@@ -46,6 +55,13 @@ export function useNewAgentDraft({
     }
     if (activeThreadId && newAgentDraftWorkspaceId === activeWorkspaceId) {
       setNewAgentDraftWorkspaceId(null);
+      setStartingDraftMessageByWorkspace((current) => {
+        if (!current[activeWorkspaceId]) {
+          return current;
+        }
+        const { [activeWorkspaceId]: _removed, ...rest } = current;
+        return rest;
+      });
       clearStartingTimeout();
       clearStartingTimeoutRef.current = window.setTimeout(() => {
         clearStartingTimeoutRef.current = null;
@@ -76,6 +92,13 @@ export function useNewAgentDraft({
     clearStartingTimeout();
     setNewAgentDraftWorkspaceId(workspaceId);
     setStartingDraftThreadWorkspaceId(null);
+    setStartingDraftMessageByWorkspace((current) => {
+      if (!current[workspaceId]) {
+        return current;
+      }
+      const { [workspaceId]: _removed, ...rest } = current;
+      return rest;
+    });
   }, [clearStartingTimeout]);
 
   const clearDraftStateIfDifferentWorkspace = useCallback(
@@ -88,7 +111,10 @@ export function useNewAgentDraft({
   );
 
   const runWithDraftStart = useCallback(
-    async (runner: () => Promise<void>) => {
+    async (
+      runner: () => Promise<void>,
+      preview?: { text: string; images: string[] },
+    ) => {
       const shouldMarkStarting = Boolean(activeWorkspace && !activeThreadId);
       const draftWorkspaceId = activeWorkspace?.id ?? null;
       if (shouldMarkStarting && draftWorkspaceId) {
@@ -99,6 +125,16 @@ export function useNewAgentDraft({
           })
           .then(async () => {
             setStartingDraftThreadWorkspaceId(draftWorkspaceId);
+            if (preview) {
+              setStartingDraftMessageByWorkspace((current) => ({
+                ...current,
+                [draftWorkspaceId]: {
+                  text: preview.text,
+                  images: [...preview.images],
+                  createdAt: Date.now(),
+                },
+              }));
+            }
             try {
               await runner();
               clearStartingTimeout();
@@ -107,12 +143,26 @@ export function useNewAgentDraft({
                 setStartingDraftThreadWorkspaceId((value) =>
                   value === draftWorkspaceId ? null : value,
                 );
+                setStartingDraftMessageByWorkspace((currentMessages) => {
+                  if (!currentMessages[draftWorkspaceId]) {
+                    return currentMessages;
+                  }
+                  const { [draftWorkspaceId]: _removed, ...rest } = currentMessages;
+                  return rest;
+                });
               }, STARTING_DRAFT_FALLBACK_MS);
             } catch (error) {
               clearStartingTimeout();
               setStartingDraftThreadWorkspaceId((value) =>
                 value === draftWorkspaceId ? null : value,
               );
+              setStartingDraftMessageByWorkspace((currentMessages) => {
+                if (!currentMessages[draftWorkspaceId]) {
+                  return currentMessages;
+                }
+                const { [draftWorkspaceId]: _removed, ...rest } = currentMessages;
+                return rest;
+              });
               throw error;
             }
           })
@@ -134,6 +184,7 @@ export function useNewAgentDraft({
   return {
     newAgentDraftWorkspaceId,
     startingDraftThreadWorkspaceId,
+    startingDraftMessageByWorkspace,
     isDraftModeForActiveWorkspace,
     startNewAgentDraft,
     clearDraftState,

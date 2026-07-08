@@ -17,6 +17,9 @@ type SidebarMenuHandlers = {
   onReloadWorkspaceThreads: (workspaceId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
+  isWorkspaceFolderPinned: (workspaceId: string) => boolean;
+  onPinWorkspaceFolder: (workspaceId: string) => void;
+  onUnpinWorkspaceFolder: (workspaceId: string) => void;
 };
 
 export function useSidebarMenus({
@@ -29,6 +32,9 @@ export function useSidebarMenus({
   onReloadWorkspaceThreads,
   onDeleteWorkspace,
   onDeleteWorktree,
+  isWorkspaceFolderPinned,
+  onPinWorkspaceFolder,
+  onUnpinWorkspaceFolder,
 }: SidebarMenuHandlers) {
   const showThreadMenu = useCallback(
     async (
@@ -101,16 +107,33 @@ export function useSidebarMenus({
         text: "重新加载会话",
         action: () => onReloadWorkspaceThreads(workspaceId),
       });
+      const isPinned = isWorkspaceFolderPinned(workspaceId);
+      const pinItem = await MenuItem.new({
+        text: isPinned ? "取消置顶" : "置顶",
+        action: () => {
+          if (isPinned) {
+            onUnpinWorkspaceFolder(workspaceId);
+            return;
+          }
+          onPinWorkspaceFolder(workspaceId);
+        },
+      });
       const deleteItem = await MenuItem.new({
         text: "删除",
         action: () => onDeleteWorkspace(workspaceId),
       });
-      const menu = await Menu.new({ items: [reloadItem, deleteItem] });
+      const menu = await Menu.new({ items: [reloadItem, pinItem, deleteItem] });
       const window = getCurrentWindow();
       const position = new LogicalPosition(event.clientX, event.clientY);
       await menu.popup(position, window);
     },
-    [onReloadWorkspaceThreads, onDeleteWorkspace],
+    [
+      isWorkspaceFolderPinned,
+      onDeleteWorkspace,
+      onPinWorkspaceFolder,
+      onReloadWorkspaceThreads,
+      onUnpinWorkspaceFolder,
+    ],
   );
 
   const showWorktreeMenu = useCallback(

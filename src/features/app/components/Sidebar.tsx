@@ -43,6 +43,7 @@ import { formatRelativeTimeShort } from "../../../utils/time";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
 
 const COLLAPSED_GROUPS_STORAGE_KEY = "codexmonitor.collapsedGroups";
+const PINNED_WORKSPACE_FOLDERS_STORAGE_KEY = "codexmonitor.pinnedWorkspaceFolders";
 const UNGROUPED_COLLAPSE_ID = "__ungrouped__";
 
 function normalizeLocalCodexSearchPath(path: string | null | undefined) {
@@ -120,6 +121,41 @@ function groupFlatThreadRowsByTimeBucket(
       label: bucketLabels[bucketId],
       rows: bucketMap.get(bucketId) ?? [],
     }));
+}
+
+type PinnedWorkspaceFoldersMap = Record<string, number>;
+
+function loadPinnedWorkspaceFolders(): PinnedWorkspaceFoldersMap {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  try {
+    const raw = window.localStorage.getItem(PINNED_WORKSPACE_FOLDERS_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw) as PinnedWorkspaceFoldersMap;
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        ([workspaceId, timestamp]) =>
+          workspaceId.trim().length > 0 &&
+          typeof timestamp === "number" &&
+          Number.isFinite(timestamp),
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function savePinnedWorkspaceFolders(pinned: PinnedWorkspaceFoldersMap) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(
+    PINNED_WORKSPACE_FOLDERS_STORAGE_KEY,
+    JSON.stringify(pinned),
+  );
 }
 
 type SidebarProps = {
@@ -255,6 +291,9 @@ export const Sidebar = memo(function Sidebar({
     useState<SidebarWorkspaceAddMenuAnchor | null>(null);
   const [allThreadsAddMenuAnchor, setAllThreadsAddMenuAnchor] =
     useState<SidebarOverlayMenuAnchor | null>(null);
+  const [pinnedWorkspaceFolders, setPinnedWorkspaceFolders] = useState(
+    loadPinnedWorkspaceFolders,
+  );
   const allThreadsAddMenuOpen = Boolean(allThreadsAddMenuAnchor);
   const addMenuController = useMenuController({
     open: Boolean(addMenuAnchor),
@@ -270,6 +309,27 @@ export const Sidebar = memo(function Sidebar({
     COLLAPSED_GROUPS_STORAGE_KEY,
   );
   const { getThreadRows } = useThreadRows(threadParentById);
+  const isWorkspaceFolderPinned = useCallback(
+    (workspaceId: string) => workspaceId in pinnedWorkspaceFolders,
+    [pinnedWorkspaceFolders],
+  );
+  const pinWorkspaceFolder = useCallback((workspaceId: string) => {
+    setPinnedWorkspaceFolders((current) => {
+      const next = { ...current, [workspaceId]: Date.now() };
+      savePinnedWorkspaceFolders(next);
+      return next;
+    });
+  }, []);
+  const unpinWorkspaceFolder = useCallback((workspaceId: string) => {
+    setPinnedWorkspaceFolders((current) => {
+      if (!(workspaceId in current)) {
+        return current;
+      }
+      const { [workspaceId]: _removed, ...next } = current;
+      savePinnedWorkspaceFolders(next);
+      return next;
+    });
+  }, []);
   const { showThreadMenu, showWorkspaceMenu, showWorktreeMenu, showCloneMenu } =
     useSidebarMenus({
       onDeleteThread,
@@ -281,6 +341,9 @@ export const Sidebar = memo(function Sidebar({
       onReloadWorkspaceThreads,
       onDeleteWorkspace,
       onDeleteWorktree,
+      isWorkspaceFolderPinned,
+      onPinWorkspaceFolder: pinWorkspaceFolder,
+      onUnpinWorkspaceFolder: unpinWorkspaceFolder,
     });
   const toggleThreadPin = useCallback(
     (workspaceId: string, threadId: string, pinned: boolean) => {
@@ -648,6 +711,33 @@ export const Sidebar = memo(function Sidebar({
     }));
   }, [filteredGroupedWorkspaces, threadListOrganizeMode, workspaceActivityById]);
 
+  const pinnedSortedGroupedWorkspaces = useMemo(
+    () =>
+      sortedGroupedWorkspaces.map((group) => ({
+        ...group,
+        workspaces: group.workspaces
+          .map((workspace, index) => ({
+            workspace,
+            index,
+            pinTime: pinnedWorkspaceFolders[workspace.id] ?? null,
+          }))
+          .sort((a, b) => {
+            if (a.pinTime !== null || b.pinTime !== null) {
+              if (a.pinTime === null) {
+                return 1;
+              }
+              if (b.pinTime === null) {
+                return -1;
+              }
+              return b.pinTime - a.pinTime;
+            }
+            return a.index - b.index;
+          })
+          .map((entry) => entry.workspace),
+      })),
+    [pinnedWorkspaceFolders, sortedGroupedWorkspaces],
+  );
+
   const flatThreadRootGroups = useMemo(() => {
     if (threadListOrganizeMode !== "threads_only") {
       return [] as FlatThreadRootGroup[];
@@ -766,10 +856,7 @@ export const Sidebar = memo(function Sidebar({
     [workspaceNameById],
   );
 
-  const groupedWorkspacesForRender =
-    threadListOrganizeMode === "by_project_activity"
-      ? sortedGroupedWorkspaces
-      : filteredGroupedWorkspaces;
+  const groupedWorkspacesForRender = pinnedSortedGroupedWorkspaces;
   const isThreadsOnlyMode = threadListOrganizeMode === "threads_only";
 
   const handleAllThreadsAddMenuToggle = useCallback(
@@ -1070,6 +1157,7 @@ export const Sidebar = memo(function Sidebar({
                   onShowWorkspaceMenu={showWorkspaceMenu}
                   onShowWorktreeMenu={showWorktreeMenu}
                   onShowCloneMenu={showCloneMenu}
+                  isWorkspaceFolderPinned={isWorkspaceFolderPinned}
                   onToggleExpanded={handleToggleExpanded}
                   onLoadOlderThreads={onLoadOlderThreads}
                   onToggleAddMenu={setAddMenuAnchor}

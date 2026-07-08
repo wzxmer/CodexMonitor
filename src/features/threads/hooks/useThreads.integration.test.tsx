@@ -55,6 +55,7 @@ const workspace: WorkspaceInfo = {
   connected: true,
   settings: { sidebarCollapsed: false },
 };
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("useThreads UX integration", () => {
   let now: number;
@@ -69,6 +70,7 @@ describe("useThreads UX integration", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     nowSpy.mockRestore();
   });
 
@@ -394,6 +396,143 @@ describe("useThreads UX integration", () => {
     expect(sendCall?.[2]).toBe("hello target");
   });
 
+  it("keeps retrying recoverable final turn errors by starting a continuation turn", async () => {
+    nowSpy.mockRestore();
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+    vi.mocked(sendUserMessageService).mockResolvedValue({
+      result: { turn: { id: "turn-retry-1" } },
+    } as Awaited<ReturnType<typeof sendUserMessageService>>);
+
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        workspaces: [workspace],
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onTurnError?.("ws-1", "thread-1", "turn-1", {
+        message:
+          "unexpected status 502 Bad Gateway: error code: 502, url: https://fcodex.top/v1/responses",
+        willRetry: false,
+      });
+    });
+
+    expect(sendUserMessageService).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      await Promise.resolve();
+    });
+
+    expect(sendUserMessageService).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "继续前面的任务",
+      expect.any(Object),
+    );
+
+    act(() => {
+      handlers?.onTurnStarted?.("ws-1", "thread-1", "turn-retry-1");
+      handlers?.onTurnError?.("ws-1", "thread-1", "turn-retry-1", {
+        message: "unexpected status 502 Bad Gateway",
+        willRetry: false,
+      });
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(3_999);
+      await Promise.resolve();
+    });
+    expect(sendUserMessageService).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+    });
+    expect(sendUserMessageService).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels pending recoverable turn retries when the thread is archived", async () => {
+    nowSpy.mockRestore();
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+    vi.mocked(sendUserMessageService).mockResolvedValue({
+      result: { turn: { id: "turn-retry-1" } },
+    } as Awaited<ReturnType<typeof sendUserMessageService>>);
+
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        workspaces: [workspace],
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onTurnError?.("ws-1", "thread-1", "turn-1", {
+        message: "unexpected status 502 Bad Gateway",
+        willRetry: false,
+      });
+      handlers?.onThreadArchived?.("ws-1", "thread-1");
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      await Promise.resolve();
+    });
+
+    expect(sendUserMessageService).not.toHaveBeenCalled();
+  });
+
+  it("reschedules recoverable turn retries when the continuation turn fails to start", async () => {
+    nowSpy.mockRestore();
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+    vi.mocked(sendUserMessageService)
+      .mockResolvedValueOnce({ result: {} } as Awaited<
+        ReturnType<typeof sendUserMessageService>
+      >)
+      .mockResolvedValueOnce({
+        result: { turn: { id: "turn-retry-2" } },
+      } as Awaited<ReturnType<typeof sendUserMessageService>>);
+
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        workspaces: [workspace],
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onTurnError?.("ws-1", "thread-1", "turn-1", {
+        message: "unexpected status 502 Bad Gateway",
+        willRetry: false,
+      });
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_000);
+      await Promise.resolve();
+    });
+    expect(sendUserMessageService).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(3_999);
+      await Promise.resolve();
+    });
+    expect(sendUserMessageService).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+    });
+    expect(sendUserMessageService).toHaveBeenCalledTimes(2);
+  });
+
   it("still starts thread when runtime codex args sync fails", async () => {
     const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => {
       throw new Error("runtime sync failed");
@@ -487,6 +626,110 @@ describe("useThreads UX integration", () => {
     await waitFor(() => {
       expect(result.current.activeItems).toHaveLength(200);
     });
+  });
+
+  it("auto-archives inactive old threads", async () => {
+    now = Date.UTC(2026, 0, 10);
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-fresh",
+            cwd: "/tmp/codex",
+            updated_at: now - DAY_MS,
+          },
+          {
+            id: "thread-old",
+            cwd: "/tmp/codex",
+            updated_at: now - 5 * DAY_MS,
+          },
+          {
+            id: "thread-other-workspace",
+            cwd: "/tmp/other",
+            updated_at: now - 5 * DAY_MS,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(archiveThread).mockResolvedValue({});
+
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        workspaces: [workspace],
+        autoArchiveThreadsEnabled: true,
+        autoArchiveThreadsDays: 3,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(archiveThread)).toHaveBeenCalledWith("ws-1", "thread-old");
+    });
+    expect(vi.mocked(archiveThread)).not.toHaveBeenCalledWith("ws-1", "thread-fresh");
+    expect(vi.mocked(archiveThread)).not.toHaveBeenCalledWith(
+      "ws-1",
+      "thread-other-workspace",
+    );
+  });
+
+  it("skips active and pinned threads during auto archive", async () => {
+    now = Date.UTC(2026, 0, 10);
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-active",
+            cwd: "/tmp/codex",
+            updated_at: now - 5 * DAY_MS,
+          },
+          {
+            id: "thread-pinned",
+            cwd: "/tmp/codex",
+            updated_at: now - 5 * DAY_MS,
+          },
+          {
+            id: "thread-old",
+            cwd: "/tmp/codex",
+            updated_at: now - 5 * DAY_MS,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(archiveThread).mockResolvedValue({});
+
+    const { result, rerender } = renderHook(
+      ({ autoArchiveThreadsEnabled }) =>
+        useThreads({
+          activeWorkspace: workspace,
+          workspaces: [workspace],
+          autoArchiveThreadsEnabled,
+          autoArchiveThreadsDays: 3,
+          onWorkspaceConnected: vi.fn(),
+        }),
+      { initialProps: { autoArchiveThreadsEnabled: false } },
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-active");
+      result.current.pinThread("ws-1", "thread-pinned");
+    });
+
+    rerender({ autoArchiveThreadsEnabled: true });
+
+    await waitFor(() => {
+      expect(vi.mocked(archiveThread)).toHaveBeenCalledWith("ws-1", "thread-old");
+    });
+    expect(vi.mocked(archiveThread)).not.toHaveBeenCalledWith(
+      "ws-1",
+      "thread-active",
+    );
+    expect(vi.mocked(archiveThread)).not.toHaveBeenCalledWith(
+      "ws-1",
+      "thread-pinned",
+    );
   });
 
   it("preserves resumed thread history beyond the live scrollback cap", async () => {

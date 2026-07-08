@@ -20,9 +20,15 @@ import {
   interruptTurn as interruptTurnService,
   getAppsList as getAppsListService,
   listMcpServerStatus as listMcpServerStatusService,
+  readWorkspaceFile,
 } from "@services/tauri";
 import { expandCustomPromptText } from "@utils/customPrompts";
-import { splitImageAndFileAttachments } from "@utils/attachments";
+import {
+  attachmentDisplayName,
+  attachmentNameFromDataUrl,
+  isImageAttachment,
+  splitImageAndFileAttachments,
+} from "@utils/attachments";
 import {
   asString,
   extractReviewThreadId,
@@ -42,6 +48,118 @@ import {
   resolveSendMessageOptions,
   type SendMessageOptions,
 } from "./threadMessagingHelpers";
+
+const TEXT_ATTACHMENT_EXTENSIONS = /\.(txt|md|markdown|json|jsonc|yaml|yml|toml|xml|html?|css|scss|sass|less|js|jsx|ts|tsx|mjs|cjs|rs|go|py|rb|php|java|kt|kts|swift|c|cc|cpp|cxx|h|hpp|cs|sh|bash|zsh|fish|ps1|bat|cmd|sql|csv|tsv|log|ini|env|gitignore|dockerfile)$/i;
+
+function escapeAttachedFileAttr(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
+function normalizePathForCompare(path: string) {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+function getWorkspaceRelativeAttachmentPath(workspacePath: string, path: string) {
+  const normalizedWorkspace = normalizePathForCompare(workspacePath);
+  const normalizedPath = normalizePathForCompare(path);
+  const lowerWorkspace = normalizedWorkspace.toLowerCase();
+  const lowerPath = normalizedPath.toLowerCase();
+  if (lowerPath === lowerWorkspace) {
+    return "";
+  }
+  if (!lowerPath.startsWith(`${lowerWorkspace}/`)) {
+    return null;
+  }
+  return normalizedPath.slice(normalizedWorkspace.length + 1);
+}
+
+function decodeDataUrlTextAttachment(dataUrl: string): {
+  name: string;
+  content: string;
+} | null {
+  if (!dataUrl.startsWith("data:")) {
+    return null;
+  }
+  const commaIndex = dataUrl.indexOf(",");
+  if (commaIndex < 0) {
+    return null;
+  }
+  const meta = dataUrl.slice("data:".length, commaIndex);
+  if (meta.startsWith("image/")) {
+    return null;
+  }
+  const encoded = dataUrl.slice(commaIndex + 1);
+  const name = attachmentNameFromDataUrl(dataUrl) || "pasted-file";
+  try {
+    const bytes = meta.split(";").some((part) => part.toLowerCase() === "base64")
+      ? Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0))
+      : new TextEncoder().encode(decodeURIComponent(encoded));
+    const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return { name, content };
+  } catch {
+    return null;
+  }
+}
+
+async function prepareMessageAttachmentsForSend({
+  workspace,
+  text,
+  attachments,
+}: {
+  workspace: WorkspaceInfo;
+  text: string;
+  attachments: string[];
+}): Promise<{ text: string; images: string[]; displayAttachments: string[] }> {
+  const images: string[] = [];
+  const attachedFileBlocks: string[] = [];
+  const displayAttachments: string[] = [];
+
+  for (const attachment of attachments) {
+    if (isImageAttachment(attachment)) {
+      images.push(attachment);
+      continue;
+    }
+
+    displayAttachments.push(attachment);
+
+    const dataText = decodeDataUrlTextAttachment(attachment);
+    if (dataText) {
+      attachedFileBlocks.push(
+        `<attached_file path="${escapeAttachedFileAttr(dataText.name)}" name="${escapeAttachedFileAttr(dataText.name)}">\n${dataText.content}\n</attached_file>`,
+      );
+      continue;
+    }
+
+    const relativePath = getWorkspaceRelativeAttachmentPath(workspace.path, attachment);
+    if (!relativePath) {
+      throw new Error(
+        `Unsupported attachment "${attachmentDisplayName(attachment)}". Text attachments must be inside the current workspace; binary files are not sent.`,
+      );
+    }
+    if (!TEXT_ATTACHMENT_EXTENSIONS.test(relativePath)) {
+      throw new Error(
+        `Unsupported attachment "${attachmentDisplayName(attachment)}". Only UTF-8 text files and images can be sent.`,
+      );
+    }
+    const response = await readWorkspaceFile(workspace.id, relativePath);
+    if (response.truncated) {
+      throw new Error(
+        `Attachment "${attachmentDisplayName(attachment)}" exceeds the inline text limit and was not sent.`,
+      );
+    }
+    attachedFileBlocks.push(
+      `<attached_file path="${escapeAttachedFileAttr(relativePath)}" name="${escapeAttachedFileAttr(attachmentDisplayName(attachment))}">\n${response.content}\n</attached_file>`,
+    );
+  }
+
+  return {
+    text: attachedFileBlocks.length > 0
+      ? [text, ...attachedFileBlocks].filter(Boolean).join("\n\n")
+      : text,
+    images,
+    displayAttachments,
+  };
+}
 
 type UseThreadMessagingOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -154,6 +272,33 @@ export function useThreadMessaging({
         }
         finalText = promptExpansion?.expanded ?? messageText;
       }
+      let preparedAttachments: {
+        text: string;
+        images: string[];
+        displayAttachments: string[];
+      };
+      if (images.some((attachment) => !isImageAttachment(attachment))) {
+        try {
+          preparedAttachments = await prepareMessageAttachmentsForSend({
+            workspace,
+            text: finalText,
+            attachments: images,
+          });
+        } catch (error) {
+          pushThreadErrorMessage(
+            threadId,
+            error instanceof Error ? error.message : String(error),
+          );
+          safeMessageActivity();
+          return { status: "blocked" };
+        }
+      } else {
+        preparedAttachments = {
+          text: finalText,
+          images,
+          displayAttachments: [],
+        };
+      }
       const isProcessing = threadStatusById[threadId]?.isProcessing ?? false;
       const activeTurnId = activeTurnIdByThread[threadId] ?? null;
       const {
@@ -183,8 +328,8 @@ export function useThreadMessaging({
         attributes: {
           workspace_id: workspace.id,
           thread_id: threadId,
-          has_images: images.length > 0 ? "true" : "false",
-          text_length: String(finalText.length),
+          has_images: preparedAttachments.images.length > 0 ? "true" : "false",
+          text_length: String(preparedAttachments.text.length),
           model: resolvedModel ?? "unknown",
           effort: resolvedEffort ?? "unknown",
           service_tier: resolvedServiceTier ?? "default",
@@ -206,7 +351,7 @@ export function useThreadMessaging({
           text: finalText,
           createdAt: timestamp,
           images: displayAttachments.images,
-          attachments: displayAttachments.attachments,
+          attachments: preparedAttachments.displayAttachments,
         },
         replaceExisting: Boolean(options?.replaceMessageId),
         hasCustomName: Boolean(customThreadName),
@@ -229,8 +374,8 @@ export function useThreadMessaging({
           workspaceId: workspace.id,
           threadId,
           turnId: activeTurnId,
-          text: finalText,
-          images,
+          text: preparedAttachments.text,
+          images: preparedAttachments.images,
           model: resolvedModel,
           effort: resolvedEffort,
           serviceTier: resolvedServiceTier,
@@ -255,28 +400,28 @@ export function useThreadMessaging({
               workspace.id,
               threadId,
               activeTurnId ?? "",
-              finalText,
-              images,
+              preparedAttachments.text,
+              preparedAttachments.images,
               appMentions,
             )
             : steerTurnService(
               workspace.id,
               threadId,
               activeTurnId ?? "",
-              finalText,
-              images,
+              preparedAttachments.text,
+              preparedAttachments.images,
             ))) as Record<string, unknown>
           : (await sendUserMessageService(
             workspace.id,
             threadId,
-            finalText,
+            preparedAttachments.text,
             buildTurnStartPayload({
               model: resolvedModel,
               effort: resolvedEffort,
               serviceTier: resolvedServiceTier,
               collaborationMode: sanitizedCollaborationMode,
               accessMode: resolvedAccessMode,
-              images,
+              images: preparedAttachments.images,
               appMentions,
             }),
           )) as Record<string, unknown>;

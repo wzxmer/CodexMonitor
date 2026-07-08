@@ -311,6 +311,57 @@ describe("useThreadCodexSyncOrchestration seed behavior", () => {
 });
 
 describe("useThreadUiOrchestration", () => {
+  it("passes the submitted text and images as draft-start preview", async () => {
+    const runWithDraftStart = vi.fn(
+      async (
+        runner: () => Promise<void>,
+        _preview?: { text: string; images: string[] },
+      ) => runner(),
+    );
+    const params = {
+      activeWorkspaceId: "ws-1",
+      activeThreadId: null,
+      accessMode: "current" as const,
+      selectedServiceTier: null,
+      selectedCollaborationModeId: null,
+      selectedCodexArgsOverride: null,
+      pendingNewThreadSeedRef: {
+        current: null,
+      } as MutableRefObject<PendingNewThreadSeed | null>,
+      runWithDraftStart,
+      handleComposerSend: vi.fn(async () => undefined),
+      clearDraftState: vi.fn(),
+      exitDiffView: vi.fn(),
+      resetPullRequestSelection: vi.fn(),
+      selectWorkspace: vi.fn(),
+      setActiveThreadId: vi.fn(),
+      setActiveTab: vi.fn() as unknown as Dispatch<
+        SetStateAction<"home" | "projects" | "codex" | "git" | "log">
+      >,
+      isCompact: false,
+      removeThread: vi.fn(),
+      clearDraftForThread: vi.fn(),
+      removeImagesForThread: vi.fn(),
+    };
+
+    const { result } = renderHook(() => useThreadUiOrchestration(params));
+
+    await act(async () => {
+      await result.current.handleComposerSendWithDraftStart("hello", ["img-1"]);
+    });
+
+    expect(runWithDraftStart).toHaveBeenCalledWith(
+      expect.any(Function),
+      { text: "hello", images: ["img-1"] },
+    );
+    expect(params.handleComposerSend).toHaveBeenCalledWith(
+      "hello",
+      ["img-1"],
+      undefined,
+      undefined,
+    );
+  });
+
   it("opens thread links in their source workspace", () => {
     const setActiveTab = vi.fn() as unknown as Dispatch<
       SetStateAction<"home" | "projects" | "codex" | "git" | "log">
