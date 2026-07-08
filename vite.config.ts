@@ -105,8 +105,12 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**", "**/.codex-worktrees/**"],
+      // 3. keep dev watcher away from generated Rust and agent artifacts
+      ignored: [
+        "**/src-tauri/**",
+        "**/.codex-worktrees/**",
+        "**/.codex-monitor/**",
+      ],
     },
   },
 }));
