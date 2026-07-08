@@ -272,7 +272,10 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         ...state,
         itemsByThread: {
           ...state.itemsByThread,
-          [action.threadId]: prepareThreadItems(action.items, { maxItemsPerThread: state.maxItemsPerThread }),
+          [action.threadId]: prepareThreadItems(action.items, {
+            maxItemsPerThread:
+              action.trimItems === false ? null : state.maxItemsPerThread,
+          }),
         },
       };
     case "appendReasoningSummary": {

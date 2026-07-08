@@ -291,10 +291,21 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
       }
 
       if (method === "thread/started") {
-        const thread = (params.thread as Record<string, unknown> | undefined) ?? null;
-        const threadId = String(thread?.id ?? "");
-        if (thread && threadId) {
-          currentHandlers.onThreadStarted?.(workspace_id, thread);
+        const threadPayload =
+          params.thread && typeof params.thread === "object" && !Array.isArray(params.thread)
+            ? (params.thread as Record<string, unknown>)
+            : null;
+        const { thread: _thread, ...paramsThreadFields } = params;
+        const thread = {
+          ...paramsThreadFields,
+          ...(threadPayload ?? {}),
+        };
+        const threadId = String(thread.id ?? thread.threadId ?? thread.thread_id ?? "").trim();
+        if (threadId) {
+          currentHandlers.onThreadStarted?.(workspace_id, {
+            ...thread,
+            id: threadId,
+          });
         }
         return;
       }

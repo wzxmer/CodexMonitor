@@ -294,6 +294,7 @@ export function useThreadActions({
               type: "setThreadItems",
               threadId,
               items: hydrationPlan.mergedItems,
+              trimItems: false,
             });
           }
           if (hydrationPlan.threadName) {
@@ -501,6 +502,7 @@ export function useThreadActions({
         let workspacePathLookup = buildWorkspacePathLookup(targets);
         const targetWorkspaceIds = new Set(targets.map((workspace) => workspace.id));
         const includeLocalCodexSessions = targetWorkspaceIds.has(LOCAL_CODEX_WORKSPACE_ID);
+        const includeUnmatchedLocalCodexSessions = !includeLocalCodexSessions;
         let knownWorkspaces: WorkspaceInfo[] = [];
         try {
           knownWorkspaces = await listWorkspacesService();
@@ -520,6 +522,11 @@ export function useThreadActions({
           uniqueThreadIdsByWorkspace[workspace.id] = new Set<string>();
           resumeCursorByWorkspace[workspace.id] = null;
         });
+        if (includeUnmatchedLocalCodexSessions) {
+          matchingThreadsByWorkspace[LOCAL_CODEX_WORKSPACE_ID] = [];
+          uniqueThreadIdsByWorkspace[LOCAL_CODEX_WORKSPACE_ID] = new Set<string>();
+          resumeCursorByWorkspace[LOCAL_CODEX_WORKSPACE_ID] = null;
+        }
         const requestWorkspace =
           targets.find((workspace) => workspace.connected && workspace.id !== LOCAL_CODEX_WORKSPACE_ID) ??
           knownWorkspaces.find((workspace) => workspace.connected && workspace.id !== LOCAL_CODEX_WORKSPACE_ID) ??
@@ -527,6 +534,8 @@ export function useThreadActions({
           targets[0];
         let pagesFetched = 0;
         let cursor: string | null = null;
+        let unmatchedThreadCount = 0;
+        const unmatchedThreadSamples: Array<{ id: string; cwd: string }> = [];
         do {
           const pageCursor = cursor;
           pagesFetched += 1;
@@ -558,7 +567,19 @@ export function useThreadActions({
             const targetWorkspaceIdsForThread = [
               ...(workspaceId ? [workspaceId] : []),
               ...(includeLocalCodexSessions ? [LOCAL_CODEX_WORKSPACE_ID] : []),
+              ...(!workspaceId && includeUnmatchedLocalCodexSessions
+                ? [LOCAL_CODEX_WORKSPACE_ID]
+                : []),
             ];
+            if (!workspaceId) {
+              unmatchedThreadCount += 1;
+              if (unmatchedThreadSamples.length < 5) {
+                unmatchedThreadSamples.push({
+                  id: String(thread?.id ?? ""),
+                  cwd: String(thread?.cwd ?? ""),
+                });
+              }
+            }
             if (targetWorkspaceIdsForThread.length === 0) {
               return;
             }
@@ -594,9 +615,37 @@ export function useThreadActions({
           }
         } while (cursor);
 
+        if (unmatchedThreadCount > 0) {
+          onDebug?.({
+            id: `${Date.now()}-client-thread-list-diagnostics`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "thread/list diagnostics",
+            payload: {
+              unmatchedThreadCount,
+              unmatchedThreadSamples,
+              fallbackWorkspaceId: LOCAL_CODEX_WORKSPACE_ID,
+              targetWorkspaceIds: targets.map((workspace) => workspace.id),
+            },
+          });
+        }
+
         const nextThreadActivity = { ...threadActivityRef.current };
         let didChangeAnyActivity = false;
-        targets.forEach((workspace) => {
+        const hasUnmatchedLocalCodexThreads =
+          (matchingThreadsByWorkspace[LOCAL_CODEX_WORKSPACE_ID]?.length ?? 0) > 0;
+        const outputTargets = includeUnmatchedLocalCodexSessions && hasUnmatchedLocalCodexThreads
+          ? [
+              ...targets,
+              {
+                id: LOCAL_CODEX_WORKSPACE_ID,
+              } as WorkspaceInfo,
+            ]
+          : targets;
+        outputTargets.forEach((workspace) => {
+          const isUnmatchedLocalFallback =
+            includeUnmatchedLocalCodexSessions &&
+            workspace.id === LOCAL_CODEX_WORKSPACE_ID;
           const matchingThreads = matchingThreadsByWorkspace[workspace.id] ?? [];
           const activityByThread = nextThreadActivity[workspace.id] ?? {};
           const threadListState = buildWorkspaceThreadListState({
@@ -622,7 +671,7 @@ export function useThreadActions({
               notifySubagent: true,
             });
           });
-          if (threadListState.didChangeActivity) {
+          if (threadListState.didChangeActivity && !isUnmatchedLocalFallback) {
             nextThreadActivity[workspace.id] = threadListState.nextActivityByThread;
             didChangeAnyActivity = true;
           }

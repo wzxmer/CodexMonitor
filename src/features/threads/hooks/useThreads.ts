@@ -21,6 +21,7 @@ import { useThreadAccountInfo } from "./useThreadAccountInfo";
 import { useThreadRateLimits } from "./useThreadRateLimits";
 import { useThreadSelectors } from "./useThreadSelectors";
 import { useThreadStatus } from "./useThreadStatus";
+import { useThreadStallWarnings } from "./useThreadStallWarnings";
 import { useThreadUserInput } from "./useThreadUserInput";
 import { useThreadTitleAutogeneration } from "./useThreadTitleAutogeneration";
 import { useDetachedReviewTracking } from "./useDetachedReviewTracking";
@@ -37,6 +38,7 @@ import { getParentThreadIdFromThread } from "@threads/utils/threadRpc";
 import {
   buildThreadSummaryFromThread,
   extractThreadFromResponse,
+  getThreadDisplayTitle,
 } from "@threads/utils/threadSummary";
 import { getSubagentDescendantThreadIds } from "@threads/utils/subagentTree";
 
@@ -196,6 +198,12 @@ export function useThreads({
     }
   }, [onMessageActivity]);
 
+  useThreadStallWarnings({
+    threadStatusById: state.threadStatusById,
+    pushThreadErrorMessage,
+    safeMessageActivity,
+  });
+
   const setThreadLoaded = useCallback((threadId: string, isLoaded: boolean) => {
     loadedThreadsRef.current[threadId] = isLoaded;
   }, []);
@@ -338,9 +346,9 @@ export function useThreads({
             }
 
             dispatch({ type: "ensureThread", workspaceId, threadId: summary.id });
-            const preview = String(thread.preview ?? "").trim();
+            const displayTitle = getThreadDisplayTitle(thread);
             const customName = getCustomName(workspaceId, summary.id);
-            if (preview || customName) {
+            if (displayTitle || customName) {
               dispatch({
                 type: "setThreadName",
                 workspaceId,

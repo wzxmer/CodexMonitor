@@ -159,6 +159,27 @@ describe("useThreadTurnEvents", () => {
     );
   });
 
+  it("uses formal thread titles from thread started before preview", () => {
+    const { result, dispatch, getCustomName } = makeOptions();
+    getCustomName.mockReturnValue(undefined);
+
+    act(() => {
+      result.current.onThreadStarted("ws-1", {
+        id: "thread-formal-title",
+        thread_name: "Official title",
+        preview: "Raw user prompt",
+        updatedAt: 1_700_000_000_150,
+      });
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadName",
+      workspaceId: "ws-1",
+      threadId: "thread-formal-title",
+      name: "Official title",
+    });
+  });
+
   it("ignores thread started events for hidden threads", () => {
     const { result, dispatch, isThreadHidden, recordThreadActivity, safeMessageActivity } =
       makeOptions();
@@ -570,6 +591,31 @@ describe("useThreadTurnEvents", () => {
     expect(markReviewing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
     expect(pendingInterruptsRef.current.has("thread-1")).toBe(false);
+  });
+
+  it("adds a visible error when an active turn closes unexpectedly", () => {
+    const {
+      result,
+      markProcessing,
+      setActiveTurnId,
+      pushThreadErrorMessage,
+      safeMessageActivity,
+    } = makeOptions();
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onThreadClosed("ws-1", "thread-1");
+    });
+
+    expect(markProcessing).toHaveBeenNthCalledWith(1, "thread-1", true);
+    expect(markProcessing).toHaveBeenNthCalledWith(2, "thread-1", false);
+    expect(setActiveTurnId).toHaveBeenNthCalledWith(1, "thread-1", "turn-1");
+    expect(setActiveTurnId).toHaveBeenNthCalledWith(2, "thread-1", null);
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "thread-1",
+      "Turn failed: Codex app-server stopped unexpectedly.",
+    );
+    expect(safeMessageActivity).toHaveBeenCalled();
   });
 
   it("clears the active plan when all plan steps are completed", () => {

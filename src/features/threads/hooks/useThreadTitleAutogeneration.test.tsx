@@ -59,6 +59,12 @@ describe("useThreadTitleAutogeneration", () => {
       setCustomName: (value: string) => {
         customName = value;
       },
+      setThreadName: (value: string) => {
+        threadsByWorkspaceRef.current["ws-1"][0] = {
+          ...threadsByWorkspaceRef.current["ws-1"][0],
+          name: value,
+        };
+      },
     };
   }
 
@@ -92,6 +98,46 @@ describe("useThreadTitleAutogeneration", () => {
 
     await act(async () => {
       await result.current.onUserMessageCreated("ws-1", "thread-1", "Hello there");
+    });
+
+    expect(generateRunMetadata).not.toHaveBeenCalled();
+  });
+
+  it("generates when the current thread name is only the prompt preview", async () => {
+    vi.mocked(generateRunMetadata).mockResolvedValue({
+      title: "Generated Title",
+      worktreeName: "feat/generated-title",
+    });
+    const { result, renameThread } = setup({
+      threadName: "Summarize this service failure",
+    });
+
+    await act(async () => {
+      await result.current.onUserMessageCreated(
+        "ws-1",
+        "thread-1",
+        "Summarize this service failure",
+      );
+    });
+
+    expect(generateRunMetadata).toHaveBeenCalledWith(
+      "ws-1",
+      "Summarize this service failure",
+    );
+    expect(renameThread).toHaveBeenCalledWith("ws-1", "thread-1", "Generated Title");
+  });
+
+  it("does not override a manual-looking thread name that differs from the prompt preview", async () => {
+    const { result } = setup({
+      threadName: "Manual incident notes",
+    });
+
+    await act(async () => {
+      await result.current.onUserMessageCreated(
+        "ws-1",
+        "thread-1",
+        "Summarize this service failure",
+      );
     });
 
     expect(generateRunMetadata).not.toHaveBeenCalled();
@@ -157,6 +203,72 @@ describe("useThreadTitleAutogeneration", () => {
 
     const promise = result.current.onUserMessageCreated("ws-1", "thread-1", "Hello there");
     setCustomName("Manual rename");
+    resolvePromise({ title: "Generated Title", worktreeName: "feat/x" });
+
+    await act(async () => {
+      await promise;
+    });
+
+    expect(renameThread).not.toHaveBeenCalled();
+  });
+
+  it("does not override if a formal Codex title appears while generating", async () => {
+    let resolvePromise!: (value: { title: string; worktreeName: string }) => void;
+    const pending = new Promise<{ title: string; worktreeName: string }>((resolve) => {
+      resolvePromise = resolve;
+    });
+    vi.mocked(generateRunMetadata).mockReturnValue(pending);
+
+    const { result, renameThread, setThreadName } = setup({
+      threadName: "Summarize this service failure",
+    });
+
+    const promise = result.current.onUserMessageCreated(
+      "ws-1",
+      "thread-1",
+      "Summarize this service failure",
+    );
+    setThreadName("Official Codex title");
+    resolvePromise({ title: "Generated Title", worktreeName: "feat/x" });
+
+    await act(async () => {
+      await promise;
+    });
+
+    expect(renameThread).not.toHaveBeenCalled();
+  });
+
+  it("does not persist a generated title if disabled while generation is in flight", async () => {
+    let resolvePromise!: (value: { title: string; worktreeName: string }) => void;
+    const pending = new Promise<{ title: string; worktreeName: string }>((resolve) => {
+      resolvePromise = resolve;
+    });
+    vi.mocked(generateRunMetadata).mockReturnValue(pending);
+
+    let enabled = true;
+    const getCustomName = vi.fn(() => undefined);
+    const renameThread = vi.fn();
+    const itemsByThreadRef = { current: { "thread-1": [] } };
+    const threadsByWorkspaceRef = {
+      current: {
+        "ws-1": [
+          { id: "thread-1", name: "New Agent", updatedAt: 0 } as ThreadSummary,
+        ],
+      },
+    };
+    const { result, rerender } = renderHook(() =>
+      useThreadTitleAutogeneration({
+        enabled,
+        itemsByThreadRef,
+        threadsByWorkspaceRef,
+        getCustomName,
+        renameThread,
+      }),
+    );
+
+    const promise = result.current.onUserMessageCreated("ws-1", "thread-1", "Hello there");
+    enabled = false;
+    rerender();
     resolvePromise({ title: "Generated Title", worktreeName: "feat/x" });
 
     await act(async () => {

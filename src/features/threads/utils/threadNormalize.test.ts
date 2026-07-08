@@ -58,6 +58,28 @@ describe("normalizeRootPath", () => {
       "//server/share/repo",
     );
   });
+
+  it("canonicalizes dot segments in Windows paths without trimming spaces", () => {
+    expect(
+      normalizeRootPath(
+        "C:\\Users\\Administrator\\Documents\\11 服务器\\..\\11 服务器\\repo",
+      ),
+    ).toBe("c:/users/administrator/documents/11 服务器/repo");
+  });
+
+  it("canonicalizes namespace-prefixed Windows paths with dot segments", () => {
+    expect(
+      normalizeRootPath(
+        "\\\\?\\C:\\Users\\Administrator\\Documents\\11 服务器\\repo\\.\\",
+      ),
+    ).toBe("c:/users/administrator/documents/11 服务器/repo");
+  });
+
+  it("collapses duplicate separators while preserving UNC roots", () => {
+    expect(normalizeRootPath("\\\\SERVER\\\\Share\\\\Repo\\\\Sub")).toBe(
+      "//server/share/repo/sub",
+    );
+  });
 });
 
 describe("normalizeRateLimits", () => {

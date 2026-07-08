@@ -180,6 +180,26 @@ describe("useAppServerEvents", () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
+          method: "thread/started",
+          params: {
+            threadId: "thread-3",
+            threadName: "Official title",
+            preview: "Raw prompt",
+          },
+        },
+      });
+    });
+    expect(handlers.onThreadStarted).toHaveBeenCalledWith("ws-1", {
+      id: "thread-3",
+      threadId: "thread-3",
+      threadName: "Official title",
+      preview: "Raw prompt",
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
           method: "thread/name/updated",
           params: { threadId: "thread-2", threadName: "Renamed from server" },
         },

@@ -21,6 +21,16 @@ type BuildThreadSummaryFromThreadOptions = {
   getCustomName?: (workspaceId: string, threadId: string) => string | undefined;
 };
 
+export function getThreadDisplayTitle(thread: Record<string, unknown>) {
+  const rawTitle =
+    asString(thread.threadName ?? "").trim() ||
+    asString(thread.thread_name ?? "").trim() ||
+    asString(thread.name ?? "").trim() ||
+    asString(thread.title ?? "").trim() ||
+    asString(thread.preview ?? "").trim();
+  return rawTitle ? clampThreadName(rawTitle) : null;
+}
+
 export function extractThreadFromResponse(
   response: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> | null {
@@ -47,12 +57,11 @@ export function buildThreadSummaryFromThread({
   if (!id) {
     return null;
   }
-  const preview = asString(thread.preview ?? "").trim();
   const customName = getCustomName?.(workspaceId, id);
   const fallbackName = `Agent ${fallbackIndex + 1}`;
   const name = customName
     ? customName
-    : clampThreadName(preview) ?? fallbackName;
+    : getThreadDisplayTitle(thread) ?? fallbackName;
   const metadata = extractThreadCodexMetadata(thread);
   const cwd = asString(thread.cwd ?? "").trim();
   if (shouldHideSubagentThreadFromSidebar(thread.source)) {

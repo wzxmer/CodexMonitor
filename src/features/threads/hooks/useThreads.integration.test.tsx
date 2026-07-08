@@ -489,6 +489,51 @@ describe("useThreads UX integration", () => {
     });
   });
 
+  it("preserves resumed thread history beyond the live scrollback cap", async () => {
+    const totalItems = 240;
+    const items = Array.from({ length: totalItems }, (_, index) =>
+      index % 2 === 0
+        ? {
+            type: "userMessage",
+            id: `server-user-${index}`,
+            content: [{ type: "text", text: `User ${index}` }],
+          }
+        : {
+            type: "agentMessage",
+            id: `server-assistant-${index}`,
+            text: `Assistant ${index}`,
+          },
+    );
+
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-long-history",
+          preview: "Remote preview",
+          updated_at: 9999,
+          turns: [{ items }],
+        },
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        chatHistoryScrollbackItems: 200,
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-long-history");
+    });
+
+    await waitFor(() => {
+      expect(result.current.activeItems).toHaveLength(totalItems);
+    });
+    expect(result.current.activeItems[0]?.id).toBe("server-user-0");
+  });
+
   it("keeps the latest plan visible when a new turn starts", () => {
     const { result } = renderHook(() =>
       useThreads({

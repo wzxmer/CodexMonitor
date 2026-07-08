@@ -111,7 +111,12 @@ export type ThreadAction =
       replaceExisting?: boolean;
       hasCustomName?: boolean;
     }
-  | { type: "setThreadItems"; threadId: string; items: ConversationItem[] }
+  | {
+      type: "setThreadItems";
+      threadId: string;
+      items: ConversationItem[];
+      trimItems?: boolean;
+    }
   | {
       type: "appendReasoningSummary";
       threadId: string;

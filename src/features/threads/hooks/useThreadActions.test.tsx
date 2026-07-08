@@ -16,7 +16,6 @@ import {
   getThreadTimestamp,
   isReviewingFromThread,
   mergeThreadItems,
-  previewThreadName,
 } from "@utils/threadItems";
 import { saveThreadActivity } from "@threads/utils/threadStorage";
 import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
@@ -37,7 +36,6 @@ vi.mock("@utils/threadItems", () => ({
   getThreadTimestamp: vi.fn(),
   isReviewingFromThread: vi.fn(),
   mergeThreadItems: vi.fn(),
-  previewThreadName: vi.fn(),
 }));
 
 vi.mock("@threads/utils/threadStorage", () => ({
@@ -239,7 +237,6 @@ describe("useThreadActions", () => {
     vi.mocked(resumeThread).mockResolvedValue({
       result: { thread: { id: "thread-local", preview: "Local session", updated_at: 123 } },
     });
-    vi.mocked(previewThreadName).mockReturnValue("Local session");
     vi.mocked(getThreadTimestamp).mockReturnValue(123);
 
     const { result, dispatch } = renderActions();
@@ -304,12 +301,16 @@ describe("useThreadActions", () => {
 
     vi.mocked(resumeThread).mockResolvedValue({
       result: {
-        thread: { id: "thread-2", preview: "preview", updated_at: 555 },
+        thread: {
+          id: "thread-2",
+          thread_name: "Official Resume Title",
+          preview: "preview",
+          updated_at: 555,
+        },
       },
     });
     vi.mocked(buildItemsFromThread).mockReturnValue([assistantItem]);
     vi.mocked(isReviewingFromThread).mockReturnValue(true);
-    vi.mocked(previewThreadName).mockReturnValue("Preview Name");
     vi.mocked(getThreadTimestamp).mockReturnValue(999);
     vi.mocked(mergeThreadItems).mockReturnValue([assistantItem]);
 
@@ -334,6 +335,7 @@ describe("useThreadActions", () => {
       type: "setThreadItems",
       threadId: "thread-2",
       items: [assistantItem],
+      trimItems: false,
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: "markReviewing",
@@ -344,7 +346,7 @@ describe("useThreadActions", () => {
       type: "setThreadName",
       workspaceId: "ws-1",
       threadId: "thread-2",
-      name: "Preview Name",
+      name: "Official Resume Title",
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: "setLastAgentMessage",
@@ -1423,6 +1425,48 @@ describe("useThreadActions", () => {
     });
   });
 
+  it("matches canonical-equivalent Windows workspace threads client-side", async () => {
+    const windowsWorkspace: WorkspaceInfo = {
+      ...workspace,
+      path: "C:\\Users\\Administrator\\Documents\\11 服务器\\repo",
+    };
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-win-canonical-1",
+            cwd: "\\\\?\\C:\\Users\\Administrator\\Documents\\11 服务器\\repo\\.\\subdir",
+            preview: "Windows canonical thread",
+            updated_at: 5000,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(getThreadTimestamp).mockReturnValue(5000);
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(windowsWorkspace);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: "ws-1",
+      sortKey: "updated_at",
+      preserveAnchors: true,
+      threads: [
+        {
+          id: "thread-win-canonical-1",
+          name: "Windows canonical thread",
+          updatedAt: 5000,
+          createdAt: 0,
+        },
+      ],
+    });
+  });
+
   it("matches nested workspace threads client-side", async () => {
     vi.mocked(listThreads).mockResolvedValue({
       result: {
@@ -1780,6 +1824,56 @@ describe("useThreadActions", () => {
         {
           id: "thread-win-older",
           name: "Older windows preview",
+          updatedAt: 4000,
+          createdAt: 0,
+        },
+      ],
+    });
+  });
+
+  it("matches canonical-equivalent Windows workspace threads when loading older threads", async () => {
+    const windowsWorkspace: WorkspaceInfo = {
+      ...workspace,
+      path: "C:\\Users\\Administrator\\Documents\\11 服务器\\repo",
+    };
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-win-canonical-older",
+            cwd: "C:/Users/Administrator/Documents/11 服务器/other/../repo/subdir",
+            preview: "Older canonical windows preview",
+            updated_at: 4000,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [{ id: "thread-1", name: "Agent 1", updatedAt: 6000 }],
+      },
+      threadListCursorByWorkspace: { "ws-1": "cursor-1" },
+    });
+
+    await act(async () => {
+      await result.current.loadOlderThreadsForWorkspace(windowsWorkspace);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: "ws-1",
+      sortKey: "updated_at",
+      threads: [
+        { id: "thread-1", name: "Agent 1", updatedAt: 6000 },
+        {
+          id: "thread-win-canonical-older",
+          name: "Older canonical windows preview",
           updatedAt: 4000,
           createdAt: 0,
         },

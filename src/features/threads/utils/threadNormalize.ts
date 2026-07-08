@@ -163,13 +163,47 @@ export function normalizeRootPath(value: string) {
     return "";
   }
 
-  if (/^[A-Za-z]:\//.test(withoutNamespace)) {
-    return withoutNamespace.toLowerCase();
+  const canonicalized = canonicalizePathSegments(withoutNamespace);
+  if (/^[A-Za-z]:\//.test(canonicalized)) {
+    return canonicalized.toLowerCase();
   }
-  if (withoutNamespace.startsWith("//")) {
-    return withoutNamespace.toLowerCase();
+  if (canonicalized.startsWith("//")) {
+    return canonicalized.toLowerCase();
   }
-  return withoutNamespace;
+  return canonicalized;
+}
+
+function canonicalizePathSegments(value: string) {
+  const drivePrefix = value.match(/^[A-Za-z]:\//)?.[0] ?? null;
+  const prefix = drivePrefix
+    ? drivePrefix
+    : value.startsWith("//")
+      ? "//"
+      : value.startsWith("/")
+        ? "/"
+        : "";
+  const rest = prefix ? value.slice(prefix.length) : value;
+  const segments: string[] = [];
+
+  rest.split("/").forEach((segment) => {
+    if (!segment || segment === ".") {
+      return;
+    }
+    if (segment === "..") {
+      if (segments.length > 0 && segments[segments.length - 1] !== "..") {
+        segments.pop();
+      } else if (!prefix) {
+        segments.push(segment);
+      }
+      return;
+    }
+    segments.push(segment);
+  });
+
+  if (!segments.length) {
+    return prefix.replace(/\/+$/, "");
+  }
+  return `${prefix}${segments.join("/")}`;
 }
 
 export function extractRpcErrorMessage(response: unknown) {
