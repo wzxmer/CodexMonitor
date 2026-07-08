@@ -164,7 +164,7 @@ describe("useUpdater", () => {
     );
     expect(
       window.localStorage.getItem(STORAGE_KEY_PENDING_POST_UPDATE_VERSION),
-    ).toBe("9.9.9");
+    ).toBeNull();
   });
 
   it("resets to idle on dismiss", async () => {
@@ -249,87 +249,36 @@ describe("useUpdater", () => {
     );
   });
 
-  it("loads post-update release notes after restart when marker matches current version", async () => {
+  it("clears post-update marker without showing release notes", async () => {
     window.localStorage.setItem(
       STORAGE_KEY_PENDING_POST_UPDATE_VERSION,
       __APP_VERSION__,
     );
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        tag_name: `v${__APP_VERSION__}`,
-        html_url: `https://github.com/wzxmer/CodexMonitor/releases/tag/v${__APP_VERSION__}`,
-        body: "## New\n- Added updater notes",
-      }),
-    } as Response);
 
     const { result } = renderHook(() => useUpdater({}));
 
     await waitFor(() =>
-      expect(result.current.postUpdateNotice?.stage).toBe("ready"),
+      expect(
+        window.localStorage.getItem(STORAGE_KEY_PENDING_POST_UPDATE_VERSION),
+      ).toBeNull(),
     );
 
-    expect(result.current.postUpdateNotice).toMatchObject({
-      stage: "ready",
-      version: __APP_VERSION__,
-      htmlUrl: `https://github.com/wzxmer/CodexMonitor/releases/tag/v${__APP_VERSION__}`,
-      body: "## New\n- Added updater notes",
-    });
-
-    await act(async () => {
-      result.current.dismissPostUpdateNotice();
-    });
     expect(result.current.postUpdateNotice).toBeNull();
-    expect(
-      window.localStorage.getItem(STORAGE_KEY_PENDING_POST_UPDATE_VERSION),
-    ).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("shows post-update fallback when release notes fetch fails", async () => {
+  it("dismisses stale post-update marker without reopening a toast", async () => {
     window.localStorage.setItem(
       STORAGE_KEY_PENDING_POST_UPDATE_VERSION,
       __APP_VERSION__,
-    );
-    fetchMock.mockRejectedValue(new Error("offline"));
-    const onDebug = vi.fn();
-    const { result } = renderHook(() => useUpdater({ onDebug }));
-
-    await waitFor(() =>
-      expect(result.current.postUpdateNotice?.stage).toBe("fallback"),
-    );
-
-    expect(result.current.postUpdateNotice).toMatchObject({
-      stage: "fallback",
-      version: __APP_VERSION__,
-      htmlUrl: `https://github.com/wzxmer/CodexMonitor/releases/tag/v${__APP_VERSION__}`,
-    });
-    expect(onDebug).toHaveBeenCalledWith(
-      expect.objectContaining({
-        label: "updater/release-notes-error",
-        source: "error",
-      }),
-    );
-  });
-
-  it("does not reopen post-update toast after dismissing during loading", async () => {
-    window.localStorage.setItem(
-      STORAGE_KEY_PENDING_POST_UPDATE_VERSION,
-      __APP_VERSION__,
-    );
-
-    let resolveFetch: ((value: Response) => void) | null = null;
-    fetchMock.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveFetch = resolve as (value: Response) => void;
-        }),
     );
 
     const { result } = renderHook(() => useUpdater({}));
 
     await waitFor(() =>
-      expect(result.current.postUpdateNotice?.stage).toBe("loading"),
+      expect(
+        window.localStorage.getItem(STORAGE_KEY_PENDING_POST_UPDATE_VERSION),
+      ).toBeNull(),
     );
 
     await act(async () => {
@@ -340,20 +289,6 @@ describe("useUpdater", () => {
     expect(
       window.localStorage.getItem(STORAGE_KEY_PENDING_POST_UPDATE_VERSION),
     ).toBeNull();
-
-    await act(async () => {
-      resolveFetch?.({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          tag_name: `v${__APP_VERSION__}`,
-          html_url: `https://github.com/wzxmer/CodexMonitor/releases/tag/v${__APP_VERSION__}`,
-          body: "## Notes",
-        }),
-      } as Response);
-      await Promise.resolve();
-    });
-
     expect(result.current.postUpdateNotice).toBeNull();
   });
 

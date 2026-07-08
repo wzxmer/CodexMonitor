@@ -6,14 +6,10 @@ import {
   downloadAndOpenReleaseAsset,
 } from "../../../services/tauri";
 import {
-  buildReleaseTagUrl,
   clearPendingPostUpdateVersion,
   fetchLatestReleaseUpdate,
-  fetchReleaseNotesForVersion,
   type ReleaseUpdateInfo,
   loadPendingPostUpdateVersion,
-  normalizeReleaseVersion,
-  savePendingPostUpdateVersion,
 } from "../utils/postUpdateRelease";
 
 type UpdateStage =
@@ -69,12 +65,8 @@ export function useUpdater({
   onDebug,
 }: UseUpdaterOptions) {
   const [state, setState] = useState<UpdateState>({ stage: "idle" });
-  const [postUpdateNotice, setPostUpdateNotice] = useState<PostUpdateNoticeState>(
-    null,
-  );
   const updateRef = useRef<ReleaseUpdateInfo | null>(null);
   const hasAttemptedAutoCheckRef = useRef(false);
-  const postUpdateFetchGenerationRef = useRef(0);
 
   const resetToIdle = useCallback(async () => {
     updateRef.current = null;
@@ -143,7 +135,6 @@ export function useUpdater({
           downloadedBytes: update.asset.size ?? prev.progress?.downloadedBytes ?? 0,
         },
       }));
-      savePendingPostUpdateVersion(update.version);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : JSON.stringify(error);
@@ -199,81 +190,11 @@ export function useUpdater({
       return;
     }
 
-    const normalizedPendingVersion = normalizeReleaseVersion(pendingVersion);
-    const normalizedCurrentVersion = normalizeReleaseVersion(__APP_VERSION__);
-    if (
-      !normalizedPendingVersion ||
-      normalizedPendingVersion !== normalizedCurrentVersion
-    ) {
-      clearPendingPostUpdateVersion();
-      return;
-    }
-
-    const fallbackUrl = buildReleaseTagUrl(normalizedPendingVersion);
-    const generation = postUpdateFetchGenerationRef.current + 1;
-    postUpdateFetchGenerationRef.current = generation;
-    let cancelled = false;
-    setPostUpdateNotice({
-      stage: "loading",
-      version: normalizedPendingVersion,
-      htmlUrl: fallbackUrl,
-    });
-
-    void fetchReleaseNotesForVersion(normalizedPendingVersion)
-      .then((releaseInfo) => {
-        if (
-          cancelled ||
-          postUpdateFetchGenerationRef.current !== generation
-        ) {
-          return;
-        }
-        if (releaseInfo.body) {
-          setPostUpdateNotice({
-            stage: "ready",
-            version: normalizedPendingVersion,
-            body: releaseInfo.body,
-            htmlUrl: releaseInfo.htmlUrl,
-          });
-          return;
-        }
-        setPostUpdateNotice({
-          stage: "fallback",
-          version: normalizedPendingVersion,
-          htmlUrl: releaseInfo.htmlUrl,
-        });
-      })
-      .catch((error) => {
-        if (
-          cancelled ||
-          postUpdateFetchGenerationRef.current !== generation
-        ) {
-          return;
-        }
-        const message =
-          error instanceof Error ? error.message : JSON.stringify(error);
-        onDebug?.({
-          id: `${Date.now()}-client-updater-release-notes-error`,
-          timestamp: Date.now(),
-          source: "error",
-          label: "updater/release-notes-error",
-          payload: message,
-        });
-        setPostUpdateNotice({
-          stage: "fallback",
-          version: normalizedPendingVersion,
-          htmlUrl: fallbackUrl,
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, onDebug]);
+    clearPendingPostUpdateVersion();
+  }, [enabled]);
 
   const dismissPostUpdateNotice = useCallback(() => {
-    postUpdateFetchGenerationRef.current += 1;
     clearPendingPostUpdateVersion();
-    setPostUpdateNotice(null);
   }, []);
 
   return {
@@ -281,7 +202,7 @@ export function useUpdater({
     startUpdate,
     checkForUpdates,
     dismiss: resetToIdle,
-    postUpdateNotice,
+    postUpdateNotice: null as PostUpdateNoticeState,
     dismissPostUpdateNotice,
   };
 }
