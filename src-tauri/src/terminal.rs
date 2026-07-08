@@ -653,11 +653,14 @@ pub(crate) async fn terminal_open_external(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(target_os = "windows"))]
+    use super::unix_shell_args;
+    #[cfg(target_os = "windows")]
     use super::{
-        read_windows_terminal_font_from_settings, unix_shell_args, windows_pwsh_candidates,
-        windows_shell_args,
+        read_windows_terminal_font_from_settings, windows_pwsh_candidates, windows_shell_args,
     };
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn windows_shell_args_match_powershell_variants() {
         assert_eq!(
@@ -674,6 +677,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn windows_shell_args_match_cmd_variants() {
         assert_eq!(
@@ -683,16 +687,19 @@ mod tests {
         assert_eq!(windows_shell_args(r"C:\Windows\System32\CMD"), vec!["/K"]);
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn windows_shell_args_are_empty_for_other_shells() {
         assert!(windows_shell_args("nu.exe").is_empty());
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn unix_shell_args_stay_interactive() {
         assert_eq!(unix_shell_args(), vec!["-i"]);
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn windows_pwsh_candidates_prefer_pwsh_7() {
         assert_eq!(
@@ -701,6 +708,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn windows_terminal_font_prefers_profile_defaults() {
         let settings = r#"
@@ -718,6 +726,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn windows_terminal_font_reads_default_profile_font() {
         let settings = r#"
