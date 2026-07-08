@@ -2,6 +2,7 @@ import type {
   AccountSnapshot,
   RequestUserInputRequest,
   RateLimitSnapshot,
+  ThreadTokenUsage,
   ThreadListOrganizeMode,
   ThreadListSortKey,
   ThreadSummary,
@@ -39,6 +40,7 @@ import { useThreadRows } from "../hooks/useThreadRows";
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { getUsageLabels } from "../utils/usageLabels";
+import { getContextUsedPercent } from "@/features/threads/utils/contextUsage";
 import { formatRelativeTimeShort } from "../../../utils/time";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
 
@@ -181,7 +183,9 @@ type SidebarProps = {
   activeThreadId: string | null;
   userInputRequests?: RequestUserInputRequest[];
   accountRateLimits: RateLimitSnapshot | null;
+  activeTokenUsage: ThreadTokenUsage | null;
   usageShowRemaining: boolean;
+  useTokenUsageStats: boolean;
   accountInfo: AccountSnapshot | null;
   onSwitchAccount: () => void;
   onCancelSwitchAccount: () => void;
@@ -243,7 +247,9 @@ export const Sidebar = memo(function Sidebar({
   activeThreadId,
   userInputRequests = [],
   accountRateLimits,
+  activeTokenUsage,
   usageShowRemaining,
+  useTokenUsageStats,
   accountInfo,
   onSwitchAccount,
   onCancelSwitchAccount,
@@ -367,6 +373,13 @@ export const Sidebar = memo(function Sidebar({
     availableCredits: t("usage.availableCredits"),
     unlimited: t("usage.unlimited"),
   });
+  const tokenUsagePercent = getContextUsedPercent(activeTokenUsage);
+  const sidebarSessionPercent = useTokenUsageStats ? tokenUsagePercent : sessionPercent;
+  const sidebarWeeklyPercent = useTokenUsageStats ? null : weeklyPercent;
+  const sidebarSessionResetLabel = useTokenUsageStats ? null : sessionResetLabel;
+  const sidebarWeeklyResetLabel = useTokenUsageStats ? null : weeklyResetLabel;
+  const sidebarCreditsLabel = useTokenUsageStats ? null : creditsLabel;
+  const sidebarShowWeekly = useTokenUsageStats ? false : showWeekly;
   const debouncedQuery = useDebouncedValue(searchQuery, 150);
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
   const isSearchActive = Boolean(normalizedQuery);
@@ -1179,12 +1192,12 @@ export const Sidebar = memo(function Sidebar({
         </div>
       </div>
       <SidebarBottomRail
-        sessionPercent={sessionPercent}
-        weeklyPercent={weeklyPercent}
-        sessionResetLabel={sessionResetLabel}
-        weeklyResetLabel={weeklyResetLabel}
-        creditsLabel={creditsLabel}
-        showWeekly={showWeekly}
+        sessionPercent={sidebarSessionPercent}
+        weeklyPercent={sidebarWeeklyPercent}
+        sessionResetLabel={sidebarSessionResetLabel}
+        weeklyResetLabel={sidebarWeeklyResetLabel}
+        creditsLabel={sidebarCreditsLabel}
+        showWeekly={sidebarShowWeekly}
         onOpenSettings={onOpenSettings}
         onOpenDebug={onOpenDebug}
         showDebugButton={showDebugButton}

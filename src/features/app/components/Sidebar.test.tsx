@@ -39,7 +39,9 @@ const baseProps = {
   activeWorkspaceId: null,
   activeThreadId: null,
   accountRateLimits: null,
+  activeTokenUsage: null,
   usageShowRemaining: false,
+  useTokenUsageStats: false,
   accountInfo: null,
   onSwitchAccount: vi.fn(),
   onCancelSwitchAccount: vi.fn(),
@@ -159,6 +161,56 @@ describe("Sidebar", () => {
 
     const creditsLabel = screen.getByText(/^可用额度：/);
     expect(creditsLabel.textContent ?? "").toContain("120");
+  });
+
+  it("uses active thread token usage for key profile sessions", () => {
+    render(
+      <Sidebar
+        {...baseProps}
+        useTokenUsageStats
+        activeTokenUsage={{
+          total: {
+            totalTokens: 20_000,
+            inputTokens: 12_000,
+            cachedInputTokens: 2_000,
+            outputTokens: 8_000,
+            reasoningOutputTokens: 1_000,
+          },
+          last: {
+            totalTokens: 4_000,
+            inputTokens: 3_000,
+            cachedInputTokens: 1_000,
+            outputTokens: 1_000,
+            reasoningOutputTokens: 0,
+          },
+          modelContextWindow: 100_000,
+        }}
+        accountRateLimits={{
+          primary: {
+            usedPercent: 62,
+            windowDurationMins: 300,
+            resetsAt: Math.round(Date.now() / 1000) + 3600,
+          },
+          secondary: {
+            usedPercent: 88,
+            windowDurationMins: 10_080,
+            resetsAt: Math.round(Date.now() / 1000) + 7200,
+          },
+          credits: {
+            hasCredits: true,
+            unlimited: false,
+            balance: "120",
+          },
+          planType: "pro",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("本次")).toBeTruthy();
+    expect(screen.getByText("20%")).toBeTruthy();
+    expect(screen.queryByText("本周")).toBeNull();
+    expect(screen.queryByText(/^可用额度：/)).toBeNull();
+    expect(screen.queryByText("62%")).toBeNull();
   });
 
   it("opens the account menu from the bottom rail", () => {
