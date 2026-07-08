@@ -6,6 +6,7 @@ import {
   SettingsSection,
   SettingsSubsection,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import type { WorkspaceGroup, WorkspaceInfo } from "@/types";
 
 type GroupedWorkspaces = Array<{
@@ -57,21 +58,22 @@ export function SettingsProjectsSection({
   onMoveWorkspace,
   onDeleteWorkspace,
 }: SettingsProjectsSectionProps) {
+  const { t } = useI18n();
   return (
     <SettingsSection
-      title="项目"
-      subtitle="将相关工作区分组，并调整组内项目顺序。"
+      title={t("settings.projects.title")}
+      subtitle={t("settings.projects.subtitle")}
     >
       <SettingsSubsection
-        title="分组"
-        subtitle="为相关仓库创建分组标签。"
+        title={t("settings.projects.groups")}
+        subtitle={t("settings.projects.groupsSubtitle")}
       />
       <div className="settings-groups">
         <div className="settings-group-create">
           <input
             className="settings-input settings-input--compact"
             value={newGroupName}
-            placeholder="新分组名称"
+            placeholder={t("settings.projects.newGroupPlaceholder")}
             onChange={(event) => onSetNewGroupName(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && canCreateGroup) {
@@ -88,7 +90,7 @@ export function SettingsProjectsSection({
             }}
             disabled={!canCreateGroup}
           >
-            添加分组
+            {t("settings.projects.addGroup")}
           </button>
         </div>
         {groupError && <div className="settings-group-error">{groupError}</div>}
@@ -117,13 +119,15 @@ export function SettingsProjectsSection({
                     }}
                   />
                   <div className="settings-group-copies">
-                    <div className="settings-group-copies-label">副本文件夹</div>
+                    <div className="settings-group-copies-label">
+                      {t("settings.projects.copiesFolder")}
+                    </div>
                     <div className="settings-group-copies-row">
                       <div
                         className={`settings-group-copies-path${group.copiesFolder ? "" : " empty"}`}
                         title={group.copiesFolder ?? ""}
                       >
-                        {group.copiesFolder ?? "未设置"}
+                        {group.copiesFolder ?? t("settings.projects.notSet")}
                       </div>
                       <button
                         type="button"
@@ -132,7 +136,7 @@ export function SettingsProjectsSection({
                           void onChooseGroupCopiesFolder(group);
                         }}
                       >
-                        选择...
+                        {t("settings.projects.choose")}
                       </button>
                       <button
                         type="button"
@@ -142,7 +146,7 @@ export function SettingsProjectsSection({
                         }}
                         disabled={!group.copiesFolder}
                       >
-                        清除
+                        {t("common.clear")}
                       </button>
                     </div>
                   </div>
@@ -155,7 +159,7 @@ export function SettingsProjectsSection({
                       void onMoveWorkspaceGroup(group.id, "up");
                     }}
                     disabled={index === 0}
-                    aria-label="上移分组"
+                    aria-label={t("settings.projects.moveGroupUp")}
                   >
                     <ChevronUp aria-hidden />
                   </button>
@@ -166,7 +170,7 @@ export function SettingsProjectsSection({
                       void onMoveWorkspaceGroup(group.id, "down");
                     }}
                     disabled={index === workspaceGroups.length - 1}
-                    aria-label="下移分组"
+                    aria-label={t("settings.projects.moveGroupDown")}
                   >
                     <ChevronDown aria-hidden />
                   </button>
@@ -176,7 +180,7 @@ export function SettingsProjectsSection({
                     onClick={() => {
                       void onDeleteGroup(group);
                     }}
-                    aria-label="删除分组"
+                    aria-label={t("settings.projects.deleteGroup")}
                   >
                     <Trash2 aria-hidden />
                   </button>
@@ -185,12 +189,12 @@ export function SettingsProjectsSection({
             ))}
           </div>
         ) : (
-          <div className="settings-empty">暂无分组。</div>
+          <div className="settings-empty">{t("settings.projects.noGroups")}</div>
         )}
       </div>
       <SettingsSubsection
-        title="项目"
-        subtitle="将项目分配到分组并调整顺序。"
+        title={t("settings.projects.projects")}
+        subtitle={t("settings.projects.projectsSubtitle")}
       />
       <div className="settings-projects">
         {groupedWorkspaces.map((group) => (
@@ -229,7 +233,7 @@ export function SettingsProjectsSection({
                       className="ghost icon-button"
                       onClick={() => onMoveWorkspace(workspace.id, "up")}
                       disabled={index === 0}
-                      aria-label="上移项目"
+                      aria-label={t("settings.projects.moveProjectUp")}
                     >
                       <ChevronUp aria-hidden />
                     </button>
@@ -238,7 +242,7 @@ export function SettingsProjectsSection({
                       className="ghost icon-button"
                       onClick={() => onMoveWorkspace(workspace.id, "down")}
                       disabled={index === group.workspaces.length - 1}
-                      aria-label="下移项目"
+                      aria-label={t("settings.projects.moveProjectDown")}
                     >
                       <ChevronDown aria-hidden />
                     </button>
@@ -246,7 +250,7 @@ export function SettingsProjectsSection({
                       type="button"
                       className="ghost icon-button"
                       onClick={() => onDeleteWorkspace(workspace.id)}
-                      aria-label="删除项目"
+                      aria-label={t("settings.projects.deleteProject")}
                     >
                       <Trash2 aria-hidden />
                     </button>
@@ -256,7 +260,9 @@ export function SettingsProjectsSection({
             })}
           </div>
         ))}
-        {projects.length === 0 && <div className="settings-empty">暂无项目。</div>}
+        {projects.length === 0 && (
+          <div className="settings-empty">{t("settings.projects.noProjects")}</div>
+        )}
       </div>
     </SettingsSection>
   );

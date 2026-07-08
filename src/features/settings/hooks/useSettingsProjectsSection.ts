@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 import type { AppSettings, WorkspaceGroup, WorkspaceInfo } from "@/types";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import type { GroupedWorkspaces } from "./settingsSectionTypes";
 
 type UseSettingsProjectsSectionArgs = {
@@ -63,6 +64,7 @@ export const useSettingsProjectsSection = ({
   onDeleteWorkspaceGroup,
   onAssignWorkspaceGroup,
 }: UseSettingsProjectsSectionArgs): SettingsProjectsSectionProps => {
+  const { t } = useI18n();
   const [groupDrafts, setGroupDrafts] = useState<Record<string, string>>({});
   const [newGroupName, setNewGroupName] = useState("");
   const [groupError, setGroupError] = useState<string | null>(null);
@@ -151,14 +153,23 @@ export const useSettingsProjectsSection = ({
       groupedWorkspaces.find((entry) => entry.id === group.id)?.workspaces ?? [];
     const detail =
       groupProjects.length > 0
-        ? `\n\n此分组内的项目会移到“${ungroupedLabel}”。`
+        ? `\n\n${t("settings.projects.deleteGroupMoveDetail").replace(
+            "{group}",
+            ungroupedLabel,
+          )}`
         : "";
-    const confirmed = await ask(`删除“${group.name}”？${detail}`, {
-      title: "删除分组",
+    const confirmed = await ask(
+      `${t("settings.projects.deleteGroupConfirm").replace(
+        "{name}",
+        group.name,
+      )}${detail}`,
+      {
+      title: t("settings.projects.deleteGroup"),
       kind: "warning",
-      okLabel: "删除",
-      cancelLabel: "取消",
-    });
+      okLabel: t("common.delete"),
+      cancelLabel: t("common.cancel"),
+      },
+    );
     if (!confirmed) {
       return;
     }

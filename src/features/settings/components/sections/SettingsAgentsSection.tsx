@@ -13,6 +13,7 @@ import {
   SettingsToggleRow,
   SettingsToggleSwitch,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
+import { useI18n } from "@/features/i18n/I18nProvider";
 
 const FALLBACK_AGENT_MODELS: ModelOption[] = [
   {
@@ -62,6 +63,7 @@ export function SettingsAgentsSection({
   modelOptionsLoading,
   modelOptionsError,
 }: SettingsAgentsSectionProps) {
+  const { t } = useI18n();
   const [openPathError, setOpenPathError] = useState<string | null>(null);
   const [maxThreadsDraft, setMaxThreadsDraft] = useState("6");
   const [maxDepthDraft, setMaxDepthDraft] = useState("1");
@@ -352,20 +354,25 @@ export function SettingsAgentsSection({
   return (
     <SettingsSection
       title="Agents"
-      subtitle="配置多 agent 模式、限制和自定义角色。"
+      subtitle={t("settings.agents.subtitle")}
     >
       <div className="settings-help settings-agents-builtins-help">
-        Codex 内置角色仍可使用：<code>default</code>、<code>explorer</code> 和
-        <code>worker</code>。
+        {t("settings.agents.builtinsPrefix")}: <code>default</code>,{" "}
+        <code>explorer</code> {t("common.and")} <code>worker</code>.
       </div>
 
       <SettingsToggleRow
-        title="配置文件"
-        subtitle={<>在 {fileManagerName()} 中打开全局 Codex 配置。</>}
+        title={t("settings.agents.configFile")}
+        subtitle={
+          <>
+            {t("settings.agents.openConfigPrefix")} {fileManagerName()}{" "}
+            {t("settings.agents.openConfigSuffix")}
+          </>
+        }
       >
         <div className="settings-agents-actions">
           <button type="button" className="ghost" onClick={onRefresh} disabled={isLoading}>
-            刷新
+            {t("common.refresh")}
           </button>
           <button
             type="button"
@@ -379,10 +386,11 @@ export function SettingsAgentsSection({
       </SettingsToggleRow>
 
       <SettingsToggleRow
-        title="启用 Multi-Agent"
+        title={t("settings.agents.enableMultiAgent")}
         subtitle={
           <>
-            写入 config.toml 中的 <code>features.multi_agent</code>。
+            {t("settings.agents.enableMultiAgentHelp")}{" "}
+            <code>features.multi_agent</code>.
           </>
         }
       >
@@ -394,14 +402,15 @@ export function SettingsAgentsSection({
       </SettingsToggleRow>
 
       <SettingsToggleRow
-        title="最大线程数"
+        title={t("settings.agents.maxThreads")}
         subtitle={
           <>
-            最大打开 agent 线程数。有效范围：<code>1-12</code>。修改后立即保存。
+            {t("settings.agents.maxThreadsHelp")} <code>1-12</code>.
+            {t("settings.agents.savedImmediately")}
           </>
         }
       >
-        <div className="settings-agents-stepper" role="group" aria-label="最大 agent 线程数">
+        <div className="settings-agents-stepper" role="group" aria-label={t("settings.agents.maxThreadsAria")}>
           <button
             type="button"
             className="ghost settings-agents-stepper-button"
@@ -409,7 +418,7 @@ export function SettingsAgentsSection({
               void handleMaxThreadsStep(-1);
             }}
             disabled={!settings || isUpdatingCore || currentMaxThreads <= MIN_MAX_THREADS}
-            aria-label="减少最大线程数"
+            aria-label={t("settings.agents.decreaseMaxThreads")}
           >
             ▼
           </button>
@@ -423,7 +432,7 @@ export function SettingsAgentsSection({
               void handleMaxThreadsStep(1);
             }}
             disabled={!settings || isUpdatingCore || currentMaxThreads >= MAX_MAX_THREADS}
-            aria-label="增加最大线程数"
+            aria-label={t("settings.agents.increaseMaxThreads")}
           >
             ▲
           </button>
@@ -431,14 +440,15 @@ export function SettingsAgentsSection({
       </SettingsToggleRow>
 
       <SettingsToggleRow
-        title="最大深度"
+        title={t("settings.agents.maxDepth")}
         subtitle={
           <>
-            最大嵌套派生深度。有效范围：<code>1-4</code>。修改后立即保存。
+            {t("settings.agents.maxDepthHelp")} <code>1-4</code>.
+            {t("settings.agents.savedImmediately")}
           </>
         }
       >
-        <div className="settings-agents-stepper" role="group" aria-label="最大 agent 深度">
+        <div className="settings-agents-stepper" role="group" aria-label={t("settings.agents.maxDepthAria")}>
           <button
             type="button"
             className="ghost settings-agents-stepper-button"
@@ -446,7 +456,7 @@ export function SettingsAgentsSection({
               void handleMaxDepthStep(-1);
             }}
             disabled={!settings || isUpdatingCore || currentMaxDepth <= MIN_MAX_DEPTH}
-            aria-label="减少最大深度"
+            aria-label={t("settings.agents.decreaseMaxDepth")}
           >
             ▼
           </button>
@@ -460,7 +470,7 @@ export function SettingsAgentsSection({
               void handleMaxDepthStep(1);
             }}
             disabled={!settings || isUpdatingCore || currentMaxDepth >= MAX_MAX_DEPTH}
-            aria-label="增加最大深度"
+            aria-label={t("settings.agents.increaseMaxDepth")}
           >
             ▲
           </button>
@@ -468,17 +478,19 @@ export function SettingsAgentsSection({
       </SettingsToggleRow>
 
       <SettingsSubsection
-        title="创建 Agent"
+        title={t("settings.agents.createAgent")}
         subtitle={
           <>
-            在 <code>[agents.&lt;name&gt;]</code> 下添加自定义角色，并创建对应配置文件。
+            {t("settings.agents.createAgentHelpPrefix")}{" "}
+            <code>[agents.&lt;name&gt;]</code>{" "}
+            {t("settings.agents.createAgentHelpSuffix")}
           </>
         }
       />
       <div className="settings-field settings-agents-form">
         <div className="settings-agents-description-row">
           <label className="settings-label" htmlFor="settings-agent-create-name">
-            名称
+            {t("settings.agents.name")}
           </label>
           <button
             type="button"
@@ -504,8 +516,8 @@ export function SettingsAgentsSection({
               })();
             }}
             disabled={creatingAgent || createDescriptionGenerating || !canGenerateCreateFromName}
-            title="用 AI 生成描述和开发者指令"
-            aria-label="为新 agent 生成字段"
+            title={t("settings.agents.generateFields")}
+            aria-label={t("settings.agents.generateNewAgentFields")}
           >
             {createDescriptionGenerating ? (
               <MagicSparkleLoaderIcon className="settings-agents-generate-loader" />
@@ -523,26 +535,26 @@ export function SettingsAgentsSection({
           disabled={creatingAgent}
         />
         <label className="settings-label" htmlFor="settings-agent-create-description">
-          描述
+          {t("settings.agents.description")}
         </label>
         <textarea
           id="settings-agent-create-description"
           className="settings-agents-textarea settings-agents-textarea--compact"
           value={createDescription}
           onChange={(event) => setCreateDescription(event.target.value)}
-          placeholder="简短角色说明。"
+          placeholder={t("settings.agents.descriptionPlaceholder")}
           rows={2}
           disabled={creatingAgent}
         />
         <label className="settings-label" htmlFor="settings-agent-create-developer-instructions">
-          开发者指令
+          {t("settings.agents.developerInstructions")}
         </label>
         <textarea
           id="settings-agent-create-developer-instructions"
           className="settings-agents-textarea"
           value={createDeveloperInstructions}
           onChange={(event) => setCreateDeveloperInstructions(event.target.value)}
-          placeholder="多行 agent 专用开发者指令。"
+          placeholder={t("settings.agents.developerInstructionsPlaceholder")}
           disabled={creatingAgent}
         />
         <div className="settings-agents-model-row">
@@ -554,7 +566,7 @@ export function SettingsAgentsSection({
               value={createModel}
               onChange={(event) => setCreateModel(event.target.value)}
               disabled={creatingAgent}
-              aria-label="Agent 模型"
+              aria-label={t("settings.agents.agentModel")}
             >
               {effectiveModelOptions.map((option) => (
                 <option key={option.model} value={option.model}>
@@ -574,9 +586,11 @@ export function SettingsAgentsSection({
               value={createReasoningEffort}
               onChange={(event) => setCreateReasoningEffort(event.target.value)}
               disabled={creatingAgent || createReasoningOptions.length === 0}
-              aria-label="Agent 推理强度"
+              aria-label={t("settings.agents.agentReasoning")}
             >
-              {createReasoningOptions.length === 0 && <option value="">不支持</option>}
+              {createReasoningOptions.length === 0 && (
+                <option value="">{t("settings.codex.unsupported")}</option>
+              )}
               {createReasoningOptions.map((effort) => (
                 <option key={effort} value={effort}>
                   {effort}
@@ -587,14 +601,14 @@ export function SettingsAgentsSection({
         </div>
         <div className="settings-agents-actions">
           <button type="button" className="ghost" onClick={() => void handleCreateAgent()}>
-            {creatingAgent ? "创建中..." : "创建 Agent"}
+            {creatingAgent ? t("settings.agents.creating") : t("settings.agents.createAgent")}
           </button>
         </div>
         {modelOptions.length === 0 && (
           <div className="settings-help">
             {modelOptionsLoading
-              ? "正在加载项目模型元数据。暂时使用备用模型默认值。"
-              : "项目模型元数据可用前，先使用备用模型默认值。"}
+              ? t("settings.agents.modelsLoading")
+              : t("settings.agents.modelsFallback")}
           </div>
         )}
         {modelOptionsError && <div className="settings-help">{modelOptionsError}</div>}
@@ -602,12 +616,12 @@ export function SettingsAgentsSection({
       </div>
 
       <SettingsSubsection
-        title="已配置 Agents"
-        subtitle="管理自定义角色及其 agent 专用配置文件。"
+        title={t("settings.agents.configuredAgents")}
+        subtitle={t("settings.agents.configuredAgentsSubtitle")}
       />
 
       {settings && settings.agents.length === 0 && !isLoading && (
-        <div className="settings-help">尚未配置自定义 agents。</div>
+        <div className="settings-help">{t("settings.agents.noCustomAgents")}</div>
       )}
 
       {settings?.agents.map((agent) => {
@@ -625,13 +639,13 @@ export function SettingsAgentsSection({
               <div>
                 <div className="settings-toggle-title">{agent.name}</div>
                 <div className="settings-toggle-subtitle">
-                  {agent.description || "无描述。"}
+                  {agent.description || t("settings.agents.noDescription")}
                 </div>
               </div>
             </div>
 
             <div className="settings-help settings-help-inline">
-              <code>{agent.configFile || "（缺少 config_file）"}</code>
+              <code>{agent.configFile || t("settings.agents.missingConfigFile")}</code>
             </div>
             <div className="settings-agents-actions">
               {!isPendingDelete && (
@@ -642,7 +656,7 @@ export function SettingsAgentsSection({
                     onClick={() => startEditing(agent)}
                     disabled={isUpdating || isDeleting}
                   >
-                    编辑
+                    {t("common.edit")}
                   </button>
                   <button
                     type="button"
@@ -650,7 +664,7 @@ export function SettingsAgentsSection({
                     onClick={() => handleDeleteAgent(agent.name)}
                     disabled={isUpdating || isDeleting}
                   >
-                    删除
+                    {t("common.delete")}
                   </button>
                 </>
               )}
@@ -667,16 +681,16 @@ export function SettingsAgentsSection({
                 onClick={() => void handleOpenConfigEditor(agent.name)}
                 disabled={!agent.managedByApp || isReadingConfig || isWritingConfig}
               >
-                {isReadingConfig ? "打开中..." : "编辑文件"}
+                {isReadingConfig ? t("settings.agents.opening") : t("settings.agents.editFile")}
               </button>
               {!agent.managedByApp && (
-                <span className="settings-help settings-help-inline">外部路径</span>
+                <span className="settings-help settings-help-inline">{t("settings.agents.externalPath")}</span>
               )}
             </div>
             {isPendingDelete && (
               <div className="settings-agents-actions">
                 <span className="settings-help settings-help-inline">
-                  删除 agent 和托管配置文件？
+                  {t("settings.agents.deleteAgentQuestion")}
                 </span>
                 <button
                   type="button"
@@ -686,7 +700,7 @@ export function SettingsAgentsSection({
                   }}
                   disabled={isDeleting}
                 >
-                  取消
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
@@ -694,7 +708,7 @@ export function SettingsAgentsSection({
                   onClick={() => void handleConfirmDeleteAgent(agent.name)}
                   disabled={isDeleting}
                 >
-                  {isDeleting ? "删除中..." : "确认删除"}
+                  {isDeleting ? t("settings.agents.deleting") : t("settings.agents.confirmDelete")}
                 </button>
               </div>
             )}
@@ -706,7 +720,7 @@ export function SettingsAgentsSection({
                     className="settings-label"
                     htmlFor={`settings-agent-edit-name-${agent.name}`}
                   >
-                    名称
+                    {t("settings.agents.name")}
                   </label>
                   <button
                     type="button"
@@ -734,8 +748,11 @@ export function SettingsAgentsSection({
                     disabled={
                       isUpdating || editDescriptionGenerating || !canGenerateEditFromName
                     }
-                    title="用 AI 生成描述和开发者指令"
-                    aria-label={`为 ${agent.name} 生成字段`}
+                    title={t("settings.agents.generateFields")}
+                    aria-label={t("settings.agents.generateAgentFields").replace(
+                      "{name}",
+                      agent.name,
+                    )}
                   >
                     {editDescriptionGenerating ? (
                       <MagicSparkleLoaderIcon className="settings-agents-generate-loader" />
@@ -755,14 +772,14 @@ export function SettingsAgentsSection({
                   className="settings-label"
                   htmlFor={`settings-agent-edit-description-${agent.name}`}
                 >
-                  描述
+                  {t("settings.agents.description")}
                 </label>
                 <textarea
                   id={`settings-agent-edit-description-${agent.name}`}
                   className="settings-agents-textarea settings-agents-textarea--compact"
                   value={editDescriptionDraft}
                   onChange={(event) => setEditDescriptionDraft(event.target.value)}
-                  placeholder="简短角色说明。"
+                  placeholder={t("settings.agents.descriptionPlaceholder")}
                   rows={2}
                   disabled={isUpdating}
                 />
@@ -770,7 +787,7 @@ export function SettingsAgentsSection({
                   className="settings-label"
                   htmlFor={`settings-agent-edit-developer-instructions-${agent.name}`}
                 >
-                  开发者指令
+                  {t("settings.agents.developerInstructions")}
                 </label>
                 <textarea
                   id={`settings-agent-edit-developer-instructions-${agent.name}`}
@@ -779,7 +796,7 @@ export function SettingsAgentsSection({
                   onChange={(event) =>
                     setEditDeveloperInstructionsDraft(event.target.value)
                   }
-                  placeholder="多行 agent 专用开发者指令。"
+                  placeholder={t("settings.agents.developerInstructionsPlaceholder")}
                   disabled={isUpdating}
                 />
                 <label className="settings-checkbox">
@@ -788,7 +805,7 @@ export function SettingsAgentsSection({
                     checked={renameManagedFile}
                     onChange={(event) => setRenameManagedFile(event.target.checked)}
                   />
-                  agent 名称变化时同步重命名托管配置文件
+                  {t("settings.agents.renameManagedFile")}
                 </label>
                 <div className="settings-agents-actions">
                   <button
@@ -800,7 +817,7 @@ export function SettingsAgentsSection({
                     }}
                     disabled={isUpdating}
                   >
-                    取消
+                    {t("common.cancel")}
                   </button>
                   <button
                     type="button"
@@ -808,7 +825,7 @@ export function SettingsAgentsSection({
                     onClick={() => void handleUpdateAgent()}
                     disabled={isUpdating}
                   >
-                    {isUpdating ? "保存中..." : "保存"}
+                    {isUpdating ? t("common.saving") : t("common.save")}
                   </button>
                 </div>
                 {editError && <div className="settings-agents-error">{editError}</div>}
@@ -819,7 +836,9 @@ export function SettingsAgentsSection({
               <div className="settings-field settings-agents-editor">
                 <div className="settings-agents-header">
                   <div>
-                    <div className="settings-toggle-title">{agent.name} 配置文件</div>
+                    <div className="settings-toggle-title">
+                      {t("settings.agents.agentConfigFile").replace("{name}", agent.name)}
+                    </div>
                     <div className="settings-toggle-subtitle">
                       <code>{agent.configFile}</code>
                     </div>
@@ -833,7 +852,7 @@ export function SettingsAgentsSection({
                         setConfigEditorDirty(false);
                       }}
                     >
-                      关闭
+                      {t("common.close")}
                     </button>
                     <button
                       type="button"
@@ -841,7 +860,7 @@ export function SettingsAgentsSection({
                       onClick={() => void handleSaveConfigEditor()}
                       disabled={!configEditorDirty || writingConfigAgentName === agent.name}
                     >
-                      {isWritingConfig ? "保存中..." : "保存"}
+                      {isWritingConfig ? t("common.saving") : t("common.save")}
                     </button>
                   </div>
                 </div>
@@ -859,7 +878,7 @@ export function SettingsAgentsSection({
         );
       })}
 
-      {isLoading && <div className="settings-help">正在加载 agents 设置...</div>}
+      {isLoading && <div className="settings-help">{t("settings.agents.loading")}</div>}
       {openPathError && <div className="settings-agents-error">{openPathError}</div>}
       {error && <div className="settings-agents-error">{error}</div>}
     </SettingsSection>

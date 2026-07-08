@@ -2,6 +2,7 @@ import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { SettingsSection } from "@/features/design-system/components/settings/SettingsPrimitives";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import type { OpenAppTarget } from "@/types";
 import {
   fileManagerName,
@@ -40,10 +41,11 @@ export function SettingsOpenAppsSection({
   onAddOpenApp,
   onSelectOpenAppDefault,
 }: SettingsOpenAppsSectionProps) {
+  const { t } = useI18n();
   return (
     <SettingsSection
-      title="打开方式"
-      subtitle="自定义标题栏和文件预览中的“打开方式”菜单。"
+      title={t("settings.openApps.title")}
+      subtitle={t("settings.openApps.subtitle")}
     >
       <div className="settings-open-apps">
         {openAppDrafts.map((target, index) => {
@@ -55,12 +57,12 @@ export function SettingsOpenAppsSection({
             target.kind !== "command" || Boolean(target.command?.trim());
           const isComplete = labelValid && appNameValid && commandValid;
           const incompleteHint = !labelValid
-            ? "需要标签"
+            ? t("settings.openApps.needLabel")
             : target.kind === "app"
-              ? "需要应用名称"
+              ? t("settings.openApps.needAppName")
               : target.kind === "command"
-                ? "需要命令"
-                : "请补全必填字段";
+                ? t("settings.openApps.needCommand")
+                : t("settings.openApps.completeRequired");
 
           return (
             <div
@@ -78,86 +80,101 @@ export function SettingsOpenAppsSection({
               </div>
               <div className="settings-open-app-fields">
                 <label className="settings-open-app-field settings-open-app-field--label">
-                  <span className="settings-visually-hidden">标签</span>
+                  <span className="settings-visually-hidden">{t("settings.openApps.label")}</span>
                   <input
                     className="settings-input settings-input--compact settings-open-app-input settings-open-app-input--label"
                     value={target.label}
-                    placeholder="标签"
+                    placeholder={t("settings.openApps.label")}
                     onChange={(event) =>
                       onOpenAppDraftChange(index, {
                         label: event.target.value,
                       })
                     }
                     onBlur={onCommitOpenApps}
-                    aria-label={`打开方式标签 ${index + 1}`}
+                    aria-label={t("settings.openApps.labelAria").replace(
+                      "{index}",
+                      String(index + 1),
+                    )}
                     data-invalid={!labelValid || undefined}
                   />
                 </label>
                 <label className="settings-open-app-field settings-open-app-field--type">
-                  <span className="settings-visually-hidden">类型</span>
+                  <span className="settings-visually-hidden">{t("settings.openApps.type")}</span>
                   <select
                     className="settings-select settings-select--compact settings-open-app-kind"
                     value={target.kind}
                     onChange={(event) =>
                       onOpenAppKindChange(index, event.target.value as OpenAppTarget["kind"])
                     }
-                    aria-label={`打开方式类型 ${index + 1}`}
+                    aria-label={t("settings.openApps.typeAria").replace(
+                      "{index}",
+                      String(index + 1),
+                    )}
                   >
-                    <option value="app">应用</option>
-                    <option value="command">命令</option>
+                    <option value="app">{t("settings.openApps.app")}</option>
+                    <option value="command">{t("settings.openApps.command")}</option>
                     <option value="finder">{fileManagerName()}</option>
                   </select>
                 </label>
                 {target.kind === "app" && (
                   <label className="settings-open-app-field settings-open-app-field--appname">
-                    <span className="settings-visually-hidden">应用名称</span>
+                    <span className="settings-visually-hidden">{t("settings.openApps.appName")}</span>
                     <input
                       className="settings-input settings-input--compact settings-open-app-input settings-open-app-input--appname"
                       value={target.appName ?? ""}
-                      placeholder="应用名称"
+                      placeholder={t("settings.openApps.appName")}
                       onChange={(event) =>
                         onOpenAppDraftChange(index, {
                           appName: event.target.value,
                         })
                       }
                       onBlur={onCommitOpenApps}
-                      aria-label={`打开方式应用名称 ${index + 1}`}
+                      aria-label={t("settings.openApps.appNameAria").replace(
+                        "{index}",
+                        String(index + 1),
+                      )}
                       data-invalid={!appNameValid || undefined}
                     />
                   </label>
                 )}
                 {target.kind === "command" && (
                   <label className="settings-open-app-field settings-open-app-field--command">
-                    <span className="settings-visually-hidden">命令</span>
+                    <span className="settings-visually-hidden">{t("settings.openApps.command")}</span>
                     <input
                       className="settings-input settings-input--compact settings-open-app-input settings-open-app-input--command"
                       value={target.command ?? ""}
-                      placeholder="命令"
+                      placeholder={t("settings.openApps.command")}
                       onChange={(event) =>
                         onOpenAppDraftChange(index, {
                           command: event.target.value,
                         })
                       }
                       onBlur={onCommitOpenApps}
-                      aria-label={`打开方式命令 ${index + 1}`}
+                      aria-label={t("settings.openApps.commandAria").replace(
+                        "{index}",
+                        String(index + 1),
+                      )}
                       data-invalid={!commandValid || undefined}
                     />
                   </label>
                 )}
                 {target.kind !== "finder" && (
                   <label className="settings-open-app-field settings-open-app-field--args">
-                    <span className="settings-visually-hidden">参数</span>
+                    <span className="settings-visually-hidden">{t("settings.openApps.args")}</span>
                     <input
                       className="settings-input settings-input--compact settings-open-app-input settings-open-app-input--args"
                       value={target.argsText}
-                      placeholder="参数"
+                      placeholder={t("settings.openApps.args")}
                       onChange={(event) =>
                         onOpenAppDraftChange(index, {
                           argsText: event.target.value,
                         })
                       }
                       onBlur={onCommitOpenApps}
-                      aria-label={`打开方式参数 ${index + 1}`}
+                      aria-label={t("settings.openApps.argsAria").replace(
+                        "{index}",
+                        String(index + 1),
+                      )}
                     />
                   </label>
                 )}
@@ -169,7 +186,7 @@ export function SettingsOpenAppsSection({
                     title={incompleteHint}
                     aria-label={incompleteHint}
                   >
-                    未完成
+                    {t("settings.openApps.incomplete")}
                   </span>
                 )}
                 <label className="settings-open-app-default">
@@ -180,7 +197,7 @@ export function SettingsOpenAppsSection({
                     onChange={() => onSelectOpenAppDefault(target.id)}
                     disabled={!isComplete}
                   />
-                  默认
+                  {t("common.default")}
                 </label>
                 <div className="settings-open-app-order">
                   <button
@@ -188,7 +205,7 @@ export function SettingsOpenAppsSection({
                     className="ghost icon-button"
                     onClick={() => onMoveOpenApp(index, "up")}
                     disabled={index === 0}
-                    aria-label="上移"
+                    aria-label={t("settings.openApps.moveUp")}
                   >
                     <ChevronUp aria-hidden />
                   </button>
@@ -197,7 +214,7 @@ export function SettingsOpenAppsSection({
                     className="ghost icon-button"
                     onClick={() => onMoveOpenApp(index, "down")}
                     disabled={index === openAppDrafts.length - 1}
-                    aria-label="下移"
+                    aria-label={t("settings.openApps.moveDown")}
                   >
                     <ChevronDown aria-hidden />
                   </button>
@@ -207,8 +224,8 @@ export function SettingsOpenAppsSection({
                   className="ghost icon-button"
                   onClick={() => onDeleteOpenApp(index)}
                   disabled={openAppDrafts.length <= 1}
-                  aria-label="移除应用"
-                  title="移除应用"
+                  aria-label={t("settings.openApps.removeApp")}
+                  title={t("settings.openApps.removeApp")}
                 >
                   <Trash2 aria-hidden />
                 </button>
@@ -219,13 +236,13 @@ export function SettingsOpenAppsSection({
       </div>
       <div className="settings-open-app-footer">
         <button type="button" className="ghost" onClick={onAddOpenApp}>
-          添加应用
+          {t("settings.openApps.addApp")}
         </button>
         <div className="settings-help">
-          命令会把所选路径作为最后一个参数传入。{" "}
+          {t("settings.openApps.commandHelpPrefix")}{" "}
           {isMacPlatform()
-            ? "应用会通过 `open -a` 打开，并可附加参数。"
-            : "应用会作为可执行文件运行，并可附加参数。"}
+            ? t("settings.openApps.macHelp")
+            : t("settings.openApps.executableHelp")}
         </div>
       </div>
     </SettingsSection>

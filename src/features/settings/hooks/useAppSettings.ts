@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AppSettings } from "@/types";
+import type { AppSettings, CodexKeyProfile } from "@/types";
 import { getAppSettings, runCodexDoctor, updateAppSettings } from "@services/tauri";
 import { clampUiScale, UI_SCALE_DEFAULT } from "@utils/uiScale";
 import { CHAT_SCROLLBACK_DEFAULT, normalizeChatHistoryScrollbackItems } from "@utils/chatScrollback";
@@ -46,6 +46,8 @@ const DEFAULT_REMOTE_BACKEND_HOST = "127.0.0.1:4732";
 const DEFAULT_REMOTE_BACKEND_ID = "remote-default";
 const DEFAULT_REMOTE_BACKEND_NAME = "Primary remote";
 const DEFAULT_REMOTE_PROVIDER: AppSettings["remoteBackendProvider"] = "tcp";
+const DEFAULT_CODEX_KEY_ENV_VAR = "OPENAI_API_KEY";
+const DEFAULT_CODEX_BASE_URL_ENV_VAR = "OPENAI_BASE_URL";
 const DEFAULT_MESSAGE_USER_BUBBLE_COLOR = "#d9ebff";
 const DEFAULT_MESSAGE_USER_TEXT_COLOR = "#102033";
 const DEFAULT_MESSAGE_CANVAS_COLOR = "#eef1f6";
@@ -158,6 +160,35 @@ function normalizeRemoteBackends(settings: AppSettings): {
   };
 }
 
+function normalizeCodexKeyProfiles(
+  profiles: AppSettings["codexKeyProfiles"] | undefined,
+): CodexKeyProfile[] {
+  if (!Array.isArray(profiles)) {
+    return [];
+  }
+  const usedIds = new Set<string>();
+  return profiles
+    .map((profile, index) => {
+      const baseId = profile.id?.trim() || `codex-key-${index + 1}`;
+      let id = baseId;
+      let suffix = 2;
+      while (usedIds.has(id)) {
+        id = `${baseId}-${suffix}`;
+        suffix += 1;
+      }
+      usedIds.add(id);
+      return {
+        id,
+        name: profile.name?.trim() || `Key ${index + 1}`,
+        keyEnvVar: profile.keyEnvVar?.trim() || DEFAULT_CODEX_KEY_ENV_VAR,
+        key: profile.key?.trim() || "",
+        baseUrlEnvVar: profile.baseUrlEnvVar?.trim() || DEFAULT_CODEX_BASE_URL_ENV_VAR,
+        baseUrl: profile.baseUrl?.trim() || null,
+      };
+    })
+    .filter((profile) => profile.key.length > 0);
+}
+
 function buildDefaultSettings(): AppSettings {
   const isMac = isMacPlatform();
   const isMobile = isMobilePlatform();
@@ -172,6 +203,9 @@ function buildDefaultSettings(): AppSettings {
   return {
     codexBin: null,
     codexArgs: null,
+    codexHome: null,
+    codexKeyProfiles: [],
+    activeCodexKeyProfileId: null,
     backendMode: isMobile ? "remote" : "local",
     remoteBackendProvider: defaultRemote.provider,
     remoteBackendHost: defaultRemote.host,
@@ -299,11 +333,20 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
   const chatHistoryScrollbackItems = normalizeChatHistoryScrollbackItems(
     settings.chatHistoryScrollbackItems,
   );
+  const codexKeyProfiles = normalizeCodexKeyProfiles(settings.codexKeyProfiles);
+  const activeCodexKeyProfileId = codexKeyProfiles.some(
+    (profile) => profile.id === settings.activeCodexKeyProfileId,
+  )
+    ? settings.activeCodexKeyProfileId
+    : null;
   return {
     ...settings,
     ...remoteBackendSettings,
-    codexBin: settings.codexBin?.trim() ? settings.codexBin.trim() : null,
-    codexArgs: settings.codexArgs?.trim() ? settings.codexArgs.trim() : null,
+      codexBin: settings.codexBin?.trim() ? settings.codexBin.trim() : null,
+      codexArgs: settings.codexArgs?.trim() ? settings.codexArgs.trim() : null,
+      codexHome: settings.codexHome?.trim() ? settings.codexHome.trim() : null,
+      codexKeyProfiles,
+    activeCodexKeyProfileId,
     uiScale: clampUiScale(settings.uiScale),
     appLanguage: allowedAppLanguages.has(settings.appLanguage)
       ? settings.appLanguage

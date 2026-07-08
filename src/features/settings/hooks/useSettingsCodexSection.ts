@@ -4,11 +4,16 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AppSettings,
   CodexDoctorResult,
+  CodexSyncDiagnostics,
   CodexStatus,
   CodexUpdateResult,
   WorkspaceInfo,
 } from "@/types";
-import { getCodexStatus } from "@services/tauri";
+import {
+  connectWorkspace,
+  getCodexStatus,
+  getCodexSyncDiagnostics,
+} from "@services/tauri";
 import { listMcpServerStatus } from "@services/tauri";
 import { useGlobalAgentsMd } from "./useGlobalAgentsMd";
 import { useGlobalCodexConfigToml } from "./useGlobalCodexConfigToml";
@@ -40,7 +45,13 @@ export type SettingsCodexSectionProps = {
   onRefreshDefaultModels: () => void;
   codexPathDraft: string;
   codexArgsDraft: string;
+  codexHomeDraft: string;
   codexDirty: boolean;
+  codexHomeReconnectState: {
+    required: boolean;
+    status: "idle" | "running" | "done";
+    error: string | null;
+  };
   isSavingSettings: boolean;
   doctorState: {
     status: "idle" | "running" | "done";
@@ -53,6 +64,11 @@ export type SettingsCodexSectionProps = {
   codexStatusState: {
     status: "idle" | "loading" | "done";
     result: CodexStatus | null;
+    error: string | null;
+  };
+  codexSyncDiagnosticsState: {
+    status: "idle" | "loading" | "done";
+    result: CodexSyncDiagnostics | null;
     error: string | null;
   };
   mcpStatusState: {
@@ -77,13 +93,17 @@ export type SettingsCodexSectionProps = {
   globalConfigSaveLabel: string;
   onSetCodexPathDraft: Dispatch<SetStateAction<string>>;
   onSetCodexArgsDraft: Dispatch<SetStateAction<string>>;
+  onSetCodexHomeDraft: Dispatch<SetStateAction<string>>;
   onSetGlobalAgentsContent: (value: string) => void;
   onSetGlobalConfigContent: (value: string) => void;
   onBrowseCodex: () => Promise<void>;
+  onBrowseCodexHome: () => Promise<void>;
   onSaveCodexSettings: () => Promise<void>;
+  onReconnectCodexHomeWorkspaces: () => Promise<void>;
   onRunDoctor: () => Promise<void>;
   onRunCodexUpdate: () => Promise<void>;
   onRefreshCodexStatus: () => void;
+  onRefreshCodexSyncDiagnostics: () => void;
   onRefreshMcpStatus: () => void;
   onRefreshGlobalAgents: () => void;
   onSaveGlobalAgents: () => void;
@@ -100,6 +120,12 @@ export const useSettingsCodexSection = ({
 }: UseSettingsCodexSectionArgs): SettingsCodexSectionProps => {
   const [codexPathDraft, setCodexPathDraft] = useState(appSettings.codexBin ?? "");
   const [codexArgsDraft, setCodexArgsDraft] = useState(appSettings.codexArgs ?? "");
+  const [codexHomeDraft, setCodexHomeDraft] = useState(appSettings.codexHome ?? "");
+  const [codexHomeReconnectState, setCodexHomeReconnectState] = useState<{
+    required: boolean;
+    status: "idle" | "running" | "done";
+    error: string | null;
+  }>({ required: false, status: "idle", error: null });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [doctorState, setDoctorState] = useState<{
     status: "idle" | "running" | "done";
@@ -112,6 +138,11 @@ export const useSettingsCodexSection = ({
   const [codexStatusState, setCodexStatusState] = useState<{
     status: "idle" | "loading" | "done";
     result: CodexStatus | null;
+    error: string | null;
+  }>({ status: "idle", result: null, error: null });
+  const [codexSyncDiagnosticsState, setCodexSyncDiagnosticsState] = useState<{
+    status: "idle" | "loading" | "done";
+    result: CodexSyncDiagnostics | null;
     error: string | null;
   }>({ status: "idle", result: null, error: null });
   const [mcpStatusState, setMcpStatusState] = useState<{
@@ -190,13 +221,32 @@ export const useSettingsCodexSection = ({
       });
   }, []);
 
+  const refreshCodexSyncDiagnostics = useCallback(() => {
+    setCodexSyncDiagnosticsState((current) => ({
+      status: "loading",
+      result: current.result,
+      error: null,
+    }));
+    getCodexSyncDiagnostics()
+      .then((result) => {
+        setCodexSyncDiagnosticsState({ status: "done", result, error: null });
+      })
+      .catch((error) => {
+        setCodexSyncDiagnosticsState({
+          status: "done",
+          result: null,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+  }, []);
+
   const refreshMcpStatus = useCallback(() => {
     const workspace = projects.find((entry) => entry.connected) ?? null;
     if (!workspace) {
       setMcpStatusState({
         status: "done",
         result: null,
-        error: "需要先连接一个 Codex 项目或无项目会话。",
+        error: "settings.codex.mcpNeedsWorkspace",
         workspaceName: null,
       });
       return;
@@ -228,7 +278,8 @@ export const useSettingsCodexSection = ({
 
   useEffect(() => {
     refreshCodexStatus();
-  }, [refreshCodexStatus]);
+    refreshCodexSyncDiagnostics();
+  }, [refreshCodexStatus, refreshCodexSyncDiagnostics]);
 
   useEffect(() => {
     setCodexPathDraft(appSettings.codexBin ?? "");
@@ -238,11 +289,17 @@ export const useSettingsCodexSection = ({
     setCodexArgsDraft(appSettings.codexArgs ?? "");
   }, [appSettings.codexArgs]);
 
+  useEffect(() => {
+    setCodexHomeDraft(appSettings.codexHome ?? "");
+  }, [appSettings.codexHome]);
+
   const nextCodexBin = codexPathDraft.trim() ? codexPathDraft.trim() : null;
   const nextCodexArgs = normalizeCodexArgsInput(codexArgsDraft);
+  const nextCodexHome = codexHomeDraft.trim() ? codexHomeDraft.trim() : null;
   const codexDirty =
     nextCodexBin !== (appSettings.codexBin ?? null) ||
-    nextCodexArgs !== (appSettings.codexArgs ?? null);
+    nextCodexArgs !== (appSettings.codexArgs ?? null) ||
+    nextCodexHome !== (appSettings.codexHome ?? null);
 
   const handleBrowseCodex = async () => {
     const selection = await open({ multiple: false, directory: false });
@@ -252,16 +309,68 @@ export const useSettingsCodexSection = ({
     setCodexPathDraft(selection);
   };
 
+  const handleBrowseCodexHome = async () => {
+    const selection = await open({ multiple: false, directory: true });
+    if (!selection || Array.isArray(selection)) {
+      return;
+    }
+    setCodexHomeDraft(selection);
+  };
+
   const handleSaveCodexSettings = async () => {
     setIsSavingSettings(true);
+    const codexHomeChanged = nextCodexHome !== (appSettings.codexHome ?? null);
     try {
       await onUpdateAppSettings({
         ...appSettings,
         codexBin: nextCodexBin,
         codexArgs: nextCodexArgs,
+        codexHome: nextCodexHome,
       });
+      if (codexHomeChanged) {
+        setCodexHomeReconnectState({
+          required: true,
+          status: "idle",
+          error: null,
+        });
+      }
+      refreshCodexStatus();
+      refreshCodexSyncDiagnostics();
+      void refreshGlobalAgents();
+      void refreshGlobalConfig();
     } finally {
       setIsSavingSettings(false);
+    }
+  };
+
+  const handleReconnectCodexHomeWorkspaces = async () => {
+    const connectedProjects = projects.filter((project) => project.connected);
+    if (connectedProjects.length === 0) {
+      setCodexHomeReconnectState({
+        required: false,
+        status: "done",
+        error: null,
+      });
+      return;
+    }
+    setCodexHomeReconnectState({
+      required: true,
+      status: "running",
+      error: null,
+    });
+    try {
+      await Promise.all(connectedProjects.map((project) => connectWorkspace(project.id)));
+      setCodexHomeReconnectState({
+        required: false,
+        status: "done",
+        error: null,
+      });
+    } catch (error) {
+      setCodexHomeReconnectState({
+        required: true,
+        status: "done",
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   };
 
@@ -339,11 +448,14 @@ export const useSettingsCodexSection = ({
     },
     codexPathDraft,
     codexArgsDraft,
+    codexHomeDraft,
     codexDirty,
+    codexHomeReconnectState,
     isSavingSettings,
     doctorState,
     codexUpdateState,
     codexStatusState,
+    codexSyncDiagnosticsState,
     mcpStatusState,
     globalAgentsMeta: globalAgentsEditorMeta.meta,
     globalAgentsError,
@@ -361,13 +473,17 @@ export const useSettingsCodexSection = ({
     globalConfigSaveLabel: globalConfigEditorMeta.saveLabel,
     onSetCodexPathDraft: setCodexPathDraft,
     onSetCodexArgsDraft: setCodexArgsDraft,
+    onSetCodexHomeDraft: setCodexHomeDraft,
     onSetGlobalAgentsContent: setGlobalAgentsContent,
     onSetGlobalConfigContent: setGlobalConfigContent,
     onBrowseCodex: handleBrowseCodex,
+    onBrowseCodexHome: handleBrowseCodexHome,
     onSaveCodexSettings: handleSaveCodexSettings,
+    onReconnectCodexHomeWorkspaces: handleReconnectCodexHomeWorkspaces,
     onRunDoctor: handleRunDoctor,
     onRunCodexUpdate: handleRunCodexUpdate,
     onRefreshCodexStatus: refreshCodexStatus,
+    onRefreshCodexSyncDiagnostics: refreshCodexSyncDiagnostics,
     onRefreshMcpStatus: refreshMcpStatus,
     onRefreshGlobalAgents: () => {
       void refreshGlobalAgents();

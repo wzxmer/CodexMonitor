@@ -4,6 +4,7 @@ import {
   SettingsToggleRow,
   SettingsToggleSwitch,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
+import { useI18n } from "@/features/i18n/I18nProvider";
 
 type ComposerPreset = AppSettings["composerEditorPreset"];
 
@@ -22,14 +23,15 @@ export function SettingsComposerSection({
   onComposerPresetChange,
   onUpdateAppSettings,
 }: SettingsComposerSectionProps) {
+  const { t } = useI18n();
   return (
     <SettingsSection
-      title="输入框"
-      subtitle="控制消息编辑器里的辅助功能和格式化行为。"
+      title={t("settings.composer.title")}
+      subtitle={t("settings.composer.subtitle")}
     >
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="composer-send-shortcut">
-          发送快捷键
+          {t("settings.composer.sendShortcut")}
         </label>
         <select
           id="composer-send-shortcut"
@@ -46,15 +48,15 @@ export function SettingsComposerSection({
             })
           }
         >
-          <option value="ctrl-enter">Enter 换行，Ctrl+Enter 发送</option>
-          <option value="enter">Enter 发送，Ctrl+Enter 换行</option>
+          <option value="ctrl-enter">{t("settings.composer.shortcutCtrlEnter")}</option>
+          <option value="enter">{t("settings.composer.shortcutEnter")}</option>
         </select>
         <div className="settings-help">
-          Shift+Ctrl+Enter 用于引导当前运行。
+          {t("settings.composer.steerShortcutHelp")}
         </div>
         <SettingsToggleRow
-          title="处理中显示追问提示"
-          subtitle="在输入框上方显示排队/Steer 快捷键提示。"
+          title={t("settings.composer.followUpHintTitle")}
+          subtitle={t("settings.composer.followUpHintSubtitle")}
         >
           <SettingsToggleSwitch
             pressed={appSettings.composerFollowUpHintEnabled}
@@ -68,13 +70,13 @@ export function SettingsComposerSection({
         </SettingsToggleRow>
       </div>
       <div className="settings-divider" />
-      <div className="settings-subsection-title">预设</div>
+      <div className="settings-subsection-title">{t("settings.composer.presets")}</div>
       <div className="settings-subsection-subtitle">
-        选择一个起点，再按需微调下面的开关。
+        {t("settings.composer.presetsSubtitle")}
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="composer-preset">
-          预设
+          {t("settings.composer.preset")}
         </label>
         <select
           id="composer-preset"
@@ -91,14 +93,14 @@ export function SettingsComposerSection({
           ))}
         </select>
         <div className="settings-help">
-          预设会更新下面的开关；选择后仍可单独调整。
+          {t("settings.composer.presetHelp")}
         </div>
       </div>
       <div className="settings-divider" />
-      <div className="settings-subsection-title">代码围栏</div>
+      <div className="settings-subsection-title">{t("settings.composer.codeFences")}</div>
       <SettingsToggleRow
-        title="按空格展开围栏"
-        subtitle="输入 ``` 后按空格会插入代码块。"
+        title={t("settings.composer.expandOnSpaceTitle")}
+        subtitle={t("settings.composer.expandOnSpaceSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerFenceExpandOnSpace}
@@ -111,8 +113,8 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="按回车展开围栏"
-        subtitle="启用后，按回车可展开 ``` 行。"
+        title={t("settings.composer.expandOnEnterTitle")}
+        subtitle={t("settings.composer.expandOnEnterSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerFenceExpandOnEnter}
@@ -125,8 +127,8 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="支持语言标签"
-        subtitle="允许用 ```lang + 空格插入带语言的代码块。"
+        title={t("settings.composer.languageTagsTitle")}
+        subtitle={t("settings.composer.languageTagsSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerFenceLanguageTags}
@@ -139,8 +141,8 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="用围栏包裹选区"
-        subtitle="创建代码块时包裹当前选中的文本。"
+        title={t("settings.composer.wrapSelectionTitle")}
+        subtitle={t("settings.composer.wrapSelectionSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerFenceWrapSelection}
@@ -153,10 +155,11 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="复制代码块时不带围栏"
+        title={t("settings.composer.copyWithoutFenceTitle")}
         subtitle={
           <>
-            启用后复制为纯文本。按住 {optionKeyLabel} 可包含 ``` 围栏。
+            {t("settings.composer.copyWithoutFencePrefix")} {optionKeyLabel}{" "}
+            {t("settings.composer.copyWithoutFenceSuffix")}
           </>
         }
       >
@@ -172,10 +175,10 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <div className="settings-divider" />
-      <div className="settings-subsection-title">粘贴</div>
+      <div className="settings-subsection-title">{t("settings.composer.paste")}</div>
       <SettingsToggleRow
-        title="多行粘贴自动包裹"
-        subtitle="把多行粘贴内容放入代码块。"
+        title={t("settings.composer.wrapMultilinePasteTitle")}
+        subtitle={t("settings.composer.wrapMultilinePasteSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerFenceAutoWrapPasteMultiline}
@@ -189,8 +192,8 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="单行代码自动包裹"
-        subtitle="粘贴较长的单行代码片段时自动包裹。"
+        title={t("settings.composer.wrapCodePasteTitle")}
+        subtitle={t("settings.composer.wrapCodePasteSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerFenceAutoWrapPasteCodeLike}
@@ -204,10 +207,10 @@ export function SettingsComposerSection({
         />
       </SettingsToggleRow>
       <div className="settings-divider" />
-      <div className="settings-subsection-title">列表</div>
+      <div className="settings-subsection-title">{t("settings.composer.lists")}</div>
       <SettingsToggleRow
-        title="Shift+Enter 延续列表"
-        subtitle="当前行有内容时，继续编号或项目符号列表。"
+        title={t("settings.composer.listContinuationTitle")}
+        subtitle={t("settings.composer.listContinuationSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.composerListContinuation}

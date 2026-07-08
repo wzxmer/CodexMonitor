@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { SettingsSection } from "@/features/design-system/components/settings/SettingsPrimitives";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import type { WorkspaceInfo } from "@/types";
 import { pushErrorToast } from "@services/toasts";
 
@@ -44,21 +45,22 @@ export function SettingsEnvironmentsSection({
   onSetWorktreesFolderDraft,
   onSaveEnvironmentSetup,
 }: SettingsEnvironmentsSectionProps) {
+  const { t } = useI18n();
   const hasAnyChanges =
     environmentDirty || globalWorktreesFolderDirty || worktreesFolderDirty;
   const hasProjects = mainWorkspaces.length > 0;
 
   return (
     <SettingsSection
-      title="环境"
-      subtitle="配置每个项目的初始化脚本和 worktree 位置。"
+      title={t("settings.environments.title")}
+      subtitle={t("settings.environments.subtitle")}
     >
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="settings-global-worktrees-folder">
-          全局 worktree 根目录
+          {t("settings.environments.globalWorktreesRoot")}
         </label>
         <div className="settings-help">
-          项目未单独设置时，新 worktree 默认创建在这里。每个项目会在此目录下使用自己的子文件夹。
+          {t("settings.environments.globalWorktreesHelp")}
         </div>
         <div className="settings-field-row">
           <input
@@ -79,21 +81,21 @@ export function SettingsEnvironmentsSection({
                 const selected = await open({
                   directory: true,
                   multiple: false,
-                  title: "选择全局 worktree 根目录",
+                  title: t("settings.environments.selectGlobalWorktreesRoot"),
                 });
                 if (selected && typeof selected === "string") {
                   onSetGlobalWorktreesFolderDraft(selected);
                 }
               } catch (error) {
                 pushErrorToast({
-                  title: "打开文件夹选择器失败",
+                  title: t("settings.environments.folderPickerFailed"),
                   message: error instanceof Error ? error.message : String(error),
                 });
               }
             }}
             disabled={environmentSaving}
           >
-            浏览
+            {t("common.browse")}
           </button>
         </div>
         {!hasProjects ? (
@@ -104,7 +106,7 @@ export function SettingsEnvironmentsSection({
               onClick={() => onSetGlobalWorktreesFolderDraft(_globalWorktreesFolderSaved ?? "")}
               disabled={environmentSaving || !globalWorktreesFolderDirty}
             >
-              重置
+              {t("common.reset")}
             </button>
             <button
               type="button"
@@ -114,7 +116,7 @@ export function SettingsEnvironmentsSection({
               }}
               disabled={environmentSaving || !globalWorktreesFolderDirty}
             >
-              {environmentSaving ? "保存中..." : "保存"}
+              {environmentSaving ? t("common.saving") : t("common.save")}
             </button>
           </div>
         ) : null}
@@ -124,12 +126,12 @@ export function SettingsEnvironmentsSection({
       </div>
 
       {!hasProjects ? (
-        <div className="settings-empty">暂无项目。</div>
+        <div className="settings-empty">{t("settings.environments.noProjects")}</div>
       ) : (
         <>
           <div className="settings-field">
             <label className="settings-field-label" htmlFor="settings-environment-project">
-              项目
+              {t("settings.environments.project")}
             </label>
             <select
               id="settings-environment-project"
@@ -150,9 +152,9 @@ export function SettingsEnvironmentsSection({
           </div>
 
           <div className="settings-field">
-            <div className="settings-field-label">初始化脚本</div>
+            <div className="settings-field-label">{t("settings.environments.setupScript")}</div>
             <div className="settings-help">
-              每次新建 worktree 后，会在独立终端里运行一次。
+              {t("settings.environments.setupScriptHelp")}
             </div>
             {environmentError ? (
               <div className="settings-agents-error">{environmentError}</div>
@@ -173,24 +175,24 @@ export function SettingsEnvironmentsSection({
                   const clipboard = typeof navigator === "undefined" ? null : navigator.clipboard;
                   if (!clipboard?.writeText) {
                     pushErrorToast({
-                      title: "复制失败",
+                      title: t("settings.environments.copyFailed"),
                       message:
-                        "当前环境无法访问剪贴板，请手动复制脚本。",
+                        t("settings.environments.clipboardUnavailable"),
                     });
                     return;
                   }
 
                   void clipboard.writeText(environmentDraftScript).catch(() => {
                     pushErrorToast({
-                      title: "复制失败",
+                      title: t("settings.environments.copyFailed"),
                       message:
-                        "无法写入剪贴板，请手动复制脚本。",
+                        t("settings.environments.clipboardWriteFailed"),
                     });
                   });
                 }}
                 disabled={environmentSaving || environmentDraftScript.length === 0}
               >
-                复制
+                {t("common.copy")}
               </button>
               <button
                 type="button"
@@ -198,7 +200,7 @@ export function SettingsEnvironmentsSection({
                 onClick={() => onSetEnvironmentDraftScript(environmentSavedScript ?? "")}
                 disabled={environmentSaving || !environmentDirty}
               >
-                重置
+                {t("common.reset")}
               </button>
               <button
                 type="button"
@@ -208,17 +210,17 @@ export function SettingsEnvironmentsSection({
                 }}
                 disabled={environmentSaving || !hasAnyChanges}
               >
-                {environmentSaving ? "保存中..." : "保存"}
+                {environmentSaving ? t("common.saving") : t("common.save")}
               </button>
             </div>
           </div>
 
           <div className="settings-field">
             <label className="settings-field-label" htmlFor="settings-worktrees-folder">
-              Worktree 文件夹
+              {t("settings.environments.worktreeFolder")}
             </label>
             <div className="settings-help">
-              此项目的 worktree 自定义位置。留空则使用全局根目录或内置默认位置。
+              {t("settings.environments.worktreeFolderHelp")}
             </div>
             <div className="settings-field-row">
               <input
@@ -239,21 +241,21 @@ export function SettingsEnvironmentsSection({
                     const selected = await open({
                       directory: true,
                       multiple: false,
-                      title: "选择 worktree 文件夹",
+                      title: t("settings.environments.selectWorktreeFolder"),
                     });
                     if (selected && typeof selected === "string") {
                       onSetWorktreesFolderDraft(selected);
                     }
                   } catch (error) {
                     pushErrorToast({
-                      title: "打开文件夹选择器失败",
+                      title: t("settings.environments.folderPickerFailed"),
                       message: error instanceof Error ? error.message : String(error),
                     });
                   }
                 }}
                 disabled={environmentSaving}
               >
-                浏览
+                {t("common.browse")}
               </button>
             </div>
           </div>

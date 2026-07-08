@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Stethoscope from "lucide-react/dist/esm/icons/stethoscope";
 import type { Dispatch, SetStateAction } from "react";
 import type {
   AppSettings,
   CodexDoctorResult,
+  CodexKeyProfile,
+  CodexSyncDiagnostics,
   CodexStatus,
   CodexUpdateResult,
   ModelOption,
@@ -13,6 +15,7 @@ import {
   SettingsToggleRow,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
 import { FileEditorCard } from "@/features/shared/components/FileEditorCard";
+import { useI18n } from "@/features/i18n/I18nProvider";
 
 type SettingsCodexSectionProps = {
   appSettings: AppSettings;
@@ -24,7 +27,13 @@ type SettingsCodexSectionProps = {
   onRefreshDefaultModels: () => void;
   codexPathDraft: string;
   codexArgsDraft: string;
+  codexHomeDraft: string;
   codexDirty: boolean;
+  codexHomeReconnectState: {
+    required: boolean;
+    status: "idle" | "running" | "done";
+    error: string | null;
+  };
   isSavingSettings: boolean;
   doctorState: {
     status: "idle" | "running" | "done";
@@ -37,6 +46,11 @@ type SettingsCodexSectionProps = {
   codexStatusState: {
     status: "idle" | "loading" | "done";
     result: CodexStatus | null;
+    error: string | null;
+  };
+  codexSyncDiagnosticsState: {
+    status: "idle" | "loading" | "done";
+    result: CodexSyncDiagnostics | null;
     error: string | null;
   };
   mcpStatusState: {
@@ -61,13 +75,17 @@ type SettingsCodexSectionProps = {
   globalConfigSaveLabel: string;
   onSetCodexPathDraft: Dispatch<SetStateAction<string>>;
   onSetCodexArgsDraft: Dispatch<SetStateAction<string>>;
+  onSetCodexHomeDraft: Dispatch<SetStateAction<string>>;
   onSetGlobalAgentsContent: (value: string) => void;
   onSetGlobalConfigContent: (value: string) => void;
   onBrowseCodex: () => Promise<void>;
+  onBrowseCodexHome: () => Promise<void>;
   onSaveCodexSettings: () => Promise<void>;
+  onReconnectCodexHomeWorkspaces: () => Promise<void>;
   onRunDoctor: () => Promise<void>;
   onRunCodexUpdate: () => Promise<void>;
   onRefreshCodexStatus: () => void;
+  onRefreshCodexSyncDiagnostics: () => void;
   onRefreshMcpStatus: () => void;
   onRefreshGlobalAgents: () => void;
   onSaveGlobalAgents: () => void;
@@ -76,6 +94,8 @@ type SettingsCodexSectionProps = {
 };
 
 const DEFAULT_REASONING_EFFORT = "medium";
+const DEFAULT_CODEX_KEY_ENV_VAR = "OPENAI_API_KEY";
+const DEFAULT_CODEX_BASE_URL_ENV_VAR = "OPENAI_BASE_URL";
 
 const normalizeEffortValue = (value: unknown): string | null => {
   if (typeof value !== "string") {
@@ -119,6 +139,9 @@ const getReasoningOptions = (model: ModelOption | null): string[] => {
   return fallback ? [fallback] : [];
 };
 
+const createCodexKeyProfileId = () =>
+  `codex-key-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 export function SettingsCodexSection({
   appSettings,
   onUpdateAppSettings,
@@ -129,11 +152,14 @@ export function SettingsCodexSection({
   onRefreshDefaultModels,
   codexPathDraft,
   codexArgsDraft,
+  codexHomeDraft,
   codexDirty,
+  codexHomeReconnectState,
   isSavingSettings,
   doctorState,
   codexUpdateState,
   codexStatusState,
+  codexSyncDiagnosticsState,
   mcpStatusState,
   globalAgentsMeta,
   globalAgentsError,
@@ -151,19 +177,33 @@ export function SettingsCodexSection({
   globalConfigSaveLabel,
   onSetCodexPathDraft,
   onSetCodexArgsDraft,
+  onSetCodexHomeDraft,
   onSetGlobalAgentsContent,
   onSetGlobalConfigContent,
   onBrowseCodex,
+  onBrowseCodexHome,
   onSaveCodexSettings,
+  onReconnectCodexHomeWorkspaces,
   onRunDoctor,
   onRunCodexUpdate,
   onRefreshCodexStatus,
+  onRefreshCodexSyncDiagnostics,
   onRefreshMcpStatus,
   onRefreshGlobalAgents,
   onSaveGlobalAgents,
   onRefreshGlobalConfig,
   onSaveGlobalConfig,
 }: SettingsCodexSectionProps) {
+  const { t } = useI18n();
+  const loadingLabel = t("common.loading");
+  const refreshLabel = t("common.refresh");
+  const saveLabel = t("common.save");
+  const savingLabel = t("common.saving");
+  const unknownLabel = t("common.unknown");
+  const foundLabel = t("settings.codex.found");
+  const notFoundLabel = t("settings.codex.notFound");
+  const okLabel = t("settings.codex.ok");
+  const failedLabel = t("settings.codex.failed");
   const latestModelSlug = defaultModels[0]?.model ?? null;
   const savedModelSlug = useMemo(
     () => coerceSavedModelSlug(appSettings.lastComposerModelId, defaultModels),
@@ -202,6 +242,68 @@ export function SettingsCodexSection({
     }
     return reasoningOptions[0] ?? "";
   }, [reasoningOptions, reasoningSupported, savedEffort, selectedModel]);
+  const [keyProfileNameDraft, setKeyProfileNameDraft] = useState("");
+  const [keyProfileEnvDraft, setKeyProfileEnvDraft] = useState(DEFAULT_CODEX_KEY_ENV_VAR);
+  const [keyProfileKeyDraft, setKeyProfileKeyDraft] = useState("");
+  const [keyProfileBaseUrlDraft, setKeyProfileBaseUrlDraft] = useState("");
+  const [keyProfileBaseUrlEnvDraft, setKeyProfileBaseUrlEnvDraft] = useState(
+    DEFAULT_CODEX_BASE_URL_ENV_VAR,
+  );
+  const keyProfiles = appSettings.codexKeyProfiles ?? [];
+  const selectedKeyProfile = keyProfiles.find(
+    (profile) => profile.id === appSettings.activeCodexKeyProfileId,
+  );
+  const keyProfileDraftValid =
+    keyProfileNameDraft.trim().length > 0 &&
+    keyProfileEnvDraft.trim().length > 0 &&
+    keyProfileKeyDraft.trim().length > 0;
+
+  const updateCodexKeySettings = (patch: Partial<AppSettings>) => {
+    void onUpdateAppSettings({
+      ...appSettings,
+      ...patch,
+    });
+  };
+
+  const handleSelectKeyProfile = (profileId: string) => {
+    updateCodexKeySettings({
+      activeCodexKeyProfileId: profileId === "__codex_default__" ? null : profileId,
+    });
+  };
+
+  const handleAddKeyProfile = () => {
+    if (!keyProfileDraftValid) {
+      return;
+    }
+    const profile: CodexKeyProfile = {
+      id: createCodexKeyProfileId(),
+      name: keyProfileNameDraft.trim(),
+      keyEnvVar: keyProfileEnvDraft.trim(),
+      key: keyProfileKeyDraft.trim(),
+      baseUrlEnvVar: keyProfileBaseUrlEnvDraft.trim() || DEFAULT_CODEX_BASE_URL_ENV_VAR,
+      baseUrl: keyProfileBaseUrlDraft.trim() || null,
+    };
+    updateCodexKeySettings({
+      codexKeyProfiles: [...keyProfiles, profile],
+      activeCodexKeyProfileId: profile.id,
+    });
+    setKeyProfileNameDraft("");
+    setKeyProfileEnvDraft(DEFAULT_CODEX_KEY_ENV_VAR);
+    setKeyProfileKeyDraft("");
+    setKeyProfileBaseUrlDraft("");
+    setKeyProfileBaseUrlEnvDraft(DEFAULT_CODEX_BASE_URL_ENV_VAR);
+  };
+
+  const handleDeleteKeyProfile = (profileId: string) => {
+    const nextProfiles = keyProfiles.filter((profile) => profile.id !== profileId);
+    updateCodexKeySettings({
+      codexKeyProfiles: nextProfiles,
+      activeCodexKeyProfileId:
+        appSettings.activeCodexKeyProfileId === profileId
+          ? null
+          : appSettings.activeCodexKeyProfileId,
+    });
+  };
 
   const didNormalizeDefaultsRef = useRef(false);
   useEffect(() => {
@@ -248,14 +350,15 @@ export function SettingsCodexSection({
   return (
     <SettingsSection
       title="Codex"
-      subtitle="配置 CodexMonitor 使用的 Codex CLI，并检查安装状态。"
+      subtitle={t("settings.codex.subtitle")}
     >
       <div className="settings-field">
         <div className="settings-field-row settings-field-row-between">
           <div>
-            <div className="settings-field-label">本机配置</div>
+            <div className="settings-field-label">{t("settings.codex.localConfig")}</div>
             <div className="settings-help">
-              自动读取 <code>CODEX_HOME</code>；未设置时使用默认 <code>~/.codex</code>。
+              {t("settings.codex.localConfigHelpPrefix")} <code>CODEX_HOME</code>
+              {t("settings.codex.localConfigHelpSuffix")} <code>~/.codex</code>.
             </div>
           </div>
           <button
@@ -264,43 +367,50 @@ export function SettingsCodexSection({
             onClick={onRefreshCodexStatus}
             disabled={codexStatusState.status === "loading"}
           >
-            {codexStatusState.status === "loading" ? "刷新中..." : "刷新"}
+            {codexStatusState.status === "loading" ? loadingLabel : refreshLabel}
           </button>
         </div>
         {codexStatusState.error && (
           <div className="settings-help settings-help-error">
-            读取失败：{codexStatusState.error}
+            {t("settings.codex.readFailed")}: {codexStatusState.error}
           </div>
         )}
         {codexStatusState.result && (
           <div className="settings-doctor ok">
             <div className="settings-doctor-title">
-              Codex 配置已关联（{codexStatusState.result.codexHomeSource}）
+              {t("settings.codex.configLinked").replace(
+                "{source}",
+                codexStatusState.result.codexHomeSource,
+              )}
             </div>
             <div className="settings-doctor-body">
-              <div>CODEX_HOME：{codexStatusState.result.codexHomePath ?? "未解析"}</div>
+              <div>CODEX_HOME: {codexStatusState.result.codexHomePath ?? t("settings.codex.unresolved")}</div>
               <div>
-                config.toml：
-                {codexStatusState.result.configExists ? "已找到" : "未找到"}
+                config.toml:{" "}
+                {codexStatusState.result.configExists ? foundLabel : notFoundLabel}
                 {codexStatusState.result.configPath
-                  ? `（${codexStatusState.result.configPath}）`
+                  ? ` (${codexStatusState.result.configPath})`
                   : ""}
               </div>
               <div>
-                AGENTS.md：
-                {codexStatusState.result.globalAgentsExists ? "已找到" : "未找到"}
+                AGENTS.md:{" "}
+                {codexStatusState.result.globalAgentsExists ? foundLabel : notFoundLabel}
                 {codexStatusState.result.globalAgentsPath
-                  ? `（${codexStatusState.result.globalAgentsPath}）`
+                  ? ` (${codexStatusState.result.globalAgentsPath})`
                   : ""}
               </div>
               <div>
-                Skills：Codex {codexStatusState.result.codexSkillsCount} 个，
-                Agents {codexStatusState.result.agentsSkillsCount} 个
+                {t("settings.codex.skillsCount")
+                  .replace("{codex}", String(codexStatusState.result.codexSkillsCount))
+                  .replace("{agents}", String(codexStatusState.result.agentsSkillsCount))}
               </div>
               <div>
-                默认模型：
+                {t("settings.codex.defaultModel")}
+                {t("settings.codex.labelSeparator")}
                 {codexStatusState.result.model ??
-                  (codexStatusState.result.modelError ? "读取失败" : "未设置")}
+                  (codexStatusState.result.modelError
+                    ? t("settings.codex.readFailedShort")
+                    : t("settings.codex.notSet"))}
               </div>
               {codexStatusState.result.modelError && (
                 <div>{codexStatusState.result.modelError}</div>
@@ -309,7 +419,63 @@ export function SettingsCodexSection({
           </div>
         )}
         {!codexStatusState.result && codexStatusState.status === "loading" && (
-          <div className="settings-help">正在读取本机 Codex 配置...</div>
+          <div className="settings-help">{t("settings.codex.loadingLocalConfig")}</div>
+        )}
+      </div>
+
+      <div className="settings-field">
+        <div className="settings-field-row settings-field-row-between">
+          <div>
+            <div className="settings-field-label">会话同步诊断</div>
+            <div className="settings-help">
+              检查当前用户、有效 CODEX_HOME 和 sessions 文件统计。
+            </div>
+          </div>
+          <button
+            type="button"
+            className="ghost settings-button-compact"
+            onClick={onRefreshCodexSyncDiagnostics}
+            disabled={codexSyncDiagnosticsState.status === "loading"}
+          >
+            {codexSyncDiagnosticsState.status === "loading" ? loadingLabel : refreshLabel}
+          </button>
+        </div>
+        {codexSyncDiagnosticsState.error && (
+          <div className="settings-help settings-help-error">
+            {codexSyncDiagnosticsState.error}
+          </div>
+        )}
+        {codexSyncDiagnosticsState.result && (
+          <div className="settings-doctor">
+            <div className="settings-doctor-body">
+              <div>用户：{codexSyncDiagnosticsState.result.username ?? unknownLabel}</div>
+              <div>用户目录：{codexSyncDiagnosticsState.result.userProfile ?? unknownLabel}</div>
+              <div>
+                CODEX_HOME（{codexSyncDiagnosticsState.result.codexHomeSource}）：
+                {codexSyncDiagnosticsState.result.codexHomePath ?? "未解析"}
+              </div>
+              <div>
+                sessions：
+                {codexSyncDiagnosticsState.result.sessionsExists ? foundLabel : notFoundLabel}
+                {codexSyncDiagnosticsState.result.sessionsPath
+                  ? ` (${codexSyncDiagnosticsState.result.sessionsPath})`
+                  : ""}
+              </div>
+              <div>会话文件：{codexSyncDiagnosticsState.result.sessionFileCount} 个</div>
+              <div>
+                最新会话：
+                {codexSyncDiagnosticsState.result.latestSessionPath ?? "未找到"}
+              </div>
+              {codexSyncDiagnosticsState.result.latestSessionModifiedMs && (
+                <div>
+                  最新修改：
+                  {new Date(
+                    codexSyncDiagnosticsState.result.latestSessionModifiedMs,
+                  ).toLocaleString()}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
@@ -317,7 +483,7 @@ export function SettingsCodexSection({
 
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="codex-path">
-          默认 Codex 路径
+          {t("settings.codex.defaultPath")}
         </label>
         <div className="settings-field-row">
           <input
@@ -334,19 +500,19 @@ export function SettingsCodexSection({
               void onBrowseCodex();
             }}
           >
-            浏览
+            {t("common.browse")}
           </button>
           <button
             type="button"
             className="ghost"
             onClick={() => onSetCodexPathDraft("")}
           >
-            使用 PATH
+            {t("settings.codex.usePath")}
           </button>
         </div>
-        <div className="settings-help">留空则使用系统 PATH 查找。</div>
+        <div className="settings-help">{t("settings.codex.pathHelp")}</div>
         <label className="settings-field-label" htmlFor="codex-args">
-          默认 Codex 参数
+          {t("settings.codex.defaultArgs")}
         </label>
         <div className="settings-field-row">
           <input
@@ -361,21 +527,79 @@ export function SettingsCodexSection({
             className="ghost"
             onClick={() => onSetCodexArgsDraft("")}
           >
-            清空
+            {t("common.clear")}
           </button>
         </div>
         <div className="settings-help">
-          在 <code>app-server</code> 前附加的参数。带空格的值请使用引号。
+          {t("settings.codex.argsHelpPrefix")} <code>app-server</code>
+          {t("settings.codex.argsHelpSuffix")}
+        </div>
+        <label className="settings-field-label" htmlFor="codex-home">
+          CODEX_HOME
+        </label>
+        <div className="settings-field-row">
+          <input
+            id="codex-home"
+            className="settings-input"
+            value={codexHomeDraft}
+            placeholder="%USERPROFILE%\\.codex"
+            onChange={(event) => onSetCodexHomeDraft(event.target.value)}
+          />
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              void onBrowseCodexHome();
+            }}
+          >
+            {t("common.browse")}
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => onSetCodexHomeDraft("")}
+          >
+            {t("settings.codex.useDefault")}
+          </button>
         </div>
         <div className="settings-help">
-          这些设置会应用到所有已连接项目共享的 Codex app-server。
+          {t("settings.codex.homeHelp")}
+        </div>
+        {codexHomeReconnectState.required && (
+          <div className="settings-doctor">
+            <div className="settings-doctor-title">
+              CODEX_HOME 已更改，需要重连已连接项目后生效。
+            </div>
+            {codexHomeReconnectState.error && (
+              <div className="settings-help settings-help-error">
+                {codexHomeReconnectState.error}
+              </div>
+            )}
+            <div className="settings-field-actions">
+              <button
+                type="button"
+                className="primary settings-button-compact"
+                onClick={() => {
+                  void onReconnectCodexHomeWorkspaces();
+                }}
+                disabled={codexHomeReconnectState.status === "running"}
+              >
+                {codexHomeReconnectState.status === "running"
+                  ? "重连中..."
+                  : "重连已连接项目"}
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="settings-help">
+          {t("settings.codex.sharedHelp")}
         </div>
         <div className="settings-help">
-          单会话覆盖会忽略不支持的参数：<code>-m</code>/
+          {t("settings.codex.unsupportedArgsPrefix")}: <code>-m</code>/
           <code>--model</code>, <code>-a</code>/<code>--ask-for-approval</code>,{" "}
           <code>-s</code>/<code>--sandbox</code>, <code>--full-auto</code>,{" "}
           <code>--dangerously-bypass-approvals-and-sandbox</code>, <code>--oss</code>,{" "}
-          <code>--local-provider</code> 和 <code>--no-alt-screen</code>。
+          <code>--local-provider</code> {t("common.and")} <code>--no-alt-screen</code>.
         </div>
         <div className="settings-field-actions">
           {codexDirty && (
@@ -387,7 +611,7 @@ export function SettingsCodexSection({
               }}
               disabled={isSavingSettings}
             >
-              {isSavingSettings ? "保存中..." : "保存"}
+              {isSavingSettings ? savingLabel : saveLabel}
             </button>
           )}
           <button
@@ -399,7 +623,9 @@ export function SettingsCodexSection({
             disabled={doctorState.status === "running"}
           >
             <Stethoscope aria-hidden />
-            {doctorState.status === "running" ? "检查中..." : "运行诊断"}
+            {doctorState.status === "running"
+              ? t("settings.codex.checking")
+              : t("settings.codex.runDoctor")}
           </button>
           <button
             type="button"
@@ -408,26 +634,30 @@ export function SettingsCodexSection({
               void onRunCodexUpdate();
             }}
             disabled={codexUpdateState.status === "running"}
-            title="更新 Codex"
+            title={t("settings.codex.updateCodex")}
           >
             <Stethoscope aria-hidden />
-            {codexUpdateState.status === "running" ? "更新中..." : "更新"}
+            {codexUpdateState.status === "running"
+              ? t("settings.codex.updating")
+              : t("settings.codex.update")}
           </button>
         </div>
 
         {doctorState.result && (
           <div className={`settings-doctor ${doctorState.result.ok ? "ok" : "error"}`}>
             <div className="settings-doctor-title">
-              {doctorState.result.ok ? "Codex 状态正常" : "检测到 Codex 问题"}
+              {doctorState.result.ok
+                ? t("settings.codex.doctorOk")
+                : t("settings.codex.doctorIssue")}
             </div>
             <div className="settings-doctor-body">
-              <div>版本：{doctorState.result.version ?? "未知"}</div>
-              <div>App-server：{doctorState.result.appServerOk ? "正常" : "失败"}</div>
+              <div>{t("settings.codex.version")}: {doctorState.result.version ?? unknownLabel}</div>
+              <div>App-server: {doctorState.result.appServerOk ? okLabel : failedLabel}</div>
               <div>
                 Node:{" "}
                 {doctorState.result.nodeOk
-                  ? `正常（${doctorState.result.nodeVersion ?? "未知"}）`
-                  : "缺失"}
+                  ? `${okLabel} (${doctorState.result.nodeVersion ?? unknownLabel})`
+                  : t("settings.codex.missing")}
               </div>
               {doctorState.result.details && <div>{doctorState.result.details}</div>}
               {doctorState.result.nodeDetails && <div>{doctorState.result.nodeDetails}</div>}
@@ -445,25 +675,25 @@ export function SettingsCodexSection({
             <div className="settings-doctor-title">
               {codexUpdateState.result.ok
                 ? codexUpdateState.result.upgraded
-                  ? "Codex 已更新"
-                  : "Codex 已是最新"
-                : "Codex 更新失败"}
+                  ? t("settings.codex.updated")
+                  : t("settings.codex.alreadyLatest")
+                : t("settings.codex.updateFailed")}
             </div>
             <div className="settings-doctor-body">
-              <div>方式：{codexUpdateState.result.method}</div>
+              <div>{t("settings.codex.method")}: {codexUpdateState.result.method}</div>
               {codexUpdateState.result.package && (
-                <div>包：{codexUpdateState.result.package}</div>
+                <div>{t("settings.codex.package")}: {codexUpdateState.result.package}</div>
               )}
               <div>
-                版本：{" "}
+                {t("settings.codex.version")}:{" "}
                 {codexUpdateState.result.afterVersion ??
                   codexUpdateState.result.beforeVersion ??
-                  "未知"}
+                  unknownLabel}
               </div>
               {codexUpdateState.result.details && <div>{codexUpdateState.result.details}</div>}
               {codexUpdateState.result.output && (
                 <details>
-                  <summary>输出</summary>
+                  <summary>{t("settings.codex.output")}</summary>
                   <pre>{codexUpdateState.result.output}</pre>
                 </details>
               )}
@@ -474,23 +704,114 @@ export function SettingsCodexSection({
 
       <div className="settings-divider" />
       <div className="settings-field-label settings-field-label--section">
-        默认参数
+        {t("settings.codex.defaultParameters")}
+      </div>
+
+      <div className="settings-field">
+        <label className="settings-field-label" htmlFor="codex-key-profile">
+          API Key Profile
+        </label>
+        <div className="settings-help">
+          {t("settings.codex.keyProfileHelp")}
+        </div>
+        <div className="settings-field-row">
+          <select
+            id="codex-key-profile"
+            className="settings-select"
+            value={appSettings.activeCodexKeyProfileId ?? "__codex_default__"}
+            onChange={(event) => handleSelectKeyProfile(event.target.value)}
+          >
+            <option value="__codex_default__">{t("settings.codex.defaultEnvVars")}</option>
+            {keyProfiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.name}
+              </option>
+            ))}
+          </select>
+          {selectedKeyProfile && (
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => handleDeleteKeyProfile(selectedKeyProfile.id)}
+            >
+              {t("common.delete")}
+            </button>
+          )}
+        </div>
+        {selectedKeyProfile && (
+          <div className="settings-help">
+            {t("settings.codex.currentInject")} <code>{selectedKeyProfile.keyEnvVar}</code>
+            {selectedKeyProfile.baseUrl ? (
+              <>
+                {" "}
+                {t("common.and")} <code>{selectedKeyProfile.baseUrlEnvVar}</code>
+              </>
+            ) : null}
+            .
+          </div>
+        )}
+        <div className="settings-key-profile-grid">
+          <input
+            className="settings-input"
+            placeholder={t("settings.codex.keyProfileNamePlaceholder")}
+            value={keyProfileNameDraft}
+            onChange={(event) => setKeyProfileNameDraft(event.target.value)}
+            aria-label={t("settings.codex.keyProfileNameAria")}
+          />
+          <input
+            className="settings-input"
+            placeholder={t("settings.codex.keyEnvPlaceholder")}
+            value={keyProfileEnvDraft}
+            onChange={(event) => setKeyProfileEnvDraft(event.target.value)}
+            aria-label={t("settings.codex.keyEnvAria")}
+          />
+          <input
+            className="settings-input"
+            type="password"
+            placeholder="API key"
+            value={keyProfileKeyDraft}
+            onChange={(event) => setKeyProfileKeyDraft(event.target.value)}
+            aria-label="API key"
+          />
+          <input
+            className="settings-input"
+            placeholder={t("settings.codex.baseUrlPlaceholder")}
+            value={keyProfileBaseUrlDraft}
+            onChange={(event) => setKeyProfileBaseUrlDraft(event.target.value)}
+            aria-label="Base URL"
+          />
+          <input
+            className="settings-input"
+            placeholder={t("settings.codex.baseUrlEnvPlaceholder")}
+            value={keyProfileBaseUrlEnvDraft}
+            onChange={(event) => setKeyProfileBaseUrlEnvDraft(event.target.value)}
+            aria-label={t("settings.codex.baseUrlEnvAria")}
+          />
+          <button
+            type="button"
+            className="settings-button-compact"
+            disabled={!keyProfileDraftValid}
+            onClick={handleAddKeyProfile}
+          >
+            {t("settings.codex.addAndEnable")}
+          </button>
+        </div>
       </div>
 
       <SettingsToggleRow
         title={
           <label htmlFor="default-model">
-            模型
+            {t("settings.codex.model")}
           </label>
         }
         subtitle={
           defaultModelsConnectedWorkspaceCount === 0
-            ? "添加项目后才能加载可用模型。"
+            ? t("settings.codex.modelsNeedProject")
             : defaultModelsLoading
-              ? "正在从第一个项目加载模型…"
+              ? t("settings.codex.modelsLoading")
               : defaultModelsError
-                ? `无法加载模型：${defaultModelsError}`
-                : "来自第一个项目；没有会话级覆盖时使用。"
+                ? `${t("settings.codex.modelsLoadFailed")}: ${defaultModelsError}`
+                : t("settings.codex.modelsHelp")
         }
       >
         <div className="settings-field-row">
@@ -505,7 +826,7 @@ export function SettingsCodexSection({
                 lastComposerModelId: event.target.value,
               })
             }
-            aria-label="模型"
+            aria-label={t("settings.codex.model")}
           >
             {defaultModels.map((model) => (
               <option key={model.model} value={model.model}>
@@ -519,7 +840,7 @@ export function SettingsCodexSection({
             onClick={onRefreshDefaultModels}
             disabled={defaultModelsLoading || defaultModelsConnectedWorkspaceCount === 0}
           >
-            刷新
+            {refreshLabel}
           </button>
         </div>
       </SettingsToggleRow>
@@ -527,13 +848,13 @@ export function SettingsCodexSection({
       <SettingsToggleRow
         title={
           <label htmlFor="default-effort">
-            推理强度
+            {t("settings.codex.reasoningEffort")}
           </label>
         }
         subtitle={
           reasoningSupported
-            ? "可用选项取决于当前选择的模型。"
-            : "当前模型没有提供推理强度选项。"
+            ? t("settings.codex.reasoningHelp")
+            : t("settings.codex.reasoningUnsupportedHelp")
         }
       >
         <select
@@ -546,10 +867,10 @@ export function SettingsCodexSection({
               lastComposerReasoningEffort: event.target.value,
             })
           }
-          aria-label="推理强度"
+          aria-label={t("settings.codex.reasoningEffort")}
           disabled={!reasoningSupported}
         >
-          {!reasoningSupported && <option value="">不支持</option>}
+          {!reasoningSupported && <option value="">{t("settings.codex.unsupported")}</option>}
           {reasoningOptions.map((effort) => (
             <option key={effort} value={effort}>
               {effort}
@@ -561,10 +882,10 @@ export function SettingsCodexSection({
       <SettingsToggleRow
         title={
           <label htmlFor="default-access">
-            访问模式
+            {t("settings.codex.accessMode")}
           </label>
         }
-        subtitle="没有会话级覆盖时使用。"
+        subtitle={t("settings.codex.noSessionOverrideHelp")}
       >
         <select
           id="default-access"
@@ -577,14 +898,14 @@ export function SettingsCodexSection({
             })
           }
         >
-          <option value="read-only">只读</option>
-          <option value="current">按需确认</option>
-          <option value="full-access">完全访问</option>
+          <option value="read-only">{t("settings.codex.accessReadOnly")}</option>
+          <option value="current">{t("settings.codex.accessCurrent")}</option>
+          <option value="full-access">{t("settings.codex.accessFull")}</option>
         </select>
       </SettingsToggleRow>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="review-delivery">
-          Review 模式
+          {t("settings.codex.reviewMode")}
         </label>
         <select
           id="review-delivery"
@@ -597,11 +918,12 @@ export function SettingsCodexSection({
             })
           }
         >
-          <option value="inline">当前会话内</option>
-          <option value="detached">独立 review 会话</option>
+          <option value="inline">{t("settings.codex.reviewInline")}</option>
+          <option value="detached">{t("settings.codex.reviewDetached")}</option>
         </select>
         <div className="settings-help">
-          选择 <code>/review</code> 在当前会话内运行，还是新建独立 review 会话。
+          {t("settings.codex.reviewHelpPrefix")} <code>/review</code>{" "}
+          {t("settings.codex.reviewHelpSuffix")}
         </div>
       </div>
 
@@ -610,7 +932,7 @@ export function SettingsCodexSection({
         meta={globalAgentsMeta}
         error={globalAgentsError}
         value={globalAgentsContent}
-        placeholder="添加 Codex agents 的全局指令…"
+        placeholder={t("settings.codex.globalAgentsPlaceholder")}
         disabled={globalAgentsLoading}
         refreshDisabled={globalAgentsRefreshDisabled}
         saveDisabled={globalAgentsSaveDisabled}
@@ -620,7 +942,7 @@ export function SettingsCodexSection({
         onSave={onSaveGlobalAgents}
         helpText={
           <>
-            保存在 <code>~/.codex/AGENTS.md</code>。
+            {t("settings.codex.savedIn")} <code>~/.codex/AGENTS.md</code>.
           </>
         }
         classNames={{
@@ -641,14 +963,15 @@ export function SettingsCodexSection({
           MCP
         </div>
         <div className="settings-help">
-          CodexMonitor 使用 Codex 原生 MCP 配置，不维护第二份配置。
-          在下方 <code>Global config.toml</code> 添加{" "}
-          <code>[mcp_servers.&lt;name&gt;]</code>；项目级配置使用项目内{" "}
-          <code>.codex/config.toml</code>。
+          {t("settings.codex.mcpHelpPrefix")}{" "}
+          <code>Global config.toml</code> {t("settings.codex.mcpHelpMiddle")}{" "}
+          <code>[mcp_servers.&lt;name&gt;]</code>; {t("settings.codex.mcpHelpSuffix")}{" "}
+          <code>.codex/config.toml</code>.
         </div>
         <div className="settings-help">
-          会话内输入 <code>/mcp</code> 查看当前 Codex MCP 状态；OAuth 登录使用{" "}
-          <code>codex mcp login &lt;server&gt;</code>。
+          {t("settings.codex.mcpCommandHelpPrefix")} <code>/mcp</code>{" "}
+          {t("settings.codex.mcpCommandHelpMiddle")}{" "}
+          <code>codex mcp login &lt;server&gt;</code>.
         </div>
         <div className="settings-field-actions">
           <button
@@ -657,19 +980,24 @@ export function SettingsCodexSection({
             onClick={onRefreshMcpStatus}
             disabled={mcpStatusState.status === "loading"}
           >
-            {mcpStatusState.status === "loading" ? "刷新中..." : "刷新 MCP 状态"}
+            {mcpStatusState.status === "loading"
+              ? loadingLabel
+              : t("settings.codex.refreshMcpStatus")}
           </button>
         </div>
         {mcpStatusState.error && (
           <div className="settings-help settings-help-error">
-            MCP 状态读取失败：{mcpStatusState.error}
+            {t("settings.codex.mcpStatusReadFailed")}:{" "}
+            {mcpStatusState.error === "settings.codex.mcpNeedsWorkspace"
+              ? t("settings.codex.mcpNeedsWorkspace")
+              : mcpStatusState.error}
           </div>
         )}
         {mcpStatusState.result !== null && (
           <div className="settings-doctor ok">
             <div className="settings-doctor-title">
-              MCP 状态
-              {mcpStatusState.workspaceName ? `（${mcpStatusState.workspaceName}）` : ""}
+              {t("settings.codex.mcpStatus")}
+              {mcpStatusState.workspaceName ? ` (${mcpStatusState.workspaceName})` : ""}
             </div>
             <div className="settings-doctor-body">
               <pre>{JSON.stringify(mcpStatusState.result, null, 2)}</pre>
@@ -677,7 +1005,7 @@ export function SettingsCodexSection({
           </div>
         )}
         <details className="settings-code-details">
-          <summary>配置片段</summary>
+          <summary>{t("settings.codex.configSnippet")}</summary>
           <pre>{`[mcp_servers.docs]
 url = "https://example.com/mcp"
 
@@ -693,7 +1021,7 @@ args = ["server.mjs"]
         meta={globalConfigMeta}
         error={globalConfigError}
         value={globalConfigContent}
-        placeholder="编辑全局 Codex config.toml…"
+        placeholder={t("settings.codex.globalConfigPlaceholder")}
         disabled={globalConfigLoading}
         refreshDisabled={globalConfigRefreshDisabled}
         saveDisabled={globalConfigSaveDisabled}
@@ -703,7 +1031,7 @@ args = ["server.mjs"]
         onSave={onSaveGlobalConfig}
         helpText={
           <>
-            保存在 <code>~/.codex/config.toml</code>。
+            {t("settings.codex.savedIn")} <code>~/.codex/config.toml</code>.
           </>
         }
         classNames={{

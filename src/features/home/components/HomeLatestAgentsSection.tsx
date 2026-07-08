@@ -1,4 +1,5 @@
 import { formatRelativeTime } from "../../../utils/time";
+import { useI18n } from "../../i18n/I18nProvider";
 import type { LatestAgentRun } from "../homeTypes";
 
 type HomeLatestAgentsSectionProps = {
@@ -12,10 +13,11 @@ export function HomeLatestAgentsSection({
   latestAgentRuns,
   onSelectThread,
 }: HomeLatestAgentsSectionProps) {
+  const { t } = useI18n();
   return (
     <div className="home-latest">
       <div className="home-latest-header">
-        <div className="home-latest-label">最新 Agent</div>
+        <div className="home-latest-label">{t("home.latest.title")}</div>
       </div>
       {latestAgentRuns.length > 0 ? (
         <div className="home-latest-grid">
@@ -38,16 +40,19 @@ export function HomeLatestAgentsSection({
                 </div>
               </div>
               <div className="home-latest-message">
-                {run.message.trim() || "Agent 已回复。"}
+                {run.message.trim() || t("home.latest.fallbackMessage")}
               </div>
               {run.isProcessing && (
-                <div className="home-latest-status">运行中</div>
+                <div className="home-latest-status">{t("home.latest.running")}</div>
               )}
             </button>
           ))}
         </div>
       ) : isLoadingLatestAgents ? (
-        <div className="home-latest-grid home-latest-grid-loading" aria-label="正在加载 Agents">
+        <div
+          className="home-latest-grid home-latest-grid-loading"
+          aria-label={t("home.latest.loading")}
+        >
           {Array.from({ length: 3 }).map((_, index) => (
             <div className="home-latest-card home-latest-card-skeleton" key={index}>
               <div className="home-latest-card-header">
@@ -61,9 +66,9 @@ export function HomeLatestAgentsSection({
         </div>
       ) : (
         <div className="home-latest-empty">
-          <div className="home-latest-empty-title">暂无 Agent 活动</div>
+          <div className="home-latest-empty-title">{t("home.latest.emptyTitle")}</div>
           <div className="home-latest-empty-subtitle">
-            开始一个会话后，这里会显示最新回复。
+            {t("home.latest.emptySubtitle")}
           </div>
         </div>
       )}

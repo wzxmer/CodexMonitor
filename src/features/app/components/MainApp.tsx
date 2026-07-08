@@ -163,6 +163,16 @@ export default function MainApp() {
     (key: I18nKey) => I18N_STRINGS[appLanguage][key] ?? I18N_STRINGS.zh[key],
     [appLanguage],
   );
+  const trayUsageLabels = useMemo(
+    () => ({
+      resetLabel: t("usage.resetLabel"),
+      availableCredits: t("usage.availableCredits"),
+      unlimited: t("usage.unlimited"),
+      used: t("usage.used"),
+      remaining: t("usage.remaining"),
+    }),
+    [t],
+  );
   const {
     threadListSortKey,
     setThreadListSortKey,
@@ -1167,6 +1177,7 @@ export default function MainApp() {
   useTraySessionUsage({
     accountRateLimits: activeRateLimits,
     showRemaining: appSettings.usageShowRemaining,
+    labels: trayUsageLabels,
   });
   const activePlan = activeThreadId
     ? planByThread[activeThreadId] ?? null

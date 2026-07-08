@@ -4,6 +4,7 @@ import {
   SettingsToggleRow,
   SettingsToggleSwitch,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
+import { useI18n } from "@/features/i18n/I18nProvider";
 
 type SettingsGitSectionProps = {
   appSettings: AppSettings;
@@ -28,14 +29,15 @@ export function SettingsGitSection({
   onSaveCommitMessagePrompt,
   onResetCommitMessagePrompt,
 }: SettingsGitSectionProps) {
+  const { t } = useI18n();
   return (
     <SettingsSection
       title="Git"
-      subtitle="管理 Git 侧栏中 diff 的加载方式。"
+      subtitle={t("settings.git.subtitle")}
     >
       <SettingsToggleRow
-        title="预加载 Git diff"
-        subtitle="让查看 Git diff 更快。"
+        title={t("settings.git.preloadTitle")}
+        subtitle={t("settings.git.preloadSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.preloadGitDiffs}
@@ -48,8 +50,8 @@ export function SettingsGitSection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="忽略空白字符变化"
-        subtitle="在本地 diff 和提交 diff 中隐藏仅空白字符的变化。"
+        title={t("settings.git.ignoreWhitespaceTitle")}
+        subtitle={t("settings.git.ignoreWhitespaceSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.gitDiffIgnoreWhitespaceChanges}
@@ -62,9 +64,10 @@ export function SettingsGitSection({
         />
       </SettingsToggleRow>
       <div className="settings-field">
-        <div className="settings-field-label">提交信息提示词</div>
+        <div className="settings-field-label">{t("settings.git.commitPromptTitle")}</div>
         <div className="settings-help">
-          生成提交信息时使用。包含 <code>{"{diff}"}</code> 可插入 Git diff。
+          {t("settings.git.commitPromptHelpPrefix")} <code>{"{diff}"}</code>{" "}
+          {t("settings.git.commitPromptHelpSuffix")}
         </div>
         <textarea
           className="settings-agents-textarea"
@@ -82,7 +85,7 @@ export function SettingsGitSection({
             }}
             disabled={commitMessagePromptSaving || !commitMessagePromptDirty}
           >
-            重置
+            {t("common.reset")}
           </button>
           <button
             type="button"
@@ -92,17 +95,17 @@ export function SettingsGitSection({
             }}
             disabled={commitMessagePromptSaving || !commitMessagePromptDirty}
           >
-            {commitMessagePromptSaving ? "保存中..." : "保存"}
+            {commitMessagePromptSaving ? t("common.saving") : t("common.save")}
           </button>
         </div>
       </div>
       {models.length > 0 && (
         <div className="settings-field">
           <label className="settings-field-label" htmlFor="commit-message-model-select">
-            提交信息模型
+            {t("settings.git.commitModelTitle")}
           </label>
           <div className="settings-help">
-            生成提交信息时使用的模型。保持默认则使用项目模型。
+            {t("settings.git.commitModelHelp")}
           </div>
           <select
             id="commit-message-model-select"
@@ -116,7 +119,7 @@ export function SettingsGitSection({
               });
             }}
           >
-            <option value="">默认</option>
+            <option value="">{t("common.default")}</option>
             {models.map((model) => (
               <option key={model.id} value={model.model}>
                 {model.displayName?.trim() || model.model}

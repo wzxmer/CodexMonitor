@@ -1,3 +1,5 @@
+import { useI18n } from "../../i18n/I18nProvider";
+
 type HomeActionsProps = {
   onStartNoProjectChat: () => void;
   onAddWorkspace: () => void;
@@ -9,6 +11,7 @@ export function HomeActions({
   onAddWorkspace,
   onAddWorkspaceFromUrl,
 }: HomeActionsProps) {
+  const { t } = useI18n();
   return (
     <div className="home-actions">
       <button
@@ -19,7 +22,7 @@ export function HomeActions({
         <span className="home-icon" aria-hidden>
           ↵
         </span>
-        无项目对话
+        {t("home.actions.noProjectChat")}
       </button>
       <button
         className="home-button secondary home-add-workspaces-button"
@@ -29,7 +32,7 @@ export function HomeActions({
         <span className="home-icon" aria-hidden>
           +
         </span>
-        添加项目
+        {t("home.actions.addWorkspace")}
       </button>
       <button
         className="home-button secondary home-add-workspace-from-url-button"
@@ -39,7 +42,7 @@ export function HomeActions({
         <span className="home-icon" aria-hidden>
           ⤓
         </span>
-        从 URL 添加项目
+        {t("home.actions.addWorkspaceFromUrl")}
       </button>
     </div>
   );

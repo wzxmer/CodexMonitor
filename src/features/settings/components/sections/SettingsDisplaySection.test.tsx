@@ -171,7 +171,7 @@ describe("SettingsDisplaySection", () => {
     );
 
     const row = screen
-      .getByText("自动生成新会话标题")
+      .getByText("自动生成标题")
       .closest(".settings-toggle-row");
     expect(row).toBeTruthy();
     const button = within(row as HTMLElement).getByRole("button");
@@ -221,7 +221,7 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    const row = screen.getByText("无限聊天历史").closest(".settings-toggle-row");
+    const row = screen.getByText("不限聊天历史").closest(".settings-toggle-row");
     expect(row).toBeTruthy();
     const button = within(row as HTMLElement).getByRole("button");
 
@@ -271,10 +271,10 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    const presetSelect = screen.getByLabelText("历史保留预设");
+    const presetSelect = screen.getByLabelText("历史消息数量");
     expect((presetSelect as HTMLSelectElement).disabled).toBe(true);
 
-    const maxItemsInput = screen.getByLabelText("每个会话最多条目数");
+    const maxItemsInput = screen.getByLabelText("最大消息数");
     expect((maxItemsInput as HTMLInputElement).disabled).toBe(true);
 
     const maxItemsRow = maxItemsInput.closest(".settings-field-row");
@@ -327,7 +327,7 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    const select = screen.getByLabelText("历史保留预设");
+    const select = screen.getByLabelText("历史消息数量");
     fireEvent.change(select, { target: { value: "1000" } });
 
     expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -450,11 +450,11 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    const maxItemsInput = screen.getByLabelText("每个会话最多条目数");
+    const maxItemsInput = screen.getByLabelText("最大消息数");
     fireEvent.change(maxItemsInput, { target: { value: "50" } });
 
     const unlimitedRow = screen
-      .getByText("无限聊天历史")
+      .getByText("不限聊天历史")
       .closest(".settings-toggle-row");
     expect(unlimitedRow).toBeTruthy();
     const unlimitedButton = within(unlimitedRow as HTMLElement).getByRole("button");
@@ -507,7 +507,7 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    const maxItemsInput = screen.getByLabelText("每个会话最多条目数");
+    const maxItemsInput = screen.getByLabelText("最大消息数");
     fireEvent.change(maxItemsInput, { target: { value: "50" } });
 
     const maxItemsRow = maxItemsInput.closest(".settings-field-row");

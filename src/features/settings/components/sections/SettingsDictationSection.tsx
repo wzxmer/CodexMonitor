@@ -4,6 +4,7 @@ import {
   SettingsToggleRow,
   SettingsToggleSwitch,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import { formatDownloadSize } from "@utils/formatting";
 
 type DictationModelOption = {
@@ -40,16 +41,17 @@ export function SettingsDictationSection({
   onCancelDictationDownload,
   onRemoveDictationModel,
 }: SettingsDictationSectionProps) {
+  const { t } = useI18n();
   const dictationProgress = dictationModelStatus?.progress ?? null;
 
   return (
     <SettingsSection
-      title="听写"
-      subtitle="启用麦克风听写，并在本机完成转写。"
+      title={t("settings.dictation.title")}
+      subtitle={t("settings.dictation.subtitle")}
     >
       <SettingsToggleRow
-        title="启用听写"
-        subtitle="首次使用时下载所选 Whisper 模型。"
+        title={t("settings.dictation.enableTitle")}
+        subtitle={t("settings.dictation.enableSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.dictationEnabled}
@@ -78,7 +80,7 @@ export function SettingsDictationSection({
       </SettingsToggleRow>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="dictation-model">
-          听写模型
+          {t("settings.dictation.model")}
         </label>
         <select
           id="dictation-model"
@@ -98,12 +100,13 @@ export function SettingsDictationSection({
           ))}
         </select>
         <div className="settings-help">
-          {selectedDictationModel.note} 下载大小：{selectedDictationModel.size}。
+          {selectedDictationModel.note} {t("settings.dictation.downloadSize")}:{" "}
+          {selectedDictationModel.size}.
         </div>
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="dictation-language">
-          首选听写语言
+          {t("settings.dictation.language")}
         </label>
         <select
           id="dictation-language"
@@ -116,33 +119,33 @@ export function SettingsDictationSection({
             })
           }
         >
-          <option value="">仅自动检测</option>
-          <option value="en">英语</option>
-          <option value="es">西班牙语</option>
-          <option value="fr">法语</option>
-          <option value="de">德语</option>
-          <option value="it">意大利语</option>
-          <option value="pt">葡萄牙语</option>
-          <option value="nl">荷兰语</option>
-          <option value="sv">瑞典语</option>
-          <option value="no">挪威语</option>
-          <option value="da">丹麦语</option>
-          <option value="fi">芬兰语</option>
-          <option value="pl">波兰语</option>
-          <option value="tr">土耳其语</option>
-          <option value="ru">俄语</option>
-          <option value="uk">乌克兰语</option>
-          <option value="ja">日语</option>
-          <option value="ko">韩语</option>
-          <option value="zh">中文</option>
+          <option value="">{t("settings.dictation.autoDetectOnly")}</option>
+          <option value="en">{t("settings.dictation.langEnglish")}</option>
+          <option value="es">{t("settings.dictation.langSpanish")}</option>
+          <option value="fr">{t("settings.dictation.langFrench")}</option>
+          <option value="de">{t("settings.dictation.langGerman")}</option>
+          <option value="it">{t("settings.dictation.langItalian")}</option>
+          <option value="pt">{t("settings.dictation.langPortuguese")}</option>
+          <option value="nl">{t("settings.dictation.langDutch")}</option>
+          <option value="sv">{t("settings.dictation.langSwedish")}</option>
+          <option value="no">{t("settings.dictation.langNorwegian")}</option>
+          <option value="da">{t("settings.dictation.langDanish")}</option>
+          <option value="fi">{t("settings.dictation.langFinnish")}</option>
+          <option value="pl">{t("settings.dictation.langPolish")}</option>
+          <option value="tr">{t("settings.dictation.langTurkish")}</option>
+          <option value="ru">{t("settings.dictation.langRussian")}</option>
+          <option value="uk">{t("settings.dictation.langUkrainian")}</option>
+          <option value="ja">{t("settings.dictation.langJapanese")}</option>
+          <option value="ko">{t("settings.dictation.langKorean")}</option>
+          <option value="zh">{t("settings.dictation.langChinese")}</option>
         </select>
         <div className="settings-help">
-          自动检测仍会开启；此选项只用于引导解码器优先识别对应语言。
+          {t("settings.dictation.languageHelp")}
         </div>
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="dictation-hold-key">
-          按住听写按键
+          {t("settings.dictation.holdKey")}
         </label>
         <select
           id="dictation-hold-key"
@@ -155,25 +158,30 @@ export function SettingsDictationSection({
             })
           }
         >
-          <option value="">关闭</option>
+          <option value="">{t("settings.dictation.off")}</option>
           <option value="alt">{optionKeyLabel}</option>
           <option value="shift">Shift</option>
           <option value="control">Control</option>
           <option value="meta">{metaKeyLabel}</option>
         </select>
         <div className="settings-help">
-          按住开始听写，松开后停止并处理。
+          {t("settings.dictation.holdKeyHelp")}
         </div>
       </div>
       {dictationModelStatus && (
         <div className="settings-field">
-          <div className="settings-field-label">模型状态（{selectedDictationModel.label}）</div>
+          <div className="settings-field-label">
+            {t("settings.dictation.modelStatus").replace(
+              "{model}",
+              selectedDictationModel.label,
+            )}
+          </div>
           <div className="settings-help">
-            {dictationModelStatus.state === "ready" && "可用于听写。"}
-            {dictationModelStatus.state === "missing" && "模型尚未下载。"}
-            {dictationModelStatus.state === "downloading" && "正在下载模型..."}
+            {dictationModelStatus.state === "ready" && t("settings.dictation.ready")}
+            {dictationModelStatus.state === "missing" && t("settings.dictation.missing")}
+            {dictationModelStatus.state === "downloading" && t("settings.dictation.downloading")}
             {dictationModelStatus.state === "error" &&
-              (dictationModelStatus.error ?? "下载错误。")}
+              (dictationModelStatus.error ?? t("settings.dictation.downloadError"))}
           </div>
           {dictationProgress && (
             <div className="settings-download-progress">
@@ -203,7 +211,7 @@ export function SettingsDictationSection({
                 onClick={onDownloadDictationModel}
                 disabled={!onDownloadDictationModel}
               >
-                下载模型
+                {t("settings.dictation.downloadModel")}
               </button>
             )}
             {dictationModelStatus.state === "downloading" && (
@@ -213,7 +221,7 @@ export function SettingsDictationSection({
                 onClick={onCancelDictationDownload}
                 disabled={!onCancelDictationDownload}
               >
-                取消下载
+                {t("settings.dictation.cancelDownload")}
               </button>
             )}
             {dictationReady && (
@@ -223,7 +231,7 @@ export function SettingsDictationSection({
                 onClick={onRemoveDictationModel}
                 disabled={!onRemoveDictationModel}
               >
-                移除模型
+                {t("settings.dictation.removeModel")}
               </button>
             )}
           </div>

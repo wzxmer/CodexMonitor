@@ -299,7 +299,11 @@ export const Sidebar = memo(function Sidebar({
     weeklyResetLabel,
     creditsLabel,
     showWeekly,
-  } = getUsageLabels(accountRateLimits, usageShowRemaining);
+  } = getUsageLabels(accountRateLimits, usageShowRemaining, {
+    resetLabel: t("usage.resetLabel"),
+    availableCredits: t("usage.availableCredits"),
+    unlimited: t("usage.unlimited"),
+  });
   const debouncedQuery = useDebouncedValue(searchQuery, 150);
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
   const isSearchActive = Boolean(normalizedQuery);

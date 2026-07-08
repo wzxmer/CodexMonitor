@@ -4,6 +4,7 @@ import X from "lucide-react/dist/esm/icons/x";
 import { highlightLine, languageFromPath } from "../../../utils/syntax";
 import { OpenAppMenu } from "../../app/components/OpenAppMenu";
 import { PopoverSurface } from "../../design-system/components/popover/PopoverPrimitives";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import type { OpenAppTarget } from "../../../types";
 
 type FilePreviewPopoverProps = {
@@ -57,6 +58,7 @@ export function FilePreviewPopover({
   isLoading = false,
   error = null,
 }: FilePreviewPopoverProps) {
+  const { t } = useI18n();
   const isImagePreview = previewKind === "image";
   const lines = useMemo(
     () => (isImagePreview ? [] : content.split("\n")),
@@ -64,10 +66,12 @@ export function FilePreviewPopover({
   );
   const language = useMemo(() => languageFromPath(path), [path]);
   const selectionLabel = selection
-    ? `第 ${selection.start + 1}-${selection.end + 1} 行`
+    ? t("files.lineRange")
+        .replace("{start}", String(selection.start + 1))
+        .replace("{end}", String(selection.end + 1))
     : isImagePreview
-      ? "图片预览"
-      : "未选择";
+      ? t("files.imagePreview")
+      : t("files.notSelected");
   const highlightedLines = useMemo(
     () =>
       isImagePreview
@@ -85,21 +89,21 @@ export function FilePreviewPopover({
         <div className="file-preview-title">
           <span className="file-preview-path">{path}</span>
           {truncated && (
-            <span className="file-preview-warning">已截断</span>
+            <span className="file-preview-warning">{t("files.truncated")}</span>
           )}
         </div>
         <button
           type="button"
           className="icon-button file-preview-close"
           onClick={onClose}
-          aria-label="关闭预览"
-          title="关闭预览"
+          aria-label={t("files.closePreview")}
+          title={t("files.closePreview")}
         >
           <X size={14} aria-hidden />
         </button>
       </div>
       {isLoading ? (
-        <div className="file-preview-status">正在加载文件...</div>
+        <div className="file-preview-status">{t("files.loadingFile")}</div>
       ) : error ? (
         <div className="file-preview-status file-preview-error">{error}</div>
       ) : isImagePreview ? (
@@ -122,7 +126,7 @@ export function FilePreviewPopover({
             </div>
           ) : (
             <div className="file-preview-status file-preview-error">
-              图片预览不可用。
+              {t("files.imagePreviewUnavailable")}
             </div>
           )}
         </div>
@@ -132,7 +136,7 @@ export function FilePreviewPopover({
             <div className="file-preview-selection-group">
               <span className="file-preview-selection">{selectionLabel}</span>
               {selectionHints.length > 0 ? (
-                <div className="file-preview-hints" aria-label="选择提示">
+                <div className="file-preview-hints" aria-label={t("files.selectionHints")}>
                   {selectionHints.map((hint) => (
                     <span key={hint} className="file-preview-hint">
                       {hint}
@@ -155,7 +159,7 @@ export function FilePreviewPopover({
                 onClick={onClearSelection}
                 disabled={!selection}
               >
-                清除
+                {t("files.clear")}
               </button>
               <button
                 type="button"
@@ -163,7 +167,7 @@ export function FilePreviewPopover({
                 onClick={onAddSelection}
                 disabled={!selection || !canInsertText}
               >
-                添加到对话
+                {t("files.addToChat")}
               </button>
             </div>
           </div>

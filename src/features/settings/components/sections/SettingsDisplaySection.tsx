@@ -50,40 +50,32 @@ import { useI18n } from "@/features/i18n/I18nProvider";
 
 const THEME_ACCENT_OPTIONS: Array<{
   value: AppSettings["themeAccent"];
-  label: string;
   swatch: string;
 }> = [
   {
     value: "codex",
-    label: "Codex",
     swatch: "linear-gradient(135deg, #c49aff, #64c8ff)",
   },
   {
     value: "blue",
-    label: "蓝",
     swatch: "linear-gradient(135deg, #8ebaff, #5ca8ff)",
   },
   {
     value: "green",
-    label: "绿",
     swatch: "linear-gradient(135deg, #80e0be, #5cd2a6)",
   },
   {
     value: "pink",
-    label: "粉",
     swatch: "linear-gradient(135deg, #ff9ad5, #eb7ebe)",
   },
   {
     value: "orange",
-    label: "橙",
     swatch: "linear-gradient(135deg, #ffb269, #f5a65c)",
   },
 ];
 
 const STYLE_PRESETS: Array<{
   id: string;
-  title: string;
-  subtitle: string;
   swatch: string;
   settings: Pick<
     AppSettings,
@@ -100,8 +92,6 @@ const STYLE_PRESETS: Array<{
 }> = [
   {
     id: "native-white",
-    title: "原生纯白",
-    subtitle: "纯白背景，橙色点缀",
     swatch: "linear-gradient(135deg, #ffffff 0%, #ffffff 62%, #f28b3c 100%)",
     settings: {
       theme: "light",
@@ -117,8 +107,6 @@ const STYLE_PRESETS: Array<{
   },
   {
     id: "native-light",
-    title: "原生亮色",
-    subtitle: "暖白护眼，橙色强调",
     swatch: "linear-gradient(135deg, #fffaf5 0%, #f4efe8 58%, #f28b3c 100%)",
     settings: {
       theme: "light",
@@ -134,8 +122,6 @@ const STYLE_PRESETS: Array<{
   },
   {
     id: "native-dark",
-    title: "原生暗色",
-    subtitle: "深底浅字，低刺激",
     swatch: "linear-gradient(135deg, #171513 0%, #25201b 62%, #f28b3c 100%)",
     settings: {
       theme: "dark",
@@ -151,8 +137,6 @@ const STYLE_PRESETS: Array<{
   },
   {
     id: "cli-ember",
-    title: "CLI 暗黑",
-    subtitle: "黑橙终端感",
     swatch: "linear-gradient(135deg, #151719 0%, #24211d 58%, #ff9f43 100%)",
     settings: {
       theme: "dark",
@@ -170,8 +154,6 @@ const STYLE_PRESETS: Array<{
 
 const FONT_CLARITY_PRESETS: Array<{
   id: string;
-  title: string;
-  subtitle: string;
   uiLatinFontFamily: string;
   uiCjkFontFamily: string;
   uiFontWeight: number;
@@ -179,8 +161,6 @@ const FONT_CLARITY_PRESETS: Array<{
 }> = [
   {
     id: "standard",
-    title: "标准",
-    subtitle: "默认字体和字重",
     uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
     uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
     uiFontWeight: UI_FONT_WEIGHT_DEFAULT,
@@ -188,8 +168,6 @@ const FONT_CLARITY_PRESETS: Array<{
   },
   {
     id: "windows-clear",
-    title: "Windows 清晰",
-    subtitle: "雅黑 UI + 500 字重",
     uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
     uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
     uiFontWeight: 500,
@@ -197,8 +175,6 @@ const FONT_CLARITY_PRESETS: Array<{
   },
   {
     id: "bold-reading",
-    title: "加粗阅读",
-    subtitle: "长对话更醒目",
     uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
     uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
     uiFontWeight: 550,
@@ -206,8 +182,6 @@ const FONT_CLARITY_PRESETS: Array<{
   },
   {
     id: "light",
-    title: "细字轻量",
-    subtitle: "接近原始轻字重",
     uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
     uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
     uiFontWeight: 400,
@@ -220,25 +194,21 @@ type CodexPetId = NonNullable<AppSettings["codexPetId"]>;
 const CODEX_PET_OPTIONS: Array<{
   id: Exclude<CodexPetId, "custom">;
   title: string;
-  subtitle: string;
   tone: string;
 }> = [
   {
     id: "codex",
     title: "Codex",
-    subtitle: "默认助手宠物",
     tone: "linear-gradient(135deg, #f28b3c, #ffd4a3)",
   },
   {
     id: "terminal",
     title: "Terminal",
-    subtitle: "终端工作流",
     tone: "linear-gradient(135deg, #58d68d, #9af5c4)",
   },
   {
     id: "review",
     title: "Review",
-    subtitle: "代码审查提醒",
     tone: "linear-gradient(135deg, #7dadff, #c7d8ff)",
   },
 ];
@@ -569,8 +539,8 @@ export function SettingsDisplaySection({
         </div>
       </div>
       <div className="settings-field">
-        <div className="settings-field-label">风格方案</div>
-        <div className="settings-style-presets" role="radiogroup" aria-label="风格方案">
+        <div className="settings-field-label">{t("settings.display.stylePresets")}</div>
+        <div className="settings-style-presets" role="radiogroup" aria-label={t("settings.display.stylePresets")}>
           {STYLE_PRESETS.map((preset) => (
             <button
               key={preset.id}
@@ -593,21 +563,23 @@ export function SettingsDisplaySection({
                 aria-hidden
               />
               <span className="settings-style-preset-copy">
-                <span className="settings-style-preset-title">{preset.title}</span>
+                <span className="settings-style-preset-title">
+                  {t(`settings.display.stylePreset.${preset.id}.title` as any)}
+                </span>
                 <span className="settings-style-preset-subtitle">
-                  {preset.subtitle}
+                  {t(`settings.display.stylePreset.${preset.id}.subtitle` as any)}
                 </span>
               </span>
             </button>
           ))}
         </div>
         <div className="settings-help">
-          风格方案会同时切换主题、配色和会话消息显示模式。
+          {t("settings.display.stylePresetHelp")}
         </div>
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="theme-select">
-          主题
+          {t("settings.display.theme")}
         </label>
         <select
           id="theme-select"
@@ -620,15 +592,15 @@ export function SettingsDisplaySection({
             })
           }
         >
-          <option value="system">跟随系统</option>
-          <option value="light">浅色</option>
-          <option value="dark">深色</option>
-          <option value="dim">暗色</option>
+          <option value="system">{t("settings.display.themeSystem")}</option>
+          <option value="light">{t("settings.display.themeLight")}</option>
+          <option value="dark">{t("settings.display.themeDark")}</option>
+          <option value="dim">{t("settings.display.themeDim")}</option>
         </select>
       </div>
       <div className="settings-field">
-        <div className="settings-field-label">配色</div>
-        <div className="settings-accent-options" role="radiogroup" aria-label="配色">
+        <div className="settings-field-label">{t("settings.display.accent")}</div>
+        <div className="settings-accent-options" role="radiogroup" aria-label={t("settings.display.accent")}>
           {THEME_ACCENT_OPTIONS.map((option) => (
             <button
               key={option.value}
@@ -650,17 +622,19 @@ export function SettingsDisplaySection({
                 style={{ background: option.swatch }}
                 aria-hidden
               />
-              <span className="settings-accent-label">{option.label}</span>
+              <span className="settings-accent-label">
+                {t(`settings.display.accent.${option.value}` as any)}
+              </span>
             </button>
           ))}
         </div>
         <div className="settings-help">
-          配色只影响链接、选中态、用户消息和强调边框；明暗由主题控制。
+          {t("settings.display.accentHelp")}
         </div>
       </div>
       <SettingsToggleRow
-        title="显示 Codex 剩余额度"
-        subtitle="显示剩余量，而不是已使用量。"
+        title={t("settings.display.showRemainingTitle")}
+        subtitle={t("settings.display.showRemainingSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.usageShowRemaining}
@@ -673,8 +647,8 @@ export function SettingsDisplaySection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="在消息中显示文件路径"
-        subtitle="在消息里的文件链接旁显示父级路径。"
+        title={t("settings.display.showFilePathTitle")}
+        subtitle={t("settings.display.showFilePathSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.showMessageFilePath}
@@ -687,8 +661,8 @@ export function SettingsDisplaySection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="默认折叠工具调用"
-        subtitle="新打开会话时收起工具调用组，只保留文字内容优先可读。"
+        title={t("settings.display.collapseToolsTitle")}
+        subtitle={t("settings.display.collapseToolsSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.messageToolGroupsCollapsedByDefault}
@@ -702,8 +676,8 @@ export function SettingsDisplaySection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="聊天和 Diff 分栏显示"
-        subtitle="并排显示聊天和 Diff，而不是互相切换。"
+        title={t("settings.display.splitDiffTitle")}
+        subtitle={t("settings.display.splitDiffSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.splitChatDiffView}
@@ -716,8 +690,8 @@ export function SettingsDisplaySection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="自动生成新会话标题"
-        subtitle="根据第一条消息生成短标题（会额外消耗 token）。"
+        title={t("settings.display.autoTitleTitle")}
+        subtitle={t("settings.display.autoTitleSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.threadTitleAutogenerationEnabled}
@@ -730,13 +704,13 @@ export function SettingsDisplaySection({
           }
         />
       </SettingsToggleRow>
-      <div className="settings-subsection-title">聊天</div>
+      <div className="settings-subsection-title">{t("settings.display.chat")}</div>
       <div className="settings-subsection-subtitle">
-        控制每个会话保留多少上下文历史。
+        {t("settings.display.chatSubtitle")}
       </div>
       <SettingsToggleRow
-        title="无限聊天历史"
-        subtitle="在内存中保留完整会话历史（可能影响性能）。"
+        title={t("settings.display.unlimitedHistoryTitle")}
+        subtitle={t("settings.display.unlimitedHistorySubtitle")}
       >
         <SettingsToggleSwitch
           pressed={scrollbackUnlimited}
@@ -746,7 +720,7 @@ export function SettingsDisplaySection({
       </SettingsToggleRow>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="chat-scrollback-preset">
-          历史保留预设
+          {t("settings.display.historyPreset")}
         </label>
         <select
           id="chat-scrollback-preset"
@@ -756,20 +730,22 @@ export function SettingsDisplaySection({
           data-scrollback-control="true"
           disabled={scrollbackUnlimited}
         >
-          <option value="custom">自定义</option>
+          <option value="custom">{t("common.custom")}</option>
           {CHAT_SCROLLBACK_PRESETS.map((value) => (
             <option key={value} value={value}>
-              {value === CHAT_SCROLLBACK_DEFAULT ? `${value}（默认）` : value}
+              {value === CHAT_SCROLLBACK_DEFAULT
+                ? t("settings.display.defaultValue").replace("{value}", String(value))
+                : value}
             </option>
           ))}
         </select>
         <div className="settings-help">
-          数值越大保留的历史越多，但可能增加内存占用。可在会话中使用“从服务器同步”重新拉取旧消息。
+          {t("settings.display.historyPresetHelp")}
         </div>
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="chat-scrollback-items">
-          每个会话最多条目数
+          {t("settings.display.maxEntries")}
         </label>
         <div className="settings-field-row">
           <input
@@ -810,16 +786,18 @@ export function SettingsDisplaySection({
               });
             }}
           >
-            重置
+            {t("common.reset")}
           </button>
         </div>
         <div className="settings-help">
-          范围：{CHAT_SCROLLBACK_MIN}–{CHAT_SCROLLBACK_MAX}。统计消息、工具调用和其他会话条目。
+          {t("settings.display.maxEntriesHelp")
+            .replace("{min}", String(CHAT_SCROLLBACK_MIN))
+            .replace("{max}", String(CHAT_SCROLLBACK_MAX))}
         </div>
       </div>
       <SettingsToggleRow
-        title="降低透明度"
-        subtitle="使用纯色界面，替代玻璃效果。"
+        title={t("settings.display.reduceTransparencyTitle")}
+        subtitle={t("settings.display.reduceTransparencySubtitle")}
       >
         <SettingsToggleSwitch
           pressed={reduceTransparency}
@@ -828,7 +806,7 @@ export function SettingsDisplaySection({
       </SettingsToggleRow>
       <div className="settings-toggle-row settings-scale-row">
         <div>
-          <div className="settings-toggle-title">界面缩放</div>
+          <div className="settings-toggle-title">{t("settings.display.uiScale")}</div>
           <div className="settings-toggle-subtitle" title={scaleShortcutTitle}>
             {scaleShortcutText}
           </div>
@@ -840,7 +818,7 @@ export function SettingsDisplaySection({
             inputMode="decimal"
             className="settings-input settings-input--scale"
             value={scaleDraft}
-            aria-label="界面缩放"
+            aria-label={t("settings.display.uiScale")}
             onChange={(event) => onSetScaleDraft(event.target.value)}
             onBlur={() => {
               void onCommitScale();
@@ -859,13 +837,13 @@ export function SettingsDisplaySection({
               void onResetScale();
             }}
           >
-            重置
+            {t("common.reset")}
           </button>
         </div>
       </div>
       <div className="settings-field">
-        <div className="settings-field-label">字体清晰度</div>
-        <div className="settings-clarity-options" role="radiogroup" aria-label="字体清晰度">
+        <div className="settings-field-label">{t("settings.display.fontClarity")}</div>
+        <div className="settings-clarity-options" role="radiogroup" aria-label={t("settings.display.fontClarity")}>
           {FONT_CLARITY_PRESETS.map((preset) => (
             <button
               key={preset.id}
@@ -877,21 +855,25 @@ export function SettingsDisplaySection({
               aria-checked={activeFontClarityPresetId === preset.id}
               onClick={() => applyFontClarityPreset(preset)}
             >
-              <span className="settings-clarity-title">{preset.title}</span>
-              <span className="settings-clarity-subtitle">{preset.subtitle}</span>
+              <span className="settings-clarity-title">
+                {t(`settings.display.fontClarity.${preset.id}.title` as any)}
+              </span>
+              <span className="settings-clarity-subtitle">
+                {t(`settings.display.fontClarity.${preset.id}.subtitle` as any)}
+              </span>
             </button>
           ))}
         </div>
         <div className="settings-help">
-          Windows 字体发虚或偏细时，优先选 Windows 清晰；再按需要微调下面的字重。
+          {t("settings.display.fontClarityHelp")}
         </div>
       </div>
       <div className="settings-field">
         <div className="settings-field-label">
-          界面英文字体
+          {t("settings.display.uiLatinFont")}
         </div>
         <RoundedSelect
-          ariaLabel="界面英文字体"
+          ariaLabel={t("settings.display.uiLatinFont")}
           className="settings-select settings-font-select"
           popoverClassName="settings-font-select-popover"
           value={
@@ -899,7 +881,7 @@ export function SettingsDisplaySection({
               ? uiLatinFontDraft
               : "custom"
           }
-          options={[...uiLatinFontOptions, { label: "自定义", value: "custom" }]}
+          options={[...uiLatinFontOptions, { label: t("common.custom"), value: "custom" }]}
           onChange={(nextValue) => {
             if (nextValue === "custom") {
               return;
@@ -915,7 +897,7 @@ export function SettingsDisplaySection({
           <input
             type="text"
             className="settings-input"
-            aria-label="自定义界面英文字体"
+            aria-label={t("settings.display.customUiLatinFont")}
             value={uiLatinFontDraft}
             onChange={(event) => onSetUiLatinFontDraft(event.target.value)}
             onBlur={() => {
@@ -939,19 +921,19 @@ export function SettingsDisplaySection({
               });
             }}
           >
-            重置
+            {t("common.reset")}
           </button>
         </div>
         <div className="settings-help">
-          优先用于英文、数字和符号。Windows 推荐 Segoe UI 或 Inter。
+          {t("settings.display.uiLatinFontHelp")}
         </div>
       </div>
       <div className="settings-field">
         <div className="settings-field-label">
-          界面中文字体
+          {t("settings.display.uiCjkFont")}
         </div>
         <RoundedSelect
-          ariaLabel="界面中文字体"
+          ariaLabel={t("settings.display.uiCjkFont")}
           className="settings-select settings-font-select"
           popoverClassName="settings-font-select-popover"
           value={
@@ -959,7 +941,7 @@ export function SettingsDisplaySection({
               ? uiCjkFontDraft
               : "custom"
           }
-          options={[...uiCjkFontOptions, { label: "自定义", value: "custom" }]}
+          options={[...uiCjkFontOptions, { label: t("common.custom"), value: "custom" }]}
           onChange={(nextValue) => {
             if (nextValue === "custom") {
               return;
@@ -975,7 +957,7 @@ export function SettingsDisplaySection({
           <input
             type="text"
             className="settings-input"
-            aria-label="自定义界面中文字体"
+            aria-label={t("settings.display.customUiCjkFont")}
             value={uiCjkFontDraft}
             onChange={(event) => onSetUiCjkFontDraft(event.target.value)}
             onBlur={() => {
@@ -999,16 +981,16 @@ export function SettingsDisplaySection({
               });
             }}
           >
-            重置
+            {t("common.reset")}
           </button>
         </div>
         <div className="settings-help">
-          优先用于中文。Windows 推荐 Microsoft YaHei UI。
+          {t("settings.display.uiCjkFontHelp")}
         </div>
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="ui-font-size">
-          界面字号
+          {t("settings.display.uiFontSize")}
         </label>
         <div className="settings-field-row">
           <input
@@ -1034,14 +1016,14 @@ export function SettingsDisplaySection({
               void onCommitUiFontSize(UI_FONT_SIZE_DEFAULT);
             }}
           >
-            重置
+            {t("common.reset")}
           </button>
         </div>
-        <div className="settings-help">调整侧边栏、按钮、设置等界面文字。</div>
+        <div className="settings-help">{t("settings.display.uiFontSizeHelp")}</div>
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="ui-font-weight">
-          界面字重
+          {t("settings.display.uiFontWeight")}
         </label>
         <div className="settings-field-row">
           <input
@@ -1067,17 +1049,17 @@ export function SettingsDisplaySection({
               void onCommitUiFontWeight(UI_FONT_WEIGHT_DEFAULT);
             }}
           >
-            重置
+            {t("common.reset")}
           </button>
         </div>
-        <div className="settings-help">Windows 字体偏细时可调到 450 或 500。</div>
+        <div className="settings-help">{t("settings.display.uiFontWeightHelp")}</div>
       </div>
       <div className="settings-field">
         <div className="settings-field-label">
-          代码字体
+          {t("settings.display.codeFont")}
         </div>
         <RoundedSelect
-          ariaLabel="代码字体"
+          ariaLabel={t("settings.display.codeFont")}
           className="settings-select settings-font-select"
           popoverClassName="settings-font-select-popover"
           value={
@@ -1085,7 +1067,7 @@ export function SettingsDisplaySection({
               ? codeFontDraft
               : "custom"
           }
-          options={[...codeFontOptions, { label: "自定义", value: "custom" }]}
+          options={[...codeFontOptions, { label: t("common.custom"), value: "custom" }]}
           onChange={(nextValue) => {
             if (nextValue === "custom") {
               return;
@@ -1101,7 +1083,7 @@ export function SettingsDisplaySection({
           <input
             type="text"
             className="settings-input"
-            aria-label="自定义代码字体"
+            aria-label={t("settings.display.customCodeFont")}
             value={codeFontDraft}
             onChange={(event) => onSetCodeFontDraft(event.target.value)}
             onBlur={() => {
@@ -1125,14 +1107,14 @@ export function SettingsDisplaySection({
               });
             }}
           >
-            重置
+            {t("common.reset")}
           </button>
         </div>
-        <div className="settings-help">应用于 Git Diff 和其他等宽文本。</div>
+        <div className="settings-help">{t("settings.display.codeFontHelp")}</div>
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="message-font-size">
-          消息字号
+          {t("settings.display.messageFontSize")}
         </label>
         <div className="settings-field-row">
           <input
@@ -1158,14 +1140,14 @@ export function SettingsDisplaySection({
               void onCommitMessageFontSize(MESSAGE_FONT_SIZE_DEFAULT);
             }}
           >
-            重置
+            {t("common.reset")}
           </button>
         </div>
-        <div className="settings-help">调整聊天消息正文大小，不影响 Diff。</div>
+        <div className="settings-help">{t("settings.display.messageFontSizeHelp")}</div>
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="message-font-weight">
-          消息字重
+          {t("settings.display.messageFontWeight")}
         </label>
         <div className="settings-field-row">
           <input
@@ -1191,14 +1173,14 @@ export function SettingsDisplaySection({
               void onCommitMessageFontWeight(MESSAGE_FONT_WEIGHT_DEFAULT);
             }}
           >
-            重置
+            {t("common.reset")}
           </button>
         </div>
-        <div className="settings-help">只影响聊天消息正文。</div>
+        <div className="settings-help">{t("settings.display.messageFontWeightHelp")}</div>
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="code-font-size">
-          代码字号
+          {t("settings.display.codeFontSize")}
         </label>
         <div className="settings-field-row">
           <input
@@ -1224,16 +1206,16 @@ export function SettingsDisplaySection({
               void onCommitCodeFontSize(CODE_FONT_SIZE_DEFAULT);
             }}
           >
-            重置
+            {t("common.reset")}
           </button>
         </div>
-        <div className="settings-help">调整代码和 Diff 文本大小。</div>
+        <div className="settings-help">{t("settings.display.codeFontSizeHelp")}</div>
       </div>
-      <div className="settings-subsection-title">声音</div>
-      <div className="settings-subsection-subtitle">控制通知声音提醒。</div>
+      <div className="settings-subsection-title">{t("settings.display.sound")}</div>
+      <div className="settings-subsection-subtitle">{t("settings.display.soundSubtitle")}</div>
       <SettingsToggleRow
-        title="Codex 宠物"
-        subtitle="启用后由宠物接管提醒，系统通知会自动静音。"
+        title={t("settings.display.codexPetTitle")}
+        subtitle={t("settings.display.codexPetSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={Boolean(appSettings.codexPetEnabled)}
@@ -1249,7 +1231,7 @@ export function SettingsDisplaySection({
         <div
           className="settings-codex-pet-options"
           role="radiogroup"
-          aria-label="Codex 宠物选择"
+          aria-label={t("settings.display.codexPetChoice")}
         >
           {CODEX_PET_OPTIONS.map((pet) => (
             <button
@@ -1276,7 +1258,9 @@ export function SettingsDisplaySection({
               </span>
               <span className="settings-codex-pet-copy">
                 <span className="settings-codex-pet-title">{pet.title}</span>
-                <span className="settings-codex-pet-subtitle">{pet.subtitle}</span>
+                <span className="settings-codex-pet-subtitle">
+                  {t(`settings.display.codexPet.${pet.id}.subtitle` as any)}
+                </span>
               </span>
             </button>
           ))}
@@ -1303,45 +1287,52 @@ export function SettingsDisplaySection({
               <span />
             </span>
             <span className="settings-codex-pet-copy">
-              <span className="settings-codex-pet-title">导入宠物</span>
+              <span className="settings-codex-pet-title">
+                {t("settings.display.importPet")}
+              </span>
               <span className="settings-codex-pet-subtitle">
-                {customPetAvailable ? "使用自定义图片" : "PNG / JPG / GIF / WebP"}
+                {customPetAvailable
+                  ? t("settings.display.useCustomImage")
+                  : t("settings.display.petFormats")}
               </span>
             </span>
           </button>
         </div>
         {appSettings.codexPetCustomImagePath && (
           <div className="settings-help settings-codex-pet-path">
-            已导入：{appSettings.codexPetCustomImagePath}
+            {t("settings.display.importedPetPath").replace(
+              "{path}",
+              appSettings.codexPetCustomImagePath,
+            )}
           </div>
         )}
         <div className="settings-sound-actions">
           <button
             type="button"
             className="ghost settings-button-compact"
-            onClick={wakeCodexPet}
+          onClick={wakeCodexPet}
           >
-            唤醒
+            {t("settings.display.wakePet")}
           </button>
           <button
             type="button"
             className="ghost settings-button-compact"
-            onClick={refreshCodexPet}
+          onClick={refreshCodexPet}
           >
-            刷新
+            {t("common.refresh")}
           </button>
           <button
             type="button"
             className="ghost settings-button-compact"
-            onClick={() => void importCodexPet()}
+          onClick={() => void importCodexPet()}
           >
-            导入
+            {t("settings.display.importPetAction")}
           </button>
         </div>
       </div>
       <SettingsToggleRow
-        title="通知声音"
-        subtitle="窗口未聚焦时，长时间运行的 agent 完成后播放提示音。"
+        title={t("settings.display.notificationSoundsTitle")}
+        subtitle={t("settings.display.notificationSoundsSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.notificationSoundsEnabled}
@@ -1354,11 +1345,11 @@ export function SettingsDisplaySection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="系统通知"
+        title={t("settings.display.systemNotificationsTitle")}
         subtitle={
           appSettings.codexPetEnabled
-            ? "Codex 宠物启用中，系统通知已自动静音。"
-            : "窗口未聚焦时，长时间运行的 agent 完成后显示系统通知。"
+            ? t("settings.display.systemNotificationsPetEnabled")
+            : t("settings.display.systemNotificationsSubtitle")
         }
       >
         <SettingsToggleSwitch
@@ -1373,11 +1364,11 @@ export function SettingsDisplaySection({
         />
       </SettingsToggleRow>
       <SettingsToggleRow
-        title="子 agent 通知"
+        title={t("settings.display.subagentNotificationsTitle")}
         subtitle={
           appSettings.codexPetEnabled
-            ? "Codex 宠物启用中，子 agent 系统通知也会静音。"
-            : "系统通知中包含派生的子 agent 会话。"
+            ? t("settings.display.subagentNotificationsPetEnabled")
+            : t("settings.display.subagentNotificationsSubtitle")
         }
       >
         <SettingsToggleSwitch
@@ -1396,17 +1387,17 @@ export function SettingsDisplaySection({
         <button
           type="button"
           className="ghost settings-button-compact"
-          onClick={onTestNotificationSound}
+        onClick={onTestNotificationSound}
         >
-          测试声音
+          {t("settings.display.testSound")}
         </button>
         <button
           type="button"
           className="ghost settings-button-compact"
           onClick={onTestSystemNotification}
-          disabled={Boolean(appSettings.codexPetEnabled)}
+        disabled={Boolean(appSettings.codexPetEnabled)}
         >
-          测试通知
+          {t("settings.display.testNotification")}
         </button>
       </div>
     </SettingsSection>

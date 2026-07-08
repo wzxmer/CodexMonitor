@@ -86,7 +86,10 @@ getCodexStatusMock.mockResolvedValue({
 
 const baseSettings: AppSettings = {
   codexBin: null,
+  codexHome: null,
   codexArgs: null,
+  codexKeyProfiles: [],
+  activeCodexKeyProfileId: null,
   backendMode: "local",
   remoteBackendProvider: "tcp",
   remoteBackendHost: "127.0.0.1:4732",

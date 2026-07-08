@@ -97,6 +97,18 @@ describe("useTraySessionUsage", () => {
     });
   });
 
+  it("uses localized tray labels when provided", () => {
+    expect(
+      buildTraySessionUsage(makeRateLimits(), false, {
+        resetLabel: "resets in {relative}",
+        used: "{value}% used",
+      }),
+    ).toEqual({
+      sessionLabel: "12% used · resets in 2 hours",
+      weeklyLabel: null,
+    });
+  });
+
   it("syncs only when the derived usage changes", async () => {
     type HookProps = {
       accountRateLimits: RateLimitSnapshot | null;

@@ -1,5 +1,29 @@
 import type { AccountSnapshot, LocalUsageDay } from "../../types";
 
+export type HomeFormatterText = {
+  noUsageData: string;
+  rangeTo: string;
+  chatgptAccount: string;
+  apiKeyAccount: string;
+  connectedAccount: string;
+  dayWindow: string;
+  hourWindow: string;
+  minuteWindow: string;
+  dayCount: string;
+};
+
+const DEFAULT_FORMATTER_TEXT: HomeFormatterText = {
+  noUsageData: "No usage data",
+  rangeTo: "至",
+  chatgptAccount: "ChatGPT 账号",
+  apiKeyAccount: "API Key",
+  connectedAccount: "已连接账号",
+  dayWindow: "{value} 天窗口",
+  hourWindow: "{value} 小时窗口",
+  minuteWindow: "{value} 分钟窗口",
+  dayCount: "{value} 天",
+};
+
 export function formatCompactNumber(value: number | null | undefined) {
   if (value === null || value === undefined) {
     return "--";
@@ -77,15 +101,21 @@ export function formatDayLabel(value: string | null | undefined) {
   }).format(date);
 }
 
-export function formatWeekRange(days: LocalUsageDay[]) {
+export function formatWeekRange(
+  days: LocalUsageDay[],
+  labels: Partial<HomeFormatterText> = {},
+) {
+  const text = { ...DEFAULT_FORMATTER_TEXT, ...labels };
   if (days.length === 0) {
-    return "No usage data";
+    return text.noUsageData;
   }
   const first = days[0];
   const last = days[days.length - 1];
   const firstLabel = formatDayLabel(first?.day);
   const lastLabel = formatDayLabel(last?.day);
-  return first?.day === last?.day ? firstLabel : `${firstLabel} 至 ${lastLabel}`;
+  return first?.day === last?.day
+    ? firstLabel
+    : `${firstLabel} ${text.rangeTo} ${lastLabel}`;
 }
 
 export function isUsageDayActive(day: LocalUsageDay) {
@@ -106,37 +136,47 @@ export function formatPlanType(value: string | null | undefined) {
 
 export function formatAccountTypeLabel(
   value: AccountSnapshot["type"] | null | undefined,
+  labels: Partial<HomeFormatterText> = {},
 ) {
+  const text = { ...DEFAULT_FORMATTER_TEXT, ...labels };
   if (value === "chatgpt") {
-    return "ChatGPT 账号";
+    return text.chatgptAccount;
   }
   if (value === "apikey") {
-    return "API Key";
+    return text.apiKeyAccount;
   }
-  return "已连接账号";
+  return text.connectedAccount;
 }
 
-export function formatWindowDuration(valueMins: number | null | undefined) {
+export function formatWindowDuration(
+  valueMins: number | null | undefined,
+  labels: Partial<HomeFormatterText> = {},
+) {
   if (typeof valueMins !== "number" || !Number.isFinite(valueMins) || valueMins <= 0) {
     return null;
   }
+  const text = { ...DEFAULT_FORMATTER_TEXT, ...labels };
   if (valueMins >= 60 * 24) {
     const days = Math.round(valueMins / (60 * 24));
-    return `${days} 天窗口`;
+    return text.dayWindow.replace("{value}", String(days));
   }
   if (valueMins >= 60) {
     const hours = Math.round(valueMins / 60);
-    return `${hours} 小时窗口`;
+    return text.hourWindow.replace("{value}", String(hours));
   }
-  return `${Math.round(valueMins)} 分钟窗口`;
+  return text.minuteWindow.replace("{value}", String(Math.round(valueMins)));
 }
 
 export function buildWindowCaption(
   resetLabel: string | null,
   windowDurationMins: number | null | undefined,
   fallback: string,
+  labels: Partial<HomeFormatterText> = {},
 ) {
-  const parts = [resetLabel, formatWindowDuration(windowDurationMins)].filter(Boolean);
+  const parts = [
+    resetLabel,
+    formatWindowDuration(windowDurationMins, labels),
+  ].filter(Boolean);
   return parts.length > 0 ? parts.join(" · ") : fallback;
 }
 
@@ -154,9 +194,13 @@ export function formatCreditsBalance(value: string | null | undefined) {
   }).format(numeric);
 }
 
-export function formatDayCount(value: number | null | undefined) {
+export function formatDayCount(
+  value: number | null | undefined,
+  labels: Partial<HomeFormatterText> = {},
+) {
   if (value === null || value === undefined) {
     return "--";
   }
-  return `${value} 天`;
+  const text = { ...DEFAULT_FORMATTER_TEXT, ...labels };
+  return text.dayCount.replace("{value}", String(value));
 }
