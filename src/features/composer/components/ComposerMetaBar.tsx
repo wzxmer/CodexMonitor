@@ -8,7 +8,6 @@ import type {
   ComposerTriggerMode,
   ComposerSendShortcut,
   ServiceTier,
-  ThreadTokenUsage,
 } from "../../../types";
 import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
 
@@ -34,8 +33,6 @@ type ComposerMetaBarProps = {
   codexArgsOptions?: CodexArgsOption[];
   selectedCodexArgsOverride?: string | null;
   onSelectCodexArgsOverride?: (value: string | null) => void;
-  contextUsage?: ThreadTokenUsage | null;
-  contextCompactionCount?: number;
 };
 
 export function ComposerMetaBar({
@@ -60,8 +57,6 @@ export function ComposerMetaBar({
   codexArgsOptions = [],
   selectedCodexArgsOverride = null,
   onSelectCodexArgsOverride,
-  contextUsage = null,
-  contextCompactionCount = 0,
 }: ComposerMetaBarProps) {
   const { t } = useI18n();
   const selectedModel =
@@ -71,33 +66,6 @@ export function ComposerMetaBar({
   const modelSelectStyle = {
     "--composer-model-select-width": `${Math.max(selectedModelLabel.length + 2, 8)}ch`,
   } as CSSProperties;
-  const contextWindow = contextUsage?.modelContextWindow ?? null;
-  const lastTokens = contextUsage?.last.totalTokens ?? 0;
-  const totalTokens = contextUsage?.total.totalTokens ?? 0;
-  const usedTokens = lastTokens > 0 ? lastTokens : totalTokens;
-  const contextFreePercent =
-    contextWindow && contextWindow > 0 && usedTokens > 0
-      ? Math.max(
-          0,
-          100 -
-            Math.min(Math.max((usedTokens / contextWindow) * 100, 0), 100),
-        )
-      : null;
-  const contextUsedPercent =
-    contextFreePercent === null ? null : 100 - contextFreePercent;
-  const contextRingColor =
-    contextUsedPercent === null
-      ? "var(--border-accent)"
-      : contextUsedPercent >= 95
-        ? "#ef4444"
-        : contextUsedPercent >= 80
-          ? "#f59e0b"
-          : "#22c55e";
-  const contextLabel =
-    contextFreePercent === null
-      ? t("composer.contextRemainingEmpty")
-      : `${t("composer.contextRemainingPrefix")} ${Math.round(contextFreePercent)}%`;
-  const contextCompactionLabel = `${t("composer.contextCompactionsPrefix")} ${contextCompactionCount}`;
   const planMode =
     collaborationModes.find((mode) => mode.id === "plan") ?? null;
   const defaultMode =
@@ -362,21 +330,6 @@ export function ComposerMetaBar({
             />
           </div>
         )}
-      </div>
-      <div className="composer-context">
-        <div
-          className="composer-context-ring"
-          data-tooltip={`${contextLabel} · ${contextCompactionLabel}`}
-          aria-label={`${contextLabel}; ${contextCompactionLabel}`}
-          style={
-            {
-              "--context-free": contextFreePercent ?? 0,
-              "--context-ring-color": contextRingColor,
-            } as CSSProperties
-          }
-        >
-          <span className="composer-context-value">{contextCompactionCount}</span>
-        </div>
       </div>
     </div>
   );

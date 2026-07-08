@@ -1,7 +1,8 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import type {
   ChangeEvent,
   ClipboardEvent,
+  CSSProperties,
   KeyboardEvent,
   RefObject,
   SyntheticEvent,
@@ -80,6 +81,8 @@ type ComposerInputProps = {
   onReviewPromptConfirmCommit?: () => Promise<void>;
   onReviewPromptUpdateCustomInstructions?: (value: string) => void;
   onReviewPromptConfirmCustom?: () => Promise<void>;
+  contextUsedPercent?: number | null;
+  contextCompactionCount?: number;
 };
 
 export function ComposerInput({
@@ -136,6 +139,8 @@ export function ComposerInput({
   onReviewPromptConfirmCommit,
   onReviewPromptUpdateCustomInstructions,
   onReviewPromptConfirmCustom,
+  contextUsedPercent = null,
+  contextCompactionCount = 0,
 }: ComposerInputProps) {
   const { t } = useI18n();
   const suggestionListRef = useRef<HTMLDivElement | null>(null);
@@ -182,6 +187,34 @@ export function ComposerInput({
     onCancelDictation,
     onOpenDictationSettings,
   });
+  const contextStatus = useMemo(() => {
+    if (contextUsedPercent === null) {
+      return {
+        className: "is-context-unknown",
+        color: "var(--cm-border-heavy)",
+        label: t("composer.contextRemainingEmpty"),
+      };
+    }
+    const remaining = Math.max(0, 100 - contextUsedPercent);
+    const className =
+      contextUsedPercent >= 95
+        ? "is-context-danger"
+        : contextUsedPercent >= 80
+          ? "is-context-warning"
+          : "is-context-ok";
+    const color =
+      contextUsedPercent >= 95
+        ? "var(--status-error)"
+        : contextUsedPercent >= 80
+          ? "var(--status-warning)"
+          : "var(--status-success)";
+    return {
+      className,
+      color,
+      label: `${t("composer.contextRemainingPrefix")} ${remaining}%`,
+    };
+  }, [contextUsedPercent, t]);
+  const contextCompactionLabel = `${t("composer.contextCompactionsPrefix")} ${contextCompactionCount}`;
 
   const handleTextareaChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -231,13 +264,28 @@ export function ComposerInput({
   return (
     <div className={`composer-input${isPhoneLayout && isPhoneTallInput ? " is-phone-tall" : ""}`}>
       <div
-        className={`composer-input-area${isDragOver ? " is-drag-over" : ""}`}
+        className={`composer-input-area ${contextStatus.className}${isDragOver ? " is-drag-over" : ""}`}
+        style={
+          {
+            "--composer-context-used": contextUsedPercent ?? 0,
+            "--composer-context-color": contextStatus.color,
+          } as CSSProperties
+        }
         ref={dropTargetRef}
         onDragOver={handleDragOver}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        <div
+          className="composer-context-count ds-tooltip-trigger"
+          data-tooltip={`${contextStatus.label} · ${contextCompactionLabel}`}
+          data-tooltip-placement="bottom"
+          data-tooltip-align="start"
+          aria-label={`${contextStatus.label}; ${contextCompactionLabel}`}
+        >
+          {contextCompactionCount}
+        </div>
         <ComposerAttachments
           attachments={attachments}
           disabled={disabled}

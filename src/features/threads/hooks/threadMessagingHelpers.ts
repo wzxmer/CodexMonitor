@@ -19,6 +19,7 @@ export type SendMessageOptions = {
   appMentions?: AppMention[];
   sendIntent?: ComposerSendIntent;
   replaceMessageId?: string;
+  skipAutoCompact?: boolean;
 };
 
 type FastCommandAction = "toggle" | "on" | "off" | "status" | "invalid";

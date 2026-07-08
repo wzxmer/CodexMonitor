@@ -47,6 +47,7 @@ import { ComposerQueue } from "./ComposerQueue";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { isMacPlatform } from "../../../utils/platformPaths";
 import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
+import { getContextUsedPercent } from "@/features/threads/utils/contextUsage";
 
 type ComposerProps = {
   onSend: (
@@ -260,6 +261,7 @@ export const Composer = memo(function Composer({
   contextActions = [],
 }: ComposerProps) {
   const { t } = useI18n();
+  const contextUsedPercent = getContextUsedPercent(contextUsage);
   const [text, setText] = useState(draftText);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [appMentionBindings, setAppMentionBindings] = useState<AppMentionBinding[]>([]);
@@ -671,6 +673,8 @@ export const Composer = memo(function Composer({
         onReviewPromptConfirmCommit={onReviewPromptConfirmCommit}
         onReviewPromptUpdateCustomInstructions={onReviewPromptUpdateCustomInstructions}
         onReviewPromptConfirmCustom={onReviewPromptConfirmCustom}
+        contextUsedPercent={contextUsedPercent}
+        contextCompactionCount={contextCompactionCount}
       />
       <ComposerMetaBar
         disabled={disabled}
@@ -694,8 +698,6 @@ export const Composer = memo(function Composer({
         onSelectComposerSendShortcut={onSelectComposerSendShortcut}
         composerTriggerMode={composerTriggerMode}
         onSelectComposerTriggerMode={onSelectComposerTriggerMode}
-        contextUsage={contextUsage}
-        contextCompactionCount={contextCompactionCount}
       />
     </footer>
   );

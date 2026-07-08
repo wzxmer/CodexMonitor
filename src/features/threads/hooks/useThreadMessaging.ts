@@ -10,6 +10,7 @@ import type {
   ReviewTarget,
   SendMessageResult,
   ServiceTier,
+  ThreadTokenUsage,
   WorkspaceInfo,
 } from "@/types";
 import {
@@ -48,6 +49,7 @@ import {
   resolveSendMessageOptions,
   type SendMessageOptions,
 } from "./threadMessagingHelpers";
+import { shouldAutoCompactContext } from "@threads/utils/contextUsage";
 
 const TEXT_ATTACHMENT_EXTENSIONS = /\.(txt|md|markdown|json|jsonc|yaml|yml|toml|xml|html?|css|scss|sass|less|js|jsx|ts|tsx|mjs|cjs|rs|go|py|rb|php|java|kt|kts|swift|c|cc|cpp|cxx|h|hpp|cs|sh|bash|zsh|fish|ps1|bat|cmd|sql|csv|tsv|log|ini|env|gitignore|dockerfile)$/i;
 
@@ -183,6 +185,7 @@ type UseThreadMessagingOptions = {
   ) => boolean;
   threadStatusById: ThreadState["threadStatusById"];
   activeTurnIdByThread: ThreadState["activeTurnIdByThread"];
+  tokenUsageByThread?: Record<string, ThreadTokenUsage>;
   rateLimitsByWorkspace: Record<string, RateLimitSnapshot | null>;
   pendingInterruptsRef: MutableRefObject<Set<string>>;
   dispatch: Dispatch<ThreadAction>;
@@ -231,6 +234,7 @@ export function useThreadMessaging({
   shouldPreflightRuntimeCodexArgsForSend,
   threadStatusById,
   activeTurnIdByThread,
+  tokenUsageByThread = {},
   rateLimitsByWorkspace,
   pendingInterruptsRef,
   dispatch,
@@ -324,6 +328,44 @@ export function useThreadMessaging({
           activeTurnId,
         },
       });
+      if (
+        requestMode !== "steer" &&
+        !options?.skipAutoCompact &&
+        shouldAutoCompactContext(tokenUsageByThread[threadId])
+      ) {
+        onDebug?.({
+          id: `${Date.now()}-client-thread-auto-compact-start`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "thread/auto-compact start",
+          payload: { workspaceId: workspace.id, threadId },
+        });
+        try {
+          await compactThreadService(workspace.id, threadId);
+          onDebug?.({
+            id: `${Date.now()}-server-thread-auto-compact-started`,
+            timestamp: Date.now(),
+            source: "server",
+            label: "thread/auto-compact response",
+            payload: { workspaceId: workspace.id, threadId },
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          onDebug?.({
+            id: `${Date.now()}-client-thread-auto-compact-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "thread/auto-compact error",
+            payload: errorMessage,
+          });
+          pushThreadErrorMessage(
+            threadId,
+            `Context compaction failed before sending: ${errorMessage}`,
+          );
+          safeMessageActivity();
+          return { status: "blocked" };
+        }
+      }
       Sentry.metrics.count("prompt_sent", 1, {
         attributes: {
           workspace_id: workspace.id,
@@ -522,6 +564,7 @@ export function useThreadMessaging({
       setActiveTurnId,
       steerEnabled,
       threadStatusById,
+      tokenUsageByThread,
     ],
   );
 
