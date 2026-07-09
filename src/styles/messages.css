@@ -65,12 +65,13 @@
   bottom: 16px;
   z-index: 7;
   align-self: flex-end;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
+  width: fit-content;
   min-height: 34px;
   max-width: min(220px, 90%);
-  margin: -52px max(8px, calc((100% - var(--conversation-column-width, 1120px)) / 2)) 0 auto;
+  margin: -52px 8px 0 auto;
   padding: 7px 12px;
   border: 1px solid var(--cm-border-strong);
   border-radius: 999px;
