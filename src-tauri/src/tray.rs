@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 #[cfg(desktop)]
 use tauri::image::Image;
 #[cfg(desktop)]
-use tauri::menu::{Menu, MenuEvent, MenuItemBuilder, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItemBuilder, Menu, MenuEvent, MenuItemBuilder, PredefinedMenuItem};
 #[cfg(desktop)]
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 #[cfg(desktop)]
@@ -22,13 +22,11 @@ const TRAY_HIDE_ID: &str = "tray_hide";
 #[cfg(desktop)]
 const TRAY_RESTART_ID: &str = "tray_restart";
 #[cfg(desktop)]
+const TRAY_CHECK_UPDATES_ID: &str = "tray_check_updates";
+#[cfg(desktop)]
+const TRAY_AUTOSTART_ID: &str = "tray_autostart";
+#[cfg(desktop)]
 const TRAY_QUIT_ID: &str = "tray_quit";
-#[cfg(desktop)]
-const TRAY_USAGE_HEADER_ID: &str = "tray_usage_header";
-#[cfg(desktop)]
-const TRAY_USAGE_SESSION_ID: &str = "tray_usage_session";
-#[cfg(desktop)]
-const TRAY_USAGE_WEEKLY_ID: &str = "tray_usage_weekly";
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TrayRecentThreadEntry {
@@ -51,12 +49,10 @@ pub(crate) struct TraySessionUsage {
 pub(crate) struct TrayLabels {
     pub(crate) open: String,
     pub(crate) hide: String,
+    pub(crate) check_updates: String,
+    pub(crate) launch_at_startup: String,
     pub(crate) restart: String,
     pub(crate) quit: String,
-    pub(crate) usage_header: String,
-    pub(crate) no_active_session: String,
-    pub(crate) session_prefix: String,
-    pub(crate) weekly_prefix: String,
 }
 
 impl Default for TrayLabels {
@@ -64,12 +60,10 @@ impl Default for TrayLabels {
         Self {
             open: "Open Codex Monitor".into(),
             hide: "Hide Window".into(),
+            check_updates: "Check for Updates...".into(),
+            launch_at_startup: "Launch at Startup".into(),
             restart: "Restart".into(),
             quit: "Quit".into(),
-            usage_header: "Current Usage".into(),
-            no_active_session: "No active session".into(),
-            session_prefix: "Session".into(),
-            weekly_prefix: "Weekly".into(),
         }
     }
 }
@@ -267,12 +261,10 @@ fn normalize_tray_labels(labels: TrayLabels) -> TrayLabels {
     TrayLabels {
         open: normalize_label(labels.open, &fallback.open),
         hide: normalize_label(labels.hide, &fallback.hide),
+        check_updates: normalize_label(labels.check_updates, &fallback.check_updates),
+        launch_at_startup: normalize_label(labels.launch_at_startup, &fallback.launch_at_startup),
         restart: normalize_label(labels.restart, &fallback.restart),
         quit: normalize_label(labels.quit, &fallback.quit),
-        usage_header: normalize_label(labels.usage_header, &fallback.usage_header),
-        no_active_session: normalize_label(labels.no_active_session, &fallback.no_active_session),
-        session_prefix: normalize_label(labels.session_prefix, &fallback.session_prefix),
-        weekly_prefix: normalize_label(labels.weekly_prefix, &fallback.weekly_prefix),
     }
 }
 
@@ -294,28 +286,28 @@ fn build_tray_menu<R: Runtime>(
     state: &TrayState,
 ) -> tauri::Result<Menu<R>> {
     let menu = Menu::new(app)?;
-    let session_usage = state
-        .session_usage
-        .lock()
-        .map(|usage| usage.clone())
-        .unwrap_or_default();
     let labels = state
         .labels
         .lock()
         .map(|labels| labels.clone())
         .unwrap_or_default();
-    let usage_items = build_usage_menu_items(app, session_usage.as_ref(), &labels)?;
+    let autostart_enabled = crate::autostart::is_enabled_for_app(app).unwrap_or(false);
     let open_item = MenuItemBuilder::with_id(TRAY_OPEN_ID, &labels.open).build(app)?;
     menu.append(&open_item)?;
     let hide_item = MenuItemBuilder::with_id(TRAY_HIDE_ID, &labels.hide).build(app)?;
     menu.append(&hide_item)?;
     let window_separator = PredefinedMenuItem::separator(app)?;
     menu.append(&window_separator)?;
-    for item in &usage_items {
-        menu.append(item)?;
-    }
-    let quit_separator = PredefinedMenuItem::separator(app)?;
-    menu.append(&quit_separator)?;
+    let check_updates_item =
+        MenuItemBuilder::with_id(TRAY_CHECK_UPDATES_ID, &labels.check_updates).build(app)?;
+    menu.append(&check_updates_item)?;
+    let autostart_item =
+        CheckMenuItemBuilder::with_id(TRAY_AUTOSTART_ID, &labels.launch_at_startup)
+            .checked(autostart_enabled)
+            .build(app)?;
+    menu.append(&autostart_item)?;
+    let system_separator = PredefinedMenuItem::separator(app)?;
+    menu.append(&system_separator)?;
     let restart_item = MenuItemBuilder::with_id(TRAY_RESTART_ID, &labels.restart).build(app)?;
     menu.append(&restart_item)?;
     let quit_item = MenuItemBuilder::with_id(TRAY_QUIT_ID, &labels.quit).build(app)?;
@@ -324,51 +316,21 @@ fn build_tray_menu<R: Runtime>(
 }
 
 #[cfg(desktop)]
-fn build_usage_menu_items<R: Runtime>(
-    app: &tauri::AppHandle<R>,
-    usage: Option<&TraySessionUsage>,
-    labels: &TrayLabels,
-) -> tauri::Result<Vec<tauri::menu::MenuItem<R>>> {
-    let labels = build_usage_menu_labels(usage, labels);
-    let mut items = Vec::with_capacity(3);
-    let header = MenuItemBuilder::with_id(TRAY_USAGE_HEADER_ID, &labels.0)
-        .enabled(false)
-        .build(app)?;
-    items.push(header);
-    let session = MenuItemBuilder::with_id(TRAY_USAGE_SESSION_ID, &labels.1)
-        .enabled(false)
-        .build(app)?;
-    items.push(session);
-    if let Some(weekly_label) = labels.2 {
-        let weekly = MenuItemBuilder::with_id(TRAY_USAGE_WEEKLY_ID, &weekly_label)
-            .enabled(false)
-            .build(app)?;
-        items.push(weekly);
-    }
-    Ok(items)
-}
-
-fn build_usage_menu_labels(
-    usage: Option<&TraySessionUsage>,
-    labels: &TrayLabels,
-) -> (String, String, Option<String>) {
-    (
-        labels.usage_header.clone(),
-        usage
-            .map(|usage| format!("{}: {}", labels.session_prefix, usage.session_label))
-            .unwrap_or_else(|| labels.no_active_session.clone()),
-        usage
-            .map(|usage| usage.weekly_label.clone())
-            .unwrap_or(None)
-            .map(|label| format!("{}: {label}", labels.weekly_prefix)),
-    )
-}
-
-#[cfg(desktop)]
 fn handle_tray_menu_event<R: Runtime>(app: &tauri::AppHandle<R>, event: MenuEvent) {
     match event.id().as_ref() {
         TRAY_OPEN_ID => show_main_window(app),
         TRAY_HIDE_ID => hide_main_window(app),
+        TRAY_CHECK_UPDATES_ID => {
+            let _ = app.emit("updater-check", ());
+        }
+        TRAY_AUTOSTART_ID => {
+            let next_enabled = !crate::autostart::is_enabled_for_app(app).unwrap_or(false);
+            if crate::autostart::set_enabled_for_app(app, next_enabled).is_ok() {
+                if let Some(state) = app.try_state::<TrayState>() {
+                    let _ = update_tray_menu(app, state.inner());
+                }
+            }
+        }
         TRAY_RESTART_ID => app.request_restart(),
         TRAY_QUIT_ID => app.exit(0),
         _ => {}
@@ -427,8 +389,8 @@ fn load_tray_icon() -> tauri::Result<Image<'static>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_usage_menu_labels, normalize_session_usage, normalize_tray_labels,
-        normalize_tray_threads, TrayLabels, TrayRecentThreadEntry, TraySessionUsage,
+        normalize_session_usage, normalize_tray_labels, normalize_tray_threads, TrayLabels,
+        TrayRecentThreadEntry, TraySessionUsage,
     };
 
     fn recent_entry(
@@ -501,49 +463,23 @@ mod tests {
     }
 
     #[test]
-    fn build_usage_menu_labels_include_current_usage_section() {
-        assert_eq!(
-            build_usage_menu_labels(
-                Some(&TraySessionUsage {
-                    session_label: "12% used · Resets 2 hours".into(),
-                    weekly_label: Some("67% used · Resets in 2 days".into()),
-                }),
-                &TrayLabels::default(),
-            ),
-            (
-                "Current Usage".into(),
-                "Session: 12% used · Resets 2 hours".into(),
-                Some("Weekly: 67% used · Resets in 2 days".into()),
-            )
-        );
-        assert_eq!(
-            build_usage_menu_labels(None, &TrayLabels::default()),
-            ("Current Usage".into(), "No active session".into(), None)
-        );
-    }
-
-    #[test]
     fn normalize_tray_labels_uses_defaults_for_blank_values() {
         assert_eq!(
             normalize_tray_labels(TrayLabels {
                 open: " 打开 ".into(),
                 hide: " ".into(),
+                check_updates: " 检查更新 ".into(),
+                launch_at_startup: " ".into(),
                 restart: " 重启 ".into(),
                 quit: "退出".into(),
-                usage_header: "当前用量".into(),
-                no_active_session: "".into(),
-                session_prefix: "本次".into(),
-                weekly_prefix: "每周".into(),
             }),
             TrayLabels {
                 open: "打开".into(),
                 hide: "Hide Window".into(),
+                check_updates: "检查更新".into(),
+                launch_at_startup: "Launch at Startup".into(),
                 restart: "重启".into(),
                 quit: "退出".into(),
-                usage_header: "当前用量".into(),
-                no_active_session: "No active session".into(),
-                session_prefix: "本次".into(),
-                weekly_prefix: "每周".into(),
             }
         );
     }

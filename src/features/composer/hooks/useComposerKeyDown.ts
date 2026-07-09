@@ -60,25 +60,20 @@ export function useComposerKeyDown({
       if (isComposingEvent(event)) {
         return;
       }
-      handleHistoryKeyDown(event);
-      if (event.defaultPrevented) {
-        return;
-      }
-      const isOppositeFollowUpShortcut =
-        event.key === "Enter" &&
-        event.shiftKey &&
-        (isMac ? event.metaKey : event.ctrlKey);
-      if (isOppositeFollowUpShortcut && !suggestionsOpen) {
-        if (isDictationBusy) {
-          event.preventDefault();
+      const insertNewline = () => {
+        event.preventDefault();
+        const textarea = textareaRef.current;
+        if (!textarea) {
           return;
         }
-        event.preventDefault();
-        const dismissKeyboardAfterSend = canSend && isMobilePlatform();
-        handleSend(oppositeSubmitIntent);
-        if (dismissKeyboardAfterSend) {
-          textareaRef.current?.blur();
-        }
+        const start = textarea.selectionStart ?? text.length;
+        const end = textarea.selectionEnd ?? start;
+        const nextText = `${text.slice(0, start)}\n${text.slice(end)}`;
+        applyTextInsertion(nextText, start + 1);
+      };
+
+      handleHistoryKeyDown(event);
+      if (event.defaultPrevented) {
         return;
       }
       if (
@@ -105,7 +100,8 @@ export function useComposerKeyDown({
         event.shiftKey &&
         !event.metaKey &&
         !event.ctrlKey &&
-        !event.altKey
+        !event.altKey &&
+        composerSendShortcut !== "ctrl-enter"
       ) {
         if (continueListOnShiftEnter && !suggestionsOpen) {
           const textarea = textareaRef.current;
@@ -126,16 +122,7 @@ export function useComposerKeyDown({
             }
           }
         }
-        event.preventDefault();
-        const textarea = textareaRef.current;
-        if (!textarea) {
-          return;
-        }
-        const start = textarea.selectionStart ?? text.length;
-        const end = textarea.selectionEnd ?? start;
-        const nextText = `${text.slice(0, start)}\n${text.slice(end)}`;
-        const nextCursor = start + 1;
-        applyTextInsertion(nextText, nextCursor);
+        insertNewline();
         return;
       }
       if (reviewPromptOpen && onReviewPromptKeyDown) {
@@ -159,42 +146,13 @@ export function useComposerKeyDown({
         !event.shiftKey &&
         !event.altKey &&
         (event.ctrlKey || (isMac && event.metaKey));
-      const isSteerPriorityShortcut =
-        isCtrlEnter && composerSendShortcut === "steer-priority";
-      if (isSteerPriorityShortcut) {
-        if (isDictationBusy) {
-          event.preventDefault();
-          return;
-        }
-        event.preventDefault();
-        const dismissKeyboardAfterSend = canSend && isMobilePlatform();
-        handleSend(steerAvailable ? oppositeSubmitIntent : defaultSubmitIntent);
-        if (dismissKeyboardAfterSend) {
-          textareaRef.current?.blur();
-        }
-        return;
-      }
-      const shouldSend =
-        composerSendShortcut === "ctrl-enter"
-            ? isCtrlEnter
-            : isPlainEnter;
-      if (
-        isCtrlEnter &&
-        (composerSendShortcut === "enter" ||
-          composerSendShortcut === "enter-and-ctrl-enter")
-      ) {
-        event.preventDefault();
-        const textarea = textareaRef.current;
-        if (!textarea) {
-          return;
-        }
-        const start = textarea.selectionStart ?? text.length;
-        const end = textarea.selectionEnd ?? start;
-        const nextText = `${text.slice(0, start)}\n${text.slice(end)}`;
-        applyTextInsertion(nextText, start + 1);
-        return;
-      }
-      if (shouldSend) {
+      const isShiftEnter =
+        event.key === "Enter" &&
+        event.shiftKey &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey;
+      const sendWithIntent = (submitIntent: ComposerSendIntent) => {
         if (expandFenceOnEnter && isPlainEnter) {
           const textarea = textareaRef.current;
           if (textarea) {
@@ -212,9 +170,40 @@ export function useComposerKeyDown({
         }
         event.preventDefault();
         const dismissKeyboardAfterSend = canSend && isMobilePlatform();
-        handleSend(defaultSubmitIntent);
+        handleSend(submitIntent);
         if (dismissKeyboardAfterSend) {
           textareaRef.current?.blur();
+        }
+      };
+      if (composerSendShortcut === "ctrl-enter") {
+        if (isPlainEnter) {
+          return;
+        }
+        if (isCtrlEnter) {
+          sendWithIntent(defaultSubmitIntent);
+          return;
+        }
+        if (isShiftEnter) {
+          sendWithIntent(oppositeSubmitIntent);
+          return;
+        }
+      } else if (composerSendShortcut === "steer-priority") {
+        if (isPlainEnter) {
+          sendWithIntent(steerAvailable ? oppositeSubmitIntent : defaultSubmitIntent);
+          return;
+        }
+        if (isCtrlEnter) {
+          insertNewline();
+          return;
+        }
+      } else {
+        if (isPlainEnter) {
+          sendWithIntent(defaultSubmitIntent);
+          return;
+        }
+        if (isCtrlEnter) {
+          sendWithIntent(oppositeSubmitIntent);
+          return;
         }
       }
     },

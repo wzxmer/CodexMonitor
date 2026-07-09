@@ -79,12 +79,10 @@ export type TraySessionUsage = {
 export type TrayLabels = {
   open: string;
   hide: string;
+  checkUpdates: string;
+  launchAtStartup: string;
   restart: string;
   quit: string;
-  usageHeader: string;
-  noActiveSession: string;
-  sessionPrefix: string;
-  weeklyPrefix: string;
 };
 
 export type Message = {

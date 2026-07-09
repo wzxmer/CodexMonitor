@@ -6,6 +6,7 @@ use tauri::RunEvent;
 #[cfg(desktop)]
 use tauri::WindowEvent;
 
+mod autostart;
 mod backend;
 mod codex;
 mod daemon_binary;
@@ -117,6 +118,12 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
         show_main_window(app);
     }));
+
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_autostart::init(
+        tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+        None,
+    ));
 
     let builder = builder
         .on_window_event(|window, event| {
@@ -232,6 +239,8 @@ pub fn run() {
             codex::get_config_model,
             codex::get_provider_status,
             menu::menu_set_accelerators,
+            autostart::app_autostart_is_enabled,
+            autostart::app_autostart_set_enabled,
             tray::set_tray_recent_threads,
             tray::set_tray_labels,
             tray::set_tray_session_usage,

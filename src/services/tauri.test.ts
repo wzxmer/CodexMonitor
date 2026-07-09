@@ -368,12 +368,10 @@ describe("tauri invoke wrappers", () => {
     const labels = {
       open: "打开 Codex Monitor",
       hide: "隐藏窗口",
+      checkUpdates: "检查更新",
+      launchAtStartup: "开机启动",
       restart: "重启",
       quit: "退出",
-      usageHeader: "当前用量",
-      noActiveSession: "无活动会话",
-      sessionPrefix: "本次",
-      weeklyPrefix: "每周",
     };
 
     await setTrayLabels(labels);

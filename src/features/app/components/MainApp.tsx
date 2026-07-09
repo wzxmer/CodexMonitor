@@ -72,7 +72,6 @@ import { useThreadListSortKey } from "@app/hooks/useThreadListSortKey";
 import { useThreadListActions } from "@app/hooks/useThreadListActions";
 import { useRemoteThreadLiveConnection } from "@app/hooks/useRemoteThreadLiveConnection";
 import { useTrayLabels } from "@app/hooks/useTrayLabels";
-import { useTraySessionUsage } from "@app/hooks/useTraySessionUsage";
 import { I18nProvider } from "@/features/i18n/I18nProvider";
 import { resolveAppLanguage } from "@/features/i18n/appLanguage";
 import { I18N_STRINGS, type I18nKey } from "@/features/i18n/strings";
@@ -163,26 +162,14 @@ export default function MainApp() {
     (key: I18nKey) => I18N_STRINGS[appLanguage][key] ?? I18N_STRINGS.zh[key],
     [appLanguage],
   );
-  const trayUsageLabels = useMemo(
-    () => ({
-      resetLabel: t("usage.resetLabel"),
-      availableCredits: t("usage.availableCredits"),
-      unlimited: t("usage.unlimited"),
-      used: t("usage.used"),
-      remaining: t("usage.remaining"),
-    }),
-    [t],
-  );
   const trayLabels = useMemo(
     () => ({
       open: t("tray.open"),
       hide: t("tray.hide"),
+      checkUpdates: t("tray.checkUpdates"),
+      launchAtStartup: t("tray.launchAtStartup"),
       restart: t("tray.restart"),
       quit: t("tray.quit"),
-      usageHeader: t("tray.currentUsage"),
-      noActiveSession: t("tray.noActiveSession"),
-      sessionPrefix: t("tray.session"),
-      weeklyPrefix: t("tray.weekly"),
     }),
     [t],
   );
@@ -1212,11 +1199,6 @@ export default function MainApp() {
   const activeTokenUsage = activeThreadId
     ? tokenUsageByThread[activeThreadId] ?? null
     : null;
-  useTraySessionUsage({
-    accountRateLimits: activeRateLimits,
-    showRemaining: appSettings.usageShowRemaining,
-    labels: trayUsageLabels,
-  });
   const activePlan = activeThreadId
     ? planByThread[activeThreadId] ?? null
     : null;

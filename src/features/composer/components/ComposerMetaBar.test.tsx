@@ -28,7 +28,7 @@ describe("ComposerMetaBar", () => {
 
     const trigger = screen.getByRole("button", { name: "输入快捷键" });
     expect(trigger.getAttribute("title")).toBe(
-      "发送：Enter；引导：Shift+Ctrl+Enter；换行：Ctrl+Enter / Shift+Enter",
+      "发送：Enter；引导：Ctrl+Enter；换行：Shift+Enter",
     );
 
     fireEvent.click(trigger);
@@ -37,20 +37,18 @@ describe("ComposerMetaBar", () => {
       screen
         .getByRole("option", { name: "聊天：Enter 发送" })
         .getAttribute("title"),
-    ).toBe("发送：Enter；引导：Shift+Ctrl+Enter；换行：Ctrl+Enter / Shift+Enter");
+    ).toBe("发送：Enter；引导：Ctrl+Enter；换行：Shift+Enter");
     expect(
       screen
         .getByRole("option", { name: "编辑：Ctrl+Enter 发送" })
         .getAttribute("title"),
     ).toBe(
-      "发送：Ctrl+Enter；引导：Shift+Ctrl+Enter；换行：Enter / Shift+Enter",
+      "发送：Ctrl+Enter；引导：Shift+Enter；换行：Enter",
     );
     expect(
       screen
-        .getByRole("option", { name: "引导优先：Ctrl+Enter 引导" })
+        .getByRole("option", { name: "引导优先：Enter 引导" })
         .getAttribute("title"),
-    ).toBe(
-      "发送：Enter；引导：Ctrl+Enter；换行：Shift+Enter",
-    );
+    ).toBe("发送/引导：Enter；换行：Ctrl+Enter");
   });
 });
