@@ -473,6 +473,16 @@ describe("Markdown file-like href behavior", () => {
     expect(container.querySelector("code")?.textContent).toBe("/workspace/reviews#L9");
   });
 
+  it("keeps dollar-prefixed placeholders as selectable inline code", () => {
+    const { container } = render(
+      <Markdown value="提示“建议插入 `$xxx`”。" className="markdown" />,
+    );
+
+    const code = container.querySelector("code");
+    expect(code?.textContent).toBe("$xxx");
+    expect(container.querySelector(".message-file-link")).toBeNull();
+  });
+
   it("still opens mounted file links when the workspace basename is settings", () => {
     const onOpenFileLink = vi.fn();
     render(

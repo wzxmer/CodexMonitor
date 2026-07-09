@@ -26,6 +26,7 @@ type UseComposerKeyDownArgs = {
   onReviewPromptKeyDown?: (event: ReviewPromptKeyEvent) => boolean;
   oppositeSubmitIntent: ComposerSendIntent;
   reviewPromptOpen: boolean;
+  steerAvailable: boolean;
   suggestionsOpen: boolean;
   text: string;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
@@ -48,6 +49,7 @@ export function useComposerKeyDown({
   onReviewPromptKeyDown,
   oppositeSubmitIntent,
   reviewPromptOpen,
+  steerAvailable,
   suggestionsOpen,
   text,
   textareaRef,
@@ -157,13 +159,30 @@ export function useComposerKeyDown({
         !event.shiftKey &&
         !event.altKey &&
         (event.ctrlKey || (isMac && event.metaKey));
+      const isSteerPriorityShortcut =
+        isCtrlEnter && composerSendShortcut === "steer-priority";
+      if (isSteerPriorityShortcut) {
+        if (isDictationBusy) {
+          event.preventDefault();
+          return;
+        }
+        event.preventDefault();
+        const dismissKeyboardAfterSend = canSend && isMobilePlatform();
+        handleSend(steerAvailable ? oppositeSubmitIntent : defaultSubmitIntent);
+        if (dismissKeyboardAfterSend) {
+          textareaRef.current?.blur();
+        }
+        return;
+      }
       const shouldSend =
-        composerSendShortcut === "enter-and-ctrl-enter"
-          ? isPlainEnter || isCtrlEnter
-          : composerSendShortcut === "ctrl-enter"
+        composerSendShortcut === "ctrl-enter"
             ? isCtrlEnter
             : isPlainEnter;
-      if (isCtrlEnter && composerSendShortcut === "enter") {
+      if (
+        isCtrlEnter &&
+        (composerSendShortcut === "enter" ||
+          composerSendShortcut === "enter-and-ctrl-enter")
+      ) {
         event.preventDefault();
         const textarea = textareaRef.current;
         if (!textarea) {
@@ -215,6 +234,7 @@ export function useComposerKeyDown({
       onReviewPromptKeyDown,
       oppositeSubmitIntent,
       reviewPromptOpen,
+      steerAvailable,
       suggestionsOpen,
       text,
       textareaRef,

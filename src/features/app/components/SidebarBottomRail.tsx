@@ -2,7 +2,7 @@ import ScrollText from "lucide-react/dist/esm/icons/scroll-text";
 import Settings from "lucide-react/dist/esm/icons/settings";
 import User from "lucide-react/dist/esm/icons/user";
 import X from "lucide-react/dist/esm/icons/x";
-import { useEffect } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
 import {
   MenuTrigger,
   PopoverSurface,
@@ -17,6 +17,9 @@ type SidebarBottomRailProps = {
   weeklyResetLabel: string | null;
   creditsLabel: string | null;
   showWeekly: boolean;
+  thirdPartyUsageTokens: number | null;
+  thirdPartyUsageMultiplier: number;
+  onThirdPartyUsageMultiplierChange: (multiplier: number) => void;
   onOpenSettings: () => void;
   onOpenDebug: () => void;
   showDebugButton: boolean;
@@ -53,6 +56,118 @@ function UsageRow({ label, percent, resetLabel }: UsageRowProps) {
   );
 }
 
+function formatTokenCount(tokens: number) {
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 0,
+  }).format(Math.max(0, tokens));
+}
+
+function formatEstimatedCost(tokens: number, multiplier: number) {
+  const estimate = (Math.max(0, tokens) / 1_000_000) * Math.max(0, multiplier);
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: estimate >= 1 ? 2 : 4,
+    minimumFractionDigits: estimate > 0 && estimate < 1 ? 4 : 2,
+  }).format(estimate);
+}
+
+function formatMultiplier(multiplier: number) {
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 4,
+  }).format(Math.max(0, multiplier));
+}
+
+type ThirdPartyUsageSummaryProps = {
+  tokens: number;
+  multiplier: number;
+  onMultiplierChange: (multiplier: number) => void;
+};
+
+function ThirdPartyUsageSummary({
+  tokens,
+  multiplier,
+  onMultiplierChange,
+}: ThirdPartyUsageSummaryProps) {
+  const { t } = useI18n();
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(() => String(multiplier));
+  const skipNextCommitRef = useRef(false);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraft(String(multiplier));
+    }
+  }, [isEditing, multiplier]);
+
+  const commitDraft = () => {
+    if (skipNextCommitRef.current) {
+      skipNextCommitRef.current = false;
+      return;
+    }
+    const next = Number(draft);
+    if (Number.isFinite(next) && next >= 0) {
+      onMultiplierChange(next);
+    } else {
+      setDraft(String(multiplier));
+    }
+    setIsEditing(false);
+  };
+
+  const handleMultiplierKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.currentTarget.blur();
+    }
+    if (event.key === "Escape") {
+      skipNextCommitRef.current = true;
+      setDraft(String(multiplier));
+      setIsEditing(false);
+      event.currentTarget.blur();
+    }
+  };
+
+  const handleMultiplierBlur = (_event: FocusEvent<HTMLInputElement>) => {
+    commitDraft();
+  };
+
+  return (
+    <div className="sidebar-usage-third-party">
+      <div className="sidebar-usage-stat">
+        <span>{t("sidebar.usageConsumed")}</span>
+        <strong>{formatTokenCount(tokens)}</strong>
+      </div>
+      <div className="sidebar-usage-stat">
+        <span>{t("sidebar.usageEstimatedCost")}</span>
+        <strong>≈ {formatEstimatedCost(tokens, multiplier)}</strong>
+      </div>
+      <div className="sidebar-usage-stat">
+        <span>{t("sidebar.usageMultiplier")}</span>
+        {isEditing ? (
+          <input
+            className="sidebar-usage-multiplier-input"
+            type="number"
+            min="0"
+            step="0.01"
+            value={draft}
+            aria-label={t("sidebar.usageMultiplier")}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={handleMultiplierBlur}
+            onKeyDown={handleMultiplierKeyDown}
+            autoFocus
+          />
+        ) : (
+          <button
+            type="button"
+            className="sidebar-usage-multiplier-button"
+            onClick={() => setIsEditing(true)}
+            title={t("sidebar.usageEditMultiplier")}
+          >
+            x{formatMultiplier(multiplier)}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SidebarBottomRail({
   sessionPercent,
   weeklyPercent,
@@ -60,6 +175,9 @@ export function SidebarBottomRail({
   weeklyResetLabel,
   creditsLabel,
   showWeekly,
+  thirdPartyUsageTokens,
+  thirdPartyUsageMultiplier,
+  onThirdPartyUsageMultiplierChange,
   onOpenSettings,
   onOpenDebug,
   showDebugButton,
@@ -92,22 +210,32 @@ export function SidebarBottomRail({
       <div className="sidebar-usage-panel">
         <div className="sidebar-usage-header">
           <div className="sidebar-usage-kicker">{t("sidebar.usage")}</div>
-          {creditsLabel && <div className="sidebar-usage-credits">{creditsLabel}</div>}
-        </div>
-        <div className="sidebar-usage-list">
-          <UsageRow
-            label={t("sidebar.session")}
-            percent={sessionPercent}
-            resetLabel={sessionResetLabel}
-          />
-          {showWeekly && (
-            <UsageRow
-              label={t("sidebar.weekly")}
-              percent={weeklyPercent}
-              resetLabel={weeklyResetLabel}
-            />
+          {thirdPartyUsageTokens === null && creditsLabel && (
+            <div className="sidebar-usage-credits">{creditsLabel}</div>
           )}
         </div>
+        {thirdPartyUsageTokens !== null ? (
+          <ThirdPartyUsageSummary
+            tokens={thirdPartyUsageTokens}
+            multiplier={thirdPartyUsageMultiplier}
+            onMultiplierChange={onThirdPartyUsageMultiplierChange}
+          />
+        ) : (
+          <div className="sidebar-usage-list">
+            <UsageRow
+              label={t("sidebar.session")}
+              percent={sessionPercent}
+              resetLabel={sessionResetLabel}
+            />
+            {showWeekly && (
+              <UsageRow
+                label={t("sidebar.weekly")}
+                percent={weeklyPercent}
+                resetLabel={weeklyResetLabel}
+              />
+            )}
+          </div>
+        )}
       </div>
       <div
         className={`sidebar-bottom-actions${showAccountSwitcher ? "" : " is-compact"}`}

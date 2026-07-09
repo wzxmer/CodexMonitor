@@ -40,6 +40,7 @@ const allowedFollowUpMessageBehavior = new Set(["queue", "steer"]);
 const allowedComposerSendShortcut = new Set([
   "enter",
   "ctrl-enter",
+  "steer-priority",
 ]);
 const allowedComposerTriggerMode = new Set(["default", "swap-slash-at"]);
 const DEFAULT_REMOTE_BACKEND_HOST = "127.0.0.1:4732";
@@ -250,6 +251,7 @@ function buildDefaultSettings(): AppSettings {
     theme: "system",
     themeAccent: "codex",
     usageShowRemaining: false,
+    thirdPartyUsageMultiplier: 1,
     showMessageFilePath: true,
     messageToolGroupsCollapsedByDefault: false,
     messageReadingStyle: "bubble",
@@ -368,6 +370,12 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     themeAccent: allowedThemeAccents.has(settings.themeAccent)
       ? settings.themeAccent
       : "codex",
+    thirdPartyUsageMultiplier:
+      typeof settings.thirdPartyUsageMultiplier === "number" &&
+      Number.isFinite(settings.thirdPartyUsageMultiplier) &&
+      settings.thirdPartyUsageMultiplier >= 0
+        ? settings.thirdPartyUsageMultiplier
+        : 1,
     messageToolGroupsCollapsedByDefault:
       typeof settings.messageToolGroupsCollapsedByDefault === "boolean"
         ? settings.messageToolGroupsCollapsedByDefault

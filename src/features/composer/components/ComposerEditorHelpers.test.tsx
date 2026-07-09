@@ -31,7 +31,7 @@ function ComposerHarness({ initialText = "", editorSettings }: HarnessProps) {
       appsEnabled={true}
       steerAvailable={false}
       followUpMessageBehavior="queue"
-      composerSendShortcut="enter-and-ctrl-enter"
+      composerSendShortcut="enter"
       collaborationModes={[]}
       selectedCollaborationModeId={null}
       onSelectCollaborationMode={() => {}}

@@ -2,6 +2,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ClipboardEvent,
@@ -48,6 +49,10 @@ import { useI18n } from "@/features/i18n/I18nProvider";
 import { isMacPlatform } from "../../../utils/platformPaths";
 import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
 import { getCompactionCyclePercent } from "@/features/threads/utils/contextUsage";
+import {
+  buildSkillInsertion,
+  resolveSkillSuggestion,
+} from "../utils/skillSuggestions";
 
 type ComposerProps = {
   onSend: (
@@ -410,6 +415,11 @@ export const Composer = memo(function Composer({
     [handleHistoryTextChange, handleTextChange],
   );
 
+  const skillSuggestion = useMemo(
+    () => resolveSkillSuggestion(text, skills),
+    [skills, text],
+  );
+
   const handleSend = useCallback((submitIntent: ComposerSendIntent = "default") => {
     if (disabled) {
       return;
@@ -476,6 +486,23 @@ export const Composer = memo(function Composer({
     },
     [handleSelectionChange, setComposerText, textareaRef],
   );
+
+  const handleInsertSkillSuggestion = useCallback(() => {
+    if (!skillSuggestion || disabled) {
+      return;
+    }
+    const textarea = textareaRef.current;
+    const cursor = textarea?.selectionStart ?? selectionStart ?? text.length;
+    const next = buildSkillInsertion(text, cursor, skillSuggestion.name);
+    applyTextInsertion(next.text, next.cursor);
+  }, [
+    applyTextInsertion,
+    disabled,
+    selectionStart,
+    skillSuggestion,
+    text,
+    textareaRef,
+  ]);
 
   const handleTextPaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -589,6 +616,7 @@ export const Composer = memo(function Composer({
     onReviewPromptKeyDown,
     oppositeSubmitIntent,
     reviewPromptOpen,
+    steerAvailable,
     suggestionsOpen,
     text,
     textareaRef,
@@ -622,6 +650,24 @@ export const Composer = memo(function Composer({
               {action.label}
             </button>
           ))}
+        </div>
+      ) : null}
+      {skillSuggestion ? (
+        <div className="composer-skill-suggestion">
+          <span>
+            {t("composer.skillSuggestion").replace(
+              "{skill}",
+              `$${skillSuggestion.name}`,
+            )}
+          </span>
+          <button
+            type="button"
+            className="ghost composer-skill-suggestion-button"
+            disabled={disabled}
+            onClick={handleInsertSkillSuggestion}
+          >
+            {t("composer.insert")}
+          </button>
         </div>
       ) : null}
       <ComposerInput

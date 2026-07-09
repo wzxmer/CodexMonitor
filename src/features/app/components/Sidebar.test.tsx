@@ -42,6 +42,8 @@ const baseProps = {
   activeTokenUsage: null,
   usageShowRemaining: false,
   useTokenUsageStats: false,
+  thirdPartyUsageMultiplier: 1,
+  onThirdPartyUsageMultiplierChange: vi.fn(),
   accountInfo: null,
   onSwitchAccount: vi.fn(),
   onCancelSwitchAccount: vi.fn(),
@@ -163,11 +165,12 @@ describe("Sidebar", () => {
     expect(creditsLabel.textContent ?? "").toContain("120");
   });
 
-  it("uses active thread token usage for key profile sessions", () => {
+  it("shows consumed tokens and estimated cost for third-party key sessions", () => {
     render(
       <Sidebar
         {...baseProps}
         useTokenUsageStats
+        thirdPartyUsageMultiplier={2.5}
         activeTokenUsage={{
           total: {
             totalTokens: 20_000,
@@ -206,11 +209,50 @@ describe("Sidebar", () => {
       />,
     );
 
-    expect(screen.getByText("本次")).toBeTruthy();
-    expect(screen.getByText("20%")).toBeTruthy();
+    expect(screen.getByText("消耗量")).toBeTruthy();
+    expect(screen.getByText("20,000")).toBeTruthy();
+    expect(screen.getByText("费用估算")).toBeTruthy();
+    expect(screen.getByText("≈ 0.0500")).toBeTruthy();
+    expect(screen.getByText("x2.5")).toBeTruthy();
     expect(screen.queryByText("本周")).toBeNull();
     expect(screen.queryByText(/^可用额度：/)).toBeNull();
     expect(screen.queryByText("62%")).toBeNull();
+  });
+
+  it("edits the third-party usage multiplier from the usage panel", () => {
+    const onThirdPartyUsageMultiplierChange = vi.fn();
+    render(
+      <Sidebar
+        {...baseProps}
+        useTokenUsageStats
+        thirdPartyUsageMultiplier={1}
+        onThirdPartyUsageMultiplierChange={onThirdPartyUsageMultiplierChange}
+        activeTokenUsage={{
+          total: {
+            totalTokens: 1_000_000,
+            inputTokens: 700_000,
+            cachedInputTokens: 0,
+            outputTokens: 300_000,
+            reasoningOutputTokens: 0,
+          },
+          last: {
+            totalTokens: 1_000,
+            inputTokens: 700,
+            cachedInputTokens: 0,
+            outputTokens: 300,
+            reasoningOutputTokens: 0,
+          },
+          modelContextWindow: null,
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "x1" }));
+    const input = screen.getByLabelText("倍率") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "3.25" } });
+    fireEvent.blur(input);
+
+    expect(onThirdPartyUsageMultiplierChange).toHaveBeenCalledWith(3.25);
   });
 
   it("opens the account menu from the bottom rail", () => {

@@ -2264,6 +2264,29 @@ describe("Messages", () => {
     });
   });
 
+  it("keeps the style popover open when the native color picker blurs the color input", () => {
+    render(
+      <Messages
+        items={[{ id: "msg-color-picker", kind: "message", role: "assistant", text: "Output" }]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        messageUserBubbleColor="#d9ebff"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "样式" }));
+    fireEvent.blur(screen.getByLabelText("我的背景"), { relatedTarget: null });
+
+    expect(screen.getByRole("dialog", { name: "对话样式" })).toBeTruthy();
+
+    fireEvent.pointerDown(document.body);
+
+    expect(screen.queryByRole("dialog", { name: "对话样式" })).toBeNull();
+  });
+
   it("applies pure white canvas from white color preset", () => {
     const onUpdateConversationStyle = vi.fn();
 

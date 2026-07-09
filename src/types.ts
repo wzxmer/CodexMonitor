@@ -232,7 +232,11 @@ export type MessageReadingStyle = "bubble" | "native" | "cli";
 export type AppLanguagePreference = "system" | "zh" | "en";
 export type PersonalityPreference = "friendly" | "pragmatic";
 export type FollowUpMessageBehavior = "queue" | "steer";
-export type ComposerSendShortcut = "enter" | "ctrl-enter" | "enter-and-ctrl-enter";
+export type ComposerSendShortcut =
+  | "enter"
+  | "ctrl-enter"
+  | "steer-priority"
+  | "enter-and-ctrl-enter";
 export type ComposerTriggerMode = "default" | "swap-slash-at";
 export type ComposerSendIntent = "default" | "queue" | "steer";
 export type SendMessageResult = {
@@ -344,6 +348,7 @@ export type AppSettings = {
   theme: ThemePreference;
   themeAccent: ThemeAccentPreference;
   usageShowRemaining: boolean;
+  thirdPartyUsageMultiplier: number;
   showMessageFilePath: boolean;
   messageToolGroupsCollapsedByDefault: boolean;
   messageReadingStyle: MessageReadingStyle;

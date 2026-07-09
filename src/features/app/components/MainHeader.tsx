@@ -22,6 +22,7 @@ import { useMenuController } from "../hooks/useMenuController";
 
 type MainHeaderProps = {
   workspace: WorkspaceInfo;
+  titleOverride?: string | null;
   parentName?: string | null;
   worktreeLabel?: string | null;
   disableBranchMenu?: boolean;
@@ -75,6 +76,7 @@ type MainHeaderProps = {
 
 export function MainHeader({
   workspace,
+  titleOverride = null,
   parentName = null,
   worktreeLabel = null,
   disableBranchMenu = false,
@@ -153,6 +155,7 @@ export function MainHeader({
     () => `cd "${relativeWorktreePath}"`,
     [relativeWorktreePath],
   );
+  const title = titleOverride?.trim() || parentName || workspace.name;
 
   useEffect(() => {
     if (!infoOpen && renameOnCancel) {
@@ -191,7 +194,7 @@ export function MainHeader({
       <div className="workspace-header">
         <div className="workspace-title-line">
           <span className="workspace-title">
-            {parentName ? parentName : workspace.name}
+            {title}
           </span>
           <span className="workspace-separator" aria-hidden>
             ›

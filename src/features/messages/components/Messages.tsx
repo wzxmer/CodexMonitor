@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import ArrowDown from "lucide-react/dist/esm/icons/arrow-down";
@@ -82,6 +83,12 @@ function getSearchTargetForEntry(entry: MessageListEntry) {
     id: `item-${entry.item.id}`,
     text: getConversationItemSearchText(entry.item),
   };
+}
+
+function isNativeColorPickerBlur(event: ReactFocusEvent<HTMLElement>) {
+  return event.target instanceof HTMLInputElement
+    && event.target.type === "color"
+    && event.relatedTarget === null;
 }
 
 type MessagesProps = {
@@ -187,6 +194,7 @@ export const Messages = memo(function Messages({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
+  const styleMenuRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchTargetRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const activeUserInputRequestId =
@@ -287,6 +295,23 @@ export const Messages = memo(function Messages({
       searchInputRef.current?.select();
     });
   }, [searchOpen]);
+
+  useEffect(() => {
+    if (!stylePanelOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && styleMenuRef.current?.contains(target)) {
+        return;
+      }
+      setStylePanelOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [stylePanelOpen]);
 
   useEffect(() => {
     if (!activeSearchMatch) {
@@ -706,8 +731,12 @@ export const Messages = memo(function Messages({
               {toolAutoCollapseStatus}
             </button>
             <div
+              ref={styleMenuRef}
               className="messages-style-menu"
               onBlur={(event) => {
+                if (isNativeColorPickerBlur(event)) {
+                  return;
+                }
                 const nextTarget = event.relatedTarget;
                 if (
                   nextTarget instanceof Node &&

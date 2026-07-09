@@ -46,11 +46,14 @@ export function SettingsComposerSection({
             })
           }
         >
-          <option value="ctrl-enter">{t("settings.composer.shortcutCtrlEnter")}</option>
-          <option value="enter">{t("settings.composer.shortcutEnter")}</option>
+          <option value="enter">{t("settings.composer.shortcutChat")}</option>
+          <option value="ctrl-enter">{t("settings.composer.shortcutEditor")}</option>
+          <option value="steer-priority">
+            {t("settings.composer.shortcutSteerPriority")}
+          </option>
         </select>
         <div className="settings-help">
-          {t("settings.composer.steerShortcutHelp")}
+          {t("settings.composer.shortcutPresetHelp")}
         </div>
         <SettingsToggleRow
           title={t("settings.composer.followUpHintTitle")}

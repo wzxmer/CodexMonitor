@@ -413,6 +413,12 @@ function buildPrimarySurface({
         },
       ]
     : activeItems;
+  const activeThreadTitle =
+    activeWorkspaceId && activeThreadId
+      ? (threadsByWorkspace[activeWorkspaceId] ?? []).find(
+          (thread) => thread.id === activeThreadId,
+        )?.name.trim() || null
+      : null;
 
   return {
     sidebarProps: {
@@ -443,6 +449,13 @@ function buildPrimarySurface({
       useTokenUsageStats:
         codexProviderStatus?.isConfigured === true &&
         codexProviderStatus.isThirdParty,
+      thirdPartyUsageMultiplier: appSettings.thirdPartyUsageMultiplier,
+      onThirdPartyUsageMultiplierChange: (multiplier) => {
+        void onUpdateAppSettings({
+          ...appSettings,
+          thirdPartyUsageMultiplier: multiplier,
+        });
+      },
       usageConfigurationWarning:
         activeWorkspaceId &&
         (!codexProviderStatus || !codexProviderStatus.isConfigured)
@@ -715,6 +728,7 @@ function buildPrimarySurface({
     mainHeaderProps: activeWorkspace
       ? {
           workspace: activeWorkspace,
+          titleOverride: activeThreadTitle,
           parentName: worktreeState.activeParentWorkspace?.name ?? null,
           worktreeLabel: worktreeState.worktreeLabel,
           worktreeRename: worktreeState.worktreeRename ?? undefined,

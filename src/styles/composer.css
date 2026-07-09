@@ -775,6 +775,34 @@
   flex-wrap: wrap;
 }
 
+.composer-skill-suggestion {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  margin: 0 2px;
+  padding: 5px 8px 5px 10px;
+  border: 1px solid var(--cm-border-accent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-accent-soft) 72%, var(--cm-surface-panel));
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.composer-skill-suggestion-button {
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--text-strong);
+  font-size: 11px;
+}
+
+.composer-skill-suggestion-button:hover:not(:disabled) {
+  border-color: var(--border-accent);
+  background: color-mix(in srgb, var(--surface-accent-soft) 88%, var(--cm-surface-panel));
+}
+
 .composer-select-wrap {
   position: relative;
   display: inline-flex;

@@ -40,6 +40,7 @@ type HarnessProps = {
   ) => void;
   apps?: AppOption[];
   prompts?: CustomPromptOption[];
+  skills?: { name: string; description?: string }[];
   isProcessing?: boolean;
   followUpMessageBehavior?: FollowUpMessageBehavior;
   composerSendShortcut?: ComposerSendShortcut;
@@ -54,9 +55,10 @@ function ComposerHarness({
   onSend,
   apps = [],
   prompts = [],
+  skills = [],
   isProcessing = false,
   followUpMessageBehavior = "queue",
-  composerSendShortcut = "enter-and-ctrl-enter",
+  composerSendShortcut = "enter",
   steerAvailable = false,
   selectedServiceTier = null,
   canStop = false,
@@ -89,7 +91,7 @@ function ComposerHarness({
       reasoningSupported={false}
       accessMode="current"
       onSelectAccessMode={() => {}}
-      skills={[]}
+      skills={skills}
       apps={apps}
       prompts={prompts}
       files={[]}
@@ -130,6 +132,19 @@ describe("Composer send triggers", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith("ctrl send", [], undefined, "default");
+  });
+
+  it("inserts a newline on Ctrl+Enter in chat mode", () => {
+    const onSend = vi.fn();
+    render(<ComposerHarness onSend={onSend} composerSendShortcut="enter" />);
+
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "line one" } });
+    textarea.setSelectionRange(8, 8);
+    fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(textarea.value).toBe("line one\n");
   });
 
   it("does not send on plain Enter when Ctrl+Enter is selected", () => {
@@ -206,6 +221,42 @@ describe("Composer send triggers", () => {
     render(<ComposerHarness onSend={onSend} selectedServiceTier="fast" />);
 
     expect(screen.getByLabelText("快速模式已启用")).toBeTruthy();
+  });
+
+  it("suggests an available manual skill and inserts it on request", () => {
+    const onSend = vi.fn();
+    render(
+      <ComposerHarness
+        onSend={onSend}
+        skills={[{ name: "code-review", description: "Manual review helper" }]}
+      />,
+    );
+
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "帮我看下这个改动有没有问题" } });
+
+    expect(screen.getByText("可使用 $code-review")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "插入" }));
+
+    expect(textarea.value).toBe("帮我看下这个改动有没有问题 $code-review");
+  });
+
+  it("does not suggest a skill when the draft already contains one", () => {
+    const onSend = vi.fn();
+    render(
+      <ComposerHarness
+        onSend={onSend}
+        skills={[{ name: "code-review", description: "Manual review helper" }]}
+      />,
+    );
+
+    const textarea = screen.getByRole("textbox");
+    fireEvent.change(textarea, {
+      target: { value: "$frontend-design 帮我看下这个改动有没有问题" },
+    });
+
+    expect(screen.queryByText("可使用 $code-review")).toBeNull();
   });
 
   it("blurs the textarea after Enter send on mobile", () => {
@@ -294,6 +345,81 @@ describe("Composer send triggers", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith("steer this", [], undefined, "steer");
+  });
+
+  it("uses Ctrl+Enter for steer in steer-priority mode while processing", () => {
+    const onSend = vi.fn();
+    render(
+      <ComposerHarness
+        onSend={onSend}
+        isProcessing={true}
+        followUpMessageBehavior="queue"
+        steerAvailable={true}
+        composerSendShortcut="steer-priority"
+      />,
+    );
+
+    const textarea = screen.getByRole("textbox");
+    fireEvent.change(textarea, { target: { value: "steer priority" } });
+    fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith("steer priority", [], undefined, "steer");
+  });
+
+  it("falls back to the default send intent on Ctrl+Enter in steer-priority mode when steer is unavailable", () => {
+    const onSend = vi.fn();
+    render(
+      <ComposerHarness
+        onSend={onSend}
+        isProcessing={true}
+        followUpMessageBehavior="queue"
+        steerAvailable={false}
+        composerSendShortcut="steer-priority"
+      />,
+    );
+
+    const textarea = screen.getByRole("textbox");
+    fireEvent.change(textarea, { target: { value: "fallback queue" } });
+    fireEvent.keyDown(textarea, { key: "Enter", ctrlKey: true });
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith("fallback queue", [], undefined, "queue");
+  });
+
+  it("uses Enter for default send in steer-priority mode", () => {
+    const onSend = vi.fn();
+    render(
+      <ComposerHarness
+        onSend={onSend}
+        composerSendShortcut="steer-priority"
+      />,
+    );
+
+    const textarea = screen.getByRole("textbox");
+    fireEvent.change(textarea, { target: { value: "normal send" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith("normal send", [], undefined, "default");
+  });
+
+  it("inserts a newline on Shift+Enter in steer-priority mode", () => {
+    const onSend = vi.fn();
+    render(
+      <ComposerHarness
+        onSend={onSend}
+        composerSendShortcut="steer-priority"
+      />,
+    );
+
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "line one" } });
+    textarea.setSelectionRange(8, 8);
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true });
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(textarea.value).toBe("line one\n");
   });
 
   it("falls back to queue when steer is selected but unavailable", () => {

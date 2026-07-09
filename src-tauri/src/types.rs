@@ -522,6 +522,11 @@ pub(crate) struct AppSettings {
     )]
     pub(crate) usage_show_remaining: bool,
     #[serde(
+        default = "default_third_party_usage_multiplier",
+        rename = "thirdPartyUsageMultiplier"
+    )]
+    pub(crate) third_party_usage_multiplier: f64,
+    #[serde(
         default = "default_show_message_file_path",
         rename = "showMessageFilePath"
     )]
@@ -831,6 +836,10 @@ fn default_theme_accent() -> String {
 
 fn default_usage_show_remaining() -> bool {
     false
+}
+
+fn default_third_party_usage_multiplier() -> f64 {
+    1.0
 }
 
 fn default_show_message_file_path() -> bool {
@@ -1411,6 +1420,7 @@ impl Default for AppSettings {
             theme: default_theme(),
             theme_accent: default_theme_accent(),
             usage_show_remaining: default_usage_show_remaining(),
+            third_party_usage_multiplier: default_third_party_usage_multiplier(),
             show_message_file_path: default_show_message_file_path(),
             message_tool_groups_collapsed_by_default:
                 default_message_tool_groups_collapsed_by_default(),
@@ -1603,6 +1613,7 @@ mod tests {
         assert_eq!(settings.app_language, "system");
         assert_eq!(settings.theme, "system");
         assert!(!settings.usage_show_remaining);
+        assert!((settings.third_party_usage_multiplier - 1.0).abs() < f64::EPSILON);
         assert!(settings.show_message_file_path);
         assert_eq!(settings.chat_history_scrollback_items, Some(200));
         assert!(settings.thread_title_autogeneration_enabled);

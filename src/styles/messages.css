@@ -2101,12 +2101,16 @@
 }
 
 .message .markdown :not(pre) > code {
+  display: inline;
+  -webkit-user-select: text;
+  user-select: text;
   color: var(--text-stronger);
   background: color-mix(in srgb, var(--surface-command) 82%, transparent);
   border: 1px solid var(--border-subtle);
   padding: 1px 5px;
   border-radius: 6px;
   font-size: 0.97em;
+  cursor: text;
 }
 
 .message .markdown .message-file-link {

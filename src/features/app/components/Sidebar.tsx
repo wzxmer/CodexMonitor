@@ -40,7 +40,6 @@ import { useThreadRows } from "../hooks/useThreadRows";
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { getUsageLabels } from "../utils/usageLabels";
-import { getContextUsedPercent } from "@/features/threads/utils/contextUsage";
 import { formatRelativeTimeShort } from "../../../utils/time";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
 
@@ -186,6 +185,8 @@ type SidebarProps = {
   activeTokenUsage: ThreadTokenUsage | null;
   usageShowRemaining: boolean;
   useTokenUsageStats: boolean;
+  thirdPartyUsageMultiplier: number;
+  onThirdPartyUsageMultiplierChange: (multiplier: number) => void;
   usageConfigurationWarning?: string | null;
   accountInfo: AccountSnapshot | null;
   onSwitchAccount: () => void;
@@ -251,6 +252,8 @@ export const Sidebar = memo(function Sidebar({
   activeTokenUsage,
   usageShowRemaining,
   useTokenUsageStats,
+  thirdPartyUsageMultiplier,
+  onThirdPartyUsageMultiplierChange,
   usageConfigurationWarning = null,
   accountInfo,
   onSwitchAccount,
@@ -375,12 +378,9 @@ export const Sidebar = memo(function Sidebar({
     availableCredits: t("usage.availableCredits"),
     unlimited: t("usage.unlimited"),
   });
-  const tokenUsagePercent = getContextUsedPercent(activeTokenUsage);
   const sidebarSessionPercent = usageConfigurationWarning
     ? null
-    : useTokenUsageStats
-      ? tokenUsagePercent
-      : sessionPercent;
+    : sessionPercent;
   const sidebarWeeklyPercent =
     usageConfigurationWarning || useTokenUsageStats ? null : weeklyPercent;
   const sidebarSessionResetLabel = usageConfigurationWarning
@@ -393,6 +393,10 @@ export const Sidebar = memo(function Sidebar({
   const sidebarCreditsLabel =
     usageConfigurationWarning || useTokenUsageStats ? null : creditsLabel;
   const sidebarShowWeekly = usageConfigurationWarning || useTokenUsageStats ? false : showWeekly;
+  const thirdPartyUsageTokens =
+    !usageConfigurationWarning && useTokenUsageStats
+      ? activeTokenUsage?.total.totalTokens ?? 0
+      : null;
   const debouncedQuery = useDebouncedValue(searchQuery, 150);
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
   const isSearchActive = Boolean(normalizedQuery);
@@ -1226,6 +1230,9 @@ export const Sidebar = memo(function Sidebar({
         weeklyResetLabel={sidebarWeeklyResetLabel}
         creditsLabel={sidebarCreditsLabel}
         showWeekly={sidebarShowWeekly}
+        thirdPartyUsageTokens={thirdPartyUsageTokens}
+        thirdPartyUsageMultiplier={thirdPartyUsageMultiplier}
+        onThirdPartyUsageMultiplierChange={onThirdPartyUsageMultiplierChange}
         onOpenSettings={onOpenSettings}
         onOpenDebug={onOpenDebug}
         showDebugButton={showDebugButton}
