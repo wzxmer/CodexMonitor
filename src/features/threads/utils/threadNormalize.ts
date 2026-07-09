@@ -249,6 +249,28 @@ export function normalizeTokenUsage(
   const source = raw ?? {};
   const total = (source.total as Record<string, unknown>) ?? {};
   const last = (source.last as Record<string, unknown>) ?? {};
+  const readCostUsd = (...records: Record<string, unknown>[]) => {
+    const value =
+      records
+        .map(
+          (record) =>
+            record.costUsd ??
+            record.costUSD ??
+            record.cost_usd ??
+            record.totalCostUsd ??
+            record.total_cost_usd ??
+            record.cost,
+        )
+        .find((value) => value !== undefined && value !== null) ?? null;
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === "string") {
+      const parsed = Number(value.replace(/^\$/, "").trim());
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  };
   return {
     total: {
       totalTokens: asNumber(total.totalTokens ?? total.total_tokens),
@@ -260,6 +282,7 @@ export function normalizeTokenUsage(
       reasoningOutputTokens: asNumber(
         total.reasoningOutputTokens ?? total.reasoning_output_tokens,
       ),
+      costUsd: readCostUsd(total, source),
     },
     last: {
       totalTokens: asNumber(last.totalTokens ?? last.total_tokens),
@@ -269,6 +292,7 @@ export function normalizeTokenUsage(
       reasoningOutputTokens: asNumber(
         last.reasoningOutputTokens ?? last.reasoning_output_tokens,
       ),
+      costUsd: readCostUsd(last),
     },
     modelContextWindow: (() => {
       const value = source.modelContextWindow ?? source.model_context_window;

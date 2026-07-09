@@ -18,6 +18,7 @@ type SidebarBottomRailProps = {
   creditsLabel: string | null;
   showWeekly: boolean;
   thirdPartyUsageTokens: number | null;
+  thirdPartyUsageCostUsd: number | null;
   thirdPartyUsageMultiplier: number;
   onThirdPartyUsageMultiplierChange: (multiplier: number) => void;
   onOpenSettings: () => void;
@@ -62,8 +63,8 @@ function formatTokenCount(tokens: number) {
   }).format(Math.max(0, tokens));
 }
 
-function formatEstimatedCost(tokens: number, multiplier: number) {
-  const estimate = (Math.max(0, tokens) / 1_000_000) * Math.max(0, multiplier);
+function formatEstimatedCost(costUsd: number) {
+  const estimate = Math.max(0, costUsd);
   return new Intl.NumberFormat(undefined, {
     maximumFractionDigits: estimate >= 1 ? 2 : 4,
     minimumFractionDigits: estimate > 0 && estimate < 1 ? 4 : 2,
@@ -78,12 +79,14 @@ function formatMultiplier(multiplier: number) {
 
 type ThirdPartyUsageSummaryProps = {
   tokens: number;
+  costUsd: number | null;
   multiplier: number;
   onMultiplierChange: (multiplier: number) => void;
 };
 
 function ThirdPartyUsageSummary({
   tokens,
+  costUsd,
   multiplier,
   onMultiplierChange,
 }: ThirdPartyUsageSummaryProps) {
@@ -136,7 +139,12 @@ function ThirdPartyUsageSummary({
       </div>
       <div className="sidebar-usage-stat">
         <span>{t("sidebar.usageEstimatedCost")}</span>
-        <strong>≈ {formatEstimatedCost(tokens, multiplier)}</strong>
+        <strong>
+          {costUsd === null ? "≈ " : "$"}
+          {formatEstimatedCost(
+            costUsd ?? (Math.max(0, tokens) / 1_000_000) * Math.max(0, multiplier),
+          )}
+        </strong>
       </div>
       <div className="sidebar-usage-stat">
         <span>{t("sidebar.usageMultiplier")}</span>
@@ -176,6 +184,7 @@ export function SidebarBottomRail({
   creditsLabel,
   showWeekly,
   thirdPartyUsageTokens,
+  thirdPartyUsageCostUsd,
   thirdPartyUsageMultiplier,
   onThirdPartyUsageMultiplierChange,
   onOpenSettings,
@@ -217,6 +226,7 @@ export function SidebarBottomRail({
         {thirdPartyUsageTokens !== null ? (
           <ThirdPartyUsageSummary
             tokens={thirdPartyUsageTokens}
+            costUsd={thirdPartyUsageCostUsd}
             multiplier={thirdPartyUsageMultiplier}
             onMultiplierChange={onThirdPartyUsageMultiplierChange}
           />

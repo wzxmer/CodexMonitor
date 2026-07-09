@@ -103,10 +103,26 @@ export function ComposerMetaBar({
     { value: "current", label: t("composer.access.current") },
     { value: "full-access", label: t("composer.access.fullAccess") },
   ];
-  const sendShortcutOptions: Array<{ value: ComposerSendShortcut; label: string }> = [
-    { value: "enter", label: t("composer.shortcut.chat") },
-    { value: "ctrl-enter", label: t("composer.shortcut.editor") },
-    { value: "steer-priority", label: t("composer.shortcut.steerPriority") },
+  const sendShortcutOptions: Array<{
+    value: ComposerSendShortcut;
+    label: string;
+    title: string;
+  }> = [
+    {
+      value: "enter",
+      label: t("composer.shortcut.chat"),
+      title: t("composer.shortcut.chatTooltip"),
+    },
+    {
+      value: "ctrl-enter",
+      label: t("composer.shortcut.editor"),
+      title: t("composer.shortcut.editorTooltip"),
+    },
+    {
+      value: "steer-priority",
+      label: t("composer.shortcut.steerPriority"),
+      title: t("composer.shortcut.steerPriorityTooltip"),
+    },
   ];
   const triggerModeOptions: Array<{ value: ComposerTriggerMode; label: string }> = [
     { value: "default", label: t("composer.trigger.default") },

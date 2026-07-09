@@ -177,6 +177,7 @@ export default function MainApp() {
     () => ({
       open: t("tray.open"),
       hide: t("tray.hide"),
+      restart: t("tray.restart"),
       quit: t("tray.quit"),
       usageHeader: t("tray.currentUsage"),
       noActiveSession: t("tray.noActiveSession"),

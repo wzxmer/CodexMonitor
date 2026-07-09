@@ -16,6 +16,7 @@ import { PopoverSurface } from "../popover/PopoverPrimitives";
 export type RoundedSelectOption = {
   value: string;
   label: string;
+  title?: string;
   disabled?: boolean;
 };
 
@@ -158,6 +159,7 @@ export function RoundedSelect({
         aria-expanded={isOpen}
         aria-controls={listboxId}
         disabled={disabled}
+        title={selectedOption?.title}
         onClick={() => setIsOpen((current) => !current)}
         onKeyDown={handleTriggerKeyDown}
       >
@@ -187,6 +189,7 @@ export function RoundedSelect({
                   role="option"
                   aria-selected={selected}
                   disabled={option.disabled}
+                  title={option.title}
                   className={joinClassNames(
                     "ds-rounded-select-option",
                     selected && "is-selected",

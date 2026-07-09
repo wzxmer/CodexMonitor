@@ -368,6 +368,7 @@ describe("tauri invoke wrappers", () => {
     const labels = {
       open: "打开 Codex Monitor",
       hide: "隐藏窗口",
+      restart: "重启",
       quit: "退出",
       usageHeader: "当前用量",
       noActiveSession: "无活动会话",

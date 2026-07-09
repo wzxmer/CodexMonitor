@@ -20,6 +20,8 @@ const TRAY_OPEN_ID: &str = "tray_open";
 #[cfg(desktop)]
 const TRAY_HIDE_ID: &str = "tray_hide";
 #[cfg(desktop)]
+const TRAY_RESTART_ID: &str = "tray_restart";
+#[cfg(desktop)]
 const TRAY_QUIT_ID: &str = "tray_quit";
 #[cfg(desktop)]
 const TRAY_USAGE_HEADER_ID: &str = "tray_usage_header";
@@ -49,6 +51,7 @@ pub(crate) struct TraySessionUsage {
 pub(crate) struct TrayLabels {
     pub(crate) open: String,
     pub(crate) hide: String,
+    pub(crate) restart: String,
     pub(crate) quit: String,
     pub(crate) usage_header: String,
     pub(crate) no_active_session: String,
@@ -61,6 +64,7 @@ impl Default for TrayLabels {
         Self {
             open: "Open Codex Monitor".into(),
             hide: "Hide Window".into(),
+            restart: "Restart".into(),
             quit: "Quit".into(),
             usage_header: "Current Usage".into(),
             no_active_session: "No active session".into(),
@@ -263,6 +267,7 @@ fn normalize_tray_labels(labels: TrayLabels) -> TrayLabels {
     TrayLabels {
         open: normalize_label(labels.open, &fallback.open),
         hide: normalize_label(labels.hide, &fallback.hide),
+        restart: normalize_label(labels.restart, &fallback.restart),
         quit: normalize_label(labels.quit, &fallback.quit),
         usage_header: normalize_label(labels.usage_header, &fallback.usage_header),
         no_active_session: normalize_label(labels.no_active_session, &fallback.no_active_session),
@@ -311,6 +316,8 @@ fn build_tray_menu<R: Runtime>(
     }
     let quit_separator = PredefinedMenuItem::separator(app)?;
     menu.append(&quit_separator)?;
+    let restart_item = MenuItemBuilder::with_id(TRAY_RESTART_ID, &labels.restart).build(app)?;
+    menu.append(&restart_item)?;
     let quit_item = MenuItemBuilder::with_id(TRAY_QUIT_ID, &labels.quit).build(app)?;
     menu.append(&quit_item)?;
     Ok(menu)
@@ -362,6 +369,7 @@ fn handle_tray_menu_event<R: Runtime>(app: &tauri::AppHandle<R>, event: MenuEven
     match event.id().as_ref() {
         TRAY_OPEN_ID => show_main_window(app),
         TRAY_HIDE_ID => hide_main_window(app),
+        TRAY_RESTART_ID => app.request_restart(),
         TRAY_QUIT_ID => app.exit(0),
         _ => {}
     }
@@ -520,6 +528,7 @@ mod tests {
             normalize_tray_labels(TrayLabels {
                 open: " 打开 ".into(),
                 hide: " ".into(),
+                restart: " 重启 ".into(),
                 quit: "退出".into(),
                 usage_header: "当前用量".into(),
                 no_active_session: "".into(),
@@ -529,6 +538,7 @@ mod tests {
             TrayLabels {
                 open: "打开".into(),
                 hide: "Hide Window".into(),
+                restart: "重启".into(),
                 quit: "退出".into(),
                 usage_header: "当前用量".into(),
                 no_active_session: "No active session".into(),

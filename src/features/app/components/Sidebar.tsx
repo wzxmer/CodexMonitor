@@ -397,6 +397,10 @@ export const Sidebar = memo(function Sidebar({
     !usageConfigurationWarning && useTokenUsageStats
       ? activeTokenUsage?.total.totalTokens ?? 0
       : null;
+  const thirdPartyUsageCostUsd =
+    !usageConfigurationWarning && useTokenUsageStats
+      ? activeTokenUsage?.total.costUsd ?? null
+      : null;
   const debouncedQuery = useDebouncedValue(searchQuery, 150);
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
   const isSearchActive = Boolean(normalizedQuery);
@@ -1231,6 +1235,7 @@ export const Sidebar = memo(function Sidebar({
         creditsLabel={sidebarCreditsLabel}
         showWeekly={sidebarShowWeekly}
         thirdPartyUsageTokens={thirdPartyUsageTokens}
+        thirdPartyUsageCostUsd={thirdPartyUsageCostUsd}
         thirdPartyUsageMultiplier={thirdPartyUsageMultiplier}
         onThirdPartyUsageMultiplierChange={onThirdPartyUsageMultiplierChange}
         onOpenSettings={onOpenSettings}

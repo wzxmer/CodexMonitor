@@ -178,6 +178,7 @@ describe("Sidebar", () => {
             cachedInputTokens: 2_000,
             outputTokens: 8_000,
             reasoningOutputTokens: 1_000,
+            costUsd: null,
           },
           last: {
             totalTokens: 4_000,
@@ -185,6 +186,7 @@ describe("Sidebar", () => {
             cachedInputTokens: 1_000,
             outputTokens: 1_000,
             reasoningOutputTokens: 0,
+            costUsd: null,
           },
           modelContextWindow: 100_000,
         }}
@@ -219,6 +221,37 @@ describe("Sidebar", () => {
     expect(screen.queryByText("62%")).toBeNull();
   });
 
+  it("uses provider-reported cost for third-party key sessions", () => {
+    render(
+      <Sidebar
+        {...baseProps}
+        useTokenUsageStats
+        thirdPartyUsageMultiplier={1}
+        activeTokenUsage={{
+          total: {
+            totalTokens: 1_260_000,
+            inputTokens: 436_160,
+            cachedInputTokens: 809_980,
+            outputTokens: 10_880,
+            reasoningOutputTokens: 0,
+            costUsd: 0.1042,
+          },
+          last: {
+            totalTokens: 0,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+            costUsd: null,
+          },
+          modelContextWindow: null,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("$0.1042")).toBeTruthy();
+  });
+
   it("edits the third-party usage multiplier from the usage panel", () => {
     const onThirdPartyUsageMultiplierChange = vi.fn();
     render(
@@ -234,6 +267,7 @@ describe("Sidebar", () => {
             cachedInputTokens: 0,
             outputTokens: 300_000,
             reasoningOutputTokens: 0,
+            costUsd: null,
           },
           last: {
             totalTokens: 1_000,
@@ -241,6 +275,7 @@ describe("Sidebar", () => {
             cachedInputTokens: 0,
             outputTokens: 300,
             reasoningOutputTokens: 0,
+            costUsd: null,
           },
           modelContextWindow: null,
         }}

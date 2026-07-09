@@ -79,6 +79,7 @@ export type TraySessionUsage = {
 export type TrayLabels = {
   open: string;
   hide: string;
+  restart: string;
   quit: string;
   usageHeader: string;
   noActiveSession: string;
@@ -662,6 +663,7 @@ export type TokenUsageBreakdown = {
   cachedInputTokens: number;
   outputTokens: number;
   reasoningOutputTokens: number;
+  costUsd?: number | null;
 };
 
 export type ThreadTokenUsage = {

@@ -2020,8 +2020,15 @@
 }
 
 .sidebar-usage-multiplier-input {
+  appearance: textfield;
   padding: 0 8px;
   outline: none;
+}
+
+.sidebar-usage-multiplier-input::-webkit-outer-spin-button,
+.sidebar-usage-multiplier-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
 }
 
 .sidebar-usage-multiplier-input:focus {

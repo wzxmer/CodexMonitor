@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  normalizeTokenUsage,
   normalizePlanUpdate,
   normalizeRateLimits,
   normalizeRootPath,
@@ -79,6 +80,44 @@ describe("normalizeRootPath", () => {
     expect(normalizeRootPath("\\\\SERVER\\\\Share\\\\Repo\\\\Sub")).toBe(
       "//server/share/repo/sub",
     );
+  });
+});
+
+describe("normalizeTokenUsage", () => {
+  it("preserves provider-reported cost fields", () => {
+    expect(
+      normalizeTokenUsage({
+        total_cost_usd: 0.1042,
+        total: {
+          total_tokens: 1_260_000,
+          input_tokens: 436_160,
+          cached_input_tokens: 809_980,
+          output_tokens: 10_880,
+        },
+        last: {
+          totalTokens: 100,
+          inputTokens: 80,
+          cachedInputTokens: 10,
+          outputTokens: 20,
+          costUsd: 0.001,
+        },
+      }),
+    ).toMatchObject({
+      total: {
+        totalTokens: 1_260_000,
+        inputTokens: 436_160,
+        cachedInputTokens: 809_980,
+        outputTokens: 10_880,
+        costUsd: 0.1042,
+      },
+      last: {
+        totalTokens: 100,
+        inputTokens: 80,
+        cachedInputTokens: 10,
+        outputTokens: 20,
+        costUsd: 0.001,
+      },
+    });
   });
 });
 

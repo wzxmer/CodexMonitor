@@ -7,6 +7,7 @@ export const I18N_STRINGS = {
     "language.en": "English",
     "tray.open": "打开 Codex Monitor",
     "tray.hide": "隐藏窗口",
+    "tray.restart": "重启",
     "tray.quit": "退出",
     "tray.currentUsage": "当前用量",
     "tray.noActiveSession": "无活动会话",
@@ -955,6 +956,12 @@ export const I18N_STRINGS = {
     "composer.shortcut.chat": "聊天：Enter 发送",
     "composer.shortcut.editor": "编辑：Ctrl+Enter 发送",
     "composer.shortcut.steerPriority": "引导优先：Ctrl+Enter 引导",
+    "composer.shortcut.chatTooltip":
+      "发送：Enter；引导：Shift+Ctrl+Enter；换行：Ctrl+Enter / Shift+Enter",
+    "composer.shortcut.editorTooltip":
+      "发送：Ctrl+Enter；引导：Shift+Ctrl+Enter；换行：Enter / Shift+Enter",
+    "composer.shortcut.steerPriorityTooltip":
+      "发送：Enter；引导：Ctrl+Enter；换行：Shift+Enter",
     "composer.trigger.default": "默认 / @",
     "composer.trigger.swap": "对调 @ /",
     "composer.planMode": "计划模式",
@@ -1064,6 +1071,7 @@ export const I18N_STRINGS = {
     "language.en": "English",
     "tray.open": "Open Codex Monitor",
     "tray.hide": "Hide Window",
+    "tray.restart": "Restart",
     "tray.quit": "Quit",
     "tray.currentUsage": "Current Usage",
     "tray.noActiveSession": "No active session",
@@ -2020,6 +2028,12 @@ export const I18N_STRINGS = {
     "composer.shortcut.chat": "Chat: Enter sends",
     "composer.shortcut.editor": "Editor: Ctrl+Enter sends",
     "composer.shortcut.steerPriority": "Steer first: Ctrl+Enter steers",
+    "composer.shortcut.chatTooltip":
+      "Send: Enter; Steer: Shift+Ctrl+Enter; Newline: Ctrl+Enter / Shift+Enter",
+    "composer.shortcut.editorTooltip":
+      "Send: Ctrl+Enter; Steer: Shift+Ctrl+Enter; Newline: Enter / Shift+Enter",
+    "composer.shortcut.steerPriorityTooltip":
+      "Send: Enter; Steer: Ctrl+Enter; Newline: Shift+Enter",
     "composer.trigger.default": "Default / @",
     "composer.trigger.swap": "Swap @ /",
     "composer.planMode": "Plan mode",
