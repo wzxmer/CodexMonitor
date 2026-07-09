@@ -3,7 +3,7 @@ import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ThreadSummary } from "../../../types";
-import { useThreadRows } from "./useThreadRows";
+import { COLLAPSED_THREAD_ROOT_LIMIT, useThreadRows } from "./useThreadRows";
 
 describe("useThreadRows", () => {
   it("reuses cached results for identical inputs and cache version", () => {
@@ -149,5 +149,26 @@ describe("useThreadRows", () => {
       ["thread-root", 0],
       ["thread-subagent-child", 1],
     ]);
+  });
+
+  it("shows six root threads before requiring expansion", () => {
+    const threads = Array.from({ length: COLLAPSED_THREAD_ROOT_LIMIT + 1 }, (_, index) => ({
+      id: `thread-${index}`,
+      name: `Thread ${index}`,
+      updatedAt: index,
+    })) satisfies ThreadSummary[];
+    const getPinTimestamp = vi.fn(() => null);
+    const { result } = renderHook(() => useThreadRows({}));
+
+    const rows = result.current.getThreadRows(
+      threads,
+      false,
+      "ws-1",
+      getPinTimestamp,
+      0,
+    );
+
+    expect(rows.unpinnedRows).toHaveLength(COLLAPSED_THREAD_ROOT_LIMIT);
+    expect(rows.hasMoreRoots).toBe(true);
   });
 });

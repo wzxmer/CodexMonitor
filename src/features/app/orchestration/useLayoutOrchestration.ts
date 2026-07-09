@@ -22,7 +22,16 @@ type UseAppShellOrchestrationOptions = {
   debugPanelHeight: number;
   appSettings: Pick<
     AppSettings,
-    "uiFontFamily" | "uiFontSize" | "codeFontFamily" | "messageFontSize" | "codeFontSize"
+    | "uiFontFamily"
+    | "uiLatinFontFamily"
+    | "uiCjkFontFamily"
+    | "uiFontSize"
+    | "uiFontWeight"
+    | "codeFontFamily"
+    | "messageFontSize"
+    | "messageFontFamily"
+    | "messageFontWeight"
+    | "codeFontSize"
   >;
 };
 
@@ -68,10 +77,13 @@ export function useAppShellOrchestration({
       "--plan-panel-height": `${planPanelHeight}px`,
       "--terminal-panel-height": `${terminalPanelHeight}px`,
       "--debug-panel-height": `${debugPanelHeight}px`,
-      "--ui-font-family": appSettings.uiFontFamily,
+      "--ui-font-family": `${appSettings.uiLatinFontFamily}, ${appSettings.uiCjkFontFamily}, ${appSettings.uiFontFamily}`,
       "--ui-font-size": `${appSettings.uiFontSize}px`,
+      "--ui-font-weight": `${appSettings.uiFontWeight}`,
       "--code-font-family": appSettings.codeFontFamily,
       "--message-font-size": `${appSettings.messageFontSize}px`,
+      "--message-font-family": appSettings.messageFontFamily,
+      "--message-font-weight": `${appSettings.messageFontWeight}`,
       "--code-font-size": `${appSettings.codeFontSize}px`,
       "--sidebar-top-padding": isWindows ? "10px" : "36px",
       "--right-panel-top-padding": isWindows
@@ -99,9 +111,14 @@ export function useAppShellOrchestration({
     [
       appSettings.codeFontFamily,
       appSettings.codeFontSize,
+      appSettings.messageFontFamily,
       appSettings.messageFontSize,
+      appSettings.messageFontWeight,
+      appSettings.uiCjkFontFamily,
       appSettings.uiFontFamily,
       appSettings.uiFontSize,
+      appSettings.uiFontWeight,
+      appSettings.uiLatinFontFamily,
       chatDiffSplitPositionPercent,
       debugPanelHeight,
       isWindows,

@@ -86,7 +86,7 @@ describe("ThreadList", () => {
     render(
       <ThreadList
         {...baseProps}
-        totalThreadRoots={4}
+        totalThreadRoots={7}
         onToggleExpanded={onToggleExpanded}
       />,
     );

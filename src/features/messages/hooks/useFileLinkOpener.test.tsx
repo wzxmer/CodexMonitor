@@ -11,12 +11,14 @@ const {
   predefinedMenuItemNewMock,
   logicalPositionMock,
   getCurrentWindowMock,
+  revealItemInDirMock,
 } = vi.hoisted(() => ({
   menuNewMock: vi.fn(),
   menuItemNewMock: vi.fn(),
   predefinedMenuItemNewMock: vi.fn(),
   logicalPositionMock: vi.fn(),
   getCurrentWindowMock: vi.fn(),
+  revealItemInDirMock: vi.fn(),
 }));
 
 vi.mock("../../../services/tauri", () => ({
@@ -24,7 +26,7 @@ vi.mock("../../../services/tauri", () => ({
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
-  revealItemInDir: vi.fn(),
+  revealItemInDir: revealItemInDirMock,
 }));
 
 vi.mock("@tauri-apps/api/menu", () => ({
@@ -247,6 +249,26 @@ describe("useFileLinkOpener", () => {
         args: [],
         line: 366,
       }),
+    );
+  });
+
+  it("opens slash-prefixed Windows drive paths without passing an invalid Explorer path", async () => {
+    const { result } = renderHook(() =>
+      useFileLinkOpener(
+        "D:\\Project\\CodexMonitor",
+        [{ id: "finder", label: "Explorer", kind: "finder", args: [] }],
+        "finder",
+      ),
+    );
+
+    await act(async () => {
+      await result.current.openFileLink(
+        fileTarget("/D:/Project/rime/lua/txjx_processor.lua:42"),
+      );
+    });
+
+    expect(revealItemInDirMock).toHaveBeenCalledWith(
+      "D:/Project/rime/lua/txjx_processor.lua",
     );
   });
 });

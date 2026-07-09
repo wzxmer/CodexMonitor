@@ -5,6 +5,7 @@ import type { ThreadStatusById } from "../../../utils/threadStatus";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { ThreadRow } from "./ThreadRow";
 import { buildThreadRowVisibility } from "./threadRowVisibility";
+import { COLLAPSED_THREAD_ROOT_LIMIT } from "../hooks/useThreadRows";
 
 type ThreadListRow = {
   thread: ThreadSummary;
@@ -148,7 +149,7 @@ export function ThreadList({
           onToggleSubagents={(_, threadId) => toggleThreadSubagents(threadId)}
         />
       ))}
-      {showExpandToggle && totalThreadRoots > 3 && (
+      {showExpandToggle && totalThreadRoots > COLLAPSED_THREAD_ROOT_LIMIT && (
         <button
           className="thread-more"
           onClick={(event) => {
@@ -159,22 +160,24 @@ export function ThreadList({
           {isExpanded ? t("sidebar.collapseList") : t("sidebar.showMore")}
         </button>
       )}
-      {showLoadOlder && nextCursor && (isExpanded || totalThreadRoots <= 3) && (
-        <button
-          className="thread-more"
-          onClick={(event) => {
-            event.stopPropagation();
-            onLoadOlderThreads(workspaceId);
-          }}
-          disabled={isPaging}
-        >
-          {isPaging
-            ? t("sidebar.loading")
-            : totalThreadRoots === 0
-              ? t("sidebar.searchOlderThreads")
-              : t("sidebar.loadOlderThreads")}
-        </button>
-      )}
+      {showLoadOlder &&
+        nextCursor &&
+        (isExpanded || totalThreadRoots <= COLLAPSED_THREAD_ROOT_LIMIT) && (
+          <button
+            className="thread-more"
+            onClick={(event) => {
+              event.stopPropagation();
+              onLoadOlderThreads(workspaceId);
+            }}
+            disabled={isPaging}
+          >
+            {isPaging
+              ? t("sidebar.loading")
+              : totalThreadRoots === 0
+                ? t("sidebar.searchOlderThreads")
+                : t("sidebar.loadOlderThreads")}
+          </button>
+        )}
     </div>
   );
 }

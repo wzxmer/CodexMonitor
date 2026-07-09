@@ -14,13 +14,13 @@ export const CODE_FONT_SIZE_MAX = 16;
 export const UI_FONT_SIZE_DEFAULT = 13;
 export const UI_FONT_SIZE_MIN = 11;
 export const UI_FONT_SIZE_MAX = 17;
-export const UI_FONT_WEIGHT_DEFAULT = 500;
+export const UI_FONT_WEIGHT_DEFAULT = 400;
 export const UI_FONT_WEIGHT_MIN = 350;
 export const UI_FONT_WEIGHT_MAX = 650;
 export const MESSAGE_FONT_SIZE_DEFAULT = 13;
 export const MESSAGE_FONT_SIZE_MIN = 12;
 export const MESSAGE_FONT_SIZE_MAX = 18;
-export const MESSAGE_FONT_WEIGHT_DEFAULT = 500;
+export const MESSAGE_FONT_WEIGHT_DEFAULT = 450;
 export const MESSAGE_FONT_WEIGHT_MIN = 400;
 export const MESSAGE_FONT_WEIGHT_MAX = 650;
 

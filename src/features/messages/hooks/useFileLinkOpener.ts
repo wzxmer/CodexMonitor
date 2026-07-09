@@ -63,7 +63,7 @@ function resolveOpenTarget(
 }
 
 function resolveFilePath(path: string, workspacePath?: string | null) {
-  const trimmed = path.trim();
+  const trimmed = path.trim().replace(/^\/([A-Za-z]:[\\/])/, "$1");
   if (!workspacePath) {
     return trimmed;
   }

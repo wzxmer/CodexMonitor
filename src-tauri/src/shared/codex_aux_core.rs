@@ -55,7 +55,9 @@ pub(crate) fn build_run_metadata_prompt(cleaned_prompt: &str) -> String {
     format!(
         "You create concise run metadata for a coding task.\n\
 Return ONLY a JSON object with keys:\n\
-- title: short, clear, 3-7 words, Title Case\n\
+- title: short and clear. Use the user's primary task language. \
+For Chinese tasks, write a Chinese title; for English tasks, write an English Title Case title. \
+For mixed-language tasks, follow the language used for the main request.\n\
 - worktreeName: lower-case, kebab-case slug prefixed with one of: \
 feat/, fix/, chore/, test/, docs/, refactor/, perf/, build/, ci/, style/.\n\n\
 Choose fix/ when the task is a bug fix, error, regression, crash, or cleanup. \
@@ -681,8 +683,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        build_commit_message_prompt_for_diff, parse_agent_description_value,
-        parse_run_metadata_value,
+        build_commit_message_prompt_for_diff, build_run_metadata_prompt,
+        parse_agent_description_value, parse_run_metadata_value,
     };
 
     #[test]
@@ -692,6 +694,16 @@ mod tests {
             result.expect_err("should fail"),
             "No changes to generate commit message for"
         );
+    }
+
+    #[test]
+    fn build_run_metadata_prompt_requires_title_language_to_match_task() {
+        let prompt = build_run_metadata_prompt("修复登录页跳转循环");
+        assert!(prompt.contains("Use the user's primary task language"));
+        assert!(prompt.contains("For Chinese tasks, write a Chinese title"));
+        assert!(prompt.contains("for English tasks, write an English Title Case title"));
+        assert!(prompt.contains("worktreeName: lower-case, kebab-case slug"));
+        assert!(prompt.contains("Task:\n修复登录页跳转循环"));
     }
 
     #[test]
