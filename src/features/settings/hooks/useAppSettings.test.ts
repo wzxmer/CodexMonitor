@@ -98,6 +98,74 @@ describe("useAppSettings", () => {
     expect(result.current.settings.messageReadingStyle).toBe("native");
   });
 
+  it("normalizes codex key provider profile fields", async () => {
+    getAppSettingsMock.mockResolvedValue(
+      ({
+        activeCodexKeyProfileId: "work",
+        codexKeyProfiles: [
+          {
+            id: "work",
+            name: " Work ",
+            providerKind: "deepseek",
+            keyEnvVar: "LEGACY_KEY",
+            key: " sk-test ",
+            baseUrlEnvVar: "LEGACY_BASE",
+            baseUrl: " https://api.deepseek.com/v1 ",
+            model: " deepseek-chat ",
+            contextWindow: 128000.8,
+            maxOutputTokens: 8192.2,
+            useGateway: true,
+            lastModelRefreshAtMs: 1725000000000,
+            cachedModels: [
+              {
+                id: " deepseek-chat ",
+                name: " DeepSeek Chat ",
+                contextWindow: 128000.8,
+              },
+              { id: " ", name: "ignored", contextWindow: -1 },
+            ],
+            groupName: " Discount ",
+            groupMultiplier: 0.07,
+          },
+          {
+            id: "empty",
+            name: "Empty",
+            key: " ",
+          },
+        ],
+      } as unknown) as AppSettings,
+    );
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.activeCodexKeyProfileId).toBe("work");
+    expect(result.current.settings.codexKeyProfiles).toEqual([
+      expect.objectContaining({
+        id: "work",
+        name: "Work",
+        providerKind: "deepseek",
+        key: "sk-test",
+        baseUrl: "https://api.deepseek.com/v1",
+        model: "deepseek-chat",
+        contextWindow: 128000,
+        maxOutputTokens: 8192,
+        useGateway: true,
+        lastModelRefreshAtMs: 1725000000000,
+        groupName: "Discount",
+        groupMultiplier: 0.07,
+        cachedModels: [
+          {
+            id: "deepseek-chat",
+            name: "DeepSeek Chat",
+            contextWindow: 128000,
+          },
+        ],
+      }),
+    ]);
+  });
+
   it("keeps defaults when getAppSettings fails", async () => {
     getAppSettingsMock.mockRejectedValue(new Error("boom"));
 

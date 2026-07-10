@@ -3,6 +3,7 @@ import type {
   AppServerEvent,
   DictationEvent,
   DictationModelStatus,
+  ReleaseAssetDownloadProgress,
 } from "../types";
 
 export type Unsubscribe = () => void;
@@ -91,6 +92,9 @@ const dictationEventHub = createEventHub<DictationEvent>("dictation-event");
 const terminalOutputHub = createEventHub<TerminalOutputEvent>("terminal-output");
 const terminalExitHub = createEventHub<TerminalExitEvent>("terminal-exit");
 const updaterCheckHub = createEventHub<void>("updater-check");
+const releaseAssetDownloadProgressHub = createEventHub<ReleaseAssetDownloadProgress>(
+  "release-asset-download-progress",
+);
 const menuNewAgentHub = createEventHub<void>("menu-new-agent");
 const menuNewWorktreeAgentHub = createEventHub<void>("menu-new-worktree-agent");
 const menuNewCloneAgentHub = createEventHub<void>("menu-new-clone-agent");
@@ -158,6 +162,13 @@ export function subscribeUpdaterCheck(
   return updaterCheckHub.subscribe(() => {
     onEvent();
   }, options);
+}
+
+export function subscribeReleaseAssetDownloadProgress(
+  onEvent: (event: ReleaseAssetDownloadProgress) => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return releaseAssetDownloadProgressHub.subscribe(onEvent, options);
 }
 
 export function subscribeMenuNewAgent(

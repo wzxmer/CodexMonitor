@@ -1,13 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import { emitTo } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type { Options as NotificationOptions } from "@tauri-apps/plugin-notification";
 import type {
   AppSettings,
   CodexProviderStatus,
+  CodexProviderModel,
   CodexSyncDiagnostics,
-  CodexNativePetState,
-  CodexNativePetWindowPosition,
   CodexStatus,
   CodexUpdateResult,
   CodexDoctorResult,
@@ -24,7 +22,11 @@ import type {
   AppMention,
   WorkspaceSettings,
 } from "../types";
-import type { CodexPetActivity } from "@app/utils/codexPetAnimation";
+import {
+  buildThirdPartyUsageUrl,
+  normalizeThirdPartyUsagePayload,
+} from "@app/utils/thirdPartyKeyUsage";
+import type { ThirdPartyKeyUsageSnapshot } from "@app/utils/thirdPartyKeyUsage";
 import type {
   GitFileDiff,
   GitFileStatus,
@@ -312,6 +314,67 @@ export async function getProviderStatus(workspaceId: string): Promise<CodexProvi
     modelContextWindow: normalizePositiveNumber(response.modelContextWindow),
     error: typeof response.error === "string" && response.error.trim() ? response.error : null,
   };
+}
+
+export async function getThirdPartyKeyUsage(
+  baseUrl: string,
+  apiKey: string,
+): Promise<ThirdPartyKeyUsageSnapshot | null> {
+  const usageUrl = buildThirdPartyUsageUrl(baseUrl);
+  if (!usageUrl || !apiKey.trim()) {
+    return null;
+  }
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const response = await invoke<unknown>("third_party_key_usage", {
+    baseUrl: usageUrl,
+    apiKey,
+    timezone,
+  });
+  return normalizeThirdPartyUsagePayload(response);
+}
+
+function normalizeProviderModelPayload(payload: unknown): CodexProviderModel[] {
+  const data =
+    payload && typeof payload === "object" && Array.isArray((payload as { data?: unknown }).data)
+      ? (payload as { data: unknown[] }).data
+      : [];
+  return data
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const record = entry as Record<string, unknown>;
+      const id = typeof record.id === "string" ? record.id.trim() : "";
+      if (!id) {
+        return null;
+      }
+      const name =
+        typeof record.name === "string" && record.name.trim()
+          ? record.name.trim()
+          : null;
+      const rawContext =
+        record.context_window ?? record.contextWindow ?? record.max_context_tokens;
+      const contextWindow =
+        typeof rawContext === "number" && Number.isFinite(rawContext) && rawContext > 0
+          ? Math.floor(rawContext)
+          : null;
+      return { id, name, contextWindow };
+    })
+    .filter((model): model is CodexProviderModel => model !== null);
+}
+
+export async function getProviderModels(
+  baseUrl: string,
+  apiKey: string,
+): Promise<CodexProviderModel[]> {
+  if (!baseUrl.trim() || !apiKey.trim()) {
+    return [];
+  }
+  const response = await invoke<unknown>("provider_model_list", {
+    baseUrl,
+    apiKey,
+  });
+  return normalizeProviderModelPayload(response);
 }
 
 export async function addWorkspace(path: string): Promise<WorkspaceInfo> {
@@ -931,51 +994,17 @@ export async function cleanupDownloadedReleaseAssets(): Promise<void> {
 export async function downloadAndOpenReleaseAsset(
   url: string,
   fileName: string,
+  requestId: string,
 ): Promise<{ path: string }> {
   return invoke<{ path: string }>("download_and_open_release_asset", {
     url,
     fileName,
+    requestId,
   });
 }
 
 export async function updateAppSettings(settings: AppSettings): Promise<AppSettings> {
   return invoke<AppSettings>("update_app_settings", { settings });
-}
-
-export async function getCodexNativePetState(): Promise<CodexNativePetState> {
-  return invoke<CodexNativePetState>("get_codex_native_pet_state");
-}
-
-export async function setCodexNativePetEnabled(
-  enabled: boolean,
-): Promise<CodexNativePetState> {
-  return invoke<CodexNativePetState>("set_codex_native_pet_enabled", { enabled });
-}
-
-export async function setCodexNativePetSelected(
-  avatarId: string,
-): Promise<CodexNativePetState> {
-  return invoke<CodexNativePetState>("set_codex_native_pet_selected", { avatarId });
-}
-
-export async function setCodexNativePetPosition(
-  position: CodexNativePetWindowPosition,
-): Promise<CodexNativePetState> {
-  return invoke<CodexNativePetState>("set_codex_native_pet_position", { position });
-}
-
-export async function wakeCodexNativePet(): Promise<CodexNativePetState> {
-  return invoke<CodexNativePetState>("wake_codex_native_pet");
-}
-
-export async function importCodexNativePet(
-  sourceDir: string,
-): Promise<CodexNativePetState> {
-  return invoke<CodexNativePetState>("import_codex_native_pet", { sourceDir });
-}
-
-export async function setCodexPetActivity(activity: CodexPetActivity): Promise<void> {
-  return emitTo("codex-pet", "codex-pet-activity", { activity });
 }
 
 export async function listSystemFonts(): Promise<string[]> {

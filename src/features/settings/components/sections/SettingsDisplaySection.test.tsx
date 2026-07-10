@@ -225,7 +225,107 @@ describe("SettingsDisplaySection", () => {
     );
   });
 
-  it("updates desktop pet type and controls visibility", async () => {
+  it("keeps standard and Windows Clear font clarity presets distinct", () => {
+    const onUpdateAppSettings = vi.fn(async () => {});
+
+    const { rerender } = render(
+      <SettingsDisplaySection
+        appSettings={
+          ({
+            theme: "system",
+            usageShowRemaining: false,
+            showMessageFilePath: true,
+            chatHistoryScrollbackItems: 200,
+            threadTitleAutogenerationEnabled: false,
+            uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
+            uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
+            uiFontWeight: 400,
+            messageFontWeight: 450,
+            codeFontFamily: "",
+            codeFontSize: 11,
+            notificationSoundsEnabled: true,
+            systemNotificationsEnabled: true,
+          } as unknown) as AppSettings
+        }
+        reduceTransparency={false}
+        scaleShortcutTitle=""
+        scaleShortcutText=""
+        scaleDraft="100%"
+        uiLatinFontDraft={DEFAULT_UI_LATIN_FONT_FAMILY}
+        uiCjkFontDraft={DEFAULT_UI_CJK_FONT_FAMILY}
+        uiFontWeightDraft={400}
+        messageFontWeightDraft={450}
+        codeFontDraft=""
+        codeFontSizeDraft={11}
+        onUpdateAppSettings={onUpdateAppSettings}
+        onToggleTransparency={vi.fn()}
+        onSetScaleDraft={vi.fn() as any}
+        onCommitScale={vi.fn(async () => {})}
+        onResetScale={vi.fn(async () => {})}
+        onSetCodeFontDraft={vi.fn() as any}
+        onCommitCodeFont={vi.fn(async () => {})}
+        onSetCodeFontSizeDraft={vi.fn() as any}
+        onCommitCodeFontSize={vi.fn(async () => {})}
+        onTestNotificationSound={vi.fn()}
+        onTestSystemNotification={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("radio", { name: /标准/ }).getAttribute("aria-checked"),
+    ).toBe("true");
+
+    rerender(
+      <SettingsDisplaySection
+        appSettings={
+          ({
+            theme: "system",
+            usageShowRemaining: false,
+            showMessageFilePath: true,
+            chatHistoryScrollbackItems: 200,
+            threadTitleAutogenerationEnabled: false,
+            uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
+            uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
+            uiFontWeight: 500,
+            messageFontWeight: 500,
+            codeFontFamily: "",
+            codeFontSize: 11,
+            notificationSoundsEnabled: true,
+            systemNotificationsEnabled: true,
+          } as unknown) as AppSettings
+        }
+        reduceTransparency={false}
+        scaleShortcutTitle=""
+        scaleShortcutText=""
+        scaleDraft="100%"
+        uiLatinFontDraft={DEFAULT_UI_LATIN_FONT_FAMILY}
+        uiCjkFontDraft={DEFAULT_UI_CJK_FONT_FAMILY}
+        uiFontWeightDraft={500}
+        messageFontWeightDraft={500}
+        codeFontDraft=""
+        codeFontSizeDraft={11}
+        onUpdateAppSettings={onUpdateAppSettings}
+        onToggleTransparency={vi.fn()}
+        onSetScaleDraft={vi.fn() as any}
+        onCommitScale={vi.fn(async () => {})}
+        onResetScale={vi.fn(async () => {})}
+        onSetCodeFontDraft={vi.fn() as any}
+        onCommitCodeFont={vi.fn(async () => {})}
+        onSetCodeFontSizeDraft={vi.fn() as any}
+        onCommitCodeFontSize={vi.fn(async () => {})}
+        onTestNotificationSound={vi.fn()}
+        onTestSystemNotification={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole("radio", { name: /Windows 清晰/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
+  it("keeps notification test controls available", async () => {
     const onUpdateAppSettings = vi.fn(async () => {});
 
     render(
@@ -242,9 +342,6 @@ describe("SettingsDisplaySection", () => {
             codeFontSize: 11,
             notificationSoundsEnabled: true,
             systemNotificationsEnabled: true,
-            codexPetId: "codex",
-            codexPetEnabled: true,
-            codexPetWakeVersion: 2,
           } as unknown) as AppSettings
         }
         reduceTransparency={false}

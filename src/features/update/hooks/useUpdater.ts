@@ -5,6 +5,7 @@ import {
   cleanupDownloadedReleaseAssets,
   downloadAndOpenReleaseAsset,
 } from "../../../services/tauri";
+import { subscribeReleaseAssetDownloadProgress } from "../../../services/events";
 import {
   clearPendingPostUpdateVersion,
   fetchLatestReleaseUpdate,
@@ -67,10 +68,13 @@ export function useUpdater({
 }: UseUpdaterOptions) {
   const [state, setState] = useState<UpdateState>({ stage: "idle" });
   const updateRef = useRef<ReleaseUpdateInfo | null>(null);
+  const activeDownloadIdRef = useRef<string | null>(null);
+  const cleanupPromiseRef = useRef<Promise<void> | null>(null);
   const hasAttemptedAutoCheckRef = useRef(false);
 
   const resetToIdle = useCallback(async () => {
     updateRef.current = null;
+    activeDownloadIdRef.current = null;
     setState({ stage: "idle" });
   }, []);
 
@@ -115,7 +119,10 @@ export function useUpdater({
       await checkForUpdates();
       return;
     }
+    await cleanupPromiseRef.current?.catch(() => undefined);
 
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    activeDownloadIdRef.current = requestId;
     setState((prev) => ({
       ...prev,
       stage: "downloading",
@@ -127,13 +134,18 @@ export function useUpdater({
     }));
 
     try {
-      await downloadAndOpenReleaseAsset(update.asset.url, update.asset.name);
+      await downloadAndOpenReleaseAsset(update.asset.url, update.asset.name, requestId);
+      activeDownloadIdRef.current = null;
       setState((prev) => ({
         ...prev,
         stage: "installing",
         progress: {
-          totalBytes: update.asset.size,
-          downloadedBytes: update.asset.size ?? prev.progress?.downloadedBytes ?? 0,
+          totalBytes: prev.progress?.totalBytes ?? update.asset.size,
+          downloadedBytes:
+            prev.progress?.totalBytes ??
+            update.asset.size ??
+            prev.progress?.downloadedBytes ??
+            0,
         },
       }));
     } catch (error) {
@@ -146,6 +158,7 @@ export function useUpdater({
         label: "updater/error",
         payload: message,
       });
+      activeDownloadIdRef.current = null;
       setState((prev) => ({
         ...prev,
         stage: "error",
@@ -158,7 +171,41 @@ export function useUpdater({
     if (!enabled || !isTauri()) {
       return;
     }
-    void cleanupDownloadedReleaseAssets().catch((error) => {
+    return subscribeReleaseAssetDownloadProgress((progress) => {
+      if (progress.id !== activeDownloadIdRef.current) {
+        return;
+      }
+      setState((prev) => {
+        if (prev.stage !== "downloading") {
+          return prev;
+        }
+        return {
+          ...prev,
+          progress: {
+            downloadedBytes: progress.downloadedBytes,
+            totalBytes: progress.totalBytes ?? prev.progress?.totalBytes,
+          },
+        };
+      });
+    }, {
+      onError: (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        onDebug?.({
+          id: `${Date.now()}-client-updater-progress-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "updater/progress-error",
+          payload: message,
+        });
+      },
+    });
+  }, [enabled, onDebug]);
+
+  useEffect(() => {
+    if (!enabled || !isTauri()) {
+      return;
+    }
+    const cleanupPromise = cleanupDownloadedReleaseAssets().catch((error) => {
       const message =
         error instanceof Error ? error.message : JSON.stringify(error);
       onDebug?.({
@@ -168,6 +215,12 @@ export function useUpdater({
         label: "updater/cleanup-error",
         payload: message,
       });
+    });
+    cleanupPromiseRef.current = cleanupPromise;
+    cleanupPromise.finally(() => {
+      if (cleanupPromiseRef.current === cleanupPromise) {
+        cleanupPromiseRef.current = null;
+      }
     });
   }, [enabled, onDebug]);
 

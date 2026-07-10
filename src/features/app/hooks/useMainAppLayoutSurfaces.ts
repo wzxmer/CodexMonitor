@@ -10,6 +10,7 @@ import type {
 } from "@/types";
 import { getProviderStatus } from "@/services/tauri";
 import type { ThreadState } from "@/features/threads/hooks/useThreadsReducer";
+import { useThirdPartyKeyUsage } from "@app/hooks/useThirdPartyKeyUsage";
 import type { WorkspaceLaunchScriptsState } from "@app/hooks/useWorkspaceLaunchScripts";
 import { REMOTE_THREAD_POLL_INTERVAL_MS } from "@app/hooks/useRemoteThreadRefreshOnFocus";
 import type { useMainAppComposerWorkspaceState } from "@app/hooks/useMainAppComposerWorkspaceState";
@@ -21,6 +22,7 @@ import type { useMainAppWorktreeState } from "@app/hooks/useMainAppWorktreeState
 import type { StartingDraftMessagePreview } from "@app/hooks/useNewAgentDraft";
 import type { LayoutNodesOptions } from "@/features/layout/hooks/layoutNodes/types";
 import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
+import { resolveCodexProviderBaseUrl } from "@/utils/providerProfiles";
 
 type SidebarProps = LayoutNodesOptions["primary"]["sidebarProps"];
 type ComposerProps = NonNullable<LayoutNodesOptions["primary"]["composerProps"]>;
@@ -134,6 +136,7 @@ type UseMainAppLayoutSurfacesArgs = {
   handleAddAgent: SidebarProps["onAddAgent"];
   handleAddWorktreeAgent: SidebarProps["onAddWorktreeAgent"];
   handleAddCloneAgent: SidebarProps["onAddCloneAgent"];
+  handleResumeThreadById: SidebarProps["onResumeThreadById"];
   handleSelectLocalCodexThread: SidebarProps["onSelectLocalCodexThread"];
   handleOpenThreadLink: LayoutNodesOptions["primary"]["messagesProps"]["onOpenThreadLink"];
   handleSelectOpenAppId: MainHeaderProps["onSelectOpenAppId"];
@@ -155,6 +158,8 @@ type UseMainAppLayoutSurfacesArgs = {
   models: ComposerProps["models"];
   selectedModelId: ComposerProps["selectedModelId"];
   onSelectModel: ComposerProps["onSelectModel"];
+  onRefreshModels: ComposerProps["onRefreshModels"];
+  isRefreshingModels: ComposerProps["isRefreshingModels"];
   collaborationModes: ComposerProps["collaborationModes"];
   selectedCollaborationModeId: ComposerProps["selectedCollaborationModeId"];
   onSelectCollaborationMode: ComposerProps["onSelectCollaborationMode"];
@@ -241,6 +246,7 @@ type MainAppLayoutSurfacesContext = UseMainAppLayoutSurfacesArgs & {
   sidebarRateLimits: SidebarProps["accountRateLimits"];
   sidebarAccount: SidebarProps["accountInfo"];
   codexProviderStatus: CodexProviderStatus | null;
+  thirdPartyProviderUsage: SidebarProps["thirdPartyProviderUsage"];
   contextCompactionTokenLimit: number | null;
 };
 
@@ -278,6 +284,7 @@ function buildPrimarySurface({
   sidebarRateLimits,
   sidebarAccount,
   codexProviderStatus,
+  thirdPartyProviderUsage,
   contextCompactionTokenLimit,
   homeRateLimits,
   homeAccount,
@@ -317,6 +324,7 @@ function buildPrimarySurface({
   handleAddAgent,
   handleAddWorktreeAgent,
   handleAddCloneAgent,
+  handleResumeThreadById,
   handleSelectLocalCodexThread,
   handleOpenThreadLink,
   handleSelectOpenAppId,
@@ -327,6 +335,8 @@ function buildPrimarySurface({
   models,
   selectedModelId,
   onSelectModel,
+  onRefreshModels,
+  isRefreshingModels,
   collaborationModes,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
@@ -419,6 +429,10 @@ function buildPrimarySurface({
           (thread) => thread.id === activeThreadId,
         )?.name.trim() || null
       : null;
+  const activeCodexKeyProfile =
+    appSettings.codexKeyProfiles.find(
+      (profile) => profile.id === appSettings.activeCodexKeyProfileId,
+    ) ?? null;
 
   return {
     sidebarProps: {
@@ -449,8 +463,29 @@ function buildPrimarySurface({
       useTokenUsageStats:
         codexProviderStatus?.isConfigured === true &&
         codexProviderStatus.isThirdParty,
-      thirdPartyUsageMultiplier: appSettings.thirdPartyUsageMultiplier,
+      thirdPartyProviderUsage,
+      thirdPartyUsageMultiplier:
+        activeCodexKeyProfile?.groupMultiplier ?? appSettings.thirdPartyUsageMultiplier,
+      codexKeyProfiles: appSettings.codexKeyProfiles,
+      activeCodexKeyProfileId: appSettings.activeCodexKeyProfileId,
+      onSelectCodexKeyProfile: (profileId) => {
+        void onUpdateAppSettings({
+          ...appSettings,
+          activeCodexKeyProfileId: profileId || null,
+        });
+      },
       onThirdPartyUsageMultiplierChange: (multiplier) => {
+        if (activeCodexKeyProfile) {
+          void onUpdateAppSettings({
+            ...appSettings,
+            codexKeyProfiles: appSettings.codexKeyProfiles.map((profile) =>
+              profile.id === activeCodexKeyProfile.id
+                ? { ...profile, groupMultiplier: multiplier }
+                : profile,
+            ),
+          });
+          return;
+        }
         void onUpdateAppSettings({
           ...appSettings,
           thirdPartyUsageMultiplier: multiplier,
@@ -475,6 +510,7 @@ function buildPrimarySurface({
       onAddAgent: handleAddAgent,
       onAddWorktreeAgent: handleAddWorktreeAgent,
       onAddCloneAgent: handleAddCloneAgent,
+      onResumeThreadById: handleResumeThreadById,
       onToggleWorkspaceCollapse: sidebarHandlers.onToggleWorkspaceCollapse,
       onSelectThread: sidebarHandlers.onSelectThread,
       onSelectLocalCodexThread: handleSelectLocalCodexThread,
@@ -617,6 +653,8 @@ function buildPrimarySurface({
           models,
           selectedModelId,
           onSelectModel,
+          onRefreshModels,
+          isRefreshingModels,
           reasoningOptions,
           selectedEffort,
           onSelectEffort,
@@ -1134,6 +1172,7 @@ export function useMainAppLayoutSurfaces({
   handleAddAgent,
   handleAddWorktreeAgent,
   handleAddCloneAgent,
+  handleResumeThreadById,
   handleSelectLocalCodexThread,
   handleOpenThreadLink,
   handleSelectOpenAppId,
@@ -1144,6 +1183,8 @@ export function useMainAppLayoutSurfaces({
   models,
   selectedModelId,
   onSelectModel,
+  onRefreshModels,
+  isRefreshingModels,
   collaborationModes,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
@@ -1228,13 +1269,19 @@ export function useMainAppLayoutSurfaces({
 }: UseMainAppLayoutSurfacesArgs): LayoutNodesOptions {
   const sidebarRateLimits = activeWorkspace ? activeRateLimits : homeRateLimits;
   const sidebarAccount = activeWorkspace ? activeAccount : homeAccount;
-  const activeProfileBaseUrl = useMemo(
+  const activeCodexKeyProfile = useMemo(
     () =>
       appSettings.codexKeyProfiles.find(
         (profile) => profile.id === appSettings.activeCodexKeyProfileId,
-      )?.baseUrl ?? null,
+      ) ?? null,
     [appSettings.activeCodexKeyProfileId, appSettings.codexKeyProfiles],
   );
+  const activeProfileBaseUrl = activeCodexKeyProfile
+    ? resolveCodexProviderBaseUrl(
+        activeCodexKeyProfile.providerKind,
+        activeCodexKeyProfile.baseUrl,
+      )
+    : null;
   const [codexProviderStatus, setCodexProviderStatus] =
     useState<CodexProviderStatus | null>(null);
 
@@ -1274,10 +1321,19 @@ export function useMainAppLayoutSurfaces({
     activeProfileBaseUrl,
   ]);
   const contextCompactionTokenLimit =
+    activeCodexKeyProfile?.contextWindow ??
     codexProviderStatus?.autoCompactTokenLimit ??
     codexProviderStatus?.modelContextWindow ??
     activeTokenUsage?.modelContextWindow ??
     null;
+  const thirdPartyProviderUsage = useThirdPartyKeyUsage({
+    enabled:
+      Boolean(activeWorkspaceId) &&
+      Boolean(activeCodexKeyProfile) &&
+      activeCodexKeyProfile?.providerKind !== "openai",
+    baseUrl: activeProfileBaseUrl,
+    apiKey: activeCodexKeyProfile?.key ?? null,
+  });
 
   const context: MainAppLayoutSurfacesContext = {
     appSettings,
@@ -1354,6 +1410,7 @@ export function useMainAppLayoutSurfaces({
     handleAddAgent,
     handleAddWorktreeAgent,
     handleAddCloneAgent,
+    handleResumeThreadById,
     handleSelectLocalCodexThread,
     handleOpenThreadLink,
     handleSelectOpenAppId,
@@ -1364,6 +1421,8 @@ export function useMainAppLayoutSurfaces({
     models,
     selectedModelId,
     onSelectModel,
+    onRefreshModels,
+    isRefreshingModels,
     collaborationModes,
     selectedCollaborationModeId,
     onSelectCollaborationMode,
@@ -1447,6 +1506,7 @@ export function useMainAppLayoutSurfaces({
     sidebarRateLimits,
     sidebarAccount,
     codexProviderStatus,
+    thirdPartyProviderUsage,
     contextCompactionTokenLimit,
   };
 

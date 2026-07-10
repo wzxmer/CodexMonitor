@@ -3,6 +3,7 @@ import { useState, type MouseEvent, type MutableRefObject, type ReactNode } from
 import Copy from "lucide-react/dist/esm/icons/copy";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import Plus from "lucide-react/dist/esm/icons/plus";
+import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
 
 import type { ThreadSummary, WorkspaceInfo } from "../../../types";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
@@ -80,6 +81,7 @@ type SidebarWorkspaceGroupsProps = {
   onAddAgent: (workspace: WorkspaceInfo) => void;
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => void;
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
+  onResumeThreadById: (workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onSelectLocalCodexThread: (cwd: string, threadId: string) => void;
@@ -598,6 +600,7 @@ function SidebarWorkspaceEntry({
   onAddAgent,
   onAddWorktreeAgent,
   onAddCloneAgent,
+  onResumeThreadById,
   onToggleWorkspaceCollapse,
   onSelectThread,
   onSelectLocalCodexThread,
@@ -658,6 +661,7 @@ function SidebarWorkspaceEntry({
         onAddAgent={onAddAgent}
         onAddWorktreeAgent={onAddWorktreeAgent}
         onAddCloneAgent={onAddCloneAgent}
+        onResumeThreadById={onResumeThreadById}
         onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
         onSelectThread={onSelectThread}
         onSelectLocalCodexThread={onSelectLocalCodexThread}
@@ -793,6 +797,17 @@ function SidebarWorkspaceEntry({
               icon={<Copy aria-hidden />}
             >
               {t("sidebar.newCloneAgent")}
+            </PopoverMenuItem>
+            <PopoverMenuItem
+              className="workspace-add-option"
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleAddMenu(null);
+                onResumeThreadById(workspace);
+              }}
+              icon={<RotateCcw aria-hidden />}
+            >
+              {t("sidebar.resumeThreadById")}
             </PopoverMenuItem>
           </PopoverSurface>,
           document.body,

@@ -15,6 +15,7 @@ use crate::event_sink::TauriEventSink;
 use crate::remote_backend;
 use crate::shared::agents_config_core;
 use crate::shared::codex_core::{self, insert_optional_nullable_string};
+use crate::shared::provider_profiles_core::{self, active_codex_key_runtime};
 use crate::state::AppState;
 use crate::types::WorkspaceEntry;
 
@@ -39,17 +40,19 @@ pub(crate) async fn spawn_workspace_session(
     codex_home: Option<PathBuf>,
 ) -> Result<Arc<WorkspaceSession>, String> {
     let client_version = app_handle.package_info().version.to_string();
-    let codex_env = {
+    let runtime_env = {
         let state = app_handle.state::<AppState>();
-        let settings = state.app_settings.lock().await;
-        settings.active_codex_key_env()
+        let settings = state.app_settings.lock().await.clone();
+        active_codex_key_runtime(&settings, codex_args).await?
     };
     let event_sink = TauriEventSink::new(app_handle);
     spawn_workspace_session_inner(
         entry,
         default_codex_bin,
-        codex_args,
-        codex_env,
+        runtime_env.codex_args,
+        runtime_env.env,
+        runtime_env.provider_runtime_fingerprint,
+        runtime_env.gateway_shutdown,
         codex_home,
         client_version,
         event_sink,
@@ -922,6 +925,54 @@ pub(crate) async fn get_provider_status(
 
     let settings = state.app_settings.lock().await.clone();
     codex_core::get_provider_status_core(&state.workspaces, &settings, workspace_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn third_party_key_usage(
+    base_url: String,
+    api_key: String,
+    timezone: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "third_party_key_usage",
+            json!({
+                "baseUrl": base_url,
+                "apiKey": api_key,
+                "timezone": timezone,
+            }),
+        )
+        .await;
+    }
+
+    provider_profiles_core::third_party_key_usage_core(base_url, api_key, timezone).await
+}
+
+#[tauri::command]
+pub(crate) async fn provider_model_list(
+    base_url: String,
+    api_key: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "provider_model_list",
+            json!({
+                "baseUrl": base_url,
+                "apiKey": api_key,
+            }),
+        )
+        .await;
+    }
+
+    provider_profiles_core::provider_model_list_core(base_url, api_key).await
 }
 
 /// Generates a commit message in the background without showing in the main chat

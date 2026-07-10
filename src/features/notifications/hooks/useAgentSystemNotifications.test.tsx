@@ -85,4 +85,54 @@ describe("useAgentSystemNotifications", () => {
       },
     });
   });
+
+  it("waits for turn completion after an agent message completes", async () => {
+    renderHook(() =>
+      useAgentSystemNotifications({
+        enabled: true,
+        isWindowFocused: false,
+        minDurationMs: 0,
+      }),
+    );
+
+    const handlers = useAppServerEventsMock.mock.calls[
+      useAppServerEventsMock.mock.calls.length - 1
+    ]?.[0] as {
+      onTurnStarted?: (workspaceId: string, threadId: string, turnId: string) => void;
+      onAgentMessageCompleted?: (event: {
+        workspaceId: string;
+        threadId: string;
+        text: string;
+      }) => void;
+      onTurnCompleted?: (workspaceId: string, threadId: string, turnId: string) => void;
+    };
+
+    act(() => {
+      handlers.onTurnStarted?.("ws-1", "thread-1", "turn-1");
+      handlers.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        text: "Intermediate agent message",
+      });
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(sendNotification).not.toHaveBeenCalled();
+
+    act(() => {
+      handlers.onTurnCompleted?.("ws-1", "thread-1", "turn-1");
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    expect(sendNotification).toHaveBeenCalledWith(
+      "Agent Complete",
+      "Intermediate agent message",
+      expect.any(Object),
+    );
+  });
 });

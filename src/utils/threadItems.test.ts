@@ -675,6 +675,73 @@ describe("threadItems", () => {
     expect(merged[0]).toEqual(remote);
   });
 
+  it("collapses consecutive local retry user messages with the same content", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "local-user-retry-1",
+        kind: "message",
+        role: "user",
+        text: "retry this prompt",
+        images: ["C:/tmp/image.png"],
+      },
+      {
+        id: "local-user-retry-2",
+        kind: "message",
+        role: "user",
+        text: "retry this prompt",
+        images: ["C:/tmp/image.png"],
+      },
+    ];
+
+    const prepared = prepareThreadItems(items, { maxItemsPerThread: null });
+
+    expect(prepared).toHaveLength(1);
+    expect(prepared[0]?.id).toBe("local-user-retry-1");
+  });
+
+  it("collapses consecutive server user messages when their content matches", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "server-user-1",
+        kind: "message",
+        role: "user",
+        text: "repeat intentionally",
+      },
+      {
+        id: "server-user-2",
+        kind: "message",
+        role: "user",
+        text: "repeat intentionally",
+      },
+    ];
+
+    const prepared = prepareThreadItems(items, { maxItemsPerThread: null });
+
+    expect(prepared).toHaveLength(1);
+    expect(prepared[0]?.id).toBe("server-user-1");
+  });
+
+  it("keeps consecutive user messages when their content differs", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "server-user-1",
+        kind: "message",
+        role: "user",
+        text: "first prompt",
+      },
+      {
+        id: "server-user-2",
+        kind: "message",
+        role: "user",
+        text: "second prompt",
+      },
+    ];
+
+    const prepared = prepareThreadItems(items, { maxItemsPerThread: null });
+
+    expect(prepared).toHaveLength(2);
+  });
+
   it("preserves streamed reasoning content when completion item is empty", () => {
     const existing: ConversationItem = {
       id: "reasoning-1",

@@ -14,6 +14,11 @@ const RenameThreadPrompt = lazy(() =>
     default: module.RenameThreadPrompt,
   })),
 );
+const ResumeThreadPrompt = lazy(() =>
+  import("../../threads/components/ResumeThreadPrompt").then((module) => ({
+    default: module.ResumeThreadPrompt,
+  })),
+);
 const WorktreePrompt = lazy(() =>
   import("../../workspaces/components/WorktreePrompt").then((module) => ({
     default: module.WorktreePrompt,
@@ -60,6 +65,15 @@ type MobileRemoteWorkspacePathPromptState = {
 } | null;
 
 export type AppModalsProps = {
+  resumeThreadPrompt?: {
+    workspaceName: string;
+    threadId: string;
+    error: string | null;
+    isBusy: boolean;
+  } | null;
+  onResumeThreadPromptChange?: (value: string) => void;
+  onResumeThreadPromptCancel?: () => void;
+  onResumeThreadPromptConfirm?: () => void;
   renamePrompt: RenamePromptState;
   onRenamePromptChange: (value: string) => void;
   onRenamePromptCancel: () => void;
@@ -121,6 +135,10 @@ export type AppModalsProps = {
 };
 
 export const AppModals = memo(function AppModals({
+  resumeThreadPrompt = null,
+  onResumeThreadPromptChange = () => {},
+  onResumeThreadPromptCancel = () => {},
+  onResumeThreadPromptConfirm = () => {},
   renamePrompt,
   onRenamePromptChange,
   onRenamePromptCancel,
@@ -179,6 +197,19 @@ export const AppModals = memo(function AppModals({
 
   return (
     <>
+      {resumeThreadPrompt && (
+        <Suspense fallback={null}>
+          <ResumeThreadPrompt
+            workspaceName={resumeThreadPrompt.workspaceName}
+            threadId={resumeThreadPrompt.threadId}
+            error={resumeThreadPrompt.error}
+            isBusy={resumeThreadPrompt.isBusy}
+            onChange={onResumeThreadPromptChange}
+            onCancel={onResumeThreadPromptCancel}
+            onConfirm={onResumeThreadPromptConfirm}
+          />
+        </Suspense>
+      )}
       {renamePrompt && (
         <Suspense fallback={null}>
           <RenameThreadPrompt

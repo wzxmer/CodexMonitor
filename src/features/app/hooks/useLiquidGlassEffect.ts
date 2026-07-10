@@ -21,6 +21,16 @@ export function useLiquidGlassEffect({ reduceTransparency, onDebug }: Params) {
     const apply = async () => {
       try {
         const window = getCurrentWindow();
+        const userAgent = navigator.userAgent ?? "";
+        const isMac = userAgent.includes("Macintosh");
+        const isLinux = userAgent.includes("Linux");
+        const isWindows = userAgent.includes("Windows");
+
+        if (isWindows) {
+          await window.setEffects({ effects: [] });
+          return;
+        }
+
         if (reduceTransparency) {
           if (supportedRef.current === null) {
             supportedRef.current = await isGlassSupported();
@@ -44,19 +54,6 @@ export function useLiquidGlassEffect({ reduceTransparency, onDebug }: Params) {
             enabled: true,
             cornerRadius: 16,
             variant: GlassMaterialVariant.Regular,
-          });
-          return;
-        }
-
-        const userAgent = navigator.userAgent ?? "";
-        const isMac = userAgent.includes("Macintosh");
-        const isLinux = userAgent.includes("Linux");
-        const isWindows = userAgent.includes("Windows");
-
-        if (isWindows) {
-          await window.setEffects({
-            effects: [Effect.Acrylic],
-            state: EffectState.Active,
           });
           return;
         }

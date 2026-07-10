@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UpdateState } from "../hooks/useUpdater";
+import { I18nProvider } from "@/features/i18n/I18nProvider";
 import { UpdateToast } from "./UpdateToast";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -11,9 +13,17 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 
 const openUrlMock = vi.mocked(openUrl);
 
+function renderUpdateToast(element: ReactElement) {
+  return render(<I18nProvider preference="en">{element}</I18nProvider>);
+}
+
 describe("UpdateToast", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("renders available state and handles actions", () => {
@@ -21,7 +31,7 @@ describe("UpdateToast", () => {
     const onDismiss = vi.fn();
     const state: UpdateState = { stage: "available", version: "1.2.3" };
 
-    render(
+    renderUpdateToast(
       <UpdateToast state={state} onUpdate={onUpdate} onDismiss={onDismiss} />,
     );
 
@@ -45,7 +55,7 @@ describe("UpdateToast", () => {
       progress: { totalBytes: 1000, downloadedBytes: 500 },
     };
 
-    const { container } = render(
+    const { container } = renderUpdateToast(
       <UpdateToast state={state} onUpdate={vi.fn()} onDismiss={vi.fn()} />,
     );
 
@@ -67,7 +77,7 @@ describe("UpdateToast", () => {
       error: "Network error",
     };
 
-    render(
+    renderUpdateToast(
       <UpdateToast state={state} onUpdate={onUpdate} onDismiss={onDismiss} />,
     );
 
@@ -85,7 +95,7 @@ describe("UpdateToast", () => {
     const onDismissPostUpdateNotice = vi.fn();
     const state: UpdateState = { stage: "idle" };
 
-    const { container } = render(
+    const { container } = renderUpdateToast(
       <UpdateToast
         state={state}
         onUpdate={vi.fn()}
@@ -112,7 +122,7 @@ describe("UpdateToast", () => {
       "https://github.com/wzxmer/CodexMonitor/releases/tag/v1.2.3";
     const state: UpdateState = { stage: "idle" };
 
-    const { container } = render(
+    const { container } = renderUpdateToast(
       <UpdateToast
         state={state}
         onUpdate={vi.fn()}
@@ -143,7 +153,7 @@ describe("UpdateToast", () => {
       "https://github.com/wzxmer/CodexMonitor/releases/tag/v1.2.3";
     const state: UpdateState = { stage: "available", version: "9.9.9" };
 
-    const { container } = render(
+    const { container } = renderUpdateToast(
       <UpdateToast
         state={state}
         onUpdate={vi.fn()}
@@ -163,5 +173,19 @@ describe("UpdateToast", () => {
     fireEvent.click(scoped.getByRole("button", { name: "View on GitHub" }));
     expect(openUrlMock).toHaveBeenCalledWith(htmlUrl);
     expect(scoped.queryByText("A new version is available.")).toBeNull();
+  });
+
+  it("renders localized update text in the default language", () => {
+    render(
+      <UpdateToast
+        state={{ stage: "available", version: "1.2.3" }}
+        onUpdate={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText("更新")).toHaveLength(2);
+    expect(screen.getByText("发现新版本。")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "稍后" })).toBeTruthy();
   });
 });

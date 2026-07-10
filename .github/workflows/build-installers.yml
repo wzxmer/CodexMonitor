@@ -19,21 +19,32 @@ jobs:
         include:
           - name: Windows installers
             os: windows-latest
+            rust_target: ""
             command: npm run tauri -- build --config src-tauri/tauri.windows.conf.json
             artifact: windows-installers
             optional: false
             paths: |
               src-tauri/target/release/bundle/msi/*.msi
               src-tauri/target/release/bundle/nsis/*.exe
-          - name: macOS installers
+          - name: macOS Apple Silicon installers
             os: macos-latest
-            command: npm run tauri -- build --bundles dmg
-            artifact: macos-installers
+            rust_target: aarch64-apple-darwin
+            command: npm run tauri -- build --target aarch64-apple-darwin --bundles dmg
+            artifact: macos-aarch64-installers
             optional: false
             paths: |
-              src-tauri/target/release/bundle/dmg/*.dmg
+              src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          - name: macOS Intel installers
+            os: macos-15-intel
+            rust_target: x86_64-apple-darwin
+            command: npm run tauri -- build --target x86_64-apple-darwin --bundles dmg
+            artifact: macos-x86_64-installers
+            optional: false
+            paths: |
+              src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
           - name: Linux installers
             os: ubuntu-24.04
+            rust_target: ""
             command: |
               set -o pipefail
               NO_STRIP=1 npm run tauri -- build --config src-tauri/tauri.linux.conf.json --bundles appimage,rpm 2>&1 | tee tauri-linux-build.log
@@ -55,6 +66,10 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust target
+        if: matrix.rust_target != ''
+        run: rustup target add ${{ matrix.rust_target }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2

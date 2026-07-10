@@ -55,12 +55,14 @@ export function useModels({
   const [configModel, setConfigModel] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelIdState] = useState<string | null>(null);
   const [selectedEffort, setSelectedEffortState] = useState<string | null>(null);
+  const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const lastFetchedWorkspaceId = useRef<string | null>(null);
   const inFlight = useRef(false);
   const hasUserSelectedModel = useRef(false);
   const hasUserSelectedEffort = useRef(false);
   const lastWorkspaceId = useRef<string | null>(null);
   const lastSelectionKey = useRef<string | null>(null);
+  const wasConnected = useRef(false);
 
   const workspaceId = activeWorkspace?.id ?? null;
   const isConnected = Boolean(activeWorkspace?.connected);
@@ -160,6 +162,7 @@ export function useModels({
       return;
     }
     inFlight.current = true;
+    setIsRefreshingModels(true);
     onDebug?.({
       id: `${Date.now()}-client-model-list`,
       timestamp: Date.now(),
@@ -201,6 +204,8 @@ export function useModels({
               ? modelListResult.reason.message
               : String(modelListResult.reason),
         });
+        setConfigModel(configModelFromConfig);
+        return;
       }
       onDebug?.({
         id: `${Date.now()}-server-model-list`,
@@ -261,6 +266,7 @@ export function useModels({
       }
     } finally {
       inFlight.current = false;
+      setIsRefreshingModels(false);
     }
   }, [
     isConnected,
@@ -273,10 +279,16 @@ export function useModels({
   ]);
 
   useEffect(() => {
+    const reconnected = isConnected && !wasConnected.current;
+    wasConnected.current = isConnected;
     if (!workspaceId || !isConnected) {
       return;
     }
-    if (lastFetchedWorkspaceId.current === workspaceId && models.length > 0) {
+    if (
+      !reconnected &&
+      lastFetchedWorkspaceId.current === workspaceId &&
+      models.length > 0
+    ) {
       return;
     }
     refreshModels();
@@ -344,5 +356,6 @@ export function useModels({
     selectedEffort,
     setSelectedEffort,
     refreshModels,
+    isRefreshingModels,
   };
 }

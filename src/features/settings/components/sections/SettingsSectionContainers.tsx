@@ -6,7 +6,6 @@ import { SettingsEnvironmentsSection } from "./SettingsEnvironmentsSection";
 import { SettingsFeaturesSection } from "./SettingsFeaturesSection";
 import { SettingsGitSection } from "./SettingsGitSection";
 import { SettingsOpenAppsSection } from "./SettingsOpenAppsSection";
-import { SettingsPetsSection } from "./SettingsPetsSection";
 import { SettingsProjectsSection } from "./SettingsProjectsSection";
 import { SettingsServerSection } from "./SettingsServerSection";
 import { SettingsSessionSection } from "./SettingsSessionSection";
@@ -37,9 +36,6 @@ export function SettingsSectionContainers({
   if (activeSection === "display") {
     return <SettingsDisplaySection {...orchestration.displaySectionProps} />;
   }
-  if (activeSection === "pets") {
-    return <SettingsPetsSection {...orchestration.petsSectionProps} />;
-  }
   if (activeSection === "about") {
     return <SettingsAboutSection {...orchestration.aboutSectionProps} />;
   }
@@ -66,6 +62,9 @@ export function SettingsSectionContainers({
   }
   if (activeSection === "codex") {
     return <SettingsCodexSection {...orchestration.codexSectionProps} />;
+  }
+  if (activeSection === "providers") {
+    return <SettingsCodexSection {...orchestration.codexSectionProps} mode="providers" />;
   }
   if (activeSection === "features") {
     return <SettingsFeaturesSection {...orchestration.featuresSectionProps} />;

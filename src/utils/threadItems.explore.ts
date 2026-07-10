@@ -4,6 +4,8 @@ import {
   type ExploreEntry,
   type ExploreItem,
   type PrepareThreadItemsOptions,
+  sameMessageAttachments,
+  sameMessageImages,
   TOOL_OUTPUT_RECENT_ITEMS,
   truncateText,
   truncateToolText,
@@ -31,6 +33,36 @@ const RG_FLAGS_WITH_VALUES = new Set([
   "--context",
   "--max-depth",
 ]);
+
+function shouldCollapseDuplicateUserRetry(
+  previous: ConversationItem | undefined,
+  item: ConversationItem,
+) {
+  return (
+    previous?.kind === "message" &&
+    previous.role === "user" &&
+    item.kind === "message" &&
+    item.role === "user" &&
+    previous.text === item.text &&
+    sameMessageImages(previous.images, item.images) &&
+    sameMessageAttachments(previous.attachments, item.attachments)
+  );
+}
+
+function chooseUserRetryDisplayItem(
+  previous: ConversationItem,
+  item: ConversationItem,
+) {
+  if (
+    previous.kind === "message" &&
+    item.kind === "message" &&
+    previous.id.startsWith("local-user-") &&
+    !item.id.startsWith("local-user-")
+  ) {
+    return item;
+  }
+  return previous;
+}
 
 export function normalizeItem(item: ConversationItem): ConversationItem {
   if (item.kind === "message") {
@@ -397,6 +429,10 @@ export function prepareThreadItems(
       last.state === "completed" &&
       item.text.trim() === last.text.trim()
     ) {
+      continue;
+    }
+    if (shouldCollapseDuplicateUserRetry(last, item)) {
+      filtered[filtered.length - 1] = chooseUserRetryDisplayItem(last, item);
       continue;
     }
     filtered.push(item);

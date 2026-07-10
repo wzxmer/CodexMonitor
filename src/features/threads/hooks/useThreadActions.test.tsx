@@ -233,6 +233,66 @@ describe("useThreadActions", () => {
     expect(resumeThread).not.toHaveBeenCalled();
   });
 
+  it("resumes an explicit thread id, replaces history, and activates after success", async () => {
+    const serverItems = [{ id: "item-1", kind: "message" }] as ConversationItem[];
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: { thread: { id: "thread-restored", turns: [] } },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue(serverItems);
+
+    const { result, dispatch } = renderActions();
+
+    let threadId: string | null = null;
+    await act(async () => {
+      threadId = await result.current.resumeThreadById("ws-1", "  thread-restored  ");
+    });
+
+    expect(threadId).toBe("thread-restored");
+    expect(resumeThread).toHaveBeenCalledWith("ws-1", "thread-restored");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "thread-restored",
+      items: serverItems,
+      trimItems: false,
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setActiveThreadId",
+      workspaceId: "ws-1",
+      threadId: "thread-restored",
+    });
+  });
+
+  it("does not activate an explicit thread id when resume fails", async () => {
+    vi.mocked(resumeThread).mockRejectedValue(new Error("thread not found"));
+    const { result, dispatch } = renderActions();
+
+    let threadId: string | null = "unexpected";
+    await act(async () => {
+      threadId = await result.current.resumeThreadById("ws-1", "missing-thread");
+    });
+
+    expect(threadId).toBeNull();
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "setActiveThreadId", threadId: "missing-thread" }),
+    );
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "ensureThread", threadId: "missing-thread" }),
+    );
+  });
+
+  it("does not activate an explicit thread id when resume returns no thread", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({ result: {} });
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      expect(await result.current.resumeThreadById("ws-1", "missing-thread")).toBeNull();
+    });
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "setActiveThreadId", threadId: "missing-thread" }),
+    );
+  });
+
   it("resumes a local Codex session through the virtual workspace", async () => {
     vi.mocked(resumeThread).mockResolvedValue({
       result: { thread: { id: "thread-local", preview: "Local session", updated_at: 123 } },

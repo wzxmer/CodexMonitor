@@ -42,7 +42,11 @@ const baseProps = {
   activeTokenUsage: null,
   usageShowRemaining: false,
   useTokenUsageStats: false,
+  thirdPartyProviderUsage: null,
   thirdPartyUsageMultiplier: 1,
+  codexKeyProfiles: [],
+  activeCodexKeyProfileId: null,
+  onSelectCodexKeyProfile: vi.fn(),
   onThirdPartyUsageMultiplierChange: vi.fn(),
   accountInfo: null,
   onSwitchAccount: vi.fn(),
@@ -250,6 +254,104 @@ describe("Sidebar", () => {
     );
 
     expect(screen.getByText("$0.1042")).toBeTruthy();
+  });
+
+  it("shows provider balance and today cost when third-party key usage is available", () => {
+    render(
+      <Sidebar
+        {...baseProps}
+        useTokenUsageStats
+        thirdPartyProviderUsage={{
+          balanceUsd: 12.5,
+          todayCostUsd: 0.0342,
+        }}
+        activeTokenUsage={{
+          total: {
+            totalTokens: 1_260_000,
+            inputTokens: 436_160,
+            cachedInputTokens: 809_980,
+            outputTokens: 10_880,
+            reasoningOutputTokens: 0,
+            costUsd: null,
+          },
+          last: {
+            totalTokens: 0,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+            costUsd: null,
+          },
+          modelContextWindow: null,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("余额")).toBeTruthy();
+    expect(screen.getByText("$12.50")).toBeTruthy();
+    expect(screen.getByText("今日消费")).toBeTruthy();
+    expect(screen.getByText("$0.0342")).toBeTruthy();
+    expect(screen.getByText("倍率")).toBeTruthy();
+    expect(screen.getByText("x1")).toBeTruthy();
+  });
+
+  it("switches third-party key profiles from the usage panel", () => {
+    const onSelectCodexKeyProfile = vi.fn();
+    render(
+      <Sidebar
+        {...baseProps}
+        useTokenUsageStats
+        codexKeyProfiles={[
+          {
+            id: "discount",
+            name: "Discount key",
+            groupName: "特惠分组",
+            groupMultiplier: 0.07,
+            keyEnvVar: "OPENAI_API_KEY",
+            key: "sk-discount",
+            baseUrlEnvVar: "OPENAI_BASE_URL",
+            baseUrl: "https://example.com/v1",
+          },
+          {
+            id: "code",
+            name: "Code key",
+            groupName: "claude code",
+            groupMultiplier: 1.1,
+            keyEnvVar: "OPENAI_API_KEY",
+            key: "sk-code",
+            baseUrlEnvVar: "OPENAI_BASE_URL",
+            baseUrl: "https://example.com/v1",
+          },
+        ]}
+        activeCodexKeyProfileId="discount"
+        onSelectCodexKeyProfile={onSelectCodexKeyProfile}
+        activeTokenUsage={{
+          total: {
+            totalTokens: 1_000_000,
+            inputTokens: 700_000,
+            cachedInputTokens: 0,
+            outputTokens: 300_000,
+            reasoningOutputTokens: 0,
+            costUsd: null,
+          },
+          last: {
+            totalTokens: 0,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+            costUsd: null,
+          },
+          modelContextWindow: null,
+        }}
+      />,
+    );
+
+    const groupSelect = screen.getByLabelText("分组") as HTMLSelectElement;
+    expect(groupSelect.value).toBe("discount");
+
+    fireEvent.change(groupSelect, { target: { value: "code" } });
+    expect(onSelectCodexKeyProfile).toHaveBeenCalledWith("code");
   });
 
   it("edits the third-party usage multiplier from the usage panel", () => {
@@ -821,6 +923,7 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: "新建 Agent" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "新建 worktree Agent" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "新建副本 Agent" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "通过会话 ID 恢复" })).toBeTruthy();
   });
 
   it("moves pinned workspace session folders to the top of their group", () => {

@@ -13,7 +13,6 @@ type SystemNotificationOptions = {
   subagentNotificationsEnabled?: boolean;
   isSubagentThread?: (workspaceId: string, threadId: string) => boolean;
   getWorkspaceName?: (workspaceId: string) => string | undefined;
-  onThreadNotificationSent?: (workspaceId: string, threadId: string) => void;
   onDebug?: (entry: DebugEntry) => void;
 };
 
@@ -39,7 +38,6 @@ export function useAgentSystemNotifications({
   subagentNotificationsEnabled = true,
   isSubagentThread,
   getWorkspaceName,
-  onThreadNotificationSent,
   onDebug,
 }: SystemNotificationOptions) {
   const turnStartById = useRef(new Map<string, number>());
@@ -193,7 +191,6 @@ export function useAgentSystemNotifications({
         threadId,
         "Your agent has finished its task.",
       );
-      onThreadNotificationSent?.(workspaceId, threadId);
       void notify(title, body, "success", {
         kind: "thread",
         workspaceId,
@@ -201,7 +198,7 @@ export function useAgentSystemNotifications({
       });
       lastMessageByThread.current.delete(threadKey);
     },
-    [consumeDuration, getNotificationContent, notify, onThreadNotificationSent, shouldNotify],
+    [consumeDuration, getNotificationContent, notify, shouldNotify],
   );
 
   const handleTurnError = useCallback(
@@ -221,7 +218,6 @@ export function useAgentSystemNotifications({
       }
       const title = getWorkspaceName?.(workspaceId) ?? "Agent Error";
       const body = payload.message || "An error occurred.";
-      onThreadNotificationSent?.(workspaceId, threadId);
       void notify(title, truncateText(body, MAX_BODY_LENGTH), "error", {
         kind: "thread",
         workspaceId,
@@ -229,7 +225,7 @@ export function useAgentSystemNotifications({
       });
       lastMessageByThread.current.delete(threadKey);
     },
-    [consumeDuration, getWorkspaceName, notify, onThreadNotificationSent, shouldNotify],
+    [consumeDuration, getWorkspaceName, notify, shouldNotify],
   );
 
   const handleItemStarted = useCallback(
@@ -253,31 +249,8 @@ export function useAgentSystemNotifications({
       if (event.text) {
         lastMessageByThread.current.set(threadKey, event.text);
       }
-      const durationMs = consumeDuration(event.workspaceId, event.threadId, "");
-      if (
-        !shouldNotify(
-          event.workspaceId,
-          event.threadId,
-          durationMs,
-          threadKey,
-        )
-      ) {
-        return;
-      }
-      const { title, body } = getNotificationContent(
-        event.workspaceId,
-        event.threadId,
-        "Your agent has finished its task.",
-      );
-      onThreadNotificationSent?.(event.workspaceId, event.threadId);
-      void notify(title, body, "success", {
-        kind: "thread",
-        workspaceId: event.workspaceId,
-        threadId: event.threadId,
-      });
-      lastMessageByThread.current.delete(threadKey);
     },
-    [consumeDuration, getNotificationContent, notify, onThreadNotificationSent, shouldNotify],
+    [],
   );
 
   const handlers = useMemo(

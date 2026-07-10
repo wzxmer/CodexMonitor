@@ -52,6 +52,32 @@ pub(super) async fn try_handle(
             };
             Some(state.get_provider_status(workspace_id).await)
         }
+        "third_party_key_usage" => {
+            let base_url = match parse_string(params, "baseUrl") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let api_key = match parse_string(params, "apiKey") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let timezone = parse_optional_string(params, "timezone");
+            Some(
+                provider_profiles_core::third_party_key_usage_core(base_url, api_key, timezone)
+                    .await,
+            )
+        }
+        "provider_model_list" => {
+            let base_url = match parse_string(params, "baseUrl") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let api_key = match parse_string(params, "apiKey") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(provider_profiles_core::provider_model_list_core(base_url, api_key).await)
+        }
         "start_thread" => {
             let workspace_id = match parse_string(params, "workspaceId") {
                 Ok(value) => value,

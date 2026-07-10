@@ -78,6 +78,8 @@ type ComposerProps = {
   models: { id: string; displayName: string; model: string }[];
   selectedModelId: string | null;
   onSelectModel: (id: string) => void;
+  onRefreshModels?: () => void;
+  isRefreshingModels?: boolean;
   reasoningOptions: string[];
   selectedEffort: string | null;
   onSelectEffort: (effort: string) => void;
@@ -194,6 +196,8 @@ export const Composer = memo(function Composer({
   models,
   selectedModelId,
   onSelectModel,
+  onRefreshModels,
+  isRefreshingModels = false,
   reasoningOptions,
   selectedEffort,
   onSelectEffort,
@@ -735,6 +739,8 @@ export const Composer = memo(function Composer({
         models={models}
         selectedModelId={selectedModelId}
         onSelectModel={onSelectModel}
+        onRefreshModels={onRefreshModels}
+        isRefreshingModels={isRefreshingModels}
         reasoningOptions={reasoningOptions}
         selectedEffort={selectedEffort}
         onSelectEffort={onSelectEffort}

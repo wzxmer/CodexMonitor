@@ -4,7 +4,7 @@ use std::env;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -15,6 +15,7 @@ use tokio::time::timeout;
 use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::parse_codex_args;
 use crate::shared::process_core::{kill_child_process_tree, tokio_command};
+use crate::shared::provider_gateway_core::ProviderGatewayShutdown;
 use crate::types::WorkspaceEntry;
 
 #[cfg(target_os = "windows")]
@@ -537,6 +538,7 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub(crate) struct WorkspaceSession {
     pub(crate) codex_args: Option<String>,
+    pub(crate) provider_runtime_fingerprint: Option<String>,
     pub(crate) child: Mutex<Child>,
     pub(crate) stdin: Mutex<ChildStdin>,
     pub(crate) pending: Mutex<HashMap<u64, oneshot::Sender<Value>>>,
@@ -551,9 +553,38 @@ pub(crate) struct WorkspaceSession {
     pub(crate) owner_workspace_id: String,
     pub(crate) workspace_ids: Mutex<HashSet<String>>,
     pub(crate) workspace_roots: Mutex<HashMap<String, String>>,
+    provider_gateway_shutdown: StdMutex<Option<ProviderGatewayShutdown>>,
 }
 
 impl WorkspaceSession {
+    #[cfg(test)]
+    pub(crate) fn test_new(
+        codex_args: Option<String>,
+        provider_runtime_fingerprint: Option<String>,
+        child: Child,
+        stdin: ChildStdin,
+        owner_workspace_id: String,
+    ) -> Self {
+        Self {
+            codex_args,
+            provider_runtime_fingerprint,
+            child: Mutex::new(child),
+            stdin: Mutex::new(stdin),
+            pending: Mutex::new(HashMap::new()),
+            request_context: Mutex::new(HashMap::new()),
+            thread_workspace: Mutex::new(HashMap::new()),
+            active_turns: Mutex::new(HashMap::new()),
+            hidden_thread_ids: Mutex::new(HashSet::new()),
+            next_id: AtomicU64::new(0),
+            output_closed: AtomicBool::new(false),
+            background_thread_callbacks: Mutex::new(HashMap::new()),
+            owner_workspace_id: owner_workspace_id.clone(),
+            workspace_ids: Mutex::new(HashSet::from([owner_workspace_id])),
+            workspace_roots: Mutex::new(HashMap::new()),
+            provider_gateway_shutdown: StdMutex::new(None),
+        }
+    }
+
     pub(crate) fn mark_output_closed(&self) {
         self.output_closed.store(true, Ordering::SeqCst);
     }
@@ -676,6 +707,16 @@ impl WorkspaceSession {
     pub(crate) async fn send_response(&self, id: Value, result: Value) -> Result<(), String> {
         self.write_message(json!({ "id": id, "result": result }))
             .await
+    }
+}
+
+impl Drop for WorkspaceSession {
+    fn drop(&mut self) {
+        if let Ok(mut shutdown) = self.provider_gateway_shutdown.lock() {
+            if let Some(sender) = shutdown.take() {
+                let _ = sender.send(());
+            }
+        }
     }
 }
 
@@ -902,6 +943,8 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
     default_codex_bin: Option<String>,
     codex_args: Option<String>,
     codex_env: Vec<(String, String)>,
+    provider_runtime_fingerprint: Option<String>,
+    provider_gateway_shutdown: Option<ProviderGatewayShutdown>,
     codex_home: Option<PathBuf>,
     client_version: String,
     event_sink: E,
@@ -932,6 +975,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
 
     let session = Arc::new(WorkspaceSession {
         codex_args,
+        provider_runtime_fingerprint,
         child: Mutex::new(child),
         stdin: Mutex::new(stdin),
         pending: Mutex::new(HashMap::new()),
@@ -948,6 +992,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
             entry.id.clone(),
             normalize_root_path(&entry.path),
         )])),
+        provider_gateway_shutdown: StdMutex::new(provider_gateway_shutdown),
     });
 
     let session_clone = Arc::clone(&session);

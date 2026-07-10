@@ -144,14 +144,6 @@ pub fn run() {
                 let tray_state = app.state::<tray::TrayState>();
                 tray::initialize(&app.handle(), tray_state.inner())?;
             }
-            #[cfg(desktop)]
-            {
-                let state = app.state::<state::AppState>();
-                let settings = tauri::async_runtime::block_on(async {
-                    state.app_settings.lock().await.clone()
-                });
-                settings::sync_codex_pet_window_for_settings(&app.handle(), &settings);
-            }
             #[cfg(target_os = "windows")]
             {
                 if let Some(main_window) = app.get_webview_window("main") {
@@ -224,12 +216,6 @@ pub fn run() {
             settings::get_codex_config_path,
             settings::get_codex_status,
             settings::get_codex_sync_diagnostics,
-            settings::get_codex_native_pet_state,
-            settings::set_codex_native_pet_enabled,
-            settings::set_codex_native_pet_selected,
-            settings::set_codex_native_pet_position,
-            settings::wake_codex_native_pet,
-            settings::import_codex_native_pet,
             files::file_read,
             files::file_write,
             files::read_image_as_data_url,
@@ -238,6 +224,8 @@ pub fn run() {
             fonts::list_system_fonts,
             codex::get_config_model,
             codex::get_provider_status,
+            codex::provider_model_list,
+            codex::third_party_key_usage,
             menu::menu_set_accelerators,
             autostart::app_autostart_is_enabled,
             autostart::app_autostart_set_enabled,

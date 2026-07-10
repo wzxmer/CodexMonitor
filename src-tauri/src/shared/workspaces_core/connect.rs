@@ -158,9 +158,9 @@ pub(super) async fn kill_session_by_id(
 mod tests {
     use super::*;
 
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
     use std::process::Stdio;
-    use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
     use tokio::process::Command;
@@ -198,22 +198,13 @@ mod tests {
         let mut child = cmd.spawn().expect("spawn dummy child");
         let stdin = child.stdin.take().expect("dummy child stdin");
 
-        Arc::new(WorkspaceSession {
-            codex_args: None,
-            child: Mutex::new(child),
-            stdin: Mutex::new(stdin),
-            pending: Mutex::new(HashMap::new()),
-            request_context: Mutex::new(HashMap::new()),
-            thread_workspace: Mutex::new(HashMap::new()),
-            active_turns: Mutex::new(HashMap::new()),
-            hidden_thread_ids: Mutex::new(HashSet::new()),
-            next_id: AtomicU64::new(0),
-            output_closed: AtomicBool::new(false),
-            background_thread_callbacks: Mutex::new(HashMap::new()),
-            owner_workspace_id: "test-owner".to_string(),
-            workspace_ids: Mutex::new(HashSet::from(["test-owner".to_string()])),
-            workspace_roots: Mutex::new(HashMap::new()),
-        })
+        Arc::new(WorkspaceSession::test_new(
+            None,
+            None,
+            child,
+            stdin,
+            "test-owner".to_string(),
+        ))
     }
 
     #[test]

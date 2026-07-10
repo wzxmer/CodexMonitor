@@ -881,15 +881,10 @@ export function SettingsDisplaySection({
       </SettingsToggleRow>
       <SettingsToggleRow
         title={t("settings.display.systemNotificationsTitle")}
-        subtitle={
-          appSettings.codexPetEnabled
-            ? t("settings.display.systemNotificationsPetEnabled")
-            : t("settings.display.systemNotificationsSubtitle")
-        }
+        subtitle={t("settings.display.systemNotificationsSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.systemNotificationsEnabled}
-          disabled={Boolean(appSettings.codexPetEnabled)}
           onClick={() =>
             void onUpdateAppSettings({
               ...appSettings,
@@ -900,15 +895,10 @@ export function SettingsDisplaySection({
       </SettingsToggleRow>
       <SettingsToggleRow
         title={t("settings.display.subagentNotificationsTitle")}
-        subtitle={
-          appSettings.codexPetEnabled
-            ? t("settings.display.subagentNotificationsPetEnabled")
-            : t("settings.display.subagentNotificationsSubtitle")
-        }
+        subtitle={t("settings.display.subagentNotificationsSubtitle")}
       >
         <SettingsToggleSwitch
           pressed={appSettings.subagentSystemNotificationsEnabled}
-          disabled={Boolean(appSettings.codexPetEnabled)}
           onClick={() =>
             void onUpdateAppSettings({
               ...appSettings,
@@ -930,7 +920,6 @@ export function SettingsDisplaySection({
           type="button"
           className="ghost settings-button-compact"
           onClick={onTestSystemNotification}
-        disabled={Boolean(appSettings.codexPetEnabled)}
         >
           {t("settings.display.testNotification")}
         </button>

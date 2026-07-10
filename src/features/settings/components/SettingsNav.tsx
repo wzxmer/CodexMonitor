@@ -1,7 +1,6 @@
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
 import Archive from "lucide-react/dist/esm/icons/archive";
 import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
-import PawPrint from "lucide-react/dist/esm/icons/paw-print";
 import Mic from "lucide-react/dist/esm/icons/mic";
 import Keyboard from "lucide-react/dist/esm/icons/keyboard";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
@@ -12,6 +11,7 @@ import ExternalLink from "lucide-react/dist/esm/icons/external-link";
 import Layers from "lucide-react/dist/esm/icons/layers";
 import ServerCog from "lucide-react/dist/esm/icons/server-cog";
 import Bot from "lucide-react/dist/esm/icons/bot";
+import KeyRound from "lucide-react/dist/esm/icons/key-round";
 import Info from "lucide-react/dist/esm/icons/info";
 import { PanelNavItem, PanelNavList } from "@/features/design-system/components/panel/PanelPrimitives";
 import { useI18n } from "@/features/i18n/I18nProvider";
@@ -68,15 +68,6 @@ export function SettingsNav({
           onClick={() => onSelectSection("display")}
         >
           {t(SETTINGS_SECTION_LABEL_KEYS.display)}
-        </PanelNavItem>
-        <PanelNavItem
-          className="settings-nav"
-          icon={<PawPrint aria-hidden />}
-          active={activeSection === "pets"}
-          showDisclosure={showDisclosure}
-          onClick={() => onSelectSection("pets")}
-        >
-          {t(SETTINGS_SECTION_LABEL_KEYS.pets)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"
@@ -149,6 +140,15 @@ export function SettingsNav({
           onClick={() => onSelectSection("codex")}
         >
           {t(SETTINGS_SECTION_LABEL_KEYS.codex)}
+        </PanelNavItem>
+        <PanelNavItem
+          className="settings-nav"
+          icon={<KeyRound aria-hidden />}
+          active={activeSection === "providers"}
+          showDisclosure={showDisclosure}
+          onClick={() => onSelectSection("providers")}
+        >
+          {t(SETTINGS_SECTION_LABEL_KEYS.providers)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"

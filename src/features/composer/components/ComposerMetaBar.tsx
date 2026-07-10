@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { BrainCog, Repeat2, SlidersHorizontal, Zap } from "lucide-react";
+import { BrainCog, RefreshCw, Repeat2, SlidersHorizontal, Zap } from "lucide-react";
 import { RoundedSelect } from "@/features/design-system/components/select/RoundedSelect";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { formatReasoningEffortLabel } from "@/features/models/utils/reasoningEffortLabels";
@@ -19,6 +19,8 @@ type ComposerMetaBarProps = {
   models: { id: string; displayName: string; model: string }[];
   selectedModelId: string | null;
   onSelectModel: (id: string) => void;
+  onRefreshModels?: () => void;
+  isRefreshingModels?: boolean;
   reasoningOptions: string[];
   selectedEffort: string | null;
   onSelectEffort: (effort: string) => void;
@@ -43,6 +45,8 @@ export function ComposerMetaBar({
   models,
   selectedModelId,
   onSelectModel,
+  onRefreshModels,
+  isRefreshingModels = false,
   reasoningOptions,
   selectedEffort,
   onSelectEffort,
@@ -64,7 +68,7 @@ export function ComposerMetaBar({
   const selectedModelLabel =
     selectedModel?.displayName || selectedModel?.model || t("composer.noModel");
   const modelSelectStyle = {
-    "--composer-model-select-width": `${Math.max(selectedModelLabel.length + 2, 8)}ch`,
+    "--composer-model-select-width": `${Math.max(selectedModelLabel.length + 4, 12)}ch`,
   } as CSSProperties;
   const planMode =
     collaborationModes.find((mode) => mode.id === "plan") ?? null;
@@ -222,6 +226,7 @@ export function ComposerMetaBar({
           </span>
           <RoundedSelect
             className="composer-select composer-select--model"
+            popoverClassName="composer-model-select-popover"
             ariaLabel={t("composer.model")}
             value={selectedModelId ?? ""}
             options={modelOptions}
@@ -229,6 +234,22 @@ export function ComposerMetaBar({
             disabled={disabled}
             style={modelSelectStyle}
           />
+          {onRefreshModels && (
+            <button
+              className="composer-model-refresh"
+              type="button"
+              onClick={onRefreshModels}
+              disabled={isRefreshingModels}
+              aria-label={t("composer.refreshModels")}
+              title={t("composer.refreshModels")}
+            >
+              <RefreshCw
+                size={12}
+                strokeWidth={1.8}
+                className={isRefreshingModels ? "is-spinning" : undefined}
+              />
+            </button>
+          )}
           {selectedServiceTier === "fast" && (
             <span
               className="composer-fast-indicator"

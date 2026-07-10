@@ -42,7 +42,6 @@ import "./styles/compact-phone.css";
 import "./styles/compact-tablet.css";
 import { useWindowLabel } from "@/features/layout/hooks/useWindowLabel";
 import MainApp from "@app/components/MainApp";
-import { CodexPetOverlay } from "@app/components/CodexPetOverlay";
 
 const AboutView = lazy(() =>
   import("@/features/about/components/AboutView").then((module) => ({
@@ -59,10 +58,6 @@ export default function App() {
         <AboutView />
       </Suspense>
     );
-  }
-
-  if (windowLabel === "codex-pet") {
-    return <CodexPetOverlay />;
   }
 
   return <MainApp />;

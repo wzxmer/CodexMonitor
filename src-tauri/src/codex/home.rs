@@ -20,6 +20,9 @@ pub(crate) fn resolve_default_codex_home() -> Option<PathBuf> {
 }
 
 pub(crate) fn resolve_settings_codex_home(settings: &AppSettings) -> Option<PathBuf> {
+    // Provider/key profiles intentionally do not participate in home resolution.
+    // Switching credentials must keep the same sessions/config/agents under
+    // the configured CODEX_HOME or the user's default CODEX_HOME.
     settings
         .codex_home
         .as_deref()
@@ -180,7 +183,7 @@ pub(crate) fn resolve_home_dir() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{WorkspaceKind, WorkspaceSettings, WorktreeInfo};
+    use crate::types::{CodexKeyProfile, WorkspaceKind, WorkspaceSettings, WorktreeInfo};
     use std::sync::Mutex;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -214,6 +217,43 @@ mod tests {
 
         let resolved = resolve_workspace_codex_home(&entry, None);
         assert_eq!(resolved, Some(PathBuf::from("/tmp/codex-global")));
+
+        match prev_codex_home {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+    }
+
+    #[test]
+    fn settings_codex_home_ignores_key_profiles() {
+        let _guard = ENV_LOCK.lock().expect("lock env");
+        let prev_codex_home = std::env::var("CODEX_HOME").ok();
+        std::env::set_var("CODEX_HOME", "/tmp/global-codex-home");
+
+        let mut settings = AppSettings::default();
+        settings.codex_home = Some("/tmp/settings-codex-home".to_string());
+        settings.codex_key_profiles = vec![CodexKeyProfile {
+            id: "provider".to_string(),
+            name: "Provider".to_string(),
+            provider_kind: "custom".to_string(),
+            key_env_var: "IGNORED_KEY_ENV".to_string(),
+            key: "sk-test".to_string(),
+            base_url_env_var: "IGNORED_BASE_URL_ENV".to_string(),
+            base_url: Some("https://provider.example/v1".to_string()),
+            model: Some("provider-model".to_string()),
+            context_window: Some(200_000),
+            max_output_tokens: Some(16_384),
+            use_gateway: true,
+            last_model_refresh_at_ms: Some(1_725_000_000_000),
+            cached_models: Vec::new(),
+            group_name: Some("Provider".to_string()),
+            group_multiplier: Some(0.5),
+        }];
+        settings.active_codex_key_profile_id = Some("provider".to_string());
+
+        let resolved = resolve_settings_codex_home(&settings);
+
+        assert_eq!(resolved, Some(PathBuf::from("/tmp/settings-codex-home")));
 
         match prev_codex_home {
             Some(value) => std::env::set_var("CODEX_HOME", value),

@@ -5,7 +5,6 @@ import { useAgentResponseRequiredNotifications } from "../../notifications/hooks
 type Params = {
   systemNotificationsEnabled: boolean;
   subagentSystemNotificationsEnabled: boolean;
-  codexPetEnabled?: boolean;
   isSubagentThread?: (workspaceId: string, threadId: string) => boolean;
   approvals: ApprovalRequest[];
   userInputRequests: RequestUserInputRequest[];
@@ -16,7 +15,6 @@ type Params = {
 export function useResponseRequiredNotificationsController({
   systemNotificationsEnabled,
   subagentSystemNotificationsEnabled,
-  codexPetEnabled = false,
   isSubagentThread,
   approvals,
   userInputRequests,
@@ -26,7 +24,7 @@ export function useResponseRequiredNotificationsController({
   const isWindowFocused = useWindowFocusState();
 
   useAgentResponseRequiredNotifications({
-    enabled: systemNotificationsEnabled && !codexPetEnabled,
+    enabled: systemNotificationsEnabled,
     subagentNotificationsEnabled: subagentSystemNotificationsEnabled,
     isSubagentThread,
     isWindowFocused,

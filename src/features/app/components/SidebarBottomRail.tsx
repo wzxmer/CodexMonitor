@@ -9,6 +9,8 @@ import {
 } from "../../design-system/components/popover/PopoverPrimitives";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { useMenuController } from "../hooks/useMenuController";
+import type { ThirdPartyKeyUsageSnapshot } from "../utils/thirdPartyKeyUsage";
+import type { CodexKeyProfile } from "@/types";
 
 type SidebarBottomRailProps = {
   sessionPercent: number | null;
@@ -19,7 +21,11 @@ type SidebarBottomRailProps = {
   showWeekly: boolean;
   thirdPartyUsageTokens: number | null;
   thirdPartyUsageCostUsd: number | null;
+  thirdPartyProviderUsage: ThirdPartyKeyUsageSnapshot | null;
   thirdPartyUsageMultiplier: number;
+  codexKeyProfiles: CodexKeyProfile[];
+  activeCodexKeyProfileId: string | null;
+  onSelectCodexKeyProfile: (profileId: string) => void;
   onThirdPartyUsageMultiplierChange: (multiplier: number) => void;
   onOpenSettings: () => void;
   onOpenDebug: () => void;
@@ -71,6 +77,18 @@ function formatEstimatedCost(costUsd: number) {
   }).format(estimate);
 }
 
+function formatUsdValue(value: number | null) {
+  if (value === null) {
+    return "--";
+  }
+  const amount = Math.max(0, value);
+  const formatted = new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: amount >= 1 ? 2 : 4,
+    minimumFractionDigits: amount > 0 && amount < 1 ? 4 : 2,
+  }).format(amount);
+  return `$${formatted}`;
+}
+
 function formatMultiplier(multiplier: number) {
   return new Intl.NumberFormat(undefined, {
     maximumFractionDigits: 4,
@@ -80,14 +98,22 @@ function formatMultiplier(multiplier: number) {
 type ThirdPartyUsageSummaryProps = {
   tokens: number;
   costUsd: number | null;
+  providerUsage: ThirdPartyKeyUsageSnapshot | null;
   multiplier: number;
+  keyProfiles: CodexKeyProfile[];
+  activeKeyProfileId: string | null;
+  onSelectKeyProfile: (profileId: string) => void;
   onMultiplierChange: (multiplier: number) => void;
 };
 
 function ThirdPartyUsageSummary({
   tokens,
   costUsd,
+  providerUsage,
   multiplier,
+  keyProfiles,
+  activeKeyProfileId,
+  onSelectKeyProfile,
   onMultiplierChange,
 }: ThirdPartyUsageSummaryProps) {
   const { t } = useI18n();
@@ -133,45 +159,104 @@ function ThirdPartyUsageSummary({
 
   return (
     <div className="sidebar-usage-third-party">
-      <div className="sidebar-usage-stat">
-        <span>{t("sidebar.usageConsumed")}</span>
-        <strong>{formatTokenCount(tokens)}</strong>
-      </div>
-      <div className="sidebar-usage-stat">
-        <span>{t("sidebar.usageEstimatedCost")}</span>
-        <strong>
-          {costUsd === null ? "≈ " : "$"}
-          {formatEstimatedCost(
-            costUsd ?? (Math.max(0, tokens) / 1_000_000) * Math.max(0, multiplier),
-          )}
-        </strong>
-      </div>
-      <div className="sidebar-usage-stat">
-        <span>{t("sidebar.usageMultiplier")}</span>
-        {isEditing ? (
-          <input
-            className="sidebar-usage-multiplier-input"
-            type="number"
-            min="0"
-            step="0.01"
-            value={draft}
-            aria-label={t("sidebar.usageMultiplier")}
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={handleMultiplierBlur}
-            onKeyDown={handleMultiplierKeyDown}
-            autoFocus
-          />
-        ) : (
-          <button
-            type="button"
-            className="sidebar-usage-multiplier-button"
-            onClick={() => setIsEditing(true)}
-            title={t("sidebar.usageEditMultiplier")}
+      {keyProfiles.length > 0 && (
+        <div className="sidebar-usage-stat">
+          <span>{t("sidebar.usageGroup")}</span>
+          <select
+            className="sidebar-usage-group-select"
+            value={activeKeyProfileId ?? ""}
+            aria-label={t("sidebar.usageGroup")}
+            onChange={(event) => onSelectKeyProfile(event.target.value)}
           >
-            x{formatMultiplier(multiplier)}
-          </button>
-        )}
-      </div>
+            <option value="">{t("settings.codex.defaultEnvVars")}</option>
+            {keyProfiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.groupName?.trim() || profile.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {providerUsage ? (
+        <>
+          <div className="sidebar-usage-stat">
+            <span>{t("sidebar.usageBalance")}</span>
+            <strong>{formatUsdValue(providerUsage.balanceUsd)}</strong>
+          </div>
+          <div className="sidebar-usage-stat">
+            <span>{t("sidebar.usageTodayCost")}</span>
+            <strong>{formatUsdValue(providerUsage.todayCostUsd)}</strong>
+          </div>
+          <div className="sidebar-usage-stat">
+            <span>{t("sidebar.usageMultiplier")}</span>
+            {isEditing ? (
+              <input
+                className="sidebar-usage-multiplier-input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={draft}
+                aria-label={t("sidebar.usageMultiplier")}
+                onChange={(event) => setDraft(event.target.value)}
+                onBlur={handleMultiplierBlur}
+                onKeyDown={handleMultiplierKeyDown}
+                autoFocus
+              />
+            ) : (
+              <button
+                type="button"
+                className="sidebar-usage-multiplier-button"
+                onClick={() => setIsEditing(true)}
+                title={t("sidebar.usageEditMultiplier")}
+              >
+                x{formatMultiplier(multiplier)}
+              </button>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="sidebar-usage-stat">
+            <span>{t("sidebar.usageConsumed")}</span>
+            <strong>{formatTokenCount(tokens)}</strong>
+          </div>
+          <div className="sidebar-usage-stat">
+            <span>{t("sidebar.usageEstimatedCost")}</span>
+            <strong>
+              {costUsd === null ? "≈ " : "$"}
+              {formatEstimatedCost(
+                costUsd ?? (Math.max(0, tokens) / 1_000_000) * Math.max(0, multiplier),
+              )}
+            </strong>
+          </div>
+          <div className="sidebar-usage-stat">
+            <span>{t("sidebar.usageMultiplier")}</span>
+            {isEditing ? (
+              <input
+                className="sidebar-usage-multiplier-input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={draft}
+                aria-label={t("sidebar.usageMultiplier")}
+                onChange={(event) => setDraft(event.target.value)}
+                onBlur={handleMultiplierBlur}
+                onKeyDown={handleMultiplierKeyDown}
+                autoFocus
+              />
+            ) : (
+              <button
+                type="button"
+                className="sidebar-usage-multiplier-button"
+                onClick={() => setIsEditing(true)}
+                title={t("sidebar.usageEditMultiplier")}
+              >
+                x{formatMultiplier(multiplier)}
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -185,7 +270,11 @@ export function SidebarBottomRail({
   showWeekly,
   thirdPartyUsageTokens,
   thirdPartyUsageCostUsd,
+  thirdPartyProviderUsage,
   thirdPartyUsageMultiplier,
+  codexKeyProfiles,
+  activeCodexKeyProfileId,
+  onSelectCodexKeyProfile,
   onThirdPartyUsageMultiplierChange,
   onOpenSettings,
   onOpenDebug,
@@ -227,7 +316,11 @@ export function SidebarBottomRail({
           <ThirdPartyUsageSummary
             tokens={thirdPartyUsageTokens}
             costUsd={thirdPartyUsageCostUsd}
+            providerUsage={thirdPartyProviderUsage}
             multiplier={thirdPartyUsageMultiplier}
+            keyProfiles={codexKeyProfiles}
+            activeKeyProfileId={activeCodexKeyProfileId}
+            onSelectKeyProfile={onSelectCodexKeyProfile}
             onMultiplierChange={onThirdPartyUsageMultiplierChange}
           />
         ) : (

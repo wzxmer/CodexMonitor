@@ -1,0 +1,52 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildThirdPartyUsageUrl,
+  normalizeThirdPartyUsagePayload,
+} from "./thirdPartyKeyUsage";
+
+describe("thirdPartyKeyUsage", () => {
+  it("derives the usage endpoint from the configured provider origin", () => {
+    expect(buildThirdPartyUsageUrl("https://fk.k-star.net/v1")).toBe(
+      "https://fk.k-star.net/v1/usage",
+    );
+    expect(buildThirdPartyUsageUrl("fcodex.top/api/v1")).toBe(
+      "https://fcodex.top/api/v1/usage",
+    );
+    expect(buildThirdPartyUsageUrl("https://openrouter.ai/api/v1/")).toBe(
+      "https://openrouter.ai/api/v1/usage",
+    );
+    expect(buildThirdPartyUsageUrl("api.deepseek.com")).toBe(
+      "https://api.deepseek.com/v1/usage",
+    );
+  });
+
+  it("normalizes balance and today cost from provider usage payloads", () => {
+    expect(
+      normalizeThirdPartyUsagePayload({
+        balance: "$12.50",
+        usage: {
+          today: {
+            actual_cost: "0.0342",
+          },
+        },
+      }),
+    ).toEqual({
+      balanceUsd: 12.5,
+      todayCostUsd: 0.0342,
+    });
+  });
+
+  it("falls back to remaining balance and subscription daily usage", () => {
+    expect(
+      normalizeThirdPartyUsagePayload({
+        remaining: 8,
+        subscription: {
+          daily_usage_usd: 0.12,
+        },
+      }),
+    ).toEqual({
+      balanceUsd: 8,
+      todayCostUsd: 0.12,
+    });
+  });
+});

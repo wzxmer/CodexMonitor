@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { onAction } from "@tauri-apps/plugin-notification";
 import type { WorkspaceInfo } from "../../../types";
 
 type ThreadDeepLink = {
@@ -16,11 +17,6 @@ type Params = {
   maxAgeMs?: number;
 };
 
-type Result = {
-  recordPendingThreadLink: (workspaceId: string, threadId: string) => void;
-  openThreadLinkOrQueue: (workspaceId: string, threadId: string) => void;
-};
-
 export function useSystemNotificationThreadLinks({
   hasLoadedWorkspaces,
   workspacesById,
@@ -28,7 +24,7 @@ export function useSystemNotificationThreadLinks({
   connectWorkspace,
   openThreadLink,
   maxAgeMs = 120_000,
-}: Params): Result {
+}: Params): void {
   const pendingLinkRef = useRef<ThreadDeepLink | null>(null);
   const refreshInFlightRef = useRef(false);
 
@@ -92,12 +88,41 @@ export function useSystemNotificationThreadLinks({
     [hasLoadedWorkspaces, queuePendingThreadLink, tryNavigateToLink],
   );
 
-  const focusHandler = useMemo(() => () => void tryNavigateToLink(), [tryNavigateToLink]);
-
   useEffect(() => {
-    window.addEventListener("focus", focusHandler);
-    return () => window.removeEventListener("focus", focusHandler);
-  }, [focusHandler]);
+    let disposed = false;
+    let unregister: (() => Promise<void>) | null = null;
+
+    void onAction((notification) => {
+      const extra = notification.extra;
+      const kind = extra?.kind;
+      const workspaceId = extra?.workspaceId;
+      const threadId = extra?.threadId;
+      if (kind !== "thread" && kind !== "response_required") {
+        return;
+      }
+      if (typeof workspaceId !== "string" || typeof threadId !== "string") {
+        return;
+      }
+      openThreadLinkOrQueue(workspaceId, threadId);
+    })
+      .then((listener) => {
+        if (disposed) {
+          void listener.unregister();
+          return;
+        }
+        unregister = () => listener.unregister();
+      })
+      .catch(() => {
+        // Notification actions are unavailable in browser and fallback modes.
+      });
+
+    return () => {
+      disposed = true;
+      if (unregister) {
+        void unregister();
+      }
+    };
+  }, [openThreadLinkOrQueue]);
 
   useEffect(() => {
     if (!pendingLinkRef.current) {
@@ -109,8 +134,4 @@ export function useSystemNotificationThreadLinks({
     void tryNavigateToLink();
   }, [hasLoadedWorkspaces, tryNavigateToLink]);
 
-  return {
-    recordPendingThreadLink: queuePendingThreadLink,
-    openThreadLinkOrQueue,
-  };
 }

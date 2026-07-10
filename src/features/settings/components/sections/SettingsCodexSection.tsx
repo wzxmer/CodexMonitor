@@ -17,8 +17,11 @@ import {
 import { FileEditorCard } from "@/features/shared/components/FileEditorCard";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { formatReasoningEffortLabel } from "@/features/models/utils/reasoningEffortLabels";
+import { getProviderModels } from "@/services/tauri";
+import { resolveCodexProviderBaseUrl } from "@/utils/providerProfiles";
 
 type SettingsCodexSectionProps = {
+  mode?: "codex" | "providers";
   appSettings: AppSettings;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
   defaultModels: ModelOption[];
@@ -97,7 +100,6 @@ type SettingsCodexSectionProps = {
 const DEFAULT_REASONING_EFFORT = "medium";
 const DEFAULT_CODEX_KEY_ENV_VAR = "OPENAI_API_KEY";
 const DEFAULT_CODEX_BASE_URL_ENV_VAR = "OPENAI_BASE_URL";
-
 const normalizeEffortValue = (value: unknown): string | null => {
   if (typeof value !== "string") {
     return null;
@@ -144,6 +146,7 @@ const createCodexKeyProfileId = () =>
   `codex-key-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 export function SettingsCodexSection({
+  mode = "codex",
   appSettings,
   onUpdateAppSettings,
   defaultModels,
@@ -244,17 +247,71 @@ export function SettingsCodexSection({
     return reasoningOptions[0] ?? "";
   }, [reasoningOptions, reasoningSupported, savedEffort, selectedModel]);
   const [keyProfileNameDraft, setKeyProfileNameDraft] = useState("");
+  const [keyProfileGroupNameDraft, setKeyProfileGroupNameDraft] = useState("");
+  const [keyProfileGroupMultiplierDraft, setKeyProfileGroupMultiplierDraft] = useState("");
   const [keyProfileKeyDraft, setKeyProfileKeyDraft] = useState("");
   const [keyProfileKeyVisible, setKeyProfileKeyVisible] = useState(false);
   const [keyProfileBaseUrlDraft, setKeyProfileBaseUrlDraft] = useState("");
+  const [keyProfileProviderKindDraft, setKeyProfileProviderKindDraft] =
+    useState<CodexKeyProfile["providerKind"]>("custom");
+  const [keyProfileModelDraft, setKeyProfileModelDraft] = useState("");
+  const [keyProfileContextWindowDraft, setKeyProfileContextWindowDraft] = useState("");
+  const [keyProfileMaxOutputTokensDraft, setKeyProfileMaxOutputTokensDraft] = useState("");
+  const [keyProfileUseGatewayDraft, setKeyProfileUseGatewayDraft] = useState(false);
+  const [keyProfileModelFetchState, setKeyProfileModelFetchState] = useState<{
+    status: "idle" | "loading" | "done" | "error";
+    error: string | null;
+  }>({ status: "idle", error: null });
+  const [keyProfileFetchedModels, setKeyProfileFetchedModels] = useState<
+    NonNullable<CodexKeyProfile["cachedModels"]>
+  >([]);
+  const [keyProfileFetchedAtMs, setKeyProfileFetchedAtMs] = useState<number | null>(null);
   const [editingKeyProfileId, setEditingKeyProfileId] = useState<string | null>(null);
   const keyProfiles = appSettings.codexKeyProfiles ?? [];
   const selectedKeyProfile = keyProfiles.find(
     (profile) => profile.id === appSettings.activeCodexKeyProfileId,
   );
+  const editingKeyProfile = editingKeyProfileId
+    ? keyProfiles.find((profile) => profile.id === editingKeyProfileId) ?? null
+    : null;
+  const draftModelOptions = keyProfileFetchedModels.length
+    ? keyProfileFetchedModels
+    : editingKeyProfile?.cachedModels ?? [];
+  const resolvedKeyProfileBaseUrl = resolveCodexProviderBaseUrl(
+    keyProfileProviderKindDraft,
+    keyProfileBaseUrlDraft,
+  ) ?? "";
   const keyProfileDraftValid =
     keyProfileNameDraft.trim().length > 0 &&
-    keyProfileKeyDraft.trim().length > 0;
+    keyProfileKeyDraft.trim().length > 0 &&
+    (!keyProfileUseGatewayDraft || resolvedKeyProfileBaseUrl.length > 0);
+
+  const resetKeyProfileDrafts = () => {
+    setEditingKeyProfileId(null);
+    setKeyProfileNameDraft("");
+    setKeyProfileGroupNameDraft("");
+    setKeyProfileGroupMultiplierDraft("");
+    setKeyProfileKeyDraft("");
+    setKeyProfileKeyVisible(false);
+    setKeyProfileBaseUrlDraft("");
+    setKeyProfileProviderKindDraft("custom");
+    setKeyProfileModelDraft("");
+    setKeyProfileContextWindowDraft("");
+    setKeyProfileMaxOutputTokensDraft("");
+    setKeyProfileUseGatewayDraft(false);
+    setKeyProfileModelFetchState({ status: "idle", error: null });
+    setKeyProfileFetchedModels([]);
+    setKeyProfileFetchedAtMs(null);
+  };
+
+  const parsePositiveIntegerDraft = (value: string): number | null => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+  };
 
   const updateCodexKeySettings = (patch: Partial<AppSettings>) => {
     void onUpdateAppSettings({
@@ -276,10 +333,34 @@ export function SettingsCodexSection({
     const profile: CodexKeyProfile = {
       id: createCodexKeyProfileId(),
       name: keyProfileNameDraft.trim(),
+      providerKind: keyProfileProviderKindDraft ?? "custom",
       keyEnvVar: DEFAULT_CODEX_KEY_ENV_VAR,
       key: keyProfileKeyDraft.trim(),
       baseUrlEnvVar: DEFAULT_CODEX_BASE_URL_ENV_VAR,
-      baseUrl: keyProfileBaseUrlDraft.trim() || null,
+      baseUrl: resolvedKeyProfileBaseUrl || null,
+      model: keyProfileModelDraft.trim() || null,
+      contextWindow: parsePositiveIntegerDraft(keyProfileContextWindowDraft),
+      maxOutputTokens: parsePositiveIntegerDraft(keyProfileMaxOutputTokensDraft),
+      useGateway: keyProfileUseGatewayDraft,
+      lastModelRefreshAtMs:
+        keyProfileFetchedAtMs ??
+        (editingKeyProfileId
+          ? keyProfiles.find((existing) => existing.id === editingKeyProfileId)
+              ?.lastModelRefreshAtMs ?? null
+          : null),
+      cachedModels:
+        keyProfileFetchedModels.length > 0
+          ? keyProfileFetchedModels
+          : editingKeyProfileId
+            ? keyProfiles.find((existing) => existing.id === editingKeyProfileId)
+                ?.cachedModels ?? []
+            : [],
+      groupName: keyProfileGroupNameDraft.trim() || keyProfileNameDraft.trim(),
+      groupMultiplier:
+        keyProfileGroupMultiplierDraft.trim().length > 0 &&
+        Number.isFinite(Number(keyProfileGroupMultiplierDraft))
+          ? Math.max(0, Number(keyProfileGroupMultiplierDraft))
+          : null,
     };
     if (editingKeyProfileId) {
       updateCodexKeySettings({
@@ -288,29 +369,73 @@ export function SettingsCodexSection({
         ),
         activeCodexKeyProfileId: editingKeyProfileId,
       });
-      setEditingKeyProfileId(null);
-      setKeyProfileNameDraft("");
-      setKeyProfileKeyDraft("");
-      setKeyProfileKeyVisible(false);
-      setKeyProfileBaseUrlDraft("");
+      resetKeyProfileDrafts();
       return;
     }
     updateCodexKeySettings({
       codexKeyProfiles: [...keyProfiles, profile],
       activeCodexKeyProfileId: profile.id,
     });
-    setKeyProfileNameDraft("");
-    setKeyProfileKeyDraft("");
-    setKeyProfileKeyVisible(false);
-    setKeyProfileBaseUrlDraft("");
+    resetKeyProfileDrafts();
   };
 
   const handleEditKeyProfile = (profile: CodexKeyProfile) => {
     setEditingKeyProfileId(profile.id);
     setKeyProfileNameDraft(profile.name);
+    setKeyProfileGroupNameDraft(profile.groupName ?? profile.name);
+    setKeyProfileGroupMultiplierDraft(
+      profile.groupMultiplier == null ? "" : String(profile.groupMultiplier),
+    );
     setKeyProfileKeyDraft(profile.key);
     setKeyProfileKeyVisible(false);
     setKeyProfileBaseUrlDraft(profile.baseUrl ?? "");
+    setKeyProfileProviderKindDraft(profile.providerKind ?? "custom");
+    setKeyProfileModelDraft(profile.model ?? "");
+    setKeyProfileContextWindowDraft(
+      profile.contextWindow == null ? "" : String(profile.contextWindow),
+    );
+    setKeyProfileMaxOutputTokensDraft(
+      profile.maxOutputTokens == null ? "" : String(profile.maxOutputTokens),
+    );
+    setKeyProfileUseGatewayDraft(Boolean(profile.useGateway));
+    setKeyProfileModelFetchState({ status: "idle", error: null });
+    setKeyProfileFetchedModels(profile.cachedModels ?? []);
+    setKeyProfileFetchedAtMs(profile.lastModelRefreshAtMs ?? null);
+  };
+
+  const handleFetchKeyProfileModels = async () => {
+    if (!resolvedKeyProfileBaseUrl || !keyProfileKeyDraft.trim()) {
+      setKeyProfileModelFetchState({
+        status: "error",
+        error: t("settings.codex.providerModelsNeedUrlAndKey"),
+      });
+      return;
+    }
+    setKeyProfileModelFetchState({ status: "loading", error: null });
+    try {
+      const models = await getProviderModels(
+        resolvedKeyProfileBaseUrl,
+        keyProfileKeyDraft.trim(),
+      );
+      const refreshedAt = Date.now();
+      if (models.length > 0 && !keyProfileModelDraft.trim()) {
+        setKeyProfileModelDraft(models[0].id);
+      }
+      setKeyProfileFetchedModels(models);
+      setKeyProfileFetchedAtMs(refreshedAt);
+      setKeyProfileModelFetchState({
+        status: "done",
+        error:
+          models.length > 0
+            ? null
+            : t("settings.codex.providerModelsEmpty"),
+      });
+    } catch (error) {
+      setKeyProfileModelFetchState({
+        status: "error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   };
 
   const handleDeleteKeyProfile = (profileId: string) => {
@@ -368,9 +493,13 @@ export function SettingsCodexSection({
 
   return (
     <SettingsSection
-      title="Codex"
-      subtitle={t("settings.codex.subtitle")}
+      title={mode === "providers" ? t("settings.section.providers") : "Codex"}
+      subtitle={
+        mode === "providers" ? t("settings.codex.keyProfileHelp") : t("settings.codex.subtitle")
+      }
     >
+      {mode === "codex" ? (
+        <>
       <div className="settings-field">
         <div className="settings-field-row settings-field-row-between">
           <div>
@@ -727,11 +856,9 @@ export function SettingsCodexSection({
         )}
       </div>
 
-      <div className="settings-divider" />
-      <div className="settings-field-label settings-field-label--section">
-        {t("settings.codex.defaultParameters")}
-      </div>
-
+        </>
+      ) : null}
+      {mode === "providers" ? (
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="codex-key-profile">
           {t("settings.codex.keyProfile")}
@@ -775,7 +902,10 @@ export function SettingsCodexSection({
         {selectedKeyProfile && (
           <div className="settings-help">
             {t("settings.codex.currentInject")} <code>{DEFAULT_CODEX_KEY_ENV_VAR}</code>
-            {selectedKeyProfile.baseUrl ? (
+            {resolveCodexProviderBaseUrl(
+              selectedKeyProfile.providerKind,
+              selectedKeyProfile.baseUrl ?? "",
+            ) ? (
               <>
                 {" "}
                 {t("common.and")} <code>{DEFAULT_CODEX_BASE_URL_ENV_VAR}</code>
@@ -791,6 +921,32 @@ export function SettingsCodexSection({
             value={keyProfileNameDraft}
             onChange={(event) => setKeyProfileNameDraft(event.target.value)}
             aria-label={t("settings.codex.keyProfileNameAria")}
+          />
+          <select
+            className="settings-select"
+            value={keyProfileProviderKindDraft ?? "custom"}
+            aria-label={t("settings.codex.providerKindAria")}
+            onChange={(event) => {
+              const providerKind = event.target.value as CodexKeyProfile["providerKind"];
+              setKeyProfileProviderKindDraft(providerKind);
+              if (!keyProfileBaseUrlDraft.trim()) {
+                setKeyProfileBaseUrlDraft(
+                  resolveCodexProviderBaseUrl(providerKind, null) ?? "",
+                );
+              }
+            }}
+          >
+            <option value="custom">{t("settings.codex.providerKindCustom")}</option>
+            <option value="openai">{t("settings.codex.providerKindOpenai")}</option>
+            <option value="deepseek">{t("settings.codex.providerKindDeepseek")}</option>
+            <option value="openrouter">{t("settings.codex.providerKindOpenrouter")}</option>
+          </select>
+          <input
+            className="settings-input"
+            placeholder={t("settings.codex.keyProfileGroupNamePlaceholder")}
+            value={keyProfileGroupNameDraft}
+            onChange={(event) => setKeyProfileGroupNameDraft(event.target.value)}
+            aria-label={t("settings.codex.keyProfileGroupNameAria")}
           />
           <div className="settings-field-row">
             <input
@@ -814,7 +970,90 @@ export function SettingsCodexSection({
             placeholder={t("settings.codex.baseUrlPlaceholder")}
             value={keyProfileBaseUrlDraft}
             onChange={(event) => setKeyProfileBaseUrlDraft(event.target.value)}
-            aria-label="Base URL"
+            aria-label={t("settings.codex.baseUrlAria")}
+          />
+          <div className="settings-field-row">
+            <input
+              className="settings-input"
+              list="codex-provider-models"
+              placeholder={t("settings.codex.providerModelPlaceholder")}
+              value={keyProfileModelDraft}
+              onChange={(event) => setKeyProfileModelDraft(event.target.value)}
+              aria-label={t("settings.codex.providerModelAria")}
+            />
+            <datalist id="codex-provider-models">
+              {draftModelOptions.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name ?? model.id}
+                </option>
+              ))}
+            </datalist>
+            <button
+              type="button"
+              className="ghost settings-button-compact"
+              disabled={keyProfileModelFetchState.status === "loading"}
+              onClick={handleFetchKeyProfileModels}
+            >
+              {keyProfileModelFetchState.status === "loading"
+                ? t("common.loading")
+                : t("settings.codex.fetchProviderModels")}
+            </button>
+          </div>
+          {keyProfileModelFetchState.error ? (
+            <div className="settings-help settings-help-error">
+              {keyProfileModelFetchState.error}
+            </div>
+          ) : null}
+          {(keyProfileFetchedAtMs ?? editingKeyProfile?.lastModelRefreshAtMs) ? (
+            <div className="settings-help">
+              {t("settings.codex.providerModelsLastRefresh")}:{" "}
+              {new Date(
+                keyProfileFetchedAtMs ?? editingKeyProfile?.lastModelRefreshAtMs ?? 0,
+              ).toLocaleString()}
+            </div>
+          ) : null}
+          <input
+            className="settings-input"
+            type="number"
+            min="1"
+            step="1"
+            placeholder={t("settings.codex.contextWindowPlaceholder")}
+            value={keyProfileContextWindowDraft}
+            onChange={(event) => setKeyProfileContextWindowDraft(event.target.value)}
+            aria-label={t("settings.codex.contextWindowAria")}
+          />
+          <input
+            className="settings-input"
+            type="number"
+            min="1"
+            step="1"
+            placeholder={t("settings.codex.maxOutputTokensPlaceholder")}
+            value={keyProfileMaxOutputTokensDraft}
+            onChange={(event) => setKeyProfileMaxOutputTokensDraft(event.target.value)}
+            aria-label={t("settings.codex.maxOutputTokensAria")}
+          />
+          <label className="settings-checkbox">
+            <input
+              type="checkbox"
+              checked={keyProfileUseGatewayDraft}
+              onChange={(event) => setKeyProfileUseGatewayDraft(event.target.checked)}
+            />
+            <span>{t("settings.codex.useGateway")}</span>
+          </label>
+          {keyProfileUseGatewayDraft && !resolvedKeyProfileBaseUrl ? (
+            <div className="settings-help settings-help-error">
+              {t("settings.codex.gatewayBaseUrlRequired")}
+            </div>
+          ) : null}
+          <input
+            className="settings-input"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder={t("settings.codex.keyProfileGroupMultiplierPlaceholder")}
+            value={keyProfileGroupMultiplierDraft}
+            onChange={(event) => setKeyProfileGroupMultiplierDraft(event.target.value)}
+            aria-label={t("settings.codex.keyProfileGroupMultiplierAria")}
           />
           <button
             type="button"
@@ -829,11 +1068,7 @@ export function SettingsCodexSection({
               type="button"
               className="ghost settings-button-compact"
               onClick={() => {
-                setEditingKeyProfileId(null);
-                setKeyProfileNameDraft("");
-                setKeyProfileKeyDraft("");
-                setKeyProfileKeyVisible(false);
-                setKeyProfileBaseUrlDraft("");
+                resetKeyProfileDrafts();
               }}
             >
               {t("common.cancel")}
@@ -841,7 +1076,13 @@ export function SettingsCodexSection({
           ) : null}
         </div>
       </div>
-
+      ) : null}
+      {mode === "codex" ? (
+        <>
+      <div className="settings-divider" />
+      <div className="settings-field-label settings-field-label--section">
+        {t("settings.codex.defaultParameters")}
+      </div>
       <SettingsToggleRow
         title={
           <label htmlFor="default-model">
@@ -1090,6 +1331,8 @@ args = ["server.mjs"]
           help: "settings-help",
         }}
       />
+        </>
+      ) : null}
     </SettingsSection>
   );
 }

@@ -76,6 +76,12 @@ export type TraySessionUsage = {
   weeklyLabel: string | null;
 };
 
+export type ReleaseAssetDownloadProgress = {
+  id: string;
+  downloadedBytes: number;
+  totalBytes?: number | null;
+};
+
 export type TrayLabels = {
   open: string;
   hide: string;
@@ -264,13 +270,30 @@ export type OpenAppTarget = {
   args: string[];
 };
 
+export type CodexProviderKind = "openai" | "deepseek" | "openrouter" | "custom";
+
+export type CodexProviderModel = {
+  id: string;
+  name: string | null;
+  contextWindow: number | null;
+};
+
 export type CodexKeyProfile = {
   id: string;
   name: string;
+  providerKind?: CodexProviderKind;
   keyEnvVar: string;
   key: string;
   baseUrlEnvVar: string;
   baseUrl: string | null;
+  model?: string | null;
+  contextWindow?: number | null;
+  maxOutputTokens?: number | null;
+  useGateway?: boolean;
+  lastModelRefreshAtMs?: number | null;
+  cachedModels?: CodexProviderModel[];
+  groupName?: string | null;
+  groupMultiplier?: number | null;
 };
 
 export type CodexProviderStatus = {
@@ -282,29 +305,6 @@ export type CodexProviderStatus = {
   autoCompactTokenLimit: number | null;
   modelContextWindow: number | null;
   error: string | null;
-};
-
-export type CodexNativePet = {
-  id: string;
-  displayName: string;
-  description?: string | null;
-  directory: string;
-  spritesheetPath: string;
-};
-
-export type CodexNativePetWindowPosition = {
-  x: number;
-  y: number;
-};
-
-export type CodexNativePetState = {
-  enabled: boolean;
-  selectedAvatarId?: string | null;
-  windowPosition?: CodexNativePetWindowPosition | null;
-  codexHome: string;
-  globalStatePath: string;
-  petsDir: string;
-  pets: CodexNativePet[];
 };
 
 export type AppSettings = {
@@ -375,10 +375,6 @@ export type AppSettings = {
   notificationSoundsEnabled: boolean;
   systemNotificationsEnabled: boolean;
   subagentSystemNotificationsEnabled: boolean;
-  codexPetEnabled?: boolean;
-  codexPetId?: "codex" | "terminal" | "review" | "custom";
-  codexPetCustomImagePath?: string | null;
-  codexPetWakeVersion?: number;
   nativeAgentMarkdownImportEnabled: boolean;
   splitChatDiffView: boolean;
   preloadGitDiffs: boolean;

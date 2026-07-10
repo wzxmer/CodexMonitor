@@ -10,6 +10,9 @@ use crate::backend::app_server::WorkspaceSession;
 use crate::codex::args::resolve_workspace_codex_args;
 use crate::codex::home::resolve_settings_codex_home;
 use crate::shared::process_core::kill_child_process_tree;
+use crate::shared::provider_profiles_core::{
+    active_profile_codex_args, active_profile_runtime_fingerprint,
+};
 use crate::types::{AppSettings, WorkspaceEntry};
 
 use super::connect::workspace_session_spawn_lock;
@@ -52,6 +55,13 @@ where
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .or(resolved_args);
+    let (effective_target_args, provider_runtime_fingerprint) = {
+        let settings = app_settings.lock().await;
+        (
+            active_profile_codex_args(&settings, target_args.clone())?,
+            active_profile_runtime_fingerprint(&settings),
+        )
+    };
 
     // If we are not connected, we can't respawn. Treat this as a no-op success; callers
     // should call again after connecting.
@@ -76,7 +86,9 @@ where
         });
     };
 
-    if current_session.codex_args == target_args {
+    if current_session.codex_args == effective_target_args
+        && current_session.provider_runtime_fingerprint == provider_runtime_fingerprint
+    {
         return Ok(WorkspaceRuntimeCodexArgsResult {
             applied_codex_args: target_args,
             respawned: false,
@@ -129,13 +141,12 @@ where
 mod tests {
     use super::*;
 
-    use std::collections::HashSet;
     use std::process::Stdio;
-    use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use tokio::process::Command;
 
-    use crate::types::{WorkspaceKind, WorkspaceSettings};
+    use crate::types::{CodexKeyProfile, WorkspaceKind, WorkspaceSettings};
 
     fn make_workspace_entry(id: &str) -> WorkspaceEntry {
         WorkspaceEntry {
@@ -150,6 +161,13 @@ mod tests {
     }
 
     fn make_session(_entry: WorkspaceEntry, codex_args: Option<String>) -> WorkspaceSession {
+        make_session_with_provider(codex_args, None)
+    }
+
+    fn make_session_with_provider(
+        codex_args: Option<String>,
+        provider_runtime_fingerprint: Option<String>,
+    ) -> WorkspaceSession {
         let mut cmd = if cfg!(windows) {
             let mut cmd = Command::new("cmd");
             cmd.args(["/C", "more"]);
@@ -167,22 +185,13 @@ mod tests {
         let mut child = cmd.spawn().expect("spawn dummy child");
         let stdin = child.stdin.take().expect("dummy child stdin");
 
-        WorkspaceSession {
+        WorkspaceSession::test_new(
             codex_args,
-            child: Mutex::new(child),
-            stdin: Mutex::new(stdin),
-            pending: Mutex::new(HashMap::new()),
-            request_context: Mutex::new(HashMap::new()),
-            thread_workspace: Mutex::new(HashMap::new()),
-            active_turns: Mutex::new(HashMap::new()),
-            hidden_thread_ids: Mutex::new(HashSet::new()),
-            next_id: AtomicU64::new(0),
-            output_closed: AtomicBool::new(false),
-            background_thread_callbacks: Mutex::new(HashMap::new()),
-            owner_workspace_id: "test-owner".to_string(),
-            workspace_ids: Mutex::new(HashSet::from(["test-owner".to_string()])),
-            workspace_roots: Mutex::new(HashMap::new()),
-        }
+            provider_runtime_fingerprint,
+            child,
+            stdin,
+            "test-owner".to_string(),
+        )
     }
 
     #[test]
@@ -261,6 +270,135 @@ mod tests {
                 }
             );
             assert_eq!(spawn_calls.load(Ordering::SeqCst), 0);
+        });
+    }
+
+    #[test]
+    fn set_workspace_runtime_codex_args_compares_effective_profile_args() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let entry = make_workspace_entry("ws-1");
+            let workspaces = Mutex::new(HashMap::from([(entry.id.clone(), entry.clone())]));
+            let mut settings = AppSettings::default();
+            settings.codex_key_profiles = vec![CodexKeyProfile {
+                id: "profile".to_string(),
+                name: "Profile".to_string(),
+                provider_kind: "deepseek".to_string(),
+                key_env_var: "OPENAI_API_KEY".to_string(),
+                key: "sk-test".to_string(),
+                base_url_env_var: "OPENAI_BASE_URL".to_string(),
+                base_url: None,
+                model: Some("deepseek-chat".to_string()),
+                context_window: Some(128_000),
+                max_output_tokens: None,
+                use_gateway: false,
+                last_model_refresh_at_ms: None,
+                cached_models: Vec::new(),
+                group_name: None,
+                group_multiplier: None,
+            }];
+            settings.active_codex_key_profile_id = Some("profile".to_string());
+            let effective_args =
+                active_profile_codex_args(&settings, Some("--profile inherited".to_string()))
+                    .expect("effective args");
+            let provider_runtime_fingerprint = active_profile_runtime_fingerprint(&settings);
+            let current_session = Arc::new(make_session_with_provider(
+                effective_args,
+                provider_runtime_fingerprint,
+            ));
+            let sessions = Mutex::new(HashMap::from([(entry.id.clone(), current_session)]));
+            let app_settings = Mutex::new(settings);
+            let spawn_calls = Arc::new(AtomicUsize::new(0));
+            let spawn_calls_ref = spawn_calls.clone();
+
+            let result = set_workspace_runtime_codex_args_core(
+                entry.id.clone(),
+                Some("--profile inherited".to_string()),
+                &workspaces,
+                &sessions,
+                &app_settings,
+                move |entry, _bin, args, _home| {
+                    let spawn_calls_ref = spawn_calls_ref.clone();
+                    async move {
+                        spawn_calls_ref.fetch_add(1, Ordering::SeqCst);
+                        Ok(Arc::new(make_session(entry, args)))
+                    }
+                },
+            )
+            .await
+            .expect("core call succeeds");
+
+            assert_eq!(
+                result,
+                WorkspaceRuntimeCodexArgsResult {
+                    applied_codex_args: Some("--profile inherited".to_string()),
+                    respawned: false
+                }
+            );
+            assert_eq!(spawn_calls.load(Ordering::SeqCst), 0);
+        });
+    }
+
+    #[test]
+    fn set_workspace_runtime_codex_args_respawns_when_profile_key_changes() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let entry = make_workspace_entry("ws-1");
+            let workspaces = Mutex::new(HashMap::from([(entry.id.clone(), entry.clone())]));
+            let mut settings = AppSettings::default();
+            settings.codex_key_profiles = vec![CodexKeyProfile {
+                id: "profile".to_string(),
+                name: "Profile".to_string(),
+                provider_kind: "deepseek".to_string(),
+                key_env_var: "OPENAI_API_KEY".to_string(),
+                key: "sk-old".to_string(),
+                base_url_env_var: "OPENAI_BASE_URL".to_string(),
+                base_url: None,
+                model: Some("deepseek-chat".to_string()),
+                context_window: Some(128_000),
+                max_output_tokens: None,
+                use_gateway: false,
+                last_model_refresh_at_ms: None,
+                cached_models: Vec::new(),
+                group_name: None,
+                group_multiplier: None,
+            }];
+            settings.active_codex_key_profile_id = Some("profile".to_string());
+            let effective_args =
+                active_profile_codex_args(&settings, Some("--profile inherited".to_string()))
+                    .expect("effective args");
+            let old_fingerprint = active_profile_runtime_fingerprint(&settings);
+            let current_session =
+                Arc::new(make_session_with_provider(effective_args, old_fingerprint));
+            let sessions = Mutex::new(HashMap::from([(entry.id.clone(), current_session)]));
+            settings.codex_key_profiles[0].key = "sk-new".to_string();
+            let app_settings = Mutex::new(settings);
+            let spawn_calls = Arc::new(AtomicUsize::new(0));
+            let spawn_calls_ref = spawn_calls.clone();
+
+            let result = set_workspace_runtime_codex_args_core(
+                entry.id.clone(),
+                Some("--profile inherited".to_string()),
+                &workspaces,
+                &sessions,
+                &app_settings,
+                move |entry, _bin, args, _home| {
+                    let spawn_calls_ref = spawn_calls_ref.clone();
+                    async move {
+                        spawn_calls_ref.fetch_add(1, Ordering::SeqCst);
+                        Ok(Arc::new(make_session(entry, args)))
+                    }
+                },
+            )
+            .await
+            .expect("core call succeeds");
+
+            assert_eq!(
+                result,
+                WorkspaceRuntimeCodexArgsResult {
+                    applied_codex_args: Some("--profile inherited".to_string()),
+                    respawned: true
+                }
+            );
+            assert_eq!(spawn_calls.load(Ordering::SeqCst), 1);
         });
     }
 

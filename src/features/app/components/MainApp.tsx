@@ -88,8 +88,6 @@ import {
 } from "@app/orchestration/useWorkspaceOrchestration";
 import { useAppShellOrchestration } from "@app/orchestration/useLayoutOrchestration";
 import { normalizeCodexArgsInput } from "@/utils/codexArgsInput";
-import { setCodexPetActivity } from "@/services/tauri";
-import { resolveCodexPetActivity } from "@app/utils/codexPetAnimation";
 
 const SettingsView = lazy(() =>
   import("@settings/components/SettingsView").then((module) => ({
@@ -354,10 +352,6 @@ export default function MainApp() {
     [workspacesById],
   );
 
-  const recordPendingThreadLinkRef = useRef<
-    (workspaceId: string, threadId: string) => void
-  >(() => {});
-
   const { errorToasts, dismissErrorToast } = useErrorToasts();
   const queueGitStatusRefreshRef = useRef<() => void>(() => {});
   const handleThreadMessageActivity = useCallback(() => {
@@ -365,6 +359,14 @@ export default function MainApp() {
   }, []);
 
   // Access mode is thread-scoped (best-effort persisted) and falls back to the app default.
+  const activeCodexKeyProfile = useMemo(
+    () =>
+      appSettings.codexKeyProfiles.find(
+        (profile) => profile.id === appSettings.activeCodexKeyProfileId,
+      ) ?? null,
+    [appSettings.activeCodexKeyProfileId, appSettings.codexKeyProfiles],
+  );
+  const effectivePreferredModelId = preferredModelId ?? activeCodexKeyProfile?.model ?? null;
 
   const {
     models,
@@ -374,11 +376,13 @@ export default function MainApp() {
     reasoningSupported,
     reasoningOptions,
     selectedEffort,
-    setSelectedEffort
+    setSelectedEffort,
+    refreshModels,
+    isRefreshingModels,
   } = useModels({
     activeWorkspace,
     onDebug: addDebugEntry,
-    preferredModelId,
+    preferredModelId: effectivePreferredModelId,
     preferredEffort,
     selectionKey: threadCodexSelectionKey,
   });
@@ -547,6 +551,7 @@ export default function MainApp() {
     startThreadForWorkspace,
     listThreadsForWorkspaces,
     listThreadsForWorkspace,
+    resumeThreadById,
     loadOlderThreadsForWorkspace,
     resetWorkspaceThreads,
     refreshThread,
@@ -624,29 +629,6 @@ export default function MainApp() {
       reconnectWorkspace: connectWorkspace,
     });
 
-  const codexPetActivity = useMemo(
-    () =>
-      resolveCodexPetActivity({
-        hasErrors: errorToasts.length > 0,
-        isWaitingForUser: approvals.length > 0 || userInputRequests.length > 0,
-        hasReviewPrompt: Boolean(reviewPrompt),
-        isProcessing: activeThreadIsProcessing,
-      }),
-    [
-      activeThreadIsProcessing,
-      approvals.length,
-      errorToasts.length,
-      reviewPrompt,
-      userInputRequests.length,
-    ],
-  );
-  useEffect(() => {
-    if (!appSettings.codexPetEnabled) {
-      return;
-    }
-    void setCodexPetActivity(codexPetActivity).catch(() => {});
-  }, [appSettings.codexPetEnabled, codexPetActivity]);
-
   const { mobileThreadRefreshLoading, handleMobileThreadRefresh } =
     useMainAppMobileThreadRefresh({
       activeWorkspace,
@@ -671,11 +653,8 @@ export default function MainApp() {
     systemNotificationsEnabled: appSettings.systemNotificationsEnabled,
     subagentSystemNotificationsEnabled:
       appSettings.subagentSystemNotificationsEnabled,
-    codexPetEnabled: appSettings.codexPetEnabled,
     isSubagentThread,
     getWorkspaceName,
-    onThreadNotificationSent: (workspaceId, threadId) =>
-      recordPendingThreadLinkRef.current(workspaceId, threadId),
     onDebug: addDebugEntry,
     successSoundUrl,
     errorSoundUrl,
@@ -787,7 +766,7 @@ export default function MainApp() {
     activeThreadId,
     appSettings: {
       defaultAccessMode: appSettings.defaultAccessMode,
-      lastComposerModelId: appSettings.lastComposerModelId,
+      lastComposerModelId: activeCodexKeyProfile?.model ?? appSettings.lastComposerModelId,
       lastComposerReasoningEffort: appSettings.lastComposerReasoningEffort,
     },
     threadCodexParamsVersion,
@@ -823,7 +802,6 @@ export default function MainApp() {
     systemNotificationsEnabled: appSettings.systemNotificationsEnabled,
     subagentSystemNotificationsEnabled:
       appSettings.subagentSystemNotificationsEnabled,
-    codexPetEnabled: appSettings.codexPetEnabled,
     isSubagentThread,
     approvals,
     userInputRequests,
@@ -1006,6 +984,57 @@ export default function MainApp() {
     setCenterMode,
     setSelectedDiffPath,
   });
+
+  const [resumeThreadPrompt, setResumeThreadPrompt] = useState<{
+    workspace: WorkspaceInfo;
+    threadId: string;
+    error: string | null;
+    isBusy: boolean;
+  } | null>(null);
+  const openResumeThreadPrompt = useCallback((workspace: WorkspaceInfo) => {
+    setResumeThreadPrompt({ workspace, threadId: "", error: null, isBusy: false });
+  }, []);
+  const closeResumeThreadPrompt = useCallback(() => {
+    setResumeThreadPrompt((current) => (current?.isBusy ? current : null));
+  }, []);
+  const updateResumeThreadPrompt = useCallback((threadId: string) => {
+    setResumeThreadPrompt((current) =>
+      current ? { ...current, threadId, error: null } : current,
+    );
+  }, []);
+  const confirmResumeThreadPrompt = useCallback(async () => {
+    if (!resumeThreadPrompt || resumeThreadPrompt.isBusy) {
+      return;
+    }
+    const threadId = resumeThreadPrompt.threadId.trim();
+    if (!threadId) {
+      return;
+    }
+    const workspace = resumeThreadPrompt.workspace;
+    setResumeThreadPrompt((current) =>
+      current ? { ...current, isBusy: true, error: null } : current,
+    );
+    try {
+      if (!workspace.connected) {
+        await connectWorkspace(workspace);
+      }
+      const restoredThreadId = await resumeThreadById(workspace.id, threadId);
+      if (!restoredThreadId) {
+        throw new Error("thread/resume returned no thread");
+      }
+      setResumeThreadPrompt(null);
+    } catch (error) {
+      setResumeThreadPrompt((current) =>
+        current
+          ? {
+              ...current,
+              isBusy: false,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          : current,
+      );
+    }
+  }, [connectWorkspace, resumeThreadById, resumeThreadPrompt]);
   const resolveCloneProjectContext = useCallback(
     (workspace: WorkspaceInfo) => {
       const groupId = workspace.settings.groupId ?? null;
@@ -1054,7 +1083,7 @@ export default function MainApp() {
     },
   });
 
-  const { appModalsProps, modalActions } = useMainAppModals({
+  const { appModalsProps: baseAppModalsProps, modalActions } = useMainAppModals({
     settingsViewComponent: SettingsView,
     workspaces: storedWorkspaces,
     workspaceGroups,
@@ -1457,6 +1486,31 @@ export default function MainApp() {
     clearDraftForThread,
     removeImagesForThread,
   });
+  const appModalsProps = useMemo(
+    () => ({
+      ...baseAppModalsProps,
+      resumeThreadPrompt: resumeThreadPrompt
+        ? {
+            workspaceName: resumeThreadPrompt.workspace.name,
+            threadId: resumeThreadPrompt.threadId,
+            error: resumeThreadPrompt.error,
+            isBusy: resumeThreadPrompt.isBusy,
+          }
+        : null,
+      onResumeThreadPromptChange: updateResumeThreadPrompt,
+      onResumeThreadPromptCancel: closeResumeThreadPrompt,
+      onResumeThreadPromptConfirm: () => {
+        void confirmResumeThreadPrompt();
+      },
+    }),
+    [
+      baseAppModalsProps,
+      closeResumeThreadPrompt,
+      confirmResumeThreadPrompt,
+      resumeThreadPrompt,
+      updateResumeThreadPrompt,
+    ],
+  );
 
   const handleRefreshAllWorkspaceThreadsFromSidebar = useCallback(() => {
     void handleRefreshAllWorkspaceThreads();
@@ -1551,20 +1605,13 @@ export default function MainApp() {
     [handleOpenThreadLink, setActiveTab],
   );
 
-  const { recordPendingThreadLink } = useSystemNotificationThreadLinks({
+  useSystemNotificationThreadLinks({
     hasLoadedWorkspaces: hasLoaded,
     workspacesById,
     refreshWorkspaces,
     connectWorkspace,
     openThreadLink: handleOpenThreadLinkFromExternal,
   });
-
-  useEffect(() => {
-    recordPendingThreadLinkRef.current = recordPendingThreadLink;
-    return () => {
-      recordPendingThreadLinkRef.current = () => {};
-    };
-  }, [recordPendingThreadLink]);
 
   const { handlePlanAccept, handlePlanSubmitChanges } = usePlanReadyActions({
     activeWorkspace,
@@ -1873,6 +1920,7 @@ export default function MainApp() {
     handleAddAgent,
     handleAddWorktreeAgent,
     handleAddCloneAgent,
+    handleResumeThreadById: openResumeThreadPrompt,
     handleSelectLocalCodexThread,
     handleOpenThreadLink,
     handleSelectOpenAppId,
@@ -1883,6 +1931,10 @@ export default function MainApp() {
     models,
     selectedModelId,
     onSelectModel: handleSelectModel,
+    onRefreshModels: () => {
+      void refreshModels();
+    },
+    isRefreshingModels,
     collaborationModes,
     selectedCollaborationModeId,
     onSelectCollaborationMode: handleSelectCollaborationMode,

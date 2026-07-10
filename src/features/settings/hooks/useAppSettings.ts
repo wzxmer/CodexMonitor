@@ -34,7 +34,6 @@ const allowedThemes = new Set(["system", "light", "dark", "dim"]);
 const allowedAppLanguages = new Set(["system", "zh", "en"]);
 const allowedThemeAccents = new Set(["codex", "blue", "green", "pink", "orange"]);
 const allowedMessageReadingStyles = new Set(["bubble", "native", "cli"]);
-const allowedCodexPetIds = new Set(["codex", "terminal", "review", "custom"]);
 const allowedPersonality = new Set(["friendly", "pragmatic"]);
 const allowedFollowUpMessageBehavior = new Set(["queue", "steer"]);
 const allowedComposerSendShortcut = new Set([
@@ -49,6 +48,7 @@ const DEFAULT_REMOTE_BACKEND_NAME = "Primary remote";
 const DEFAULT_REMOTE_PROVIDER: AppSettings["remoteBackendProvider"] = "tcp";
 const DEFAULT_CODEX_KEY_ENV_VAR = "OPENAI_API_KEY";
 const DEFAULT_CODEX_BASE_URL_ENV_VAR = "OPENAI_BASE_URL";
+const allowedCodexProviderKinds = new Set(["openai", "deepseek", "openrouter", "custom"]);
 const DEFAULT_MESSAGE_USER_BUBBLE_COLOR = "#d9ebff";
 const DEFAULT_MESSAGE_USER_TEXT_COLOR = "#102033";
 const DEFAULT_MESSAGE_CANVAS_COLOR = "#eef1f6";
@@ -188,13 +188,48 @@ function normalizeCodexKeyProfiles(
         suffix += 1;
       }
       usedIds.add(id);
+      const providerKind = allowedCodexProviderKinds.has(profile.providerKind ?? "")
+        ? profile.providerKind
+        : "custom";
+      const normalizePositiveInteger = (value: unknown) =>
+        typeof value === "number" && Number.isFinite(value) && value > 0
+          ? Math.floor(value)
+          : null;
+      const cachedModels = Array.isArray(profile.cachedModels)
+        ? profile.cachedModels
+            .map((model) => ({
+              id: model.id?.trim() ?? "",
+              name: model.name?.trim() || null,
+              contextWindow: normalizePositiveInteger(model.contextWindow),
+            }))
+            .filter((model) => model.id.length > 0)
+        : [];
       return {
         id,
         name: profile.name?.trim() || `Key ${index + 1}`,
+        providerKind,
         keyEnvVar: profile.keyEnvVar?.trim() || DEFAULT_CODEX_KEY_ENV_VAR,
         key: profile.key?.trim() || "",
         baseUrlEnvVar: profile.baseUrlEnvVar?.trim() || DEFAULT_CODEX_BASE_URL_ENV_VAR,
         baseUrl: profile.baseUrl?.trim() || null,
+        model: profile.model?.trim() || null,
+        contextWindow: normalizePositiveInteger(profile.contextWindow),
+        maxOutputTokens: normalizePositiveInteger(profile.maxOutputTokens),
+        useGateway: Boolean(profile.useGateway),
+        lastModelRefreshAtMs:
+          typeof profile.lastModelRefreshAtMs === "number" &&
+          Number.isFinite(profile.lastModelRefreshAtMs) &&
+          profile.lastModelRefreshAtMs > 0
+            ? profile.lastModelRefreshAtMs
+            : null,
+        cachedModels,
+        groupName: profile.groupName?.trim() || profile.name?.trim() || `Key ${index + 1}`,
+        groupMultiplier:
+          typeof profile.groupMultiplier === "number" &&
+          Number.isFinite(profile.groupMultiplier) &&
+          profile.groupMultiplier >= 0
+            ? profile.groupMultiplier
+            : null,
       };
     })
     .filter((profile) => profile.key.length > 0);
@@ -279,10 +314,6 @@ function buildDefaultSettings(): AppSettings {
     notificationSoundsEnabled: true,
     systemNotificationsEnabled: true,
     subagentSystemNotificationsEnabled: true,
-    codexPetEnabled: false,
-    codexPetId: "codex",
-    codexPetCustomImagePath: null,
-    codexPetWakeVersion: 0,
     nativeAgentMarkdownImportEnabled: true,
     splitChatDiffView: false,
     preloadGitDiffs: true,
@@ -457,22 +488,6 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     composerTriggerMode: allowedComposerTriggerMode.has(settings.composerTriggerMode ?? "")
       ? settings.composerTriggerMode
       : "default",
-    codexPetEnabled: typeof settings.codexPetEnabled === "boolean"
-      ? settings.codexPetEnabled
-      : false,
-    codexPetId: allowedCodexPetIds.has(settings.codexPetId ?? "")
-      ? settings.codexPetId
-      : "codex",
-    codexPetCustomImagePath:
-      typeof settings.codexPetCustomImagePath === "string" &&
-      settings.codexPetCustomImagePath.trim().length > 0
-        ? settings.codexPetCustomImagePath
-        : null,
-    codexPetWakeVersion:
-      typeof settings.codexPetWakeVersion === "number" &&
-      Number.isFinite(settings.codexPetWakeVersion)
-        ? settings.codexPetWakeVersion
-        : 0,
     nativeAgentMarkdownImportEnabled:
       typeof settings.nativeAgentMarkdownImportEnabled === "boolean"
         ? settings.nativeAgentMarkdownImportEnabled

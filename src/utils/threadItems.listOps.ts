@@ -1,6 +1,9 @@
 import type { ConversationItem } from "../types";
-import { attachmentDisplayName } from "./attachments";
-import { normalizeThreadTimestamp } from "./threadItems.shared";
+import {
+  normalizeThreadTimestamp,
+  sameMessageAttachments,
+  sameMessageImages,
+} from "./threadItems.shared";
 
 function mergeUserInputQuestions(
   existing: Extract<ConversationItem, { kind: "userInput" }>["questions"],
@@ -24,34 +27,6 @@ function mergeUserInputQuestions(
   const incomingIds = new Set(incoming.map((question) => question.id));
   const missingExisting = existing.filter((question) => !incomingIds.has(question.id));
   return [...merged, ...missingExisting];
-}
-
-function sameMessageImages(
-  left: Extract<ConversationItem, { kind: "message" }>["images"],
-  right: Extract<ConversationItem, { kind: "message" }>["images"],
-) {
-  const leftImages = left ?? [];
-  const rightImages = right ?? [];
-  return (
-    leftImages.length === rightImages.length &&
-    leftImages.every((image, index) => image === rightImages[index])
-  );
-}
-
-function sameMessageAttachments(
-  left: Extract<ConversationItem, { kind: "message" }>["attachments"],
-  right: Extract<ConversationItem, { kind: "message" }>["attachments"],
-) {
-  const leftAttachments = left ?? [];
-  const rightAttachments = right ?? [];
-  return (
-    leftAttachments.length === rightAttachments.length &&
-    leftAttachments.every(
-      (attachment, index) =>
-        attachmentDisplayName(attachment) ===
-        attachmentDisplayName(rightAttachments[index] ?? ""),
-    )
-  );
 }
 
 function isMatchingLocalUserEcho(

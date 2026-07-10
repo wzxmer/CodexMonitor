@@ -142,4 +142,61 @@ describe("useModels", () => {
       expect(result.current.selectedEffort).toBe("high");
     });
   });
+
+  it("refreshes again after the workspace reconnects", async () => {
+    vi.mocked(getModelList).mockResolvedValue({ result: { data: [] } });
+    vi.mocked(getConfigModel).mockResolvedValue("custom-model");
+    const { rerender } = renderHook(
+      ({ connected }) =>
+        useModels({ activeWorkspace: { ...workspace, connected } }),
+      { initialProps: { connected: true } },
+    );
+
+    await waitFor(() => expect(getModelList).toHaveBeenCalledTimes(1));
+    rerender({ connected: false });
+    rerender({ connected: true });
+
+    await waitFor(() => expect(getModelList).toHaveBeenCalledTimes(2));
+  });
+
+  it("exposes manual refresh loading without clearing existing models", async () => {
+    let resolveRefresh: ((value: unknown) => void) | null = null;
+    vi.mocked(getModelList)
+      .mockResolvedValueOnce({ result: { data: [] } })
+      .mockImplementationOnce(
+        () => new Promise((resolve) => {
+          resolveRefresh = resolve;
+        }),
+      );
+    vi.mocked(getConfigModel).mockResolvedValue("custom-model");
+    const { result } = renderHook(() => useModels({ activeWorkspace: workspace }));
+
+    await waitFor(() => expect(result.current.models).toHaveLength(1));
+    act(() => {
+      void result.current.refreshModels();
+    });
+    await waitFor(() => expect(result.current.isRefreshingModels).toBe(true));
+    expect(result.current.models).toHaveLength(1);
+
+    await act(async () => {
+      resolveRefresh?.({ result: { data: [] } });
+    });
+    await waitFor(() => expect(result.current.isRefreshingModels).toBe(false));
+  });
+
+  it("keeps the existing model list when manual refresh fails", async () => {
+    vi.mocked(getModelList)
+      .mockResolvedValueOnce({ result: { data: [] } })
+      .mockRejectedValueOnce(new Error("offline"));
+    vi.mocked(getConfigModel).mockResolvedValue("custom-model");
+    const { result } = renderHook(() => useModels({ activeWorkspace: workspace }));
+
+    await waitFor(() => expect(result.current.models).toHaveLength(1));
+    await act(async () => {
+      await result.current.refreshModels();
+    });
+
+    expect(result.current.models).toHaveLength(1);
+    expect(result.current.models[0].id).toBe("custom-model");
+  });
 });

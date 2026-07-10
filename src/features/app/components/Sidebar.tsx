@@ -32,6 +32,7 @@ import type {
   ThreadBucket,
   WorkspaceGroupSection,
 } from "./sidebarTypes";
+import type { ThirdPartyKeyUsageSnapshot } from "../utils/thirdPartyKeyUsage";
 import { useCollapsedGroups } from "../hooks/useCollapsedGroups";
 import { useMenuController } from "../hooks/useMenuController";
 import { useSidebarMenus } from "../hooks/useSidebarMenus";
@@ -42,6 +43,7 @@ import { useI18n } from "@/features/i18n/I18nProvider";
 import { getUsageLabels } from "../utils/usageLabels";
 import { formatRelativeTimeShort } from "../../../utils/time";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
+import type { CodexKeyProfile } from "@/types";
 
 const COLLAPSED_GROUPS_STORAGE_KEY = "codexmonitor.collapsedGroups";
 const PINNED_WORKSPACE_FOLDERS_STORAGE_KEY = "codexmonitor.pinnedWorkspaceFolders";
@@ -185,7 +187,11 @@ type SidebarProps = {
   activeTokenUsage: ThreadTokenUsage | null;
   usageShowRemaining: boolean;
   useTokenUsageStats: boolean;
+  thirdPartyProviderUsage: ThirdPartyKeyUsageSnapshot | null;
   thirdPartyUsageMultiplier: number;
+  codexKeyProfiles: CodexKeyProfile[];
+  activeCodexKeyProfileId: string | null;
+  onSelectCodexKeyProfile: (profileId: string) => void;
   onThirdPartyUsageMultiplierChange: (multiplier: number) => void;
   usageConfigurationWarning?: string | null;
   accountInfo: AccountSnapshot | null;
@@ -202,6 +208,7 @@ type SidebarProps = {
   onAddAgent: (workspace: WorkspaceInfo) => void;
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => void;
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
+  onResumeThreadById?: (workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onSelectLocalCodexThread: (cwd: string, threadId: string) => void;
@@ -252,7 +259,11 @@ export const Sidebar = memo(function Sidebar({
   activeTokenUsage,
   usageShowRemaining,
   useTokenUsageStats,
+  thirdPartyProviderUsage,
   thirdPartyUsageMultiplier,
+  codexKeyProfiles,
+  activeCodexKeyProfileId,
+  onSelectCodexKeyProfile,
   onThirdPartyUsageMultiplierChange,
   usageConfigurationWarning = null,
   accountInfo,
@@ -269,6 +280,7 @@ export const Sidebar = memo(function Sidebar({
   onAddAgent,
   onAddWorktreeAgent,
   onAddCloneAgent,
+  onResumeThreadById = () => {},
   onToggleWorkspaceCollapse,
   onSelectThread,
   onSelectLocalCodexThread,
@@ -1199,6 +1211,7 @@ export const Sidebar = memo(function Sidebar({
                   onAddAgent={onAddAgent}
                   onAddWorktreeAgent={onAddWorktreeAgent}
                   onAddCloneAgent={onAddCloneAgent}
+                  onResumeThreadById={onResumeThreadById}
                   onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
                   onSelectThread={onSelectThread}
                   onSelectLocalCodexThread={onSelectLocalCodexThread}
@@ -1236,7 +1249,11 @@ export const Sidebar = memo(function Sidebar({
         showWeekly={sidebarShowWeekly}
         thirdPartyUsageTokens={thirdPartyUsageTokens}
         thirdPartyUsageCostUsd={thirdPartyUsageCostUsd}
+        thirdPartyProviderUsage={thirdPartyProviderUsage}
         thirdPartyUsageMultiplier={thirdPartyUsageMultiplier}
+        codexKeyProfiles={codexKeyProfiles}
+        activeCodexKeyProfileId={activeCodexKeyProfileId}
+        onSelectCodexKeyProfile={onSelectCodexKeyProfile}
         onThirdPartyUsageMultiplierChange={onThirdPartyUsageMultiplierChange}
         onOpenSettings={onOpenSettings}
         onOpenDebug={onOpenDebug}

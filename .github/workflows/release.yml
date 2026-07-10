@@ -61,11 +61,22 @@ jobs:
           echo "Resolved release version: ${VERSION}"
 
   build_macos:
-    runs-on: macos-latest
+    name: macOS bundle (${{ matrix.arch }})
+    runs-on: ${{ matrix.platform }}
     needs: prepare_release
     environment: release
     env:
       RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            arch: aarch64
+            target: aarch64-apple-darwin
+          - platform: macos-15-intel
+            arch: x86_64
+            target: x86_64-apple-darwin
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -157,6 +168,9 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Rust target
+        run: rustup target add ${{ matrix.target }}
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -171,13 +185,13 @@ jobs:
       - name: Build app bundle
         run: |
           set -euo pipefail
-          npm run tauri -- build --config src-tauri/tauri.macos.conf.json --bundles app
+          npm run tauri -- build --config src-tauri/tauri.macos.conf.json --target ${{ matrix.target }} --bundles app
 
       - name: Build daemon binaries
         run: |
           set -euo pipefail
           cd src-tauri
-          cargo build --release --bin codex_monitor_daemon --bin codex_monitor_daemonctl
+          cargo build --release --target ${{ matrix.target }} --bin codex_monitor_daemon --bin codex_monitor_daemonctl
 
       - name: Package artifacts
         run: |
@@ -193,25 +207,25 @@ jobs:
 
           mkdir -p release-artifacts release-artifacts/dmg-root
           rm -rf "release-artifacts/dmg-root/Codex Monitor.app"
-          ditto "src-tauri/target/release/bundle/macos/Codex Monitor.app" \
+          ditto "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Codex Monitor.app" \
             "release-artifacts/dmg-root/Codex Monitor.app"
 
           ditto -c -k --keepParent \
-            "src-tauri/target/release/bundle/macos/Codex Monitor.app" \
-            release-artifacts/CodexMonitor.zip
+            "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Codex Monitor.app" \
+            release-artifacts/CodexMonitor_${VERSION}_${{ matrix.arch }}.zip
 
           hdiutil create -volname "Codex Monitor" \
             -srcfolder release-artifacts/dmg-root \
             -ov -format UDZO \
-            release-artifacts/CodexMonitor_${VERSION}_aarch64.dmg
+            release-artifacts/CodexMonitor_${VERSION}_${{ matrix.arch }}.dmg
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-artifacts
+          name: macos-artifacts-${{ matrix.arch }}
           path: |
-            release-artifacts/CodexMonitor.zip
-            release-artifacts/CodexMonitor_*_aarch64.dmg
+            release-artifacts/CodexMonitor_*_${{ matrix.arch }}.zip
+            release-artifacts/CodexMonitor_*_${{ matrix.arch }}.dmg
 
   build_linux:
     name: linux bundles (${{ matrix.arch }})
@@ -545,8 +559,9 @@ jobs:
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
         with:
-          name: macos-artifacts
+          pattern: macos-artifacts-*
           path: release-artifacts
+          merge-multiple: true
 
       - name: Download Linux bundles
         uses: actions/download-artifact@v4
@@ -694,8 +709,8 @@ jobs:
             --title "v${VERSION}" \
             --notes-file release-artifacts/release-notes.md \
             --target "$GITHUB_SHA" \
-            release-artifacts/CodexMonitor.zip \
-            release-artifacts/CodexMonitor_*_aarch64.dmg \
+            release-artifacts/CodexMonitor_*_*.zip \
+            release-artifacts/CodexMonitor_*_*.dmg \
             "${appimages[@]}" \
             "${rpms[@]}" \
             "${windows_exes[@]}" \

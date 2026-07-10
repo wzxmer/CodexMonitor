@@ -6,8 +6,10 @@ import {
   cleanupDownloadedReleaseAssets,
   downloadAndOpenReleaseAsset,
 } from "../../../services/tauri";
+import { subscribeReleaseAssetDownloadProgress } from "../../../services/events";
 import { useUpdater } from "./useUpdater";
 import { STORAGE_KEY_PENDING_POST_UPDATE_VERSION } from "../utils/postUpdateRelease";
+import type { ReleaseAssetDownloadProgress } from "@/types";
 
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: vi.fn(() => true),
@@ -18,9 +20,17 @@ vi.mock("../../../services/tauri", () => ({
   downloadAndOpenReleaseAsset: vi.fn(() => Promise.resolve({ path: "installer.msi" })),
 }));
 
+vi.mock("../../../services/events", () => ({
+  subscribeReleaseAssetDownloadProgress: vi.fn(() => vi.fn()),
+}));
+
 const cleanupDownloadedReleaseAssetsMock = vi.mocked(cleanupDownloadedReleaseAssets);
 const downloadAndOpenReleaseAssetMock = vi.mocked(downloadAndOpenReleaseAsset);
+const subscribeReleaseAssetDownloadProgressMock = vi.mocked(
+  subscribeReleaseAssetDownloadProgress,
+);
 const fetchMock = vi.fn();
+let progressListener: ((event: ReleaseAssetDownloadProgress) => void) | null = null;
 
 function latestReleaseResponse(version: string, assets = releaseAssets()) {
   return {
@@ -63,6 +73,11 @@ describe("useUpdater", () => {
     vi.clearAllMocks();
     cleanupDownloadedReleaseAssetsMock.mockResolvedValue(undefined);
     downloadAndOpenReleaseAssetMock.mockResolvedValue({ path: "installer.msi" });
+    progressListener = null;
+    subscribeReleaseAssetDownloadProgressMock.mockImplementation((listener) => {
+      progressListener = listener;
+      return vi.fn();
+    });
     window.localStorage.clear();
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
@@ -161,10 +176,82 @@ describe("useUpdater", () => {
     expect(downloadAndOpenReleaseAssetMock).toHaveBeenCalledWith(
       expect.stringContaining("/releases/download/v9.9.9/"),
       expect.stringMatching(/\.(msi|dmg|AppImage)$/),
+      expect.any(String),
     );
     expect(
       window.localStorage.getItem(STORAGE_KEY_PENDING_POST_UPDATE_VERSION),
     ).toBeNull();
+  });
+
+  it("updates download progress from backend progress events", async () => {
+    fetchMock.mockResolvedValue(latestReleaseResponse("9.9.9"));
+    let resolveDownload: ((value: { path: string }) => void) | null = null;
+    downloadAndOpenReleaseAssetMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDownload = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useUpdater({}));
+
+    await act(async () => {
+      await result.current.startUpdate();
+    });
+    await act(async () => {
+      void result.current.startUpdate();
+    });
+
+    const requestId = downloadAndOpenReleaseAssetMock.mock.calls[0]?.[2];
+    expect(requestId).toEqual(expect.any(String));
+
+    act(() => {
+      progressListener?.({
+        id: requestId as string,
+        downloadedBytes: 25,
+        totalBytes: 100,
+      });
+    });
+
+    expect(result.current.state.progress).toEqual({
+      downloadedBytes: 25,
+      totalBytes: 100,
+    });
+
+    await act(async () => {
+      resolveDownload?.({ path: "installer.msi" });
+    });
+  });
+
+  it("waits for startup cleanup before downloading an installer", async () => {
+    fetchMock.mockResolvedValue(latestReleaseResponse("9.9.9"));
+    let resolveCleanup: (() => void) | null = null;
+    cleanupDownloadedReleaseAssetsMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCleanup = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useUpdater({}));
+
+    await act(async () => {
+      await result.current.startUpdate();
+    });
+
+    await act(async () => {
+      void result.current.startUpdate();
+    });
+
+    expect(downloadAndOpenReleaseAssetMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveCleanup?.();
+    });
+
+    await waitFor(() =>
+      expect(downloadAndOpenReleaseAssetMock).toHaveBeenCalledTimes(1),
+    );
   });
 
   it("resets to idle on dismiss", async () => {

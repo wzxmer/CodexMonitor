@@ -195,6 +195,7 @@ export function useThreadActions({
       threadId: string,
       force = false,
       replaceLocal = false,
+      requireThreadResponse = false,
     ) => {
       if (!threadId) {
         return null;
@@ -239,6 +240,9 @@ export function useThreadActions({
           payload: response,
         });
         const thread = extractThreadFromResponse(response);
+        if (!thread && requireThreadResponse) {
+          return null;
+        }
         if (thread) {
           dispatch({ type: "ensureThread", workspaceId, threadId });
           applyThreadMetadata(workspaceId, threadId, thread, {
@@ -424,6 +428,28 @@ export function useThreadActions({
       return resumeThreadForWorkspace(workspaceId, threadId, true, true);
     },
     [replaceOnResumeRef, resumeThreadForWorkspace],
+  );
+
+  const resumeThreadById = useCallback(
+    async (workspaceId: string, rawThreadId: string) => {
+      const threadId = rawThreadId.trim();
+      if (!workspaceId || !threadId) {
+        return null;
+      }
+      const resumedThreadId = await resumeThreadForWorkspace(
+        workspaceId,
+        threadId,
+        true,
+        true,
+        true,
+      );
+      if (!resumedThreadId) {
+        return null;
+      }
+      dispatch({ type: "setActiveThreadId", workspaceId, threadId: resumedThreadId });
+      return resumedThreadId;
+    },
+    [dispatch, resumeThreadForWorkspace],
   );
 
   const resetWorkspaceThreads = useCallback(
@@ -1044,6 +1070,7 @@ export function useThreadActions({
     startThreadForWorkspace,
     forkThreadForWorkspace,
     resumeThreadForWorkspace,
+    resumeThreadById,
     refreshThread,
     resetWorkspaceThreads,
     listThreadsForWorkspaces,

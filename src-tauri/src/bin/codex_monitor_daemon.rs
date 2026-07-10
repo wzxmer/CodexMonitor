@@ -82,7 +82,7 @@ use shared::process_core::kill_child_process_tree;
 use shared::prompts_core::{self, CustomPromptEntry};
 use shared::{
     agents_config_core, codex_aux_core, codex_core, files_core, git_core, git_ui_core,
-    local_usage_core, settings_core, workspaces_core, worktree_core,
+    local_usage_core, provider_profiles_core, settings_core, workspaces_core, worktree_core,
 };
 use storage::{read_settings, read_workspaces};
 use types::{
@@ -106,15 +106,17 @@ fn spawn_with_client(
     codex_home: Option<PathBuf>,
 ) -> impl std::future::Future<Output = Result<Arc<WorkspaceSession>, String>> + '_ {
     async move {
-        let codex_env = {
-            let settings = app_settings.lock().await;
-            settings.active_codex_key_env()
+        let runtime_env = {
+            let settings = app_settings.lock().await.clone();
+            provider_profiles_core::active_codex_key_runtime(&settings, codex_args).await?
         };
         spawn_workspace_session(
             entry,
             default_bin,
-            codex_args,
-            codex_env,
+            runtime_env.codex_args,
+            runtime_env.env,
+            runtime_env.provider_runtime_fingerprint,
+            runtime_env.gateway_shutdown,
             codex_home,
             client_version,
             event_sink,

@@ -1,8 +1,19 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import { useSystemNotificationThreadLinks } from "./useSystemNotificationThreadLinks";
+
+const notificationMocks = vi.hoisted(() => ({
+  onAction: vi.fn(),
+  unregister: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/plugin-notification", () => ({
+  onAction: notificationMocks.onAction,
+}));
+
+let actionHandler: ((notification: { extra?: Record<string, unknown> }) => void) | null;
 
 function makeWorkspace(overrides: Partial<WorkspaceInfo> = {}): WorkspaceInfo {
   return {
@@ -16,7 +27,16 @@ function makeWorkspace(overrides: Partial<WorkspaceInfo> = {}): WorkspaceInfo {
 }
 
 describe("useSystemNotificationThreadLinks", () => {
-  it("navigates to the thread when the app regains focus", async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    actionHandler = null;
+    notificationMocks.onAction.mockImplementation(async (handler) => {
+      actionHandler = handler;
+      return { unregister: notificationMocks.unregister };
+    });
+  });
+
+  it("navigates only after a notification action", async () => {
     const workspace = makeWorkspace({ connected: true });
     const workspacesById = new Map([[workspace.id, workspace]]);
 
@@ -24,7 +44,7 @@ describe("useSystemNotificationThreadLinks", () => {
     const connectWorkspace = vi.fn(async () => {});
     const openThreadLink = vi.fn();
 
-    const { result } = renderHook(() =>
+    renderHook(() =>
       useSystemNotificationThreadLinks({
         hasLoadedWorkspaces: true,
         workspacesById,
@@ -34,12 +54,17 @@ describe("useSystemNotificationThreadLinks", () => {
       }),
     );
 
+    await waitFor(() => expect(notificationMocks.onAction).toHaveBeenCalledTimes(1));
+
     act(() => {
-      result.current.recordPendingThreadLink("ws-1", "t-1");
+      window.dispatchEvent(new Event("focus"));
     });
+    expect(openThreadLink).not.toHaveBeenCalled();
 
     await act(async () => {
-      window.dispatchEvent(new Event("focus"));
+      actionHandler?.({
+        extra: { kind: "thread", workspaceId: "ws-1", threadId: "t-1" },
+      });
       await Promise.resolve();
     });
 
@@ -48,7 +73,7 @@ describe("useSystemNotificationThreadLinks", () => {
     expect(refreshWorkspaces).not.toHaveBeenCalled();
   });
 
-  it("connects the workspace before selecting the thread when needed", async () => {
+  it("connects the workspace before selecting an action target", async () => {
     const workspace = makeWorkspace({ connected: false });
     const workspacesById = new Map([[workspace.id, workspace]]);
 
@@ -56,7 +81,7 @@ describe("useSystemNotificationThreadLinks", () => {
     const connectWorkspace = vi.fn(async () => {});
     const openThreadLink = vi.fn();
 
-    const { result } = renderHook(() =>
+    renderHook(() =>
       useSystemNotificationThreadLinks({
         hasLoadedWorkspaces: true,
         workspacesById,
@@ -66,12 +91,12 @@ describe("useSystemNotificationThreadLinks", () => {
       }),
     );
 
-    act(() => {
-      result.current.recordPendingThreadLink("ws-1", "t-1");
-    });
+    await waitFor(() => expect(notificationMocks.onAction).toHaveBeenCalledTimes(1));
 
     await act(async () => {
-      window.dispatchEvent(new Event("focus"));
+      actionHandler?.({
+        extra: { kind: "thread", workspaceId: "ws-1", threadId: "t-1" },
+      });
       await Promise.resolve();
     });
 
@@ -79,7 +104,7 @@ describe("useSystemNotificationThreadLinks", () => {
     expect(openThreadLink).toHaveBeenCalledWith("ws-1", "t-1");
   });
 
-  it("navigates immediately when openThreadLinkOrQueue is used after load", async () => {
+  it("ignores notification actions without a valid thread target", async () => {
     const workspace = makeWorkspace({ connected: true });
     const workspacesById = new Map([[workspace.id, workspace]]);
 
@@ -87,7 +112,7 @@ describe("useSystemNotificationThreadLinks", () => {
     const connectWorkspace = vi.fn(async () => {});
     const openThreadLink = vi.fn();
 
-    const { result } = renderHook(() =>
+    renderHook(() =>
       useSystemNotificationThreadLinks({
         hasLoadedWorkspaces: true,
         workspacesById,
@@ -97,11 +122,13 @@ describe("useSystemNotificationThreadLinks", () => {
       }),
     );
 
+    await waitFor(() => expect(notificationMocks.onAction).toHaveBeenCalledTimes(1));
+
     await act(async () => {
-      result.current.openThreadLinkOrQueue("ws-1", "t-2");
+      actionHandler?.({ extra: { kind: "thread", workspaceId: "ws-1" } });
       await Promise.resolve();
     });
 
-    expect(openThreadLink).toHaveBeenCalledWith("ws-1", "t-2");
+    expect(openThreadLink).not.toHaveBeenCalled();
   });
 });

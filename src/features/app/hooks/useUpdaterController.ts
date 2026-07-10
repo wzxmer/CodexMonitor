@@ -15,10 +15,8 @@ type Params = {
   notificationSoundsEnabled: boolean;
   systemNotificationsEnabled: boolean;
   subagentSystemNotificationsEnabled: boolean;
-  codexPetEnabled?: boolean;
   isSubagentThread?: (workspaceId: string, threadId: string) => boolean;
   getWorkspaceName?: (workspaceId: string) => string | undefined;
-  onThreadNotificationSent?: (workspaceId: string, threadId: string) => void;
   onDebug: (entry: DebugEntry) => void;
   successSoundUrl: string;
   errorSoundUrl: string;
@@ -30,10 +28,8 @@ export function useUpdaterController({
   notificationSoundsEnabled,
   systemNotificationsEnabled,
   subagentSystemNotificationsEnabled,
-  codexPetEnabled = false,
   isSubagentThread,
   getWorkspaceName,
-  onThreadNotificationSent,
   onDebug,
   successSoundUrl,
   errorSoundUrl,
@@ -52,8 +48,6 @@ export function useUpdaterController({
   });
   const isWindowFocused = useWindowFocusState();
   const nextTestSoundIsError = useRef(false);
-  const effectiveSystemNotificationsEnabled =
-    systemNotificationsEnabled && !codexPetEnabled;
 
   const subscribeUpdaterCheckEvent = useCallback(
     (handler: () => void) =>
@@ -86,12 +80,11 @@ export function useUpdaterController({
   });
 
   useAgentSystemNotifications({
-    enabled: effectiveSystemNotificationsEnabled,
+    enabled: systemNotificationsEnabled,
     subagentNotificationsEnabled: subagentSystemNotificationsEnabled,
     isSubagentThread,
     isWindowFocused,
     getWorkspaceName,
-    onThreadNotificationSent,
     onDebug,
   });
 
@@ -104,7 +97,7 @@ export function useUpdaterController({
   }, [errorSoundUrl, onDebug, successSoundUrl]);
 
   const handleTestSystemNotification = useCallback(() => {
-    if (!effectiveSystemNotificationsEnabled) {
+    if (!systemNotificationsEnabled) {
       return;
     }
     void sendNotification(
@@ -119,7 +112,7 @@ export function useUpdaterController({
         payload: error instanceof Error ? error.message : String(error),
       });
     });
-  }, [effectiveSystemNotificationsEnabled, onDebug]);
+  }, [onDebug, systemNotificationsEnabled]);
 
   return {
     updaterState,

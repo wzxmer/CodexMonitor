@@ -52,12 +52,18 @@
 .ds-rounded-select-option:focus-visible,
 .ds-rounded-select-option.is-active {
   outline: none;
-  background: var(--surface-hover);
+  background: color-mix(in srgb, var(--surface-hover) 70%, transparent);
   color: var(--text-stronger);
 }
 
 .ds-rounded-select-option.is-selected {
   color: var(--text-strong);
+  background: color-mix(in srgb, var(--surface-active) 72%, transparent);
+}
+
+.ds-rounded-select-option.is-selected:hover:not(:disabled),
+.ds-rounded-select-option.is-selected:focus-visible,
+.ds-rounded-select-option.is-selected.is-active {
   background: color-mix(in srgb, var(--surface-active) 72%, transparent);
 }
 

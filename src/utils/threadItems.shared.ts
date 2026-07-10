@@ -1,4 +1,5 @@
 import type { ConversationItem } from "../types";
+import { attachmentDisplayName } from "./attachments";
 import { CHAT_SCROLLBACK_DEFAULT } from "./chatScrollback";
 
 export type PrepareThreadItemsOptions = {
@@ -52,6 +53,34 @@ export function normalizeStringList(value: unknown) {
   }
   const single = asString(value);
   return single ? [single] : [];
+}
+
+export function sameMessageImages(
+  left: Extract<ConversationItem, { kind: "message" }>["images"],
+  right: Extract<ConversationItem, { kind: "message" }>["images"],
+) {
+  const leftImages = left ?? [];
+  const rightImages = right ?? [];
+  return (
+    leftImages.length === rightImages.length &&
+    leftImages.every((image, index) => image === rightImages[index])
+  );
+}
+
+export function sameMessageAttachments(
+  left: Extract<ConversationItem, { kind: "message" }>["attachments"],
+  right: Extract<ConversationItem, { kind: "message" }>["attachments"],
+) {
+  const leftAttachments = left ?? [];
+  const rightAttachments = right ?? [];
+  return (
+    leftAttachments.length === rightAttachments.length &&
+    leftAttachments.every(
+      (attachment, index) =>
+        attachmentDisplayName(attachment) ===
+        attachmentDisplayName(rightAttachments[index] ?? ""),
+    )
+  );
 }
 
 export function normalizeThreadTimestamp(raw: unknown) {

@@ -160,11 +160,11 @@ const baseSettings: AppSettings = {
   uiCjkFontFamily:
     '"Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif',
   uiFontSize: 13,
-  uiFontWeight: 500,
+  uiFontWeight: 400,
   codeFontFamily:
     'ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
   messageFontSize: 13,
-  messageFontWeight: 500,
+  messageFontWeight: 450,
   messageFontFamily:
     '"Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif',
   codeFontSize: 11,
@@ -331,6 +331,7 @@ const renderCodexSection = (
   options: {
     appSettings?: Partial<AppSettings>;
     onUpdateAppSettings?: ComponentProps<typeof SettingsView>["onUpdateAppSettings"];
+    initialSection?: ComponentProps<typeof SettingsView>["initialSection"];
   } = {},
 ) => {
   cleanup();
@@ -363,7 +364,7 @@ const renderCodexSection = (
     onDownloadDictationModel: vi.fn(),
     onCancelDictationDownload: vi.fn(),
     onRemoveDictationModel: vi.fn(),
-    initialSection: "codex",
+    initialSection: options.initialSection ?? "codex",
   };
 
   render(<SettingsView {...props} />);
@@ -1681,18 +1682,30 @@ describe("SettingsView Codex defaults", () => {
     result: { data: models },
   });
 
-  it("explains that key profiles only affect CodexMonitor-launched sessions", () => {
-    renderCodexSection();
+  it("explains that provider profiles only affect CodexMonitor-launched sessions", () => {
+    renderCodexSection({ initialSection: "providers" });
 
-    expect((screen.getByLabelText("Key 配置") as HTMLSelectElement).value).toBe(
+    expect((screen.getByLabelText("Provider 配置") as HTMLSelectElement).value).toBe(
       "__codex_default__",
     );
     expect(screen.getByText("使用 Codex 默认配置")).toBeTruthy();
     expect(
-      screen.getByText(
-        /仅对 CodexMonitor 启动的会话注入 API key，不会修改本机 Codex 配置/,
-      ),
-    ).toBeTruthy();
+      screen.getAllByText(
+        /只覆盖 CodexMonitor 新启动会话的 key、URL、模型和上下文，不修改 CODEX_HOME、sessions、MCP、agents 或全局 config\.toml/,
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("fills the recommended base URL when selecting a known provider", () => {
+    renderCodexSection({ initialSection: "providers" });
+
+    fireEvent.change(screen.getByLabelText("Provider 类型"), {
+      target: { value: "deepseek" },
+    });
+
+    expect((screen.getByLabelText("Provider Base URL") as HTMLInputElement).value).toBe(
+      "https://api.deepseek.com/v1",
+    );
   });
 
   it("uses the latest model and medium effort by default (no Default option)", async () => {

@@ -944,8 +944,53 @@
 }
 
 .composer-select--model {
-  width: var(--composer-model-select-width, auto);
-  max-width: none;
+  width: clamp(112px, var(--composer-model-select-width, 14ch), 260px);
+  max-width: min(260px, calc(100vw - 96px));
+}
+
+.composer-model-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.composer-model-refresh:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.composer-model-refresh:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.composer-model-refresh .is-spinning {
+  animation: composer-model-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes composer-model-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.composer-model-select-popover {
+  min-width: min(260px, calc(100vw - 32px));
+}
+
+.composer-model-select-popover .ds-rounded-select-option-label {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .composer-select--collab {
