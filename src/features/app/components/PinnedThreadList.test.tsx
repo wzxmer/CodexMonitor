@@ -140,6 +140,7 @@ describe("PinnedThreadList", () => {
           { thread, depth: 0, workspaceId: "ws-1" },
           { thread: nestedThread, depth: 1, workspaceId: "ws-1" },
         ]}
+        threadStatusById={{ "thread-3": { isProcessing: true } }}
       />,
     );
 
@@ -148,5 +149,20 @@ describe("PinnedThreadList", () => {
     expect(screen.queryByText("Pinned Nested")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Show sub-agents" }));
     expect(screen.getByText("Pinned Nested")).toBeTruthy();
+  });
+
+  it("auto-collapses completed pinned sub-agent descendants", () => {
+    render(
+      <PinnedThreadList
+        {...baseProps}
+        rows={[
+          { thread, depth: 0, workspaceId: "ws-1" },
+          { thread: nestedThread, depth: 1, workspaceId: "ws-1" },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText("Pinned Nested")).toBeNull();
+    expect(screen.getByRole("button", { name: "Show sub-agents" })).toBeTruthy();
   });
 });

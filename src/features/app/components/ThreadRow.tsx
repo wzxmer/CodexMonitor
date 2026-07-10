@@ -1,4 +1,5 @@
 import type { CSSProperties, MouseEvent } from "react";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import Pin from "lucide-react/dist/esm/icons/pin";
 import PinOff from "lucide-react/dist/esm/icons/pin-off";
 import { useI18n } from "@/features/i18n/I18nProvider";
@@ -242,7 +243,7 @@ export function ThreadRow({
           >
             <span className="thread-subagent-time-label">{relativeTime ?? "Now"}</span>
             <span className="thread-subagent-toggle-icon" aria-hidden>
-              ›
+              <ChevronRight size={14} strokeWidth={2.25} />
             </span>
           </button>
         ) : (

@@ -1,4 +1,4 @@
-import { useMemo, useState, type MouseEvent } from "react";
+import { useMemo, type MouseEvent } from "react";
 
 import type { ThreadSummary } from "../../../types";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
@@ -6,6 +6,7 @@ import { useI18n } from "@/features/i18n/I18nProvider";
 import { ThreadRow } from "./ThreadRow";
 import { buildThreadRowVisibility } from "./threadRowVisibility";
 import { COLLAPSED_THREAD_ROOT_LIMIT } from "../hooks/useThreadRows";
+import { useSubagentAutoCollapse } from "../hooks/useSubagentAutoCollapse";
 
 type ThreadListRow = {
   thread: ThreadSummary;
@@ -68,36 +69,40 @@ export function ThreadList({
 }: ThreadListProps) {
   const { t } = useI18n();
   const indentUnit = nested ? 10 : 14;
-  const [collapsedThreadKeys, setCollapsedThreadKeys] = useState<Set<string>>(new Set());
-
-  const toggleThreadSubagents = (threadId: string) => {
-    const threadKey = `${workspaceId}:${threadId}`;
-    setCollapsedThreadKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(threadKey)) {
-        next.delete(threadKey);
-      } else {
-        next.add(threadKey);
-      }
-      return next;
-    });
-  };
+  const pinnedRowsWithWorkspace = useMemo(
+    () => pinnedRows.map((row) => ({ ...row, workspaceId })),
+    [pinnedRows, workspaceId],
+  );
+  const unpinnedRowsWithWorkspace = useMemo(
+    () => unpinnedRows.map((row) => ({ ...row, workspaceId })),
+    [unpinnedRows, workspaceId],
+  );
+  const pinnedSubagentCollapse = useSubagentAutoCollapse(
+    pinnedRowsWithWorkspace,
+    threadStatusById,
+    pendingUserInputKeys,
+  );
+  const unpinnedSubagentCollapse = useSubagentAutoCollapse(
+    unpinnedRowsWithWorkspace,
+    threadStatusById,
+    pendingUserInputKeys,
+  );
 
   const pinnedVisibility = useMemo(
     () =>
       buildThreadRowVisibility(
         pinnedRows,
-        (row) => collapsedThreadKeys.has(`${workspaceId}:${row.thread.id}`),
+        (row) => pinnedSubagentCollapse.isCollapsed(workspaceId, row.thread.id),
       ),
-    [collapsedThreadKeys, pinnedRows, workspaceId],
+    [pinnedRows, pinnedSubagentCollapse, workspaceId],
   );
   const unpinnedVisibility = useMemo(
     () =>
       buildThreadRowVisibility(
         unpinnedRows,
-        (row) => collapsedThreadKeys.has(`${workspaceId}:${row.thread.id}`),
+        (row) => unpinnedSubagentCollapse.isCollapsed(workspaceId, row.thread.id),
       ),
-    [collapsedThreadKeys, unpinnedRows, workspaceId],
+    [unpinnedRows, unpinnedSubagentCollapse, workspaceId],
   );
 
   return (
@@ -120,8 +125,8 @@ export function ThreadList({
           onShowThreadMenu={onShowThreadMenu}
           onToggleThreadPin={onToggleThreadPin}
           hasSubagentChildren={pinnedVisibility.rowsWithChildren.has(row)}
-          subagentsExpanded={!collapsedThreadKeys.has(`${workspaceId}:${row.thread.id}`)}
-          onToggleSubagents={(_, threadId) => toggleThreadSubagents(threadId)}
+          subagentsExpanded={!pinnedSubagentCollapse.isCollapsed(workspaceId, row.thread.id)}
+          onToggleSubagents={pinnedSubagentCollapse.toggle}
         />
       ))}
       {pinnedVisibility.visibleRows.length > 0 && unpinnedVisibility.visibleRows.length > 0 && (
@@ -145,8 +150,8 @@ export function ThreadList({
           onShowThreadMenu={onShowThreadMenu}
           onToggleThreadPin={onToggleThreadPin}
           hasSubagentChildren={unpinnedVisibility.rowsWithChildren.has(row)}
-          subagentsExpanded={!collapsedThreadKeys.has(`${workspaceId}:${row.thread.id}`)}
-          onToggleSubagents={(_, threadId) => toggleThreadSubagents(threadId)}
+          subagentsExpanded={!unpinnedSubagentCollapse.isCollapsed(workspaceId, row.thread.id)}
+          onToggleSubagents={unpinnedSubagentCollapse.toggle}
         />
       ))}
       {showExpandToggle && totalThreadRoots > COLLAPSED_THREAD_ROOT_LIMIT && (

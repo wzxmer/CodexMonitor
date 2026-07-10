@@ -121,6 +121,7 @@ describe("ThreadList", () => {
           { thread, depth: 0 },
           { thread: nestedThread, depth: 1 },
         ]}
+        threadStatusById={{ "thread-2": { isProcessing: true } }}
         onShowThreadMenu={onShowThreadMenu}
       />,
     );
@@ -185,6 +186,7 @@ describe("ThreadList", () => {
           { thread, depth: 0 },
           { thread: nestedThread, depth: 1 },
         ]}
+        threadStatusById={{ "thread-2": { isProcessing: true } }}
       />,
     );
 
@@ -196,6 +198,21 @@ describe("ThreadList", () => {
     const showButton = getByRole("button", { name: "Show sub-agents" });
     fireEvent.click(showButton);
     expect(getByText("Nested Agent")).toBeTruthy();
+  });
+
+  it("auto-collapses completed sub-agent descendants", () => {
+    const { queryByText, getByRole } = render(
+      <ThreadList
+        {...baseProps}
+        unpinnedRows={[
+          { thread, depth: 0 },
+          { thread: nestedThread, depth: 1 },
+        ]}
+      />,
+    );
+
+    expect(queryByText("Nested Agent")).toBeNull();
+    expect(getByRole("button", { name: "Show sub-agents" })).toBeTruthy();
   });
 
   it("does not show sub-agent toggle for rows without descendants", () => {

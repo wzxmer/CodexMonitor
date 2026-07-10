@@ -1,9 +1,10 @@
-import { useMemo, useState, type MouseEvent } from "react";
+import { useMemo, type MouseEvent } from "react";
 
 import type { ThreadSummary } from "../../../types";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
 import { ThreadRow } from "./ThreadRow";
 import { buildThreadRowVisibility } from "./threadRowVisibility";
+import { useSubagentAutoCollapse } from "../hooks/useSubagentAutoCollapse";
 
 type PinnedThreadRow = {
   thread: ThreadSummary;
@@ -45,34 +46,24 @@ export function PinnedThreadList({
   onShowThreadMenu,
   onToggleThreadPin,
 }: PinnedThreadListProps) {
-  const [collapsedThreadKeys, setCollapsedThreadKeys] = useState<Set<string>>(new Set());
+  const subagentCollapse = useSubagentAutoCollapse(
+    rows,
+    threadStatusById,
+    pendingUserInputKeys,
+  );
   const visibility = useMemo(
     () =>
       buildThreadRowVisibility(
         rows,
-        (row) => collapsedThreadKeys.has(`${row.workspaceId}:${row.thread.id}`),
+        (row) => subagentCollapse.isCollapsed(row.workspaceId, row.thread.id),
       ),
-    [collapsedThreadKeys, rows],
+    [rows, subagentCollapse],
   );
-
-  const toggleThreadSubagents = (workspaceId: string, threadId: string) => {
-    const threadKey = `${workspaceId}:${threadId}`;
-    setCollapsedThreadKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(threadKey)) {
-        next.delete(threadKey);
-      } else {
-        next.add(threadKey);
-      }
-      return next;
-    });
-  };
 
   return (
     <div className="thread-list pinned-thread-list">
       {visibility.visibleRows.map((row) => {
         const { thread, depth, workspaceId } = row;
-        const threadKey = `${workspaceId}:${thread.id}`;
         return (
           <ThreadRow
             key={`${workspaceId}:${thread.id}`}
@@ -92,8 +83,8 @@ export function PinnedThreadList({
             onShowThreadMenu={onShowThreadMenu}
             onToggleThreadPin={onToggleThreadPin}
             hasSubagentChildren={visibility.rowsWithChildren.has(row)}
-            subagentsExpanded={!collapsedThreadKeys.has(threadKey)}
-            onToggleSubagents={toggleThreadSubagents}
+            subagentsExpanded={!subagentCollapse.isCollapsed(workspaceId, thread.id)}
+            onToggleSubagents={subagentCollapse.toggle}
             showPinnedLabel={false}
           />
         );
