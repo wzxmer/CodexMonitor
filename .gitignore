@@ -39,6 +39,10 @@ RTK.md
 .cursor/
 public/assets/material-icons/
 
+# Local-only product planning and agent knowledge
+/docs/superpowers/
+/docs/codex-native-experience-requirements.md
+
 # Nix
 result
 skills-lock.json
