@@ -7,10 +7,14 @@ import { useComposerImages } from "./useComposerImages";
 
 vi.mock("../../../services/tauri", () => ({
   pickAttachmentFiles: vi.fn().mockResolvedValue([]),
-  saveComposerImages: vi.fn(async (_workspaceId: string, images: string[]) =>
+  saveComposerImages: vi.fn(async (
+    _workspaceId: string,
+    _ownerKey: string,
+    images: string[],
+  ) =>
     images.map(
       (image) =>
-        `/workspace/.codex-monitor/attachments/${
+        `/home/.codex/codex-monitor/attachments/sessions/session/${
           image.split("/").pop() ?? "image.png"
         }`,
     ),
@@ -119,9 +123,14 @@ describe("useComposerImages", () => {
     });
 
     expect(hook.result.activeImages).toEqual([
-      "/workspace/.codex-monitor/attachments/a.png",
-      "/workspace/.codex-monitor/attachments/b.png",
+      "/home/.codex/codex-monitor/attachments/sessions/session/a.png",
+      "/home/.codex/codex-monitor/attachments/sessions/session/b.png",
     ]);
+    expect(saveComposerImages).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      ["/tmp/a.png", "/tmp/b.png"],
+    );
 
     await act(async () => {
       hook.result.attachImages(["/tmp/b.png", "/tmp/c.png"]);
@@ -129,9 +138,9 @@ describe("useComposerImages", () => {
     });
 
     expect(hook.result.activeImages).toEqual([
-      "/workspace/.codex-monitor/attachments/a.png",
-      "/workspace/.codex-monitor/attachments/b.png",
-      "/workspace/.codex-monitor/attachments/c.png",
+      "/home/.codex/codex-monitor/attachments/sessions/session/a.png",
+      "/home/.codex/codex-monitor/attachments/sessions/session/b.png",
+      "/home/.codex/codex-monitor/attachments/sessions/session/c.png",
     ]);
 
     hook.unmount();
@@ -149,15 +158,18 @@ describe("useComposerImages", () => {
     });
 
     act(() => {
-      hook.result.removeImage("/workspace/.codex-monitor/attachments/a.png");
+      hook.result.removeImage(
+        "/home/.codex/codex-monitor/attachments/sessions/session/a.png",
+      );
     });
 
     expect(hook.result.activeImages).toEqual([
-      "/workspace/.codex-monitor/attachments/b.png",
+      "/home/.codex/codex-monitor/attachments/sessions/session/b.png",
     ]);
-
     act(() => {
-      hook.result.removeImage("/workspace/.codex-monitor/attachments/b.png");
+      hook.result.removeImage(
+        "/home/.codex/codex-monitor/attachments/sessions/session/b.png",
+      );
     });
 
     expect(hook.result.activeImages).toEqual([]);
@@ -188,7 +200,9 @@ describe("useComposerImages", () => {
     expect(hook.result.activeImages).toEqual([]);
 
     await act(async () => {
-      resolveSave(["/workspace/.codex-monitor/attachments/a.png"]);
+      resolveSave([
+        "/home/.codex/codex-monitor/attachments/sessions/session/a.png",
+      ]);
       await Promise.resolve();
     });
     expect(hook.result.activeImages).toEqual([]);
@@ -207,7 +221,7 @@ describe("useComposerImages", () => {
       await Promise.resolve();
     });
     expect(hook.result.activeImages).toEqual([
-      "/workspace/.codex-monitor/attachments/a.png",
+      "/home/.codex/codex-monitor/attachments/sessions/session/a.png",
     ]);
 
     hook.rerender({ activeThreadId: null, activeWorkspaceId: "ws-1" });
@@ -218,12 +232,17 @@ describe("useComposerImages", () => {
       await Promise.resolve();
     });
     expect(hook.result.activeImages).toEqual([
-      "/workspace/.codex-monitor/attachments/b.png",
+      "/home/.codex/codex-monitor/attachments/sessions/session/b.png",
     ]);
+    expect(saveComposerImages).toHaveBeenLastCalledWith(
+      "ws-1",
+      "draft-ws-1",
+      ["/tmp/b.png"],
+    );
 
     hook.rerender({ activeThreadId: "thread-1", activeWorkspaceId: "ws-1" });
     expect(hook.result.activeImages).toEqual([
-      "/workspace/.codex-monitor/attachments/a.png",
+      "/home/.codex/codex-monitor/attachments/sessions/session/a.png",
     ]);
 
     hook.unmount();

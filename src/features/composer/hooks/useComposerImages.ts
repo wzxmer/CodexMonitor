@@ -57,7 +57,7 @@ export function useComposerImages({
       if (imagePaths.length === 0) {
         return;
       }
-      void saveComposerImages(activeWorkspaceId, imagePaths)
+      void saveComposerImages(activeWorkspaceId, draftKey, imagePaths)
         .then((savedPaths) => {
           if (savedPaths.length > 0) {
             replaceImages(imagePaths, savedPaths);

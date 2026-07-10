@@ -132,10 +132,24 @@ pub(crate) async fn read_image_as_data_url(
 #[tauri::command]
 pub(crate) async fn save_composer_images(
     workspace_id: String,
+    owner_key: String,
     images: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
-    attachments::save_composer_images_impl(workspace_id, images, &*state).await
+    attachments::save_composer_images_impl(workspace_id, owner_key, images, &*state).await
+}
+
+#[tauri::command]
+pub(crate) async fn promote_composer_images(
+    workspace_id: String,
+    thread_id: String,
+    images: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return Ok(images);
+    }
+    attachments::promote_composer_images_impl(workspace_id, thread_id, images, &*state).await
 }
 
 #[tauri::command]

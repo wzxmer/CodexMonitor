@@ -417,6 +417,14 @@ pub(crate) async fn resume_thread_core(
     thread_id: String,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
+    resume_thread_with_session_core(&session, workspace_id, thread_id).await
+}
+
+pub(crate) async fn resume_thread_with_session_core(
+    session: &WorkspaceSession,
+    workspace_id: String,
+    thread_id: String,
+) -> Result<Value, String> {
     let params = json!({ "threadId": thread_id });
     session
         .send_request_for_workspace(&workspace_id, "thread/resume", params)
@@ -429,6 +437,14 @@ pub(crate) async fn read_thread_core(
     thread_id: String,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
+    read_thread_with_session_core(&session, workspace_id, thread_id).await
+}
+
+pub(crate) async fn read_thread_with_session_core(
+    session: &WorkspaceSession,
+    workspace_id: String,
+    thread_id: String,
+) -> Result<Value, String> {
     let params = build_read_thread_params(thread_id);
     session
         .send_request_for_workspace(&workspace_id, "thread/read", params)
@@ -646,6 +662,37 @@ pub(crate) async fn send_user_message_core(
     collaboration_mode: Option<Value>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
+    send_user_message_with_session_core(
+        &session,
+        workspaces,
+        workspace_id,
+        thread_id,
+        text,
+        model,
+        effort,
+        service_tier,
+        access_mode,
+        images,
+        app_mentions,
+        collaboration_mode,
+    )
+    .await
+}
+
+pub(crate) async fn send_user_message_with_session_core(
+    session: &WorkspaceSession,
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    workspace_id: String,
+    thread_id: String,
+    text: String,
+    model: Option<String>,
+    effort: Option<String>,
+    service_tier: Option<Option<String>>,
+    access_mode: Option<String>,
+    images: Option<Vec<String>>,
+    app_mentions: Option<Vec<Value>>,
+    collaboration_mode: Option<Value>,
+) -> Result<Value, String> {
     let workspace_path = resolve_workspace_path_core(workspaces, &workspace_id).await?;
     let access_mode = access_mode.unwrap_or_else(|| "current".to_string());
     let sandbox_policy = match access_mode.as_str() {
@@ -694,10 +741,31 @@ pub(crate) async fn turn_steer_core(
     images: Option<Vec<String>>,
     app_mentions: Option<Vec<Value>>,
 ) -> Result<Value, String> {
+    let session = get_session_clone(sessions, &workspace_id).await?;
+    turn_steer_with_session_core(
+        &session,
+        workspace_id,
+        thread_id,
+        turn_id,
+        text,
+        images,
+        app_mentions,
+    )
+    .await
+}
+
+pub(crate) async fn turn_steer_with_session_core(
+    session: &WorkspaceSession,
+    workspace_id: String,
+    thread_id: String,
+    turn_id: String,
+    text: String,
+    images: Option<Vec<String>>,
+    app_mentions: Option<Vec<Value>>,
+) -> Result<Value, String> {
     if turn_id.trim().is_empty() {
         return Err("missing active turn id".to_string());
     }
-    let session = get_session_clone(sessions, &workspace_id).await?;
     let input = build_turn_input_items(text, images, app_mentions)?;
     let params = json!({
         "threadId": thread_id,
@@ -726,6 +794,15 @@ pub(crate) async fn turn_interrupt_core(
     turn_id: String,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
+    turn_interrupt_with_session_core(&session, workspace_id, thread_id, turn_id).await
+}
+
+pub(crate) async fn turn_interrupt_with_session_core(
+    session: &WorkspaceSession,
+    workspace_id: String,
+    thread_id: String,
+    turn_id: String,
+) -> Result<Value, String> {
     let params = json!({ "threadId": thread_id, "turnId": turn_id });
     session
         .send_request_for_workspace(&workspace_id, "turn/interrupt", params)

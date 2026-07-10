@@ -15,6 +15,7 @@ import type {
 } from "@/types";
 import {
   compactThread as compactThreadService,
+  promoteComposerImages,
   sendUserMessage as sendUserMessageService,
   steerTurn as steerTurnService,
   startReview as startReviewService,
@@ -24,12 +25,12 @@ import {
   readWorkspaceFile,
   rollbackThread as rollbackThreadService,
 } from "@services/tauri";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import { expandCustomPromptText } from "@utils/customPrompts";
 import {
   attachmentDisplayName,
   attachmentNameFromDataUrl,
   isImageAttachment,
-  splitImageAndFileAttachments,
 } from "@utils/attachments";
 import {
   asString,
@@ -126,6 +127,11 @@ async function prepareMessageAttachmentsForSend({
 
     const dataText = decodeDataUrlTextAttachment(attachment);
     if (dataText) {
+      if (new TextEncoder().encode(dataText.content).byteLength > 1024 * 1024) {
+        throw new Error(
+          `Attachment "${attachmentDisplayName(attachment)}" exceeds the inline text limit and was not sent.`,
+        );
+      }
       attachedFileBlocks.push(
         `<attached_file path="${escapeAttachedFileAttr(dataText.name)}" name="${escapeAttachedFileAttr(dataText.name)}">\n${dataText.content}\n</attached_file>`,
       );
@@ -260,6 +266,7 @@ export function useThreadMessaging({
   renameThread,
   onUserMessageCreated,
 }: UseThreadMessagingOptions) {
+  const { t } = useI18n();
   const sendMessageToThread = useCallback(
     async (
       workspace: WorkspaceInfo,
@@ -309,6 +316,27 @@ export function useThreadMessaging({
           displayAttachments: [],
         };
       }
+      if (preparedAttachments.images.length > 0) {
+        try {
+          const promotedImages = await promoteComposerImages(
+            workspace.id,
+            threadId,
+            preparedAttachments.images,
+          );
+          preparedAttachments = {
+            ...preparedAttachments,
+            images: promotedImages,
+          };
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          pushThreadErrorMessage(
+            threadId,
+            `${t("composer.attachmentPersistFailed")} ${detail}`,
+          );
+          safeMessageActivity();
+          return { status: "blocked" };
+        }
+      }
       const isProcessing = threadStatusById[threadId]?.isProcessing ?? false;
       const activeTurnId = activeTurnIdByThread[threadId] ?? null;
       const {
@@ -349,7 +377,6 @@ export function useThreadMessaging({
       });
       const timestamp = Date.now();
       const customThreadName = getCustomName(workspace.id, threadId) ?? null;
-      const displayAttachments = splitImageAndFileAttachments(images);
       dispatch({
         type: "upsertItem",
         workspaceId: workspace.id,
@@ -360,7 +387,7 @@ export function useThreadMessaging({
           role: "user",
           text: finalText,
           createdAt: timestamp,
-          images: displayAttachments.images,
+          images: preparedAttachments.images,
           attachments: preparedAttachments.displayAttachments,
         },
         replaceExisting: Boolean(options?.replaceMessageId),
@@ -537,6 +564,7 @@ export function useThreadMessaging({
       threadStatusById,
       tokenUsageByThread,
       onUserMessageCreated,
+      t,
     ],
   );
 

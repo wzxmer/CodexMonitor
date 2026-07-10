@@ -3,6 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/react";
 import {
+  promoteComposerImages,
   sendUserMessage as sendUserMessageService,
   steerTurn as steerTurnService,
   startReview as startReviewService,
@@ -23,6 +24,7 @@ vi.mock("@sentry/react", () => ({
 }));
 
 vi.mock("@services/tauri", () => ({
+  promoteComposerImages: vi.fn(),
   sendUserMessage: vi.fn(),
   steerTurn: vi.fn(),
   startReview: vi.fn(),
@@ -72,6 +74,9 @@ describe("useThreadMessaging telemetry", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(promoteComposerImages).mockImplementation(
+      async (_workspaceId, _threadId, images) => images,
+    );
     vi.mocked(sendUserMessageService).mockResolvedValue({
       result: {
         turn: { id: "turn-1" },
@@ -165,6 +170,77 @@ describe("useThreadMessaging telemetry", () => {
     );
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledTimes(1);
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", "thread-1");
+  });
+
+  it("promotes draft images before inserting and sending the user message", async () => {
+    const dispatch = vi.fn();
+    vi.mocked(promoteComposerImages).mockResolvedValueOnce([
+      "/home/.codex/codex-monitor/attachments/sessions/thread/image.png",
+    ]);
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "image",
+        ["/home/.codex/codex-monitor/attachments/pending/draft/image.png"],
+      );
+    });
+
+    expect(promoteComposerImages).toHaveBeenCalledWith("ws-1", "thread-1", [
+      "/home/.codex/codex-monitor/attachments/pending/draft/image.png",
+    ]);
+    expect(sendUserMessageService).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "image",
+      expect.objectContaining({
+        images: [
+          "/home/.codex/codex-monitor/attachments/sessions/thread/image.png",
+        ],
+      }),
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upsertItem",
+        item: expect.objectContaining({
+          images: [
+            "/home/.codex/codex-monitor/attachments/sessions/thread/image.png",
+          ],
+        }),
+      }),
+    );
   });
 
   it("notifies title autogeneration when a new user message starts a turn", async () => {
