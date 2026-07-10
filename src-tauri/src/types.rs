@@ -1,5 +1,338 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionSource {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) codex_home_path: String,
+    pub(crate) enabled: bool,
+    pub(crate) is_current: bool,
+    pub(crate) is_default: bool,
+    pub(crate) discovered_at: i64,
+    pub(crate) last_scan_at: Option<i64>,
+    pub(crate) status: SessionSourceStatus,
+    pub(crate) error: Option<String>,
+}
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum SessionSourceStatus {
+    Ready,
+    Missing,
+    Denied,
+    Invalid,
+    Scanning,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SourceScopedSessionKey {
+    pub(crate) source_id: String,
+    pub(crate) thread_id: String,
+}
+
+impl SourceScopedSessionKey {
+    pub(crate) fn new(source_id: impl Into<String>, thread_id: impl Into<String>) -> Self {
+        Self {
+            source_id: source_id.into(),
+            thread_id: thread_id.into(),
+        }
+    }
+
+    pub(crate) fn stable_key(&self) -> String {
+        format!("{}:{}", self.source_id, self.thread_id)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum SessionFileStatus {
+    Mapped,
+    Unmapped,
+    Missing,
+    Invalid,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum SessionFileConfidence {
+    Exact,
+    Inferred,
+    Ambiguous,
+    None,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedSession {
+    pub(crate) key: String,
+    pub(crate) source_id: String,
+    pub(crate) thread_id: String,
+    pub(crate) source_kind: Option<String>,
+    pub(crate) cwd: Option<String>,
+    pub(crate) title: String,
+    pub(crate) preview: Option<String>,
+    pub(crate) created_at: Option<i64>,
+    pub(crate) updated_at: Option<i64>,
+    pub(crate) archived_at: Option<i64>,
+    pub(crate) is_archived: bool,
+    pub(crate) parent_thread_id: Option<String>,
+    pub(crate) is_subagent: bool,
+    pub(crate) subagent_nickname: Option<String>,
+    pub(crate) subagent_role: Option<String>,
+    pub(crate) project_exists: bool,
+    pub(crate) file_status: SessionFileStatus,
+    pub(crate) file_confidence: SessionFileConfidence,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionSearchRequest {
+    pub(crate) request_id: String,
+    pub(crate) query: String,
+    pub(crate) source_ids: Vec<String>,
+    pub(crate) include_archived: bool,
+    pub(crate) include_subagents: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum SessionSearchMatchField {
+    Title,
+    ThreadId,
+    ProjectName,
+    ProjectPath,
+    UserMessage,
+    AgentReply,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionSearchMatch {
+    pub(crate) field: SessionSearchMatchField,
+    pub(crate) snippet: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionSearchResult {
+    pub(crate) session: ManagedSession,
+    pub(crate) matches: Vec<SessionSearchMatch>,
+    pub(crate) incomplete: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionSearchProgress {
+    pub(crate) request_id: String,
+    pub(crate) scanned_sources: usize,
+    pub(crate) total_sources: usize,
+    pub(crate) scanned_files: usize,
+    pub(crate) total_files: Option<usize>,
+    pub(crate) completed: bool,
+    pub(crate) cancelled: bool,
+    pub(crate) incomplete: bool,
+}
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionSearchResponse {
+    pub(crate) results: Vec<SessionSearchResult>,
+    pub(crate) progress: SessionSearchProgress,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionSourceUpdateRequest {
+    pub(crate) action: String,
+    #[serde(default)]
+    pub(crate) source_id: Option<String>,
+    #[serde(default)]
+    pub(crate) name: Option<String>,
+    #[serde(default)]
+    pub(crate) path: Option<String>,
+    #[serde(default)]
+    pub(crate) enabled: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionScanRequest {
+    pub(crate) request_id: String,
+    #[serde(default)]
+    pub(crate) source_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionScanSummary {
+    pub(crate) request_id: String,
+    pub(crate) total_sessions: usize,
+    pub(crate) diagnostic_count: usize,
+    pub(crate) cancelled: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedSessionPageRequest {
+    pub(crate) request_id: String,
+    #[serde(default)]
+    pub(crate) offset: usize,
+    #[serde(default = "default_managed_session_page_limit")]
+    pub(crate) limit: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionScanDiagnosticDto {
+    pub(crate) source_id: String,
+    pub(crate) path: Option<String>,
+    pub(crate) error: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedSessionPage {
+    pub(crate) request_id: String,
+    pub(crate) items: Vec<ManagedSession>,
+    pub(crate) diagnostics: Vec<SessionScanDiagnosticDto>,
+    pub(crate) total: usize,
+    pub(crate) next_offset: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ResumeManagedSessionRequest {
+    pub(crate) source_id: String,
+    pub(crate) thread_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ResumeManagedSessionResponse {
+    pub(crate) workspace: WorkspaceInfo,
+    pub(crate) thread_id: String,
+    pub(crate) source_id: String,
+    pub(crate) source_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ArchiveManagedSessionItem {
+    pub(crate) source_id: String,
+    pub(crate) thread_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ArchiveManagedSessionsRequest {
+    pub(crate) items: Vec<ArchiveManagedSessionItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ArchiveManagedSessionResult {
+    pub(crate) source_id: String,
+    pub(crate) thread_id: String,
+    pub(crate) success: bool,
+    pub(crate) archived_at: Option<i64>,
+    pub(crate) error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ArchiveManagedSessionsResponse {
+    pub(crate) results: Vec<ArchiveManagedSessionResult>,
+    pub(crate) success_count: usize,
+    pub(crate) failure_count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PermanentlyDeleteManagedSessionRequest {
+    pub(crate) source_id: String,
+    pub(crate) thread_id: String,
+    pub(crate) archived_at: i64,
+    pub(crate) cascade_requested: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PermanentlyDeleteManagedSessionResult {
+    pub(crate) source_id: String,
+    pub(crate) thread_id: String,
+    pub(crate) success: bool,
+    pub(crate) error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PermanentlyDeleteManagedSessionResponse {
+    pub(crate) results: Vec<PermanentlyDeleteManagedSessionResult>,
+    pub(crate) success_count: usize,
+    pub(crate) failure_count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedSessionCleanupRequest {
+    pub(crate) retention_days: u32,
+    #[serde(default)]
+    pub(crate) protected_thread_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedSessionCleanupPreview {
+    pub(crate) eligible_count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedSessionCleanupResponse {
+    pub(crate) results: Vec<PermanentlyDeleteManagedSessionResult>,
+    pub(crate) success_count: usize,
+    pub(crate) failure_count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedSessionCleanupSchedulerRequest {
+    #[serde(default)]
+    pub(crate) protected_thread_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedSessionCleanupSchedulerResponse {
+    pub(crate) ran: bool,
+    pub(crate) results: Vec<PermanentlyDeleteManagedSessionResult>,
+    pub(crate) success_count: usize,
+    pub(crate) failure_count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PrepareManagedSessionDerivationRequest {
+    pub(crate) source_id: String,
+    pub(crate) thread_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedSessionDerivationPreview {
+    pub(crate) source_session: ManagedSession,
+    pub(crate) source_name: String,
+    pub(crate) source_session_key: String,
+    pub(crate) handoff_content: String,
+    pub(crate) user_message_count: usize,
+    pub(crate) agent_reply_count: usize,
+    pub(crate) incomplete: bool,
+}
+
+fn default_managed_session_page_limit() -> usize {
+    100
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct GitFileStatus {
     pub(crate) path: String,
@@ -428,6 +761,8 @@ pub(crate) struct AppSettings {
     pub(crate) codex_args: Option<String>,
     #[serde(default, rename = "codexHome")]
     pub(crate) codex_home: Option<String>,
+    #[serde(default, rename = "sessionSources")]
+    pub(crate) session_sources: Vec<SessionSource>,
     #[serde(default, rename = "codexKeyProfiles")]
     pub(crate) codex_key_profiles: Vec<CodexKeyProfile>,
     #[serde(default, rename = "activeCodexKeyProfileId")]
@@ -544,6 +879,8 @@ pub(crate) struct AppSettings {
     pub(crate) theme: String,
     #[serde(default = "default_theme_accent", rename = "themeAccent")]
     pub(crate) theme_accent: String,
+    #[serde(default = "default_show_codex_usage", rename = "showCodexUsage")]
+    pub(crate) show_codex_usage: bool,
     #[serde(
         default = "default_usage_show_remaining",
         rename = "usageShowRemaining"
@@ -616,6 +953,13 @@ pub(crate) struct AppSettings {
         rename = "autoArchiveThreadsDays"
     )]
     pub(crate) auto_archive_threads_days: u32,
+    #[serde(default, rename = "autoDeleteArchivedThreadsEnabled")]
+    pub(crate) auto_delete_archived_threads_enabled: bool,
+    #[serde(
+        default = "default_auto_delete_archived_threads_days",
+        rename = "autoDeleteArchivedThreadsDays"
+    )]
+    pub(crate) auto_delete_archived_threads_days: u32,
     #[serde(
         default = "default_automatic_app_update_checks_enabled",
         rename = "automaticAppUpdateChecksEnabled"
@@ -635,6 +979,8 @@ pub(crate) struct AppSettings {
     pub(crate) code_font_family: String,
     #[serde(default = "default_message_font_size", rename = "messageFontSize")]
     pub(crate) message_font_size: u8,
+    #[serde(default = "default_process_font_size", rename = "processFontSize")]
+    pub(crate) process_font_size: u8,
     #[serde(default = "default_message_font_weight", rename = "messageFontWeight")]
     pub(crate) message_font_weight: u16,
     #[serde(default = "default_message_font_family", rename = "messageFontFamily")]
@@ -770,6 +1116,11 @@ pub(crate) struct AppSettings {
     )]
     pub(crate) composer_fence_auto_wrap_paste_code_like: bool,
     #[serde(
+        default = "default_composer_large_paste_behavior",
+        rename = "composerLargePasteBehavior"
+    )]
+    pub(crate) composer_large_paste_behavior: String,
+    #[serde(
         default = "default_composer_list_continuation",
         rename = "composerListContinuation"
     )]
@@ -854,6 +1205,10 @@ fn default_theme_accent() -> String {
     "codex".to_string()
 }
 
+fn default_show_codex_usage() -> bool {
+    true
+}
+
 fn default_usage_show_remaining() -> bool {
     false
 }
@@ -910,6 +1265,10 @@ fn default_auto_archive_threads_days() -> u32 {
     7
 }
 
+fn default_auto_delete_archived_threads_days() -> u32 {
+    30
+}
+
 fn default_automatic_app_update_checks_enabled() -> bool {
     true
 }
@@ -923,7 +1282,7 @@ fn default_ui_latin_font_family() -> String {
 }
 
 fn default_ui_cjk_font_family() -> String {
-    "\"Microsoft YaHei UI\", \"Microsoft YaHei\", \"Segoe UI\", sans-serif".to_string()
+    "\"PingFang SC\", \"Noto Sans SC Variable\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", sans-serif".to_string()
 }
 
 fn default_code_font_family() -> String {
@@ -931,15 +1290,19 @@ fn default_code_font_family() -> String {
 }
 
 fn default_ui_font_size() -> u8 {
-    13
+    14
 }
 
 fn default_ui_font_weight() -> u16 {
-    400
+    450
 }
 
 fn default_message_font_size() -> u8 {
-    13
+    14
+}
+
+fn default_process_font_size() -> u8 {
+    12
 }
 
 fn default_message_font_weight() -> u16 {
@@ -947,11 +1310,11 @@ fn default_message_font_weight() -> u16 {
 }
 
 fn default_message_font_family() -> String {
-    "\"Segoe UI\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", system-ui, sans-serif".to_string()
+    "\"Segoe UI\", \"PingFang SC\", \"Noto Sans SC Variable\", \"Microsoft YaHei UI\", \"Microsoft YaHei\", system-ui, sans-serif".to_string()
 }
 
 fn default_code_font_size() -> u8 {
-    11
+    13
 }
 
 fn default_composer_model_shortcut() -> Option<String> {
@@ -1219,6 +1582,10 @@ fn default_composer_fence_auto_wrap_paste_code_like() -> bool {
     false
 }
 
+fn default_composer_large_paste_behavior() -> String {
+    "smart".to_string()
+}
+
 fn default_composer_list_continuation() -> bool {
     false
 }
@@ -1369,6 +1736,7 @@ impl Default for AppSettings {
             codex_bin: None,
             codex_args: None,
             codex_home: None,
+            session_sources: Vec::new(),
             codex_key_profiles: Vec::new(),
             active_codex_key_profile_id: None,
             backend_mode: default_backend_mode(),
@@ -1403,6 +1771,7 @@ impl Default for AppSettings {
             app_language: default_app_language(),
             theme: default_theme(),
             theme_accent: default_theme_accent(),
+            show_codex_usage: default_show_codex_usage(),
             usage_show_remaining: default_usage_show_remaining(),
             third_party_usage_multiplier: default_third_party_usage_multiplier(),
             show_message_file_path: default_show_message_file_path(),
@@ -1419,6 +1788,8 @@ impl Default for AppSettings {
             thread_title_autogeneration_enabled: default_thread_title_autogeneration_enabled(),
             auto_archive_threads_enabled: false,
             auto_archive_threads_days: default_auto_archive_threads_days(),
+            auto_delete_archived_threads_enabled: false,
+            auto_delete_archived_threads_days: default_auto_delete_archived_threads_days(),
             automatic_app_update_checks_enabled: true,
             ui_font_family: default_ui_font_family(),
             ui_latin_font_family: default_ui_latin_font_family(),
@@ -1427,6 +1798,7 @@ impl Default for AppSettings {
             ui_font_weight: default_ui_font_weight(),
             code_font_family: default_code_font_family(),
             message_font_size: default_message_font_size(),
+            process_font_size: default_process_font_size(),
             message_font_weight: default_message_font_weight(),
             message_font_family: default_message_font_family(),
             code_font_size: default_code_font_size(),
@@ -1463,6 +1835,7 @@ impl Default for AppSettings {
                 default_composer_fence_auto_wrap_paste_multiline(),
             composer_fence_auto_wrap_paste_code_like:
                 default_composer_fence_auto_wrap_paste_code_like(),
+            composer_large_paste_behavior: default_composer_large_paste_behavior(),
             composer_list_continuation: default_composer_list_continuation(),
             composer_code_block_copy_use_modifier: default_composer_code_block_copy_use_modifier(),
             workspace_groups: default_workspace_groups(),
@@ -1599,8 +1972,17 @@ mod tests {
         assert!(settings.thread_title_autogeneration_enabled);
         assert!(settings.automatic_app_update_checks_enabled);
         assert!(settings.ui_font_family.contains("system-ui"));
+        assert!(settings.ui_cjk_font_family.contains("PingFang SC"));
+        assert!(settings
+            .ui_cjk_font_family
+            .contains("Noto Sans SC Variable"));
         assert!(settings.code_font_family.contains("ui-monospace"));
-        assert_eq!(settings.code_font_size, 11);
+        assert_eq!(settings.ui_font_size, 14);
+        assert_eq!(settings.ui_font_weight, 450);
+        assert_eq!(settings.message_font_size, 14);
+        assert_eq!(settings.process_font_size, 12);
+        assert_eq!(settings.code_font_size, 13);
+        assert!(settings.show_codex_usage);
         assert!(settings.notification_sounds_enabled);
         assert!(settings.system_notifications_enabled);
         assert!(settings.subagent_system_notifications_enabled);

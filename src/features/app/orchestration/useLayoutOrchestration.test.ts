@@ -10,6 +10,8 @@ const appSettings = {
   uiCjkFontFamily: '"LXGW WenKai Screen", sans-serif',
   uiFontSize: 13,
   uiFontWeight: 500,
+  messageFontSize: 17,
+  processFontSize: 11,
   codeFontFamily: '"JetBrains Mono", monospace',
   codeFontSize: 12,
 } satisfies Pick<
@@ -19,6 +21,8 @@ const appSettings = {
   | "uiCjkFontFamily"
   | "uiFontSize"
   | "uiFontWeight"
+  | "messageFontSize"
+  | "processFontSize"
   | "codeFontFamily"
   | "codeFontSize"
 >;
@@ -57,7 +61,8 @@ describe("useAppShellOrchestration", () => {
     expect(appStyle["--message-font-family"]).toBe(
       '"Avenir", "LXGW WenKai Screen", sans-serif, system-ui',
     );
-    expect(appStyle["--message-font-size"]).toBe("13px");
+    expect(appStyle["--message-font-size"]).toBe("17px");
+    expect(appStyle["--process-font-size"]).toBe("11px");
     expect(appStyle["--message-font-weight"]).toBe("500");
     expect(appStyle["--code-font-family"]).toBe(
       '"JetBrains Mono", "LXGW WenKai Screen", monospace, sans-serif, system-ui',

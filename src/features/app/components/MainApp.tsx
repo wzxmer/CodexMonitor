@@ -72,6 +72,7 @@ import { useThreadListSortKey } from "@app/hooks/useThreadListSortKey";
 import { useThreadListActions } from "@app/hooks/useThreadListActions";
 import { useRemoteThreadLiveConnection } from "@app/hooks/useRemoteThreadLiveConnection";
 import { useTrayLabels } from "@app/hooks/useTrayLabels";
+import { useSessionCleanupScheduler } from "@app/hooks/useSessionCleanupScheduler";
 import { I18nProvider } from "@/features/i18n/I18nProvider";
 import { resolveAppLanguage } from "@/features/i18n/appLanguage";
 import { I18N_STRINGS, type I18nKey } from "@/features/i18n/strings";
@@ -88,6 +89,11 @@ import {
 } from "@app/orchestration/useWorkspaceOrchestration";
 import { useAppShellOrchestration } from "@app/orchestration/useLayoutOrchestration";
 import { normalizeCodexArgsInput } from "@/utils/codexArgsInput";
+import { prepareManagedSessionDerivation, resumeManagedSession } from "@services/tauri";
+import type { ManagedSession, ManagedSessionDerivationPreview } from "@/types";
+import { SessionDerivationPrompt } from "@/features/sessions/components/SessionDerivationPrompt";
+import { loadThreadDerivations, saveThreadDerivation } from "@threads/utils/threadStorage";
+import { deriveManagedSessionIntoWorkspace } from "@/features/sessions/orchestration/deriveManagedSession";
 
 const SettingsView = lazy(() =>
   import("@settings/components/SettingsView").then((module) => ({
@@ -123,6 +129,14 @@ function resolveWorkspaceIdForLocalCodexPath(
 }
 
 export default function MainApp() {
+  const [managedSessionSourceByThread, setManagedSessionSourceByThread] = useState<Record<string, string>>({});
+  const [threadDerivations, setThreadDerivations] = useState(loadThreadDerivations);
+  const [managedSessionDerivation, setManagedSessionDerivation] = useState<{
+    preview: ManagedSessionDerivationPreview;
+    destination: WorkspaceInfo;
+    error: string | null;
+    isBusy: boolean;
+  } | null>(null);
   const {
     appSettings,
     setAppSettings,
@@ -154,6 +168,7 @@ export default function MainApp() {
     handleCopyDebug,
     clearDebugEntries,
     shouldReduceTransparency,
+    runtimeThemeAppearance,
   } = useAppBootstrapOrchestration();
   const appLanguage = resolveAppLanguage(appSettings.appLanguage);
   const t = useCallback(
@@ -744,6 +759,7 @@ export default function MainApp() {
       fenceWrapSelection: appSettings.composerFenceWrapSelection,
       autoWrapPasteMultiline: appSettings.composerFenceAutoWrapPasteMultiline,
       autoWrapPasteCodeLike: appSettings.composerFenceAutoWrapPasteCodeLike,
+      largePasteBehavior: appSettings.composerLargePasteBehavior ?? "smart",
       continueListOnShiftEnter: appSettings.composerListContinuation,
     }),
     [
@@ -754,6 +770,7 @@ export default function MainApp() {
       appSettings.composerFenceWrapSelection,
       appSettings.composerFenceAutoWrapPasteMultiline,
       appSettings.composerFenceAutoWrapPasteCodeLike,
+      appSettings.composerLargePasteBehavior,
       appSettings.composerListContinuation,
     ],
   );
@@ -1039,6 +1056,87 @@ export default function MainApp() {
       );
     }
   }, [connectWorkspace, resumeThreadById, resumeThreadPrompt]);
+  const handleResumeManagedSession = useCallback(async (session: ManagedSession) => {
+    try {
+      const result = await resumeManagedSession({
+        sourceId: session.sourceId,
+        threadId: session.threadId,
+      });
+      await refreshWorkspaces();
+      markWorkspaceConnected(result.workspace.id);
+      const restoredThreadId = await resumeThreadById(
+        result.workspace.id,
+        result.threadId,
+      );
+      if (!restoredThreadId) {
+        throw new Error("thread/resume returned no thread");
+      }
+      setManagedSessionSourceByThread((current) => ({
+        ...current,
+        [`${result.workspace.id}:${restoredThreadId}`]: result.sourceName,
+      }));
+      exitDiffView();
+      selectWorkspace(result.workspace.id);
+      setActiveThreadId(restoredThreadId, result.workspace.id);
+      if (isCompact) setActiveTab("codex");
+      return true;
+    } catch (error) {
+      alertError(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  }, [alertError, exitDiffView, isCompact, markWorkspaceConnected, refreshWorkspaces, resumeThreadById, selectWorkspace, setActiveTab, setActiveThreadId]);
+  const handleDeriveManagedSession = useCallback(async (session: ManagedSession) => {
+    if (!activeWorkspace) {
+      alertError(t("sessionManager.deriveNeedsWorkspace"));
+      return;
+    }
+    try {
+      const preview = await prepareManagedSessionDerivation({
+        sourceId: session.sourceId,
+        threadId: session.threadId,
+      });
+      setManagedSessionDerivation({
+        preview,
+        destination: activeWorkspace,
+        error: null,
+        isBusy: false,
+      });
+    } catch (error) {
+      alertError(error instanceof Error ? error.message : String(error));
+    }
+  }, [activeWorkspace, alertError, t]);
+  const confirmManagedSessionDerivation = useCallback(async () => {
+    if (!managedSessionDerivation || managedSessionDerivation.isBusy) return;
+    const { destination, preview } = managedSessionDerivation;
+    setManagedSessionDerivation((current) => current ? { ...current, error: null, isBusy: true } : current);
+    try {
+      let nextDerivations = threadDerivations;
+      const threadId = await deriveManagedSessionIntoWorkspace({
+        destination,
+        preview,
+        connectWorkspace,
+        startThreadForWorkspace,
+        sendUserMessageToThread,
+        persistDerivation: (workspaceId, derivedThreadId, metadata) => {
+          nextDerivations = saveThreadDerivation(workspaceId, derivedThreadId, metadata);
+        },
+        startError: t("sessionManager.deriveStartFailed"),
+        sendError: t("sessionManager.deriveSendFailed"),
+      });
+      setThreadDerivations(nextDerivations);
+      exitDiffView();
+      selectWorkspace(destination.id);
+      setActiveThreadId(threadId, destination.id);
+      if (isCompact) setActiveTab("codex");
+      setManagedSessionDerivation(null);
+    } catch (error) {
+      setManagedSessionDerivation((current) => current ? {
+        ...current,
+        error: error instanceof Error ? error.message : String(error),
+        isBusy: false,
+      } : current);
+    }
+  }, [connectWorkspace, exitDiffView, isCompact, managedSessionDerivation, selectWorkspace, sendUserMessageToThread, setActiveTab, setActiveThreadId, startThreadForWorkspace, t, threadDerivations]);
   const resolveCloneProjectContext = useCallback(
     (workspace: WorkspaceInfo) => {
       const groupId = workspace.settings.groupId ?? null;
@@ -1368,7 +1466,7 @@ export default function MainApp() {
   });
   const { baseWorkspaceRef } = worktreeState;
 
-  useMainAppWorkspaceLifecycle({
+  const { initialWorkspaceRestoreComplete } = useMainAppWorkspaceLifecycle({
     activeTab,
     isTablet,
     setActiveTab,
@@ -1383,6 +1481,14 @@ export default function MainApp() {
     threadStatusById,
     remoteThreadConnectionState,
     refreshThread,
+  });
+  useSessionCleanupScheduler({
+    settingsLoading: appSettingsLoading,
+    startupReady: initialWorkspaceRestoreComplete,
+    enabled: appSettings.autoDeleteArchivedThreadsEnabled,
+    activeThreadId,
+    threadStatusById,
+    pinnedThreadsVersion,
   });
 
   const {
@@ -1819,6 +1925,7 @@ export default function MainApp() {
   const { workspaceHomeNode } = displayNodes;
   const layoutSurfaces = useMainAppLayoutSurfaces({
     appSettings,
+    conversationAppearance: runtimeThemeAppearance.conversationAppearance,
     onUpdateAppSettings: queueSaveSettings,
     workspaces,
     groupedWorkspaces,
@@ -1925,6 +2032,14 @@ export default function MainApp() {
     handleAddWorktreeAgent,
     handleAddCloneAgent,
     handleResumeThreadById: openResumeThreadPrompt,
+    handleResumeManagedSession,
+    handleDeriveManagedSession,
+    activeManagedSessionSourceName: activeThreadId
+      ? (managedSessionSourceByThread[`${activeWorkspaceId}:${activeThreadId}`]
+        ?? (threadDerivations[`${activeWorkspaceId}:${activeThreadId}`]
+          ? `${t("sessionManager.derivedFrom")} ${threadDerivations[`${activeWorkspaceId}:${activeThreadId}`].sourceName}`
+          : null))
+      : null,
     handleSelectLocalCodexThread,
     handleOpenThreadLink,
     handleSelectOpenAppId,
@@ -2121,6 +2236,16 @@ export default function MainApp() {
   return (
     <I18nProvider preference={appSettings.appLanguage}>
       <MainAppShell {...mainAppShellProps} />
+      {managedSessionDerivation && (
+        <SessionDerivationPrompt
+          preview={managedSessionDerivation.preview}
+          destination={managedSessionDerivation.destination}
+          error={managedSessionDerivation.error}
+          isBusy={managedSessionDerivation.isBusy}
+          onCancel={() => setManagedSessionDerivation(null)}
+          onConfirm={() => void confirmManagedSessionDerivation()}
+        />
+      )}
     </I18nProvider>
   );
 }

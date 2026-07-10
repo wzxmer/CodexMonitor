@@ -1,12 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use tokio::sync::Mutex;
 
 use crate::codex::config as codex_config;
 use crate::codex::home as codex_home;
+use crate::shared::session_manager_core::sources::reconcile_session_sources;
 use crate::storage::write_settings;
 use crate::types::AppSettings;
 use crate::utils::normalize_windows_namespace_path;
@@ -50,8 +51,12 @@ fn normalize_personality(value: &str) -> Option<&'static str> {
     }
 }
 
-pub(crate) async fn get_app_settings_core(app_settings: &Mutex<AppSettings>) -> AppSettings {
+pub(crate) async fn get_app_settings_core(
+    app_settings: &Mutex<AppSettings>,
+    settings_path: &PathBuf,
+) -> AppSettings {
     let mut settings = app_settings.lock().await.clone();
+    let sources_changed = reconcile_settings_session_sources(&mut settings);
     if let Ok(Some(collaboration_modes_enabled)) =
         codex_config::read_collaboration_modes_enabled(&settings)
     {
@@ -73,6 +78,13 @@ pub(crate) async fn get_app_settings_core(app_settings: &Mutex<AppSettings>) -> 
             .unwrap_or("friendly")
             .to_string();
     }
+    if sources_changed {
+        if let Err(error) = write_settings(settings_path, &settings) {
+            eprintln!("get_app_settings_core: failed to persist session sources: {error}");
+        } else {
+            *app_settings.lock().await = settings.clone();
+        }
+    }
     settings
 }
 
@@ -84,6 +96,7 @@ pub(crate) async fn update_app_settings_core(
     settings.global_worktrees_folder = settings
         .global_worktrees_folder
         .map(|path| normalize_windows_namespace_path(&path));
+    reconcile_settings_session_sources(&mut settings);
     let _ = codex_config::write_collaboration_modes_enabled(
         &settings,
         settings.collaboration_modes_enabled,
@@ -96,6 +109,26 @@ pub(crate) async fn update_app_settings_core(
     let mut current = app_settings.lock().await;
     *current = settings.clone();
     Ok(settings)
+}
+
+fn reconcile_settings_session_sources(settings: &mut AppSettings) -> bool {
+    let previous = settings.session_sources.clone();
+    let current = codex_home::resolve_settings_codex_home(settings);
+    let default = codex_home::resolve_home_dir().map(|home| home.join(".codex"));
+    settings.session_sources = reconcile_session_sources(
+        std::mem::take(&mut settings.session_sources),
+        current.as_deref(),
+        default.as_deref(),
+        current_time_ms(),
+    );
+    settings.session_sources != previous
+}
+
+fn current_time_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
+        .unwrap_or_default()
 }
 
 pub(crate) fn get_codex_config_path_core(settings: &AppSettings) -> Result<String, String> {

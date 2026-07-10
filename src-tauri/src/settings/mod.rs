@@ -15,7 +15,7 @@ pub(crate) async fn get_app_settings(
     state: State<'_, AppState>,
     window: Window,
 ) -> Result<AppSettings, String> {
-    let settings = get_app_settings_core(&state.app_settings).await;
+    let settings = get_app_settings_core(&state.app_settings, &state.settings_path).await;
     let _ = window::apply_window_appearance(&window, settings.theme.as_str());
     Ok(settings)
 }

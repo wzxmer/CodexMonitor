@@ -116,6 +116,17 @@ pub(crate) async fn resume_thread(
         .await;
     }
 
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+        &workspace_id,
+        &thread_id,
+        &state,
+        app.clone(),
+    )
+    .await?
+    {
+        return codex_core::resume_thread_with_session_core(&session, workspace_id, thread_id)
+            .await;
+    }
     codex_core::resume_thread_core(&state.sessions, workspace_id, thread_id).await
 }
 
@@ -136,6 +147,16 @@ pub(crate) async fn read_thread(
         .await;
     }
 
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+        &workspace_id,
+        &thread_id,
+        &state,
+        app.clone(),
+    )
+    .await?
+    {
+        return codex_core::read_thread_with_session_core(&session, workspace_id, thread_id).await;
+    }
     codex_core::read_thread_core(&state.sessions, workspace_id, thread_id).await
 }
 
@@ -156,12 +177,19 @@ pub(crate) async fn thread_live_subscribe(
         .await;
     }
 
-    codex_core::thread_live_subscribe_core(
-        &state.sessions,
-        workspace_id.clone(),
-        thread_id.clone(),
-    )
-    .await?;
+    if state
+        .source_thread_runtimes
+        .get(&workspace_id, &thread_id)
+        .await
+        .is_none()
+    {
+        codex_core::thread_live_subscribe_core(
+            &state.sessions,
+            workspace_id.clone(),
+            thread_id.clone(),
+        )
+        .await?;
+    }
     let subscription_id = format!("{}:{}", workspace_id, thread_id);
     emit_thread_live_event(
         &app,
@@ -196,12 +224,19 @@ pub(crate) async fn thread_live_unsubscribe(
         .await;
     }
 
-    codex_core::thread_live_unsubscribe_core(
-        &state.sessions,
-        workspace_id.clone(),
-        thread_id.clone(),
-    )
-    .await?;
+    if state
+        .source_thread_runtimes
+        .get(&workspace_id, &thread_id)
+        .await
+        .is_none()
+    {
+        codex_core::thread_live_unsubscribe_core(
+            &state.sessions,
+            workspace_id.clone(),
+            thread_id.clone(),
+        )
+        .await?;
+    }
     emit_thread_live_event(
         &app,
         &workspace_id,
@@ -232,6 +267,22 @@ pub(crate) async fn fork_thread(
         .await;
     }
 
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+        &workspace_id,
+        &thread_id,
+        &state,
+        app.clone(),
+    )
+    .await?
+    {
+        return session
+            .send_request_for_workspace(
+                &workspace_id,
+                "thread/fork",
+                json!({ "threadId": thread_id }),
+            )
+            .await;
+    }
     codex_core::fork_thread_core(&state.sessions, workspace_id, thread_id).await
 }
 
@@ -257,6 +308,22 @@ pub(crate) async fn rollback_thread(
         .await;
     }
 
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+        &workspace_id,
+        &thread_id,
+        &state,
+        app.clone(),
+    )
+    .await?
+    {
+        return session
+            .send_request_for_workspace(
+                &workspace_id,
+                "thread/rollback",
+                json!({ "threadId": thread_id, "numTurns": num_turns }),
+            )
+            .await;
+    }
     codex_core::rollback_thread_core(&state.sessions, workspace_id, thread_id, num_turns).await
 }
 
@@ -335,6 +402,29 @@ pub(crate) async fn archive_thread(
         .await;
     }
 
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+        &workspace_id,
+        &thread_id,
+        &state,
+        app.clone(),
+    )
+    .await?
+    {
+        let result = session
+            .send_request_for_workspace(
+                &workspace_id,
+                "thread/archive",
+                json!({ "threadId": thread_id }),
+            )
+            .await;
+        if result.is_ok() {
+            state
+                .source_thread_runtimes
+                .remove(&workspace_id, &thread_id)
+                .await;
+        }
+        return result;
+    }
     codex_core::archive_thread_core(&state.sessions, workspace_id, thread_id).await
 }
 
@@ -355,6 +445,22 @@ pub(crate) async fn compact_thread(
         .await;
     }
 
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+        &workspace_id,
+        &thread_id,
+        &state,
+        app.clone(),
+    )
+    .await?
+    {
+        return session
+            .send_request_for_workspace(
+                &workspace_id,
+                "thread/compact/start",
+                json!({ "threadId": thread_id }),
+            )
+            .await;
+    }
     codex_core::compact_thread_core(&state.sessions, workspace_id, thread_id).await
 }
 
@@ -376,6 +482,22 @@ pub(crate) async fn set_thread_name(
         .await;
     }
 
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+        &workspace_id,
+        &thread_id,
+        &state,
+        app.clone(),
+    )
+    .await?
+    {
+        return session
+            .send_request_for_workspace(
+                &workspace_id,
+                "thread/name/set",
+                json!({ "threadId": thread_id, "name": name }),
+            )
+            .await;
+    }
     codex_core::set_thread_name_core(&state.sessions, workspace_id, thread_id, name).await
 }
 
@@ -425,6 +547,30 @@ pub(crate) async fn send_user_message(
         .await;
     }
 
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+        &workspace_id,
+        &thread_id,
+        &state,
+        app.clone(),
+    )
+    .await?
+    {
+        return codex_core::send_user_message_with_session_core(
+            &session,
+            &state.workspaces,
+            workspace_id,
+            thread_id,
+            text,
+            model,
+            effort,
+            service_tier,
+            access_mode,
+            images,
+            app_mentions,
+            collaboration_mode,
+        )
+        .await;
+    }
     codex_core::send_user_message_core(
         &state.sessions,
         &state.workspaces,
@@ -476,6 +622,25 @@ pub(crate) async fn turn_steer(
         .await;
     }
 
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+        &workspace_id,
+        &thread_id,
+        &state,
+        app.clone(),
+    )
+    .await?
+    {
+        return codex_core::turn_steer_with_session_core(
+            &session,
+            workspace_id,
+            thread_id,
+            turn_id,
+            text,
+            images,
+            app_mentions,
+        )
+        .await;
+    }
     codex_core::turn_steer_core(
         &state.sessions,
         workspace_id,
@@ -525,6 +690,22 @@ pub(crate) async fn turn_interrupt(
         .await;
     }
 
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+        &workspace_id,
+        &thread_id,
+        &state,
+        app.clone(),
+    )
+    .await?
+    {
+        return codex_core::turn_interrupt_with_session_core(
+            &session,
+            workspace_id,
+            thread_id,
+            turn_id,
+        )
+        .await;
+    }
     codex_core::turn_interrupt_core(&state.sessions, workspace_id, thread_id, turn_id).await
 }
 
@@ -552,6 +733,22 @@ pub(crate) async fn start_review(
         .await;
     }
 
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+        &workspace_id,
+        &thread_id,
+        &state,
+        app.clone(),
+    )
+    .await?
+    {
+        let mut params = Map::new();
+        params.insert("threadId".to_string(), json!(thread_id));
+        params.insert("target".to_string(), target);
+        params.insert("delivery".to_string(), json!(delivery));
+        return session
+            .send_request_for_workspace(&workspace_id, "review/start", Value::Object(params))
+            .await;
+    }
     codex_core::start_review_core(&state.sessions, workspace_id, thread_id, target, delivery).await
 }
 
@@ -900,6 +1097,15 @@ pub(crate) async fn respond_to_server_request(
         return Ok(());
     }
 
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_workspace(
+        &workspace_id,
+        &state,
+        app.clone(),
+    )
+    .await?
+    {
+        return session.send_response(request_id, result).await;
+    }
     codex_core::respond_to_server_request_core(&state.sessions, workspace_id, request_id, result)
         .await
 }

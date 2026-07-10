@@ -589,6 +589,16 @@ impl WorkspaceSession {
         self.output_closed.store(true, Ordering::SeqCst);
     }
 
+    pub(crate) async fn shutdown(&self) {
+        if let Ok(mut shutdown) = self.provider_gateway_shutdown.lock() {
+            if let Some(sender) = shutdown.take() {
+                let _ = sender.send(());
+            }
+        }
+        let mut child = self.child.lock().await;
+        kill_child_process_tree(&mut child).await;
+        self.mark_output_closed();
+    }
     pub(crate) async fn is_process_alive(&self) -> bool {
         if self.output_closed.load(Ordering::SeqCst) {
             return false;

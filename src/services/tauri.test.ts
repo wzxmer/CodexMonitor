@@ -5,9 +5,16 @@ import * as notification from "@tauri-apps/plugin-notification";
 import {
   exportMarkdownFile,
   addWorkspace,
+  archiveManagedSessions,
+  cleanupManagedSessionsNow,
+  permanentlyDeleteManagedSession,
+  previewManagedSessionCleanup,
+  runManagedSessionCleanupScheduler,
   compactThread,
   createGitHubRepo,
   fetchGit,
+  fetchManagedSessionsPage,
+  fetchSessionSearchResults,
   forkThread,
   getAppsList,
   getAgentsSettings,
@@ -18,13 +25,18 @@ import {
   getOpenAppIcon,
   getWorkspaceThirdPartyKeyUsage,
   listThreads,
+  listSessionSources,
   listMcpServerStatus,
   readThread,
+  resumeManagedSession,
   rollbackThread,
+  scanManagedSessions,
+  searchManagedSessions,
   readGlobalAgentsMd,
   readGlobalCodexConfigToml,
   listWorkspaces,
   openWorkspaceIn,
+  prepareManagedSessionDerivation,
   readAgentMd,
   stageGitAll,
   respondToServerRequest,
@@ -40,6 +52,8 @@ import {
   setTraySessionUsage,
   startReview,
   setThreadName,
+  updateSessionSource,
+  cancelSessionTask,
   tailscaleDaemonStart,
   tailscaleDaemonCommandPreview,
   tailscaleDaemonStatus,
@@ -55,6 +69,8 @@ import {
   deleteAgent,
   readAgentConfigToml,
   readImageAsDataUrl,
+  saveComposerImages,
+  promoteComposerImages,
   generateAgentDescription,
   writeAgentConfigToml,
   writeAgentMd,
@@ -154,6 +170,76 @@ describe("tauri invoke wrappers", () => {
           ],
         },
       ],
+    });
+  });
+
+  it("forwards session manager contracts", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValue(undefined);
+
+    await listSessionSources();
+    await updateSessionSource({
+      action: "rename",
+      sourceId: "source-a",
+      name: "Work",
+    });
+    await scanManagedSessions({ requestId: "scan-a", sourceIds: ["source-a"] });
+    await fetchManagedSessionsPage({ requestId: "scan-a", offset: 0, limit: 50 });
+    await searchManagedSessions({ requestId: "search-a", query: "alpha", sourceIds: [], includeArchived: true, includeSubagents: false });
+    await fetchSessionSearchResults("search-a");
+    await cancelSessionTask("scan-a");
+    await resumeManagedSession({ sourceId: "source-a", threadId: "thread-a" });
+    await archiveManagedSessions({
+      items: [{ sourceId: "source-a", threadId: "thread-a" }],
+    });
+    await permanentlyDeleteManagedSession({ sourceId: "source-a", threadId: "thread-a", archivedAt: 123, cascadeRequested: false });
+    const cleanupRequest = { retentionDays: 30 as const, protectedThreadIds: ["thread-a"] };
+    await previewManagedSessionCleanup(cleanupRequest);
+    await cleanupManagedSessionsNow(cleanupRequest);
+    const schedulerRequest = { protectedThreadIds: ["thread-a"] };
+    await runManagedSessionCleanupScheduler(schedulerRequest);
+    await prepareManagedSessionDerivation({ sourceId: "source-a", threadId: "thread-a" });
+
+    expect(invokeMock).toHaveBeenCalledWith("list_session_sources");
+    expect(invokeMock).toHaveBeenCalledWith("update_session_source", {
+      request: { action: "rename", sourceId: "source-a", name: "Work" },
+    });
+    expect(invokeMock).toHaveBeenCalledWith("scan_managed_sessions", {
+      request: { requestId: "scan-a", sourceIds: ["source-a"] },
+    });
+    expect(invokeMock).toHaveBeenCalledWith("fetch_managed_sessions_page", {
+      request: { requestId: "scan-a", offset: 0, limit: 50 },
+    });
+    expect(invokeMock).toHaveBeenCalledWith("search_managed_sessions", {
+      request: { requestId: "search-a", query: "alpha", sourceIds: [], includeArchived: true, includeSubagents: false },
+    });
+    expect(invokeMock).toHaveBeenCalledWith("fetch_session_search_results", { requestId: "search-a" });
+    expect(invokeMock).toHaveBeenCalledWith("cancel_session_task", {
+      requestId: "scan-a",
+    });
+    expect(invokeMock).toHaveBeenCalledWith("resume_managed_session", {
+      request: { sourceId: "source-a", threadId: "thread-a" },
+    });
+    expect(invokeMock).toHaveBeenCalledWith("archive_managed_sessions", {
+      request: {
+        items: [{ sourceId: "source-a", threadId: "thread-a" }],
+      },
+    });
+    expect(invokeMock).toHaveBeenCalledWith("permanently_delete_managed_session", {
+      request: { sourceId: "source-a", threadId: "thread-a", archivedAt: 123, cascadeRequested: false },
+    });
+    expect(invokeMock).toHaveBeenCalledWith("preview_managed_session_cleanup", {
+      request: cleanupRequest,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("cleanup_managed_sessions_now", {
+      request: cleanupRequest,
+    });
+    expect(invokeMock).toHaveBeenCalledWith(
+      "run_managed_session_cleanup_scheduler",
+      { request: schedulerRequest },
+    );
+    expect(invokeMock).toHaveBeenCalledWith("prepare_managed_session_derivation", {
+      request: { sourceId: "source-a", threadId: "thread-a" },
     });
   });
 
@@ -1090,6 +1176,32 @@ describe("tauri invoke wrappers", () => {
       title: "Hello",
       body: "World",
       extra: { kind: "thread", workspaceId: "ws-1", threadId: "t-1" },
+    });
+  });
+
+  it("maps session-aware composer image storage", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce(["/home/.codex/image.png"]);
+
+    await saveComposerImages("ws-1", "draft-ws-1", ["/tmp/image.png"]);
+
+    expect(invokeMock).toHaveBeenCalledWith("save_composer_images", {
+      workspaceId: "ws-1",
+      ownerKey: "draft-ws-1",
+      images: ["/tmp/image.png"],
+    });
+  });
+
+  it("maps composer image promotion", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce(["/home/.codex/image.png"]);
+
+    await promoteComposerImages("ws-1", "thread-1", ["/tmp/image.png"]);
+
+    expect(invokeMock).toHaveBeenCalledWith("promote_composer_images", {
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      images: ["/tmp/image.png"],
     });
   });
 

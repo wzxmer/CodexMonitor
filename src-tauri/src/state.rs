@@ -8,6 +8,10 @@ use tokio::sync::Mutex;
 use crate::dictation::DictationState;
 use crate::shared::agents_config_core;
 use crate::shared::codex_core::CodexLoginCancelState;
+use crate::shared::session_manager_core::runtime::{
+    SessionSourceRuntimePool, SourceThreadRuntimeBindings,
+};
+use crate::shared::session_manager_core::service::SessionManagerRuntime;
 use crate::storage::{read_settings, read_workspaces};
 use crate::types::{AppSettings, TcpDaemonState, TcpDaemonStatus, WorkspaceEntry};
 
@@ -41,6 +45,9 @@ pub(crate) struct AppState {
     pub(crate) app_settings: Mutex<AppSettings>,
     pub(crate) dictation: Mutex<DictationState>,
     pub(crate) codex_login_cancels: Mutex<HashMap<String, CodexLoginCancelState>>,
+    pub(crate) session_manager: SessionManagerRuntime,
+    pub(crate) session_source_runtimes: SessionSourceRuntimePool,
+    pub(crate) source_thread_runtimes: SourceThreadRuntimeBindings,
     pub(crate) tcp_daemon: Mutex<TcpDaemonRuntime>,
 }
 
@@ -71,6 +78,9 @@ impl AppState {
             app_settings: Mutex::new(app_settings),
             dictation: Mutex::new(DictationState::default()),
             codex_login_cancels: Mutex::new(HashMap::new()),
+            session_manager: SessionManagerRuntime::with_storage_dir(&data_dir),
+            session_source_runtimes: SessionSourceRuntimePool::for_workspace_sessions(),
+            source_thread_runtimes: SourceThreadRuntimeBindings::default(),
             tcp_daemon: Mutex::new(TcpDaemonRuntime::default()),
         }
     }

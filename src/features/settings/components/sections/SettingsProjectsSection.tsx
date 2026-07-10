@@ -6,6 +6,7 @@ import {
   SettingsSection,
   SettingsSubsection,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
+import { RoundedSelect } from "@/features/design-system/components/select/RoundedSelect";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import type { WorkspaceGroup, WorkspaceInfo } from "@/types";
 
@@ -206,6 +207,13 @@ export function SettingsProjectsSection({
               )
                 ? workspace.settings.groupId ?? ""
                 : "";
+              const groupOptions = [
+                { value: "", label: ungroupedLabel },
+                ...workspaceGroups.map((entry) => ({
+                  value: entry.id,
+                  label: entry.name,
+                })),
+              ];
               return (
                 <div key={workspace.id} className="settings-project-row">
                   <div className="settings-project-info">
@@ -213,21 +221,17 @@ export function SettingsProjectsSection({
                     <div className="settings-project-path">{workspace.path}</div>
                   </div>
                   <div className="settings-project-actions">
-                    <select
-                      className="settings-select settings-select--compact"
+                    <RoundedSelect
+                      ariaLabel={t("settings.projects.assignGroup")}
+                      className="settings-select settings-select--compact settings-project-group-select"
+                      popoverClassName="settings-project-group-select-popover"
                       value={groupValue}
-                      onChange={(event) => {
-                        const nextGroupId = event.target.value || null;
+                      options={groupOptions}
+                      onChange={(nextValue) => {
+                        const nextGroupId = nextValue || null;
                         void onAssignWorkspaceGroup(workspace.id, nextGroupId);
                       }}
-                    >
-                      <option value="">{ungroupedLabel}</option>
-                      {workspaceGroups.map((entry) => (
-                        <option key={entry.id} value={entry.id}>
-                          {entry.name}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     <button
                       type="button"
                       className="ghost icon-button"

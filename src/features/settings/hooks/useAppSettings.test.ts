@@ -51,10 +51,96 @@ describe("useAppSettings", () => {
     expect(result.current.settings.theme).toBe("system");
     expect(result.current.settings.uiFontFamily).toContain("system-ui");
     expect(result.current.settings.codeFontFamily).toContain("ui-monospace");
-    expect(result.current.settings.codeFontSize).toBe(16);
+    expect(result.current.settings.codeFontSize).toBe(18);
     expect(result.current.settings.personality).toBe("friendly");
     expect(result.current.settings.backendMode).toBe("remote");
     expect(result.current.settings.remoteBackendHost).toBe("example:1234");
+    expect(result.current.settings.sessionSources).toEqual([]);
+  });
+
+  it("preserves persisted session sources", async () => {
+    getAppSettingsMock.mockResolvedValue(
+      ({
+        sessionSources: [
+          {
+            id: "source-a",
+            name: "Work",
+            codexHomePath: "D:\\Profiles\\Work",
+            enabled: true,
+            isCurrent: false,
+            isDefault: false,
+            discoveredAt: 10,
+            lastScanAt: null,
+            status: "missing",
+            error: null,
+          },
+        ],
+      } as unknown) as AppSettings,
+    );
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.settings.sessionSources).toHaveLength(1);
+    expect(result.current.settings.sessionSources[0]?.name).toBe("Work");
+  });
+
+  it("restores persisted UI and code font sizes after startup", async () => {
+    getAppSettingsMock.mockResolvedValue(
+      ({
+        uiFontSize: 17,
+        messageFontSize: 18,
+        processFontSize: 15,
+        codeFontSize: 15,
+        showCodexUsage: false,
+      } as unknown) as AppSettings,
+    );
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.uiFontSize).toBe(17);
+    expect(result.current.settings.messageFontSize).toBe(18);
+    expect(result.current.settings.processFontSize).toBe(15);
+    expect(result.current.settings.codeFontSize).toBe(15);
+    expect(result.current.settings.showCodexUsage).toBe(false);
+  });
+
+  it("defaults new display settings for legacy persisted data", async () => {
+    getAppSettingsMock.mockResolvedValue(({} as unknown) as AppSettings);
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.uiFontSize).toBe(14);
+    expect(result.current.settings.messageFontSize).toBe(14);
+    expect(result.current.settings.processFontSize).toBe(12);
+    expect(result.current.settings.codeFontSize).toBe(13);
+    expect(result.current.settings.showCodexUsage).toBe(true);
+    expect(result.current.settings.uiCjkFontFamily).toContain("PingFang SC");
+    expect(result.current.settings.uiCjkFontFamily).toContain(
+      "Noto Sans SC Variable",
+    );
+    expect(result.current.settings.uiFontWeight).toBe(450);
+    expect(result.current.settings.autoDeleteArchivedThreadsEnabled).toBe(false);
+    expect(result.current.settings.autoDeleteArchivedThreadsDays).toBe(30);
+  });
+
+  it("migrates the legacy PingFang shorthand to the bundled fallback chain", async () => {
+    getAppSettingsMock.mockResolvedValue(
+      ({
+        uiCjkFontFamily: '"苹方-简", "Microsoft YaHei UI", sans-serif',
+      } as unknown) as AppSettings,
+    );
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.settings.uiCjkFontFamily).toBe(
+      '"PingFang SC", "Noto Sans SC Variable", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif',
+    );
   });
 
   it("migrates retired comfortable message reading style to native", async () => {

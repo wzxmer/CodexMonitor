@@ -4,10 +4,15 @@ import { useAppSettingsController } from "@app/hooks/useAppSettingsController";
 import { useCodeCssVars } from "@app/hooks/useCodeCssVars";
 import { useDictationController } from "@app/hooks/useDictationController";
 import { useLiquidGlassEffect } from "@app/hooks/useLiquidGlassEffect";
+import { resolveRuntimeThemeAppearance } from "@app/utils/runtimeThemeAppearance";
 
 export function useAppBootstrap() {
   const appSettingsState = useAppSettingsController();
-  useCodeCssVars(appSettingsState.appSettings);
+  const runtimeThemeAppearance = resolveRuntimeThemeAppearance(
+    appSettingsState.appSettings,
+    appSettingsState.resolvedTheme,
+  );
+  useCodeCssVars(appSettingsState.appSettings, runtimeThemeAppearance.themeAccent);
 
   const dictationState = useDictationController(appSettingsState.appSettings);
   const debugState = useDebugLog();
@@ -24,6 +29,7 @@ export function useAppBootstrap() {
     ...appSettingsState,
     ...dictationState,
     ...debugState,
+    runtimeThemeAppearance,
     shouldReduceTransparency,
   };
 }

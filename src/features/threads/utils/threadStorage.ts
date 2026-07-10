@@ -5,12 +5,20 @@ export const STORAGE_KEY_PINNED_THREADS = "codexmonitor.pinnedThreads";
 export const STORAGE_KEY_CUSTOM_NAMES = "codexmonitor.threadCustomNames";
 export const STORAGE_KEY_THREAD_CODEX_PARAMS = "codexmonitor.threadCodexParams";
 export const STORAGE_KEY_DETACHED_REVIEW_LINKS = "codexmonitor.detachedReviewLinks";
+export const STORAGE_KEY_THREAD_DERIVATIONS = "codexmonitor.threadDerivations";
 export const MAX_PINS_SOFT_LIMIT = 5;
 
 export type ThreadActivityMap = Record<string, Record<string, number>>;
 export type PinnedThreadsMap = Record<string, number>;
 export type CustomNamesMap = Record<string, string>;
 type DetachedReviewLinksMap = Record<string, Record<string, string>>;
+export type ThreadDerivationMetadata = {
+  sourceSessionKey: string;
+  sourceName: string;
+  sourceTitle: string;
+  createdAt: number;
+};
+export type ThreadDerivationsMap = Record<string, ThreadDerivationMetadata>;
 
 // Per-thread Codex parameter overrides. Keyed by `${workspaceId}:${threadId}`.
 // These are UI-level preferences (not server state) and are best-effort persisted.
@@ -210,4 +218,46 @@ export function saveDetachedReviewLinks(links: DetachedReviewLinksMap) {
   } catch {
     // Best-effort persistence; ignore write failures.
   }
+}
+
+export function loadPinnedThreadIds(): string[] {
+  const ids = new Set<string>();
+  for (const key of Object.keys(loadPinnedThreads())) {
+    const separator = key.indexOf(":");
+    if (separator >= 0 && separator < key.length - 1) {
+      ids.add(key.slice(separator + 1));
+    }
+  }
+  return [...ids];
+}
+
+export function loadThreadDerivations(): ThreadDerivationsMap {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_THREAD_DERIVATIONS);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as ThreadDerivationsMap;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveThreadDerivation(
+  workspaceId: string,
+  threadId: string,
+  metadata: ThreadDerivationMetadata,
+): ThreadDerivationsMap {
+  const next = {
+    ...loadThreadDerivations(),
+    [`${workspaceId}:${threadId}`]: metadata,
+  };
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(STORAGE_KEY_THREAD_DERIVATIONS, JSON.stringify(next));
+    } catch {
+      // Best-effort UI metadata persistence.
+    }
+  }
+  return next;
 }

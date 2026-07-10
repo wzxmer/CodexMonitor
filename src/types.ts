@@ -179,6 +179,217 @@ export type ThreadSummary = {
   subagentRole?: string | null;
 };
 
+export type SessionSourceStatus =
+  | "ready"
+  | "missing"
+  | "denied"
+  | "invalid"
+  | "scanning";
+
+export type SessionSource = {
+  id: string;
+  name: string;
+  codexHomePath: string;
+  enabled: boolean;
+  isCurrent: boolean;
+  isDefault: boolean;
+  discoveredAt: number;
+  lastScanAt: number | null;
+  status: SessionSourceStatus;
+  error: string | null;
+};
+
+export type SourceScopedSessionKey = {
+  sourceId: string;
+  threadId: string;
+};
+
+export type SessionFileStatus = "mapped" | "unmapped" | "missing" | "invalid";
+export type SessionFileConfidence = "exact" | "inferred" | "ambiguous" | "none";
+
+export type ManagedSession = {
+  key: string;
+  sourceId: string;
+  threadId: string;
+  sourceKind: string | null;
+  cwd: string | null;
+  title: string;
+  preview: string | null;
+  createdAt: number | null;
+  updatedAt: number | null;
+  archivedAt: number | null;
+  isArchived: boolean;
+  parentThreadId: string | null;
+  isSubagent: boolean;
+  subagentNickname: string | null;
+  subagentRole: string | null;
+  projectExists: boolean;
+  fileStatus: SessionFileStatus;
+  fileConfidence: SessionFileConfidence;
+};
+
+export type SessionSearchRequest = {
+  requestId: string;
+  query: string;
+  sourceIds: string[];
+  includeArchived: boolean;
+  includeSubagents: boolean;
+};
+
+export type SessionSearchMatchField =
+  | "title"
+  | "threadId"
+  | "projectName"
+  | "projectPath"
+  | "userMessage"
+  | "agentReply";
+
+export type SessionSearchMatch = {
+  field: SessionSearchMatchField;
+  snippet: string | null;
+};
+
+export type SessionSearchResult = {
+  session: ManagedSession;
+  matches: SessionSearchMatch[];
+  incomplete: boolean;
+};
+
+export type SessionSearchProgress = {
+  requestId: string;
+  scannedSources: number;
+  totalSources: number;
+  scannedFiles: number;
+  totalFiles: number | null;
+  completed: boolean;
+  cancelled: boolean;
+  incomplete: boolean;
+};
+export type SessionSearchResponse = {
+  results: SessionSearchResult[];
+  progress: SessionSearchProgress;
+};
+
+export type SessionSourceUpdateRequest = {
+  action: "add" | "rename" | "setEnabled" | "remove";
+  sourceId?: string | null;
+  name?: string | null;
+  path?: string | null;
+  enabled?: boolean | null;
+};
+
+export type SessionScanRequest = {
+  requestId: string;
+  sourceIds?: string[];
+};
+
+export type SessionScanSummary = {
+  requestId: string;
+  totalSessions: number;
+  diagnosticCount: number;
+  cancelled: boolean;
+};
+
+export type ManagedSessionPageRequest = {
+  requestId: string;
+  offset?: number;
+  limit?: number;
+};
+
+export type SessionScanDiagnostic = {
+  sourceId: string;
+  path: string | null;
+  error: string;
+};
+
+export type ManagedSessionPage = {
+  requestId: string;
+  items: ManagedSession[];
+  diagnostics: SessionScanDiagnostic[];
+  total: number;
+  nextOffset: number | null;
+};
+
+export type ResumeManagedSessionRequest = {
+  sourceId: string;
+  threadId: string;
+};
+
+export type ResumeManagedSessionResponse = {
+  workspace: WorkspaceInfo;
+  threadId: string;
+  sourceId: string;
+  sourceName: string;
+};
+
+export type ArchiveManagedSessionItem = {
+  sourceId: string;
+  threadId: string;
+};
+
+export type ArchiveManagedSessionsRequest = {
+  items: ArchiveManagedSessionItem[];
+};
+
+export type ArchiveManagedSessionResult = ArchiveManagedSessionItem & {
+  success: boolean;
+  archivedAt: number | null;
+  error: string | null;
+};
+
+export type ArchiveManagedSessionsResponse = {
+  results: ArchiveManagedSessionResult[];
+  successCount: number;
+  failureCount: number;
+};
+
+export type PermanentlyDeleteManagedSessionRequest = {
+  sourceId: string;
+  threadId: string;
+  archivedAt: number;
+  cascadeRequested: boolean;
+};
+
+export type PermanentlyDeleteManagedSessionResponse = {
+  results: Array<{ sourceId: string; threadId: string; success: boolean; error: string | null }>;
+  successCount: number;
+  failureCount: number;
+};
+
+export type ManagedSessionCleanupRequest = {
+  retentionDays: 30 | 60 | 90 | 180;
+  protectedThreadIds: string[];
+};
+
+export type ManagedSessionCleanupPreview = {
+  eligibleCount: number;
+};
+
+export type ManagedSessionCleanupResponse = PermanentlyDeleteManagedSessionResponse;
+
+export type ManagedSessionCleanupSchedulerRequest = {
+  protectedThreadIds: string[];
+};
+
+export type ManagedSessionCleanupSchedulerResponse = ManagedSessionCleanupResponse & {
+  ran: boolean;
+};
+
+export type PrepareManagedSessionDerivationRequest = {
+  sourceId: string;
+  threadId: string;
+};
+
+export type ManagedSessionDerivationPreview = {
+  sourceSession: ManagedSession;
+  sourceName: string;
+  sourceSessionKey: string;
+  handoffContent: string;
+  userMessageCount: number;
+  agentReplyCount: number;
+  incomplete: boolean;
+};
+
 export type ThreadListSortKey = "created_at" | "updated_at";
 export type ThreadListOrganizeMode =
   | "by_project"
@@ -250,6 +461,8 @@ export type SendMessageResult = {
 
 export type ComposerEditorPreset = "default" | "helpful" | "smart";
 
+export type ComposerLargePasteBehavior = "smart" | "keepText";
+
 export type ComposerEditorSettings = {
   preset: ComposerEditorPreset;
   expandFenceOnSpace: boolean;
@@ -258,6 +471,7 @@ export type ComposerEditorSettings = {
   fenceWrapSelection: boolean;
   autoWrapPasteMultiline: boolean;
   autoWrapPasteCodeLike: boolean;
+  largePasteBehavior?: ComposerLargePasteBehavior;
   continueListOnShiftEnter: boolean;
 };
 
@@ -311,6 +525,7 @@ export type AppSettings = {
   codexBin: string | null;
   codexArgs: string | null;
   codexHome: string | null;
+  sessionSources: SessionSource[];
   codexKeyProfiles: CodexKeyProfile[];
   activeCodexKeyProfileId: string | null;
   backendMode: BackendMode;
@@ -346,6 +561,7 @@ export type AppSettings = {
   appLanguage: AppLanguagePreference;
   theme: ThemePreference;
   themeAccent: ThemeAccentPreference;
+  showCodexUsage: boolean;
   usageShowRemaining: boolean;
   thirdPartyUsageMultiplier: number;
   showMessageFilePath: boolean;
@@ -362,6 +578,8 @@ export type AppSettings = {
   threadTitleAutogenerationEnabled: boolean;
   autoArchiveThreadsEnabled: boolean;
   autoArchiveThreadsDays: number;
+  autoDeleteArchivedThreadsEnabled: boolean;
+  autoDeleteArchivedThreadsDays: 30 | 60 | 90 | 180;
   automaticAppUpdateChecksEnabled: boolean;
   uiFontFamily: string;
   uiLatinFontFamily: string;
@@ -370,6 +588,7 @@ export type AppSettings = {
   uiFontWeight: number;
   codeFontFamily: string;
   messageFontSize: number;
+  processFontSize: number;
   messageFontWeight: number;
   codeFontSize: number;
   notificationSoundsEnabled: boolean;
@@ -402,6 +621,7 @@ export type AppSettings = {
   composerFenceWrapSelection: boolean;
   composerFenceAutoWrapPasteMultiline: boolean;
   composerFenceAutoWrapPasteCodeLike: boolean;
+  composerLargePasteBehavior?: ComposerLargePasteBehavior;
   composerListContinuation: boolean;
   composerCodeBlockCopyUseModifier: boolean;
   workspaceGroups: WorkspaceGroup[];

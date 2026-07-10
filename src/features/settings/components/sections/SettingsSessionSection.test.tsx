@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings } from "@/types";
+import {
+  cleanupManagedSessionsNow,
+  previewManagedSessionCleanup,
+} from "@services/tauri";
 import { SettingsSessionSection } from "./SettingsSessionSection";
+
+vi.mock("@services/tauri", () => ({
+  previewManagedSessionCleanup: vi.fn(),
+  cleanupManagedSessionsNow: vi.fn(),
+}));
 
 function renderSessionSection(
   settings: Partial<AppSettings>,
@@ -13,6 +22,8 @@ function renderSessionSection(
     threadTitleAutogenerationEnabled: false,
     autoArchiveThreadsEnabled: false,
     autoArchiveThreadsDays: 7,
+    autoDeleteArchivedThreadsEnabled: false,
+    autoDeleteArchivedThreadsDays: 30,
     ...settings,
   } as unknown) as AppSettings;
 
@@ -29,6 +40,64 @@ function renderSessionSection(
 describe("SettingsSessionSection", () => {
   afterEach(() => {
     cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("previews before enabling and cancel leaves auto delete disabled", async () => {
+    vi.mocked(previewManagedSessionCleanup).mockResolvedValue({ eligibleCount: 3 });
+    const onUpdateAppSettings = vi.fn(async () => {});
+    renderSessionSection({}, onUpdateAppSettings);
+
+    const row = screen
+      .getByText("自动永久删除归档会话")
+      .closest(".settings-toggle-row");
+    fireEvent.click(within(row as HTMLElement).getByRole("button"));
+
+    expect(await screen.findByRole("dialog", { name: "开启自动永久删除" })).toBeTruthy();
+    expect(screen.getByText("当前预计符合条件：3 个会话。")).toBeTruthy();
+    expect(onUpdateAppSettings).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(onUpdateAppSettings).not.toHaveBeenCalled();
+  });
+
+  it("enables only after irreversible confirmation without deleting", async () => {
+    vi.mocked(previewManagedSessionCleanup).mockResolvedValue({ eligibleCount: 2 });
+    const onUpdateAppSettings = vi.fn(async () => {});
+    renderSessionSection({}, onUpdateAppSettings);
+
+    const row = screen
+      .getByText("自动永久删除归档会话")
+      .closest(".settings-toggle-row");
+    fireEvent.click(within(row as HTMLElement).getByRole("button"));
+    await screen.findByRole("dialog", { name: "开启自动永久删除" });
+    fireEvent.click(screen.getByLabelText("我了解永久删除无法恢复"));
+    fireEvent.click(screen.getByRole("button", { name: "确认开启" }));
+
+    await waitFor(() =>
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ autoDeleteArchivedThreadsEnabled: true }),
+      ),
+    );
+    expect(cleanupManagedSessionsNow).not.toHaveBeenCalled();
+  });
+
+  it("requires a fresh preview and confirmation for immediate cleanup", async () => {
+    vi.mocked(previewManagedSessionCleanup).mockResolvedValue({ eligibleCount: 1 });
+    vi.mocked(cleanupManagedSessionsNow).mockResolvedValue({
+      results: [],
+      successCount: 1,
+      failureCount: 0,
+    });
+    renderSessionSection({ autoDeleteArchivedThreadsEnabled: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "立即清理" }));
+    await screen.findByRole("dialog", { name: "立即永久清理归档会话" });
+    fireEvent.click(screen.getByLabelText("我了解永久删除无法恢复"));
+    fireEvent.click(screen.getByRole("button", { name: "确认立即清理" }));
+
+    await waitFor(() => expect(cleanupManagedSessionsNow).toHaveBeenCalledTimes(1));
+    expect(previewManagedSessionCleanup).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("清理完成：成功 1，失败 0。")).toBeTruthy();
   });
 
   it("toggles auto archive", () => {
@@ -94,10 +163,10 @@ describe("SettingsSessionSection", () => {
     const onUpdateAppSettings = vi.fn(async () => {});
     renderSessionSection({ chatHistoryScrollbackItems: null }, onUpdateAppSettings);
 
-    const presetSelect = screen.getByLabelText("初始加载消息数量");
+    const presetSelect = screen.getByLabelText("每批显示消息数量");
     expect((presetSelect as HTMLSelectElement).disabled).toBe(true);
 
-    const maxItemsInput = screen.getByLabelText("初始加载上限");
+    const maxItemsInput = screen.getByLabelText("每批显示数量");
     expect((maxItemsInput as HTMLInputElement).disabled).toBe(true);
 
     const maxItemsRow = maxItemsInput.closest(".settings-field-row");
@@ -115,7 +184,7 @@ describe("SettingsSessionSection", () => {
     const onUpdateAppSettings = vi.fn(async () => {});
     renderSessionSection({ chatHistoryScrollbackItems: 200 }, onUpdateAppSettings);
 
-    fireEvent.change(screen.getByLabelText("初始加载消息数量"), {
+    fireEvent.change(screen.getByLabelText("每批显示消息数量"), {
       target: { value: "1000" },
     });
 
@@ -128,7 +197,7 @@ describe("SettingsSessionSection", () => {
     const onUpdateAppSettings = vi.fn(async () => {});
     renderSessionSection({ chatHistoryScrollbackItems: 200 }, onUpdateAppSettings);
 
-    const maxItemsInput = screen.getByLabelText("初始加载上限");
+    const maxItemsInput = screen.getByLabelText("每批显示数量");
     fireEvent.change(maxItemsInput, { target: { value: "50" } });
 
     const unlimitedRow = screen
@@ -150,7 +219,7 @@ describe("SettingsSessionSection", () => {
     const onUpdateAppSettings = vi.fn(async () => {});
     renderSessionSection({ chatHistoryScrollbackItems: 200 }, onUpdateAppSettings);
 
-    const maxItemsInput = screen.getByLabelText("初始加载上限");
+    const maxItemsInput = screen.getByLabelText("每批显示数量");
     fireEvent.change(maxItemsInput, { target: { value: "50" } });
 
     const maxItemsRow = maxItemsInput.closest(".settings-field-row");

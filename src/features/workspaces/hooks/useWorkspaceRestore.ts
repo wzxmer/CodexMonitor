@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WorkspaceInfo } from "../../../types";
 import { isLocalCodexWorkspaceId } from "@/features/workspaces/domain/localCodexWorkspace";
 
@@ -21,6 +21,8 @@ export function useWorkspaceRestore({
   listThreadsForWorkspaces,
 }: WorkspaceRestoreOptions) {
   const restoredWorkspaces = useRef(new Set<string>());
+  const pendingRestoreBatches = useRef(0);
+  const [initialRestoreComplete, setInitialRestoreComplete] = useState(false);
 
   useEffect(() => {
     if (!hasLoaded) {
@@ -30,8 +32,12 @@ export function useWorkspaceRestore({
       (workspace) => !restoredWorkspaces.current.has(workspace.id),
     );
     if (pending.length === 0) {
+      if (pendingRestoreBatches.current === 0) {
+        setInitialRestoreComplete(true);
+      }
       return;
     }
+    pendingRestoreBatches.current += 1;
     pending.forEach((workspace) => {
       restoredWorkspaces.current.add(workspace.id);
     });
@@ -49,11 +55,20 @@ export function useWorkspaceRestore({
           // Silent: connection errors show in debug panel.
         }
       }
-      if (connectedTargets.length > 0) {
-        await listThreadsForWorkspaces(connectedTargets, {
-          maxPages: INITIAL_THREAD_LIST_MAX_PAGES,
-        });
+      try {
+        if (connectedTargets.length > 0) {
+          await listThreadsForWorkspaces(connectedTargets, {
+            maxPages: INITIAL_THREAD_LIST_MAX_PAGES,
+          });
+        }
+      } finally {
+        pendingRestoreBatches.current -= 1;
+        if (pendingRestoreBatches.current === 0) {
+          setInitialRestoreComplete(true);
+        }
       }
     })();
   }, [connectWorkspace, hasLoaded, listThreadsForWorkspaces, workspaces]);
+
+  return initialRestoreComplete;
 }

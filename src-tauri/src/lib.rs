@@ -26,6 +26,7 @@ mod notifications;
 mod prompts;
 mod remote_backend;
 mod rules;
+mod session_manager;
 mod settings;
 mod shared;
 mod state;
@@ -157,7 +158,7 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     let state = app_handle.state::<state::AppState>();
-                    files::attachments::cleanup_all_workspace_attachments(state.inner()).await;
+                    files::attachments::cleanup_attachment_storage(state.inner()).await;
                 });
             }
             #[cfg(desktop)]
@@ -213,6 +214,20 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             settings::get_app_settings,
             settings::update_app_settings,
+            session_manager::list_session_sources,
+            session_manager::update_session_source,
+            session_manager::scan_managed_sessions,
+            session_manager::fetch_managed_sessions_page,
+            session_manager::search_managed_sessions,
+            session_manager::fetch_session_search_results,
+            session_manager::cancel_session_task,
+            session_manager::resume_managed_session,
+            session_manager::archive_managed_sessions,
+            session_manager::permanently_delete_managed_session,
+            session_manager::preview_managed_session_cleanup,
+            session_manager::cleanup_managed_sessions_now,
+            session_manager::run_managed_session_cleanup_scheduler,
+            session_manager::prepare_managed_session_derivation,
             settings::get_codex_config_path,
             settings::get_codex_status,
             settings::get_codex_sync_diagnostics,
@@ -220,6 +235,7 @@ pub fn run() {
             files::file_write,
             files::read_image_as_data_url,
             files::save_composer_images,
+            files::promote_composer_images,
             files::write_text_file,
             fonts::list_system_fonts,
             codex::get_config_model,

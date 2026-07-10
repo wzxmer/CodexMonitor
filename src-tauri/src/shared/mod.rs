@@ -1,5 +1,6 @@
 pub(crate) mod account;
 pub(crate) mod agents_config_core;
+pub(crate) mod attachment_storage_core;
 pub(crate) mod codex_aux_core;
 pub(crate) mod codex_core;
 pub(crate) mod codex_update_core;
@@ -13,6 +14,7 @@ pub(crate) mod process_core;
 pub(crate) mod prompts_core;
 pub(crate) mod provider_gateway_core;
 pub(crate) mod provider_profiles_core;
+pub(crate) mod session_manager_core;
 pub(crate) mod settings_core;
 pub(crate) mod workspace_rpc;
 pub(crate) mod workspaces_core;

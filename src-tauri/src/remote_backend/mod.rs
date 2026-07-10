@@ -110,7 +110,14 @@ impl RemoteBackend {
 }
 
 fn request_timeout_for_method(method: &str) -> Duration {
-    if matches!(method, "send_user_message" | "start_review") {
+    if matches!(
+        method,
+        "send_user_message"
+            | "start_review"
+            | "preview_managed_session_cleanup"
+            | "cleanup_managed_sessions_now"
+            | "run_managed_session_cleanup_scheduler"
+    ) {
         REMOTE_LONG_RUNNING_REQUEST_TIMEOUT
     } else {
         REMOTE_REQUEST_TIMEOUT
@@ -183,12 +190,16 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "list_git_branches"
             | "list_git_roots"
             | "list_mcp_server_status"
+            | "list_session_sources"
             | "list_threads"
             | "local_usage_snapshot"
             | "list_workspace_files"
             | "list_workspaces"
             | "model_list"
             | "read_thread"
+            | "fetch_managed_sessions_page"
+            | "search_managed_sessions"
+            | "fetch_session_search_results"
             | "rollback_thread"
             | "read_agent_config_toml"
             | "read_workspace_file"
@@ -283,10 +294,21 @@ mod tests {
     fn retries_only_retry_safe_methods_after_disconnect() {
         assert!(can_retry_after_disconnect("resume_thread"));
         assert!(can_retry_after_disconnect("list_threads"));
+        assert!(can_retry_after_disconnect("list_session_sources"));
+        assert!(can_retry_after_disconnect("fetch_managed_sessions_page"));
+        assert!(can_retry_after_disconnect("search_managed_sessions"));
+        assert!(can_retry_after_disconnect("fetch_session_search_results"));
         assert!(can_retry_after_disconnect("local_usage_snapshot"));
         assert!(!can_retry_after_disconnect("send_user_message"));
         assert!(!can_retry_after_disconnect("start_thread"));
         assert!(!can_retry_after_disconnect("remove_workspace"));
+        assert!(!can_retry_after_disconnect("scan_managed_sessions"));
+        assert!(!can_retry_after_disconnect("update_session_source"));
+        assert!(!can_retry_after_disconnect("cancel_session_task"));
+        assert!(!can_retry_after_disconnect("cleanup_managed_sessions_now"));
+        assert!(!can_retry_after_disconnect(
+            "run_managed_session_cleanup_scheduler"
+        ));
     }
 
     #[test]
@@ -297,6 +319,18 @@ mod tests {
         );
         assert_eq!(
             request_timeout_for_method("start_review"),
+            REMOTE_LONG_RUNNING_REQUEST_TIMEOUT
+        );
+        assert_eq!(
+            request_timeout_for_method("preview_managed_session_cleanup"),
+            REMOTE_LONG_RUNNING_REQUEST_TIMEOUT
+        );
+        assert_eq!(
+            request_timeout_for_method("cleanup_managed_sessions_now"),
+            REMOTE_LONG_RUNNING_REQUEST_TIMEOUT
+        );
+        assert_eq!(
+            request_timeout_for_method("run_managed_session_cleanup_scheduler"),
             REMOTE_LONG_RUNNING_REQUEST_TIMEOUT
         );
         assert_eq!(

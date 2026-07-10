@@ -6,6 +6,8 @@ import {
 } from "@tauri-apps/plugin-notification";
 import type {
   AppSettings,
+  ArchiveManagedSessionsRequest,
+  ArchiveManagedSessionsResponse,
   CodexProviderStatus,
   CodexProviderModel,
   CodexSyncDiagnostics,
@@ -15,6 +17,26 @@ import type {
   DictationModelStatus,
   DictationSessionState,
   LocalUsageSnapshot,
+  ManagedSessionPage,
+  ManagedSessionCleanupPreview,
+  ManagedSessionCleanupRequest,
+  ManagedSessionCleanupResponse,
+  ManagedSessionCleanupSchedulerRequest,
+  ManagedSessionCleanupSchedulerResponse,
+  ManagedSessionDerivationPreview,
+  ManagedSessionPageRequest,
+  ResumeManagedSessionRequest,
+  ResumeManagedSessionResponse,
+  PrepareManagedSessionDerivationRequest,
+  PermanentlyDeleteManagedSessionRequest,
+  PermanentlyDeleteManagedSessionResponse,
+  SessionScanRequest,
+  SessionScanSummary,
+  SessionSearchProgress,
+  SessionSearchRequest,
+  SessionSearchResponse,
+  SessionSource,
+  SessionSourceUpdateRequest,
   TcpDaemonStatus,
   TailscaleDaemonCommandPreview,
   TailscaleStatus,
@@ -229,9 +251,26 @@ export async function readImageAsDataUrl(path: string): Promise<string> {
 
 export async function saveComposerImages(
   workspaceId: string,
+  ownerKey: string,
   images: string[],
 ): Promise<string[]> {
-  return invoke<string[]>("save_composer_images", { workspaceId, images });
+  return invoke<string[]>("save_composer_images", {
+    workspaceId,
+    ownerKey,
+    images,
+  });
+}
+
+export async function promoteComposerImages(
+  workspaceId: string,
+  threadId: string,
+  images: string[],
+): Promise<string[]> {
+  return invoke<string[]>("promote_composer_images", {
+    workspaceId,
+    threadId,
+    images,
+  });
 }
 
 export async function readGlobalAgentsMd(): Promise<GlobalAgentsResponse> {
@@ -997,6 +1036,43 @@ export async function getAppSettings(): Promise<AppSettings> {
   return invoke<AppSettings>("get_app_settings");
 }
 
+export async function listSessionSources(): Promise<SessionSource[]> {
+  return invoke<SessionSource[]>("list_session_sources");
+}
+
+export async function updateSessionSource(
+  request: SessionSourceUpdateRequest,
+): Promise<SessionSource[]> {
+  return invoke<SessionSource[]>("update_session_source", { request });
+}
+
+export async function scanManagedSessions(
+  request: SessionScanRequest,
+): Promise<SessionScanSummary> {
+  return invoke<SessionScanSummary>("scan_managed_sessions", { request });
+}
+
+export async function fetchManagedSessionsPage(
+  request: ManagedSessionPageRequest,
+): Promise<ManagedSessionPage> {
+  return invoke<ManagedSessionPage>("fetch_managed_sessions_page", { request });
+}
+
+export async function searchManagedSessions(
+  request: SessionSearchRequest,
+): Promise<SessionSearchProgress> {
+  return invoke<SessionSearchProgress>("search_managed_sessions", { request });
+}
+
+export async function fetchSessionSearchResults(
+  requestId: string,
+): Promise<SessionSearchResponse> {
+  return invoke<SessionSearchResponse>("fetch_session_search_results", { requestId });
+}
+
+export async function cancelSessionTask(requestId: string): Promise<void> {
+  return invoke("cancel_session_task", { requestId });
+}
 export async function isMobileRuntime(): Promise<boolean> {
   return invoke<boolean>("is_mobile_runtime");
 }
@@ -1237,6 +1313,51 @@ export async function listMcpServerStatus(
 
 export async function resumeThread(workspaceId: string, threadId: string) {
   return invoke<any>("resume_thread", { workspaceId, threadId });
+}
+
+export async function resumeManagedSession(
+  request: ResumeManagedSessionRequest,
+): Promise<ResumeManagedSessionResponse> {
+  return invoke<ResumeManagedSessionResponse>("resume_managed_session", { request });
+}
+
+export async function archiveManagedSessions(
+  request: ArchiveManagedSessionsRequest,
+): Promise<ArchiveManagedSessionsResponse> {
+  return invoke<ArchiveManagedSessionsResponse>("archive_managed_sessions", { request });
+}
+
+export async function permanentlyDeleteManagedSession(
+  request: PermanentlyDeleteManagedSessionRequest,
+): Promise<PermanentlyDeleteManagedSessionResponse> {
+  return invoke<PermanentlyDeleteManagedSessionResponse>("permanently_delete_managed_session", { request });
+}
+
+export async function previewManagedSessionCleanup(
+  request: ManagedSessionCleanupRequest,
+): Promise<ManagedSessionCleanupPreview> {
+  return invoke<ManagedSessionCleanupPreview>("preview_managed_session_cleanup", { request });
+}
+
+export async function cleanupManagedSessionsNow(
+  request: ManagedSessionCleanupRequest,
+): Promise<ManagedSessionCleanupResponse> {
+  return invoke<ManagedSessionCleanupResponse>("cleanup_managed_sessions_now", { request });
+}
+
+export async function runManagedSessionCleanupScheduler(
+  request: ManagedSessionCleanupSchedulerRequest,
+): Promise<ManagedSessionCleanupSchedulerResponse> {
+  return invoke<ManagedSessionCleanupSchedulerResponse>(
+    "run_managed_session_cleanup_scheduler",
+    { request },
+  );
+}
+
+export async function prepareManagedSessionDerivation(
+  request: PrepareManagedSessionDerivationRequest,
+): Promise<ManagedSessionDerivationPreview> {
+  return invoke<ManagedSessionDerivationPreview>("prepare_managed_session_derivation", { request });
 }
 
 export async function readThread(workspaceId: string, threadId: string) {

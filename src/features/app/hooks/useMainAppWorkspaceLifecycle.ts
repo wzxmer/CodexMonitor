@@ -51,7 +51,7 @@ export function useMainAppWorkspaceLifecycle({
 
   useWindowDrag("titlebar");
 
-  useWorkspaceRestore({
+  const initialWorkspaceRestoreComplete = useWorkspaceRestore({
     workspaces,
     hasLoaded,
     connectWorkspace,
@@ -78,4 +78,6 @@ export function useMainAppWorkspaceLifecycle({
     reconnectWorkspace: connectWorkspace,
     refreshThread,
   });
+
+  return { initialWorkspaceRestoreComplete };
 }

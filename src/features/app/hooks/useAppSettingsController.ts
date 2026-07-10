@@ -13,7 +13,7 @@ export function useAppSettingsController() {
     isLoading: appSettingsLoading,
   } = useAppSettings();
 
-  useThemePreference(appSettings.theme);
+  const resolvedTheme = useThemePreference(appSettings.theme);
   const { reduceTransparency, setReduceTransparency } =
     useTransparencyPreference();
 
@@ -37,6 +37,7 @@ export function useAppSettingsController() {
     codexUpdate: (codexBin: string | null, codexArgs: string | null) =>
       runCodexUpdate(codexBin, codexArgs),
     appSettingsLoading,
+    resolvedTheme,
     reduceTransparency,
     setReduceTransparency,
     uiScale,

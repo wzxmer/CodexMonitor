@@ -14,8 +14,12 @@ import {
   SettingsToggleSwitch,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
 import { useI18n } from "@/features/i18n/I18nProvider";
+import { useSessionCleanupSettings } from "@settings/hooks/useSessionCleanupSettings";
+import { SessionAutoDeleteEnablePrompt } from "../session/SessionAutoDeleteEnablePrompt";
+import { SessionImmediateCleanupPrompt } from "../session/SessionImmediateCleanupPrompt";
 
 const AUTO_ARCHIVE_DAY_OPTIONS = [3, 5, 7, 15, 30] as const;
+const AUTO_DELETE_DAY_OPTIONS = [30, 60, 90, 180] as const;
 type SettingsSessionSectionProps = {
   appSettings: AppSettings;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
@@ -26,6 +30,16 @@ export function SettingsSessionSection({
   onUpdateAppSettings,
 }: SettingsSessionSectionProps) {
   const { t } = useI18n();
+  const {
+    cleanupPrompt,
+    cleanupBusy,
+    cleanupError,
+    cleanupSummary,
+    openCleanupPrompt,
+    closeCleanupPrompt,
+    confirmEnableAutoDelete,
+    confirmImmediateCleanup,
+  } = useSessionCleanupSettings({ appSettings, onUpdateAppSettings });
   const scrollbackUnlimited = appSettings.chatHistoryScrollbackItems === null;
   const [scrollbackDraft, setScrollbackDraft] = useState(() => {
     const value = appSettings.chatHistoryScrollbackItems;
@@ -157,6 +171,66 @@ export function SettingsSessionSection({
         <div className="settings-help">{t("settings.session.autoArchiveHelp")}</div>
       </div>
       <SettingsToggleRow
+        title={t("settings.session.autoDeleteTitle")}
+        subtitle={t("settings.session.autoDeleteSubtitle")}
+      >
+        <SettingsToggleSwitch
+          pressed={appSettings.autoDeleteArchivedThreadsEnabled}
+          disabled={cleanupBusy}
+          onClick={() => {
+            if (appSettings.autoDeleteArchivedThreadsEnabled) {
+              void onUpdateAppSettings({
+                ...appSettings,
+                autoDeleteArchivedThreadsEnabled: false,
+              });
+              return;
+            }
+            void openCleanupPrompt("enable");
+          }}
+        />
+      </SettingsToggleRow>
+      <div className="settings-field">
+        <label className="settings-field-label" htmlFor="auto-delete-days">
+          {t("settings.session.autoDeleteDays")}
+        </label>
+        <select
+          id="auto-delete-days"
+          className="settings-select"
+          value={appSettings.autoDeleteArchivedThreadsDays}
+          onChange={(event) =>
+            void onUpdateAppSettings({
+              ...appSettings,
+              autoDeleteArchivedThreadsDays: Number(event.target.value) as
+                | 30
+                | 60
+                | 90
+                | 180,
+            })
+          }
+        >
+          {AUTO_DELETE_DAY_OPTIONS.map((days) => (
+            <option key={days} value={days}>
+              {t("settings.session.daysValue").replace("{days}", String(days))}
+            </option>
+          ))}
+        </select>
+        <div className="settings-help">{t("settings.session.autoDeleteHelp")}</div>
+        <button
+          type="button"
+          className="ghost settings-button-compact"
+          disabled={cleanupBusy}
+          onClick={() => void openCleanupPrompt("immediate")}
+        >
+          {cleanupBusy
+            ? t("settings.session.cleanupPreviewing")
+            : t("settings.session.immediateCleanup")}
+        </button>
+        {cleanupError && !cleanupPrompt && (
+          <div className="settings-error">{cleanupError}</div>
+        )}
+        {cleanupSummary && <div className="settings-help">{cleanupSummary}</div>}
+      </div>
+      <SettingsToggleRow
         title={t("settings.session.autoTitleTitle")}
         subtitle={t("settings.session.autoTitleSubtitle")}
       >
@@ -261,6 +335,24 @@ export function SettingsSessionSection({
             .replace("{max}", String(CHAT_SCROLLBACK_MAX))}
         </div>
       </div>
+      {cleanupPrompt?.kind === "enable" && (
+        <SessionAutoDeleteEnablePrompt
+          eligibleCount={cleanupPrompt.eligibleCount}
+          busy={cleanupBusy}
+          error={cleanupError}
+          onCancel={closeCleanupPrompt}
+          onConfirm={() => void confirmEnableAutoDelete()}
+        />
+      )}
+      {cleanupPrompt?.kind === "immediate" && (
+        <SessionImmediateCleanupPrompt
+          eligibleCount={cleanupPrompt.eligibleCount}
+          busy={cleanupBusy}
+          error={cleanupError}
+          onCancel={closeCleanupPrompt}
+          onConfirm={() => void confirmImmediateCleanup()}
+        />
+      )}
     </SettingsSection>
   );
 }

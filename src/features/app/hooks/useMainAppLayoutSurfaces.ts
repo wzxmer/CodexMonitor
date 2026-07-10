@@ -11,6 +11,7 @@ import type {
 import { getProviderStatus } from "@/services/tauri";
 import type { ThreadState } from "@/features/threads/hooks/useThreadsReducer";
 import { useThirdPartyKeyUsage } from "@app/hooks/useThirdPartyKeyUsage";
+import type { ConversationAppearance } from "@app/utils/runtimeThemeAppearance";
 import type { WorkspaceLaunchScriptsState } from "@app/hooks/useWorkspaceLaunchScripts";
 import { REMOTE_THREAD_POLL_INTERVAL_MS } from "@app/hooks/useRemoteThreadRefreshOnFocus";
 import type { useMainAppComposerWorkspaceState } from "@app/hooks/useMainAppComposerWorkspaceState";
@@ -37,6 +38,7 @@ function countContextCompactions(items: ConversationItem[]) {
 
 type UseMainAppLayoutSurfacesArgs = {
   appSettings: AppSettings;
+  conversationAppearance: ConversationAppearance;
   onUpdateAppSettings: (next: AppSettings) => Promise<unknown>;
   workspaces: WorkspaceInfo[];
   groupedWorkspaces: Array<{ id: string | null; name: string; workspaces: WorkspaceInfo[] }>;
@@ -137,6 +139,9 @@ type UseMainAppLayoutSurfacesArgs = {
   handleAddWorktreeAgent: SidebarProps["onAddWorktreeAgent"];
   handleAddCloneAgent: SidebarProps["onAddCloneAgent"];
   handleResumeThreadById: SidebarProps["onResumeThreadById"];
+  handleResumeManagedSession: NonNullable<SidebarProps["onResumeManagedSession"]>;
+  handleDeriveManagedSession: NonNullable<SidebarProps["onDeriveManagedSession"]>;
+  activeManagedSessionSourceName: string | null;
   handleSelectLocalCodexThread: SidebarProps["onSelectLocalCodexThread"];
   handleOpenThreadLink: LayoutNodesOptions["primary"]["messagesProps"]["onOpenThreadLink"];
   handleSelectOpenAppId: MainHeaderProps["onSelectOpenAppId"];
@@ -253,6 +258,7 @@ type MainAppLayoutSurfacesContext = UseMainAppLayoutSurfacesArgs & {
 
 function buildPrimarySurface({
   appSettings,
+  conversationAppearance,
   onUpdateAppSettings,
   workspaces,
   groupedWorkspaces,
@@ -326,6 +332,9 @@ function buildPrimarySurface({
   handleAddWorktreeAgent,
   handleAddCloneAgent,
   handleResumeThreadById,
+  handleResumeManagedSession,
+  handleDeriveManagedSession,
+  activeManagedSessionSourceName,
   handleSelectLocalCodexThread,
   handleOpenThreadLink,
   handleSelectOpenAppId,
@@ -431,6 +440,9 @@ function buildPrimarySurface({
           (thread) => thread.id === activeThreadId,
         )?.name.trim() || null
       : null;
+  const activeThreadTitleWithSource = activeThreadTitle && activeManagedSessionSourceName
+    ? `${activeThreadTitle} · ${activeManagedSessionSourceName}`
+    : activeThreadTitle;
   const activeCodexKeyProfile =
     appSettings.codexKeyProfiles.find(
       (profile) => profile.id === appSettings.activeCodexKeyProfileId,
@@ -461,6 +473,7 @@ function buildPrimarySurface({
       userInputRequests,
       accountRateLimits: sidebarRateLimits,
       activeTokenUsage: activeTokenUsage ?? null,
+      showCodexUsage: appSettings.showCodexUsage,
       usageShowRemaining: appSettings.usageShowRemaining,
       useTokenUsageStats:
         codexProviderStatus?.isConfigured === true &&
@@ -513,6 +526,8 @@ function buildPrimarySurface({
       onAddWorktreeAgent: handleAddWorktreeAgent,
       onAddCloneAgent: handleAddCloneAgent,
       onResumeThreadById: handleResumeThreadById,
+      onResumeManagedSession: handleResumeManagedSession,
+      onDeriveManagedSession: handleDeriveManagedSession,
       onToggleWorkspaceCollapse: sidebarHandlers.onToggleWorkspaceCollapse,
       onSelectThread: sidebarHandlers.onSelectThread,
       onSelectLocalCodexThread: handleSelectLocalCodexThread,
@@ -548,12 +563,12 @@ function buildPrimarySurface({
       defaultToolGroupsCollapsed:
         appSettings.messageToolGroupsCollapsedByDefault,
       messageReadingStyle: appSettings.messageReadingStyle,
-      messageCanvasColor: appSettings.messageCanvasColor,
-      messageUserBubbleColor: appSettings.messageUserBubbleColor,
-      messageUserTextColor: appSettings.messageUserTextColor,
-      messageAssistantBubbleColor: appSettings.messageAssistantBubbleColor,
-      messageAssistantAccentColor: appSettings.messageAssistantAccentColor,
-      messageAssistantTextColor: appSettings.messageAssistantTextColor,
+      messageCanvasColor: conversationAppearance.messageCanvasColor,
+      messageUserBubbleColor: conversationAppearance.messageUserBubbleColor,
+      messageUserTextColor: conversationAppearance.messageUserTextColor,
+      messageAssistantBubbleColor: conversationAppearance.messageAssistantBubbleColor,
+      messageAssistantAccentColor: conversationAppearance.messageAssistantAccentColor,
+      messageAssistantTextColor: conversationAppearance.messageAssistantTextColor,
       chatHistoryScrollbackItems: appSettings.chatHistoryScrollbackItems,
       interruptedStatus: activeThreadId
         ? interruptedThreadById[activeThreadId] ?? null
@@ -765,7 +780,7 @@ function buildPrimarySurface({
     mainHeaderProps: activeWorkspace
       ? {
           workspace: activeWorkspace,
-          titleOverride: activeThreadTitle,
+          titleOverride: activeThreadTitleWithSource,
           parentName: worktreeState.activeParentWorkspace?.name ?? null,
           worktreeLabel: worktreeState.worktreeLabel,
           worktreeRename: worktreeState.worktreeRename ?? undefined,
@@ -1099,6 +1114,7 @@ function buildSecondarySurface({
 
 export function useMainAppLayoutSurfaces({
   appSettings,
+  conversationAppearance,
   workspaces,
   groupedWorkspaces,
   workspaceGroupsCount,
@@ -1172,6 +1188,9 @@ export function useMainAppLayoutSurfaces({
   handleAddWorktreeAgent,
   handleAddCloneAgent,
   handleResumeThreadById,
+  handleResumeManagedSession,
+  handleDeriveManagedSession,
+  activeManagedSessionSourceName,
   handleSelectLocalCodexThread,
   handleOpenThreadLink,
   handleSelectOpenAppId,
@@ -1321,11 +1340,7 @@ export function useMainAppLayoutSurfaces({
     activeProfileBaseUrl,
   ]);
   const contextCompactionTokenLimit =
-    activeCodexKeyProfile?.contextWindow ??
-    codexProviderStatus?.autoCompactTokenLimit ??
-    codexProviderStatus?.modelContextWindow ??
-    activeTokenUsage?.modelContextWindow ??
-    null;
+    codexProviderStatus?.autoCompactTokenLimit ?? null;
   const thirdPartyProviderUsage = useThirdPartyKeyUsage({
     enabled:
       Boolean(activeWorkspaceId) &&
@@ -1336,6 +1351,7 @@ export function useMainAppLayoutSurfaces({
 
   const context: MainAppLayoutSurfacesContext = {
     appSettings,
+    conversationAppearance,
     onUpdateAppSettings,
     workspaces,
     groupedWorkspaces,
@@ -1410,6 +1426,9 @@ export function useMainAppLayoutSurfaces({
     handleAddWorktreeAgent,
     handleAddCloneAgent,
     handleResumeThreadById,
+    handleResumeManagedSession,
+    handleDeriveManagedSession,
+    activeManagedSessionSourceName,
     handleSelectLocalCodexThread,
     handleOpenThreadLink,
     handleSelectOpenAppId,

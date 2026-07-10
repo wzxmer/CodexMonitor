@@ -723,7 +723,7 @@ describe("useThreads UX integration", () => {
     );
   });
 
-  it("preserves resumed thread history beyond the live scrollback cap", async () => {
+  it("preserves resumed history for incremental display and full-history search", async () => {
     const totalItems = 240;
     const items = Array.from({ length: totalItems }, (_, index) =>
       index % 2 === 0

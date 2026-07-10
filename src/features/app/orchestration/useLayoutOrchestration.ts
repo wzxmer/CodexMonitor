@@ -28,6 +28,8 @@ type UseAppShellOrchestrationOptions = {
     | "uiCjkFontFamily"
     | "uiFontSize"
     | "uiFontWeight"
+    | "messageFontSize"
+    | "processFontSize"
     | "codeFontFamily"
     | "codeFontSize"
   >;
@@ -89,7 +91,8 @@ export function useAppShellOrchestration({
       "--ui-font-size": `${appSettings.uiFontSize}px`,
       "--ui-font-weight": `${appSettings.uiFontWeight}`,
       "--code-font-family": codeFontFamily,
-      "--message-font-size": `${appSettings.uiFontSize}px`,
+      "--message-font-size": `${appSettings.messageFontSize}px`,
+      "--process-font-size": `${appSettings.processFontSize}px`,
       "--message-font-family": uiFontFamily,
       "--message-font-weight": `${appSettings.uiFontWeight}`,
       "--code-font-size": `${appSettings.codeFontSize}px`,
@@ -117,13 +120,11 @@ export function useAppShellOrchestration({
         : {}),
     } as CSSProperties),
     [
-      appSettings.codeFontFamily,
       appSettings.codeFontSize,
-      appSettings.uiCjkFontFamily,
-      appSettings.uiFontFamily,
+      appSettings.messageFontSize,
+      appSettings.processFontSize,
       appSettings.uiFontSize,
       appSettings.uiFontWeight,
-      appSettings.uiLatinFontFamily,
       codeFontFamily,
       chatDiffSplitPositionPercent,
       debugPanelHeight,

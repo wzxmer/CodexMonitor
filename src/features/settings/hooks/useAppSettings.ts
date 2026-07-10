@@ -11,12 +11,15 @@ import {
   CODE_FONT_SIZE_DEFAULT,
   clampCodeFontSize,
   clampMessageFontSize,
+  clampProcessFontSize,
   clampMessageFontWeight,
   clampUiFontSize,
   clampUiFontWeight,
   MESSAGE_FONT_SIZE_DEFAULT,
+  PROCESS_FONT_SIZE_DEFAULT,
   MESSAGE_FONT_WEIGHT_DEFAULT,
   normalizeFontFamily,
+  normalizeUiCjkFontFamily,
   UI_FONT_SIZE_DEFAULT,
   UI_FONT_WEIGHT_DEFAULT,
 } from "@utils/fonts";
@@ -250,6 +253,7 @@ function buildDefaultSettings(): AppSettings {
     codexBin: null,
     codexArgs: null,
     codexHome: null,
+    sessionSources: [],
     codexKeyProfiles: [],
     activeCodexKeyProfileId: null,
     backendMode: isMobile ? "remote" : "local",
@@ -285,6 +289,7 @@ function buildDefaultSettings(): AppSettings {
     appLanguage: "system",
     theme: "system",
     themeAccent: "codex",
+    showCodexUsage: true,
     usageShowRemaining: false,
     thirdPartyUsageMultiplier: 1,
     showMessageFilePath: true,
@@ -301,6 +306,8 @@ function buildDefaultSettings(): AppSettings {
     threadTitleAutogenerationEnabled: true,
     autoArchiveThreadsEnabled: false,
     autoArchiveThreadsDays: 7,
+    autoDeleteArchivedThreadsEnabled: false,
+    autoDeleteArchivedThreadsDays: 30,
     automaticAppUpdateChecksEnabled: true,
     uiFontFamily: DEFAULT_UI_FONT_FAMILY,
     uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
@@ -309,6 +316,7 @@ function buildDefaultSettings(): AppSettings {
     uiFontWeight: UI_FONT_WEIGHT_DEFAULT,
     codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
     messageFontSize: MESSAGE_FONT_SIZE_DEFAULT,
+    processFontSize: PROCESS_FONT_SIZE_DEFAULT,
     messageFontWeight: MESSAGE_FONT_WEIGHT_DEFAULT,
     codeFontSize: CODE_FONT_SIZE_DEFAULT,
     notificationSoundsEnabled: true,
@@ -341,6 +349,7 @@ function buildDefaultSettings(): AppSettings {
     composerFenceWrapSelection: false,
     composerFenceAutoWrapPasteMultiline: false,
     composerFenceAutoWrapPasteCodeLike: false,
+    composerLargePasteBehavior: "smart",
     composerListContinuation: false,
     composerCodeBlockCopyUseModifier: false,
     workspaceGroups: [],
@@ -391,6 +400,9 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
       codexBin: settings.codexBin?.trim() ? settings.codexBin.trim() : null,
       codexArgs: settings.codexArgs?.trim() ? settings.codexArgs.trim() : null,
       codexHome: settings.codexHome?.trim() ? settings.codexHome.trim() : null,
+      sessionSources: Array.isArray(settings.sessionSources)
+        ? settings.sessionSources
+        : [],
       codexKeyProfiles,
     activeCodexKeyProfileId,
     uiScale: clampUiScale(settings.uiScale),
@@ -401,12 +413,16 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     themeAccent: allowedThemeAccents.has(settings.themeAccent)
       ? settings.themeAccent
       : "codex",
+    showCodexUsage:
+      typeof settings.showCodexUsage === "boolean" ? settings.showCodexUsage : true,
     thirdPartyUsageMultiplier:
       typeof settings.thirdPartyUsageMultiplier === "number" &&
       Number.isFinite(settings.thirdPartyUsageMultiplier) &&
       settings.thirdPartyUsageMultiplier >= 0
         ? settings.thirdPartyUsageMultiplier
         : 1,
+    composerLargePasteBehavior:
+      settings.composerLargePasteBehavior === "keepText" ? "keepText" : "smart",
     messageToolGroupsCollapsedByDefault:
       typeof settings.messageToolGroupsCollapsedByDefault === "boolean"
         ? settings.messageToolGroupsCollapsedByDefault
@@ -444,10 +460,7 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
       settings.uiLatinFontFamily,
       DEFAULT_UI_LATIN_FONT_FAMILY,
     ),
-    uiCjkFontFamily: normalizeFontFamily(
-      settings.uiCjkFontFamily,
-      DEFAULT_UI_CJK_FONT_FAMILY,
-    ),
+    uiCjkFontFamily: normalizeUiCjkFontFamily(settings.uiCjkFontFamily),
     uiFontSize: clampUiFontSize(settings.uiFontSize),
     uiFontWeight: clampUiFontWeight(settings.uiFontWeight),
     codeFontFamily: normalizeFontFamily(
@@ -455,6 +468,7 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
       DEFAULT_CODE_FONT_FAMILY,
     ),
     messageFontSize: clampMessageFontSize(settings.messageFontSize),
+    processFontSize: clampProcessFontSize(settings.processFontSize),
     messageFontWeight: clampMessageFontWeight(settings.messageFontWeight),
     messageFontFamily: normalizeFontFamily(
       settings.messageFontFamily,
@@ -468,6 +482,15 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     autoArchiveThreadsDays: [3, 5, 7, 15, 30].includes(settings.autoArchiveThreadsDays)
       ? settings.autoArchiveThreadsDays
       : 7,
+    autoDeleteArchivedThreadsEnabled:
+      typeof settings.autoDeleteArchivedThreadsEnabled === "boolean"
+        ? settings.autoDeleteArchivedThreadsEnabled
+        : false,
+    autoDeleteArchivedThreadsDays: [30, 60, 90, 180].includes(
+      settings.autoDeleteArchivedThreadsDays,
+    )
+      ? settings.autoDeleteArchivedThreadsDays
+      : 30,
     personality: allowedPersonality.has(settings.personality)
       ? settings.personality
       : "friendly",

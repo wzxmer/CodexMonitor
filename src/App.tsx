@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import "@fontsource-variable/noto-sans-sc";
 import "./styles/base.css";
 import "./styles/ds-tokens.css";
 import "./styles/ds-modal.css";

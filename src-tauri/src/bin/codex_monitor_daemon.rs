@@ -80,6 +80,10 @@ use backend::events::{AppServerEvent, EventSink, TerminalExit, TerminalOutput};
 use shared::codex_core::CodexLoginCancelState;
 use shared::process_core::kill_child_process_tree;
 use shared::prompts_core::{self, CustomPromptEntry};
+use shared::session_manager_core::runtime::{
+    SessionSourceRuntimePool, SourceThreadRuntimeBinding, SourceThreadRuntimeBindings,
+};
+use shared::session_manager_core::service::SessionManagerRuntime;
 use shared::{
     agents_config_core, codex_aux_core, codex_core, files_core, git_core, git_ui_core,
     local_usage_core, provider_profiles_core, settings_core, workspaces_core, worktree_core,
@@ -88,7 +92,7 @@ use storage::{read_settings, read_workspaces};
 use types::{
     AppSettings, GitCommitDiff, GitFileDiff, GitHubIssuesResponse, GitHubPullRequestComment,
     GitHubPullRequestDiff, GitHubPullRequestsResponse, GitLogResponse, LocalUsageSnapshot,
-    WorkspaceEntry, WorkspaceInfo, WorkspaceSettings, WorktreeSetupStatus,
+    SessionSource, WorkspaceEntry, WorkspaceInfo, WorkspaceSettings, WorktreeSetupStatus,
 };
 use workspace_settings::apply_workspace_settings_update;
 
@@ -168,6 +172,9 @@ struct DaemonState {
     app_settings: Mutex<AppSettings>,
     event_sink: DaemonEventSink,
     codex_login_cancels: Mutex<HashMap<String, CodexLoginCancelState>>,
+    session_manager: SessionManagerRuntime,
+    session_source_runtimes: SessionSourceRuntimePool,
+    source_thread_runtimes: SourceThreadRuntimeBindings,
     daemon_binary_path: Option<String>,
 }
 
@@ -178,6 +185,109 @@ struct WorkspaceFileResponse {
 }
 
 impl DaemonState {
+    async fn source_runtime_for_workspace(
+        &self,
+        source: &SessionSource,
+        entry: WorkspaceEntry,
+        default_codex_bin: Option<String>,
+        codex_args: Option<String>,
+        client_version: String,
+    ) -> Result<Arc<WorkspaceSession>, String> {
+        self.session_source_runtimes.close_idle().await;
+        let workspace_context = entry.path.clone();
+        self.session_source_runtimes
+            .get_or_spawn_workspace_session_for_source(
+                source,
+                &workspace_context,
+                move |codex_home| {
+                    spawn_with_client(
+                        self.event_sink.clone(),
+                        client_version,
+                        &self.app_settings,
+                        entry,
+                        default_codex_bin,
+                        codex_args,
+                        Some(codex_home),
+                    )
+                },
+            )
+            .await
+    }
+
+    async fn source_runtime_for_bound_thread(
+        &self,
+        workspace_id: &str,
+        thread_id: &str,
+    ) -> Result<Option<Arc<WorkspaceSession>>, String> {
+        let Some(binding) = self
+            .source_thread_runtimes
+            .get(workspace_id, thread_id)
+            .await
+        else {
+            return Ok(None);
+        };
+        let (default_codex_bin, codex_args) = {
+            let settings = self.app_settings.lock().await;
+            (
+                settings.codex_bin.clone(),
+                codex_args::resolve_workspace_codex_args(&binding.workspace, None, Some(&settings)),
+            )
+        };
+        self.session_source_runtimes.close_idle().await;
+        let workspace_context = binding.workspace.path.clone();
+        let event_sink = self.event_sink.clone();
+        let app_settings = &self.app_settings;
+        let workspace = binding.workspace.clone();
+        let client_version = binding
+            .client_version
+            .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string());
+        let (runtime, spawned) = self
+            .session_source_runtimes
+            .get_or_spawn_workspace_session_for_source_with_status(
+                &binding.source,
+                &workspace_context,
+                move |codex_home| {
+                    spawn_with_client(
+                        event_sink,
+                        client_version,
+                        app_settings,
+                        workspace,
+                        default_codex_bin,
+                        codex_args,
+                        Some(codex_home),
+                    )
+                },
+            )
+            .await?;
+        runtime
+            .register_workspace_with_path(&binding.workspace.id, Some(&binding.workspace.path))
+            .await;
+        if spawned {
+            codex_core::resume_thread_with_session_core(
+                &runtime,
+                workspace_id.to_string(),
+                thread_id.to_string(),
+            )
+            .await?;
+        }
+        Ok(Some(runtime))
+    }
+
+    async fn source_runtime_for_bound_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Option<Arc<WorkspaceSession>>, String> {
+        let Some((thread_id, _)) = self
+            .source_thread_runtimes
+            .unique_for_workspace(workspace_id)
+            .await
+        else {
+            return Ok(None);
+        };
+        self.source_runtime_for_bound_thread(workspace_id, &thread_id)
+            .await
+    }
+
     fn load(config: &DaemonConfig, event_sink: DaemonEventSink) -> Self {
         let storage_path = config.data_dir.join("workspaces.json");
         let settings_path = config.data_dir.join("settings.json");
@@ -202,6 +312,9 @@ impl DaemonState {
             app_settings: Mutex::new(app_settings),
             event_sink,
             codex_login_cancels: Mutex::new(HashMap::new()),
+            session_manager: SessionManagerRuntime::with_storage_dir(&config.data_dir),
+            session_source_runtimes: SessionSourceRuntimePool::for_workspace_sessions(),
+            source_thread_runtimes: SourceThreadRuntimeBindings::default(),
             daemon_binary_path,
         }
     }
@@ -598,7 +711,7 @@ impl DaemonState {
     }
 
     async fn get_app_settings(&self) -> AppSettings {
-        settings_core::get_app_settings_core(&self.app_settings).await
+        settings_core::get_app_settings_core(&self.app_settings, &self.settings_path).await
     }
 
     async fn update_app_settings(&self, settings: AppSettings) -> Result<AppSettings, String> {
@@ -614,6 +727,337 @@ impl DaemonState {
             eprintln!("DaemonState::update_app_settings: failed to remove legacy agent import marker: {error}");
         }
         Ok(updated)
+    }
+
+    async fn list_session_sources(&self) -> Vec<types::SessionSource> {
+        settings_core::get_app_settings_core(&self.app_settings, &self.settings_path).await;
+        shared::session_manager_core::service::list_session_sources_core(&self.app_settings).await
+    }
+
+    async fn update_session_source(
+        &self,
+        request: types::SessionSourceUpdateRequest,
+    ) -> Result<Vec<types::SessionSource>, String> {
+        shared::session_manager_core::service::update_session_source_core(
+            request,
+            &self.app_settings,
+            &self.settings_path,
+        )
+        .await
+    }
+
+    async fn scan_managed_sessions(
+        &self,
+        request: types::SessionScanRequest,
+    ) -> Result<types::SessionScanSummary, String> {
+        settings_core::get_app_settings_core(&self.app_settings, &self.settings_path).await;
+        shared::session_manager_core::service::scan_managed_sessions_core(
+            request,
+            &self.app_settings,
+            &self.session_manager,
+        )
+        .await
+    }
+
+    async fn fetch_managed_sessions_page(
+        &self,
+        request: types::ManagedSessionPageRequest,
+    ) -> Result<types::ManagedSessionPage, String> {
+        shared::session_manager_core::service::fetch_managed_sessions_page_core(
+            request,
+            &self.session_manager,
+        )
+        .await
+    }
+
+    async fn search_managed_sessions(
+        &self,
+        request: types::SessionSearchRequest,
+    ) -> Result<types::SessionSearchProgress, String> {
+        shared::session_manager_core::service::search_managed_sessions_core(
+            request,
+            &self.session_manager,
+        )
+        .await
+    }
+    async fn fetch_session_search_results(
+        &self,
+        request_id: String,
+    ) -> Result<types::SessionSearchResponse, String> {
+        shared::session_manager_core::service::fetch_session_search_results_core(
+            request_id,
+            &self.session_manager,
+        )
+    }
+    async fn cancel_session_task(&self, request_id: String) -> Result<(), String> {
+        shared::session_manager_core::service::cancel_session_task_core(
+            request_id,
+            &self.session_manager,
+        )
+        .await
+    }
+
+    async fn resume_managed_session(
+        &self,
+        request: types::ResumeManagedSessionRequest,
+        client_version: String,
+    ) -> Result<types::ResumeManagedSessionResponse, String> {
+        settings_core::get_app_settings_core(&self.app_settings, &self.settings_path).await;
+        let (source, managed) =
+            shared::session_manager_core::service::resolve_managed_session_core(
+                &request.source_id,
+                &request.thread_id,
+                &self.app_settings,
+                &self.session_manager,
+            )
+            .await?;
+        let cwd = managed
+            .cwd
+            .as_deref()
+            .ok_or_else(|| "Managed session has no project path".to_string())?;
+        let normalized = workspaces_core::normalize_workspace_path_input(cwd);
+        let path = workspaces_core::workspace_path_to_string(&normalized);
+        let existing = self
+            .workspaces
+            .lock()
+            .await
+            .values()
+            .find(|entry| entry.path.eq_ignore_ascii_case(&path))
+            .cloned();
+        let is_new = existing.is_none();
+        let entry = existing.unwrap_or_else(|| WorkspaceEntry {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: normalized
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("Workspace")
+                .to_string(),
+            path,
+            kind: types::WorkspaceKind::Main,
+            parent_id: None,
+            worktree: None,
+            settings: WorkspaceSettings::default(),
+        });
+        let (default_codex_bin, codex_args) = {
+            let settings = self.app_settings.lock().await;
+            (
+                settings.codex_bin.clone(),
+                codex_args::resolve_workspace_codex_args(&entry, None, Some(&settings)),
+            )
+        };
+        let runtime = self
+            .source_runtime_for_workspace(
+                &source,
+                entry.clone(),
+                default_codex_bin,
+                codex_args,
+                client_version.clone(),
+            )
+            .await?;
+        runtime
+            .register_workspace_with_path(&entry.id, Some(&entry.path))
+            .await;
+        codex_core::resume_thread_with_session_core(
+            &runtime,
+            entry.id.clone(),
+            managed.thread_id.clone(),
+        )
+        .await?;
+        self.source_thread_runtimes
+            .bind(
+                &entry.id,
+                &managed.thread_id,
+                SourceThreadRuntimeBinding {
+                    source: source.clone(),
+                    workspace: entry.clone(),
+                    client_version: Some(client_version),
+                },
+            )
+            .await;
+        if is_new {
+            let mut workspaces = self.workspaces.lock().await;
+            workspaces.insert(entry.id.clone(), entry.clone());
+            let list = workspaces.values().cloned().collect::<Vec<_>>();
+            if let Err(error) = storage::write_workspaces(&self.storage_path, &list) {
+                workspaces.remove(&entry.id);
+                self.source_thread_runtimes
+                    .remove(&entry.id, &managed.thread_id)
+                    .await;
+                return Err(error);
+            }
+        }
+        Ok(types::ResumeManagedSessionResponse {
+            workspace: WorkspaceInfo {
+                id: entry.id,
+                name: entry.name,
+                path: entry.path,
+                connected: true,
+                kind: entry.kind,
+                parent_id: entry.parent_id,
+                worktree: entry.worktree,
+                settings: entry.settings,
+            },
+            thread_id: managed.thread_id,
+            source_id: source.id,
+            source_name: source.name,
+        })
+    }
+
+    async fn archive_managed_sessions(
+        &self,
+        request: types::ArchiveManagedSessionsRequest,
+        client_version: String,
+    ) -> Result<types::ArchiveManagedSessionsResponse, String> {
+        settings_core::get_app_settings_core(&self.app_settings, &self.settings_path).await;
+        shared::session_manager_core::service::archive_managed_sessions_core(
+            request,
+            &self.app_settings,
+            &self.session_manager,
+            |source, managed| {
+                let client_version = client_version.clone();
+                async move {
+                    let workspace_context = managed
+                        .cwd
+                        .as_deref()
+                        .filter(|cwd| std::path::Path::new(cwd).is_dir())
+                        .unwrap_or(&source.codex_home_path);
+                    let normalized =
+                        workspaces_core::normalize_workspace_path_input(workspace_context);
+                    if !normalized.is_dir() {
+                        return Err("Managed session project path is unavailable".to_string());
+                    }
+                    let path = workspaces_core::workspace_path_to_string(&normalized);
+                    let entry = self
+                        .workspaces
+                        .lock()
+                        .await
+                        .values()
+                        .find(|entry| entry.path.eq_ignore_ascii_case(&path))
+                        .cloned()
+                        .unwrap_or_else(|| WorkspaceEntry {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            name: normalized
+                                .file_name()
+                                .and_then(|name| name.to_str())
+                                .unwrap_or("Workspace")
+                                .to_string(),
+                            path,
+                            kind: types::WorkspaceKind::Main,
+                            parent_id: None,
+                            worktree: None,
+                            settings: WorkspaceSettings::default(),
+                        });
+                    let (default_codex_bin, codex_args) = {
+                        let settings = self.app_settings.lock().await;
+                        (
+                            settings.codex_bin.clone(),
+                            codex_args::resolve_workspace_codex_args(&entry, None, Some(&settings)),
+                        )
+                    };
+                    let runtime = self
+                        .source_runtime_for_workspace(
+                            &source,
+                            entry.clone(),
+                            default_codex_bin,
+                            codex_args,
+                            client_version,
+                        )
+                        .await?;
+                    runtime
+                        .register_workspace_with_path(&entry.id, Some(&entry.path))
+                        .await;
+                    runtime
+                        .send_request_for_workspace(
+                            &entry.id,
+                            "thread/archive",
+                            json!({ "threadId": managed.thread_id }),
+                        )
+                        .await?;
+                    self.source_thread_runtimes
+                        .remove_for_source_thread(&source.id, &managed.thread_id)
+                        .await;
+                    Ok(())
+                }
+            },
+        )
+        .await
+    }
+
+    async fn permanently_delete_managed_session(
+        &self,
+        request: types::PermanentlyDeleteManagedSessionRequest,
+    ) -> Result<types::PermanentlyDeleteManagedSessionResponse, String> {
+        settings_core::get_app_settings_core(&self.app_settings, &self.settings_path).await;
+        shared::session_manager_core::service::permanently_delete_managed_session_core(
+            request,
+            &self.app_settings,
+            &self.session_manager,
+        )
+        .await
+    }
+
+    async fn preview_managed_session_cleanup(
+        &self,
+        request: types::ManagedSessionCleanupRequest,
+    ) -> Result<types::ManagedSessionCleanupPreview, String> {
+        settings_core::get_app_settings_core(&self.app_settings, &self.settings_path).await;
+        shared::session_manager_core::service::preview_managed_session_cleanup_core(
+            request,
+            &self.app_settings,
+            &self.session_manager,
+        )
+        .await
+    }
+
+    async fn cleanup_managed_sessions_now(
+        &self,
+        request: types::ManagedSessionCleanupRequest,
+    ) -> Result<types::ManagedSessionCleanupResponse, String> {
+        settings_core::get_app_settings_core(&self.app_settings, &self.settings_path).await;
+        shared::session_manager_core::service::cleanup_managed_sessions_now_core(
+            request,
+            &self.app_settings,
+            &self.session_manager,
+        )
+        .await
+    }
+
+    async fn run_managed_session_cleanup_scheduler(
+        &self,
+        request: types::ManagedSessionCleanupSchedulerRequest,
+    ) -> Result<types::ManagedSessionCleanupSchedulerResponse, String> {
+        settings_core::get_app_settings_core(&self.app_settings, &self.settings_path).await;
+        let sessions = self
+            .sessions
+            .lock()
+            .await
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut running_thread_ids = Vec::new();
+        for session in sessions {
+            running_thread_ids.extend(session.active_turns.lock().await.keys().cloned());
+        }
+        shared::session_manager_core::service::run_managed_session_cleanup_scheduler_core(
+            request,
+            running_thread_ids,
+            &self.app_settings,
+            &self.session_manager,
+        )
+        .await
+    }
+
+    async fn prepare_managed_session_derivation(
+        &self,
+        request: types::PrepareManagedSessionDerivationRequest,
+    ) -> Result<types::ManagedSessionDerivationPreview, String> {
+        settings_core::get_app_settings_core(&self.app_settings, &self.settings_path).await;
+        shared::session_manager_core::service::prepare_managed_session_derivation_core(
+            request,
+            &self.app_settings,
+            &self.session_manager,
+        )
+        .await
     }
 
     async fn set_codex_feature_flag(
@@ -741,10 +1185,24 @@ impl DaemonState {
         workspace_id: String,
         thread_id: String,
     ) -> Result<Value, String> {
+        if let Some(session) = self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+        {
+            return codex_core::resume_thread_with_session_core(&session, workspace_id, thread_id)
+                .await;
+        }
         codex_core::resume_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
     async fn read_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
+        if let Some(session) = self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+        {
+            return codex_core::read_thread_with_session_core(&session, workspace_id, thread_id)
+                .await;
+        }
         codex_core::read_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
@@ -753,12 +1211,18 @@ impl DaemonState {
         workspace_id: String,
         thread_id: String,
     ) -> Result<Value, String> {
-        codex_core::thread_live_subscribe_core(
-            &self.sessions,
-            workspace_id.clone(),
-            thread_id.clone(),
-        )
-        .await?;
+        if self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+            .is_none()
+        {
+            codex_core::thread_live_subscribe_core(
+                &self.sessions,
+                workspace_id.clone(),
+                thread_id.clone(),
+            )
+            .await?;
+        }
         let subscription_id = format!("{}:{}", workspace_id, thread_id);
         self.event_sink.emit_app_server_event(AppServerEvent {
             workspace_id: workspace_id.clone(),
@@ -782,12 +1246,18 @@ impl DaemonState {
         workspace_id: String,
         thread_id: String,
     ) -> Result<Value, String> {
-        codex_core::thread_live_unsubscribe_core(
-            &self.sessions,
-            workspace_id.clone(),
-            thread_id.clone(),
-        )
-        .await?;
+        if self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+            .is_none()
+        {
+            codex_core::thread_live_unsubscribe_core(
+                &self.sessions,
+                workspace_id.clone(),
+                thread_id.clone(),
+            )
+            .await?;
+        }
         self.event_sink.emit_app_server_event(AppServerEvent {
             workspace_id: workspace_id.clone(),
             message: json!({
@@ -803,6 +1273,18 @@ impl DaemonState {
     }
 
     async fn fork_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
+        if let Some(session) = self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+        {
+            return session
+                .send_request_for_workspace(
+                    &workspace_id,
+                    "thread/fork",
+                    json!({ "threadId": thread_id }),
+                )
+                .await;
+        }
         codex_core::fork_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
@@ -812,6 +1294,18 @@ impl DaemonState {
         thread_id: String,
         num_turns: u32,
     ) -> Result<Value, String> {
+        if let Some(session) = self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+        {
+            return session
+                .send_request_for_workspace(
+                    &workspace_id,
+                    "thread/rollback",
+                    json!({ "threadId": thread_id, "numTurns": num_turns }),
+                )
+                .await;
+        }
         codex_core::rollback_thread_core(&self.sessions, workspace_id, thread_id, num_turns).await
     }
 
@@ -848,6 +1342,24 @@ impl DaemonState {
         workspace_id: String,
         thread_id: String,
     ) -> Result<Value, String> {
+        if let Some(session) = self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+        {
+            let result = session
+                .send_request_for_workspace(
+                    &workspace_id,
+                    "thread/archive",
+                    json!({ "threadId": thread_id }),
+                )
+                .await;
+            if result.is_ok() {
+                self.source_thread_runtimes
+                    .remove(&workspace_id, &thread_id)
+                    .await;
+            }
+            return result;
+        }
         codex_core::archive_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
@@ -856,6 +1368,18 @@ impl DaemonState {
         workspace_id: String,
         thread_id: String,
     ) -> Result<Value, String> {
+        if let Some(session) = self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+        {
+            return session
+                .send_request_for_workspace(
+                    &workspace_id,
+                    "thread/compact/start",
+                    json!({ "threadId": thread_id }),
+                )
+                .await;
+        }
         codex_core::compact_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
@@ -865,6 +1389,18 @@ impl DaemonState {
         thread_id: String,
         name: String,
     ) -> Result<Value, String> {
+        if let Some(session) = self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+        {
+            return session
+                .send_request_for_workspace(
+                    &workspace_id,
+                    "thread/name/set",
+                    json!({ "threadId": thread_id, "name": name }),
+                )
+                .await;
+        }
         codex_core::set_thread_name_core(&self.sessions, workspace_id, thread_id, name).await
     }
 
@@ -881,6 +1417,26 @@ impl DaemonState {
         app_mentions: Option<Vec<Value>>,
         collaboration_mode: Option<Value>,
     ) -> Result<Value, String> {
+        if let Some(session) = self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+        {
+            return codex_core::send_user_message_with_session_core(
+                &session,
+                &self.workspaces,
+                workspace_id,
+                thread_id,
+                text,
+                model,
+                effort,
+                service_tier,
+                access_mode,
+                images,
+                app_mentions,
+                collaboration_mode,
+            )
+            .await;
+        }
         codex_core::send_user_message_core(
             &self.sessions,
             &self.workspaces,
@@ -907,6 +1463,21 @@ impl DaemonState {
         images: Option<Vec<String>>,
         app_mentions: Option<Vec<Value>>,
     ) -> Result<Value, String> {
+        if let Some(session) = self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+        {
+            return codex_core::turn_steer_with_session_core(
+                &session,
+                workspace_id,
+                thread_id,
+                turn_id,
+                text,
+                images,
+                app_mentions,
+            )
+            .await;
+        }
         codex_core::turn_steer_core(
             &self.sessions,
             workspace_id,
@@ -925,6 +1496,18 @@ impl DaemonState {
         thread_id: String,
         turn_id: String,
     ) -> Result<Value, String> {
+        if let Some(session) = self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+        {
+            return codex_core::turn_interrupt_with_session_core(
+                &session,
+                workspace_id,
+                thread_id,
+                turn_id,
+            )
+            .await;
+        }
         codex_core::turn_interrupt_core(&self.sessions, workspace_id, thread_id, turn_id).await
     }
 
@@ -935,6 +1518,18 @@ impl DaemonState {
         target: Value,
         delivery: Option<String>,
     ) -> Result<Value, String> {
+        if let Some(session) = self
+            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
+            .await?
+        {
+            let mut params = serde_json::Map::new();
+            params.insert("threadId".to_string(), json!(thread_id));
+            params.insert("target".to_string(), target);
+            params.insert("delivery".to_string(), json!(delivery));
+            return session
+                .send_request_for_workspace(&workspace_id, "review/start", Value::Object(params))
+                .await;
+        }
         codex_core::start_review_core(&self.sessions, workspace_id, thread_id, target, delivery)
             .await
     }
@@ -994,6 +1589,13 @@ impl DaemonState {
         request_id: Value,
         result: Value,
     ) -> Result<Value, String> {
+        if let Some(session) = self
+            .source_runtime_for_bound_workspace(&workspace_id)
+            .await?
+        {
+            session.send_response(request_id, result).await?;
+            return Ok(json!({ "ok": true }));
+        }
         codex_core::respond_to_server_request_core(
             &self.sessions,
             workspace_id,
@@ -1660,7 +2262,6 @@ mod tests {
     use std::future::Future;
     use std::path::PathBuf;
     use std::process::Stdio;
-    use std::sync::atomic::{AtomicBool, AtomicU64};
     use std::sync::Arc;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
@@ -1700,6 +2301,9 @@ mod tests {
             app_settings: Mutex::new(AppSettings::default()),
             event_sink: DaemonEventSink { tx },
             codex_login_cancels: Mutex::new(HashMap::new()),
+            session_manager: SessionManagerRuntime::with_storage_dir(data_dir),
+            session_source_runtimes: SessionSourceRuntimePool::for_workspace_sessions(),
+            source_thread_runtimes: SourceThreadRuntimeBindings::default(),
             daemon_binary_path: Some("/tmp/codex-monitor-daemon".to_string()),
         }
     }
@@ -1754,22 +2358,13 @@ mod tests {
         let mut child = cmd.spawn().expect("spawn dummy child");
         let stdin = child.stdin.take().expect("dummy child stdin");
 
-        Arc::new(WorkspaceSession {
-            codex_args: None,
-            child: Mutex::new(child),
-            stdin: Mutex::new(stdin),
-            pending: Mutex::new(HashMap::new()),
-            request_context: Mutex::new(HashMap::new()),
-            thread_workspace: Mutex::new(HashMap::new()),
-            active_turns: Mutex::new(HashMap::new()),
-            hidden_thread_ids: Mutex::new(HashSet::new()),
-            next_id: AtomicU64::new(0),
-            output_closed: AtomicBool::new(false),
-            background_thread_callbacks: Mutex::new(HashMap::new()),
-            workspace_ids: Mutex::new(HashSet::from([owner_workspace_id.clone()])),
-            workspace_roots: Mutex::new(HashMap::new()),
+        Arc::new(WorkspaceSession::test_new(
+            None,
+            None,
+            child,
+            stdin,
             owner_workspace_id,
-        })
+        ))
     }
 
     #[test]

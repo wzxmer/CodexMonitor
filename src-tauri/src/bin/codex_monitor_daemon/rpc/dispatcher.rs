@@ -26,5 +26,9 @@ pub(super) async fn dispatch_rpc_request(
         return result;
     }
 
+    if let Some(result) = session_manager::try_handle(state, method, params, client_version).await {
+        return result;
+    }
+
     Err(format!("unknown method: {method}"))
 }

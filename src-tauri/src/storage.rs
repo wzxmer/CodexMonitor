@@ -113,10 +113,18 @@ fn normalize_app_settings(settings: AppSettings) -> (AppSettings, bool) {
     let (codex_home, codex_home_changed) =
         normalize_optional_windows_namespace_path(settings.codex_home.clone());
     changed |= codex_home_changed;
+    let auto_delete_archived_threads_days =
+        if [30, 60, 90, 180].contains(&settings.auto_delete_archived_threads_days) {
+            settings.auto_delete_archived_threads_days
+        } else {
+            changed = true;
+            30
+        };
     (
         AppSettings {
             global_worktrees_folder,
             codex_home,
+            auto_delete_archived_threads_days,
             ..settings
         },
         changed,
@@ -428,6 +436,29 @@ mod tests {
     }
 
     #[test]
+    fn write_read_settings_preserves_font_sizes() {
+        let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let path = temp_dir.join("settings.json");
+
+        let mut settings = AppSettings::default();
+        settings.ui_font_size = 17;
+        settings.message_font_size = 18;
+        settings.process_font_size = 15;
+        settings.code_font_size = 15;
+        settings.show_codex_usage = false;
+
+        write_settings(&path, &settings).expect("write settings");
+        let read = read_settings(&path).expect("read settings");
+
+        assert_eq!(read.ui_font_size, 17);
+        assert_eq!(read.message_font_size, 18);
+        assert_eq!(read.process_font_size, 15);
+        assert_eq!(read.code_font_size, 15);
+        assert!(!read.show_codex_usage);
+    }
+
+    #[test]
     fn read_settings_rewrites_global_worktrees_folder_namespace_paths() {
         let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");
@@ -475,5 +506,58 @@ mod tests {
 
         let settings = read_settings(&path).expect("read settings");
         assert_eq!(settings.follow_up_message_behavior, "queue");
+    }
+
+    #[test]
+    fn read_settings_migrates_missing_session_sources_to_empty_list() {
+        let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let path = temp_dir.join("settings.json");
+
+        std::fs::write(&path, r#"{"theme":"dark"}"#).expect("write settings");
+
+        let settings = read_settings(&path).expect("read settings");
+        assert!(settings.session_sources.is_empty());
+    }
+
+    #[test]
+    fn write_read_settings_preserves_session_sources() {
+        let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let path = temp_dir.join("settings.json");
+        let mut settings = AppSettings::default();
+        settings.session_sources.push(crate::types::SessionSource {
+            id: "source-a".to_string(),
+            name: "Work".to_string(),
+            codex_home_path: r"D:\Profiles\Work".to_string(),
+            enabled: true,
+            is_current: false,
+            is_default: false,
+            discovered_at: 10,
+            last_scan_at: None,
+            status: crate::types::SessionSourceStatus::Missing,
+            error: None,
+        });
+
+        write_settings(&path, &settings).expect("write settings");
+        let read = read_settings(&path).expect("read settings");
+
+        assert_eq!(read.session_sources.len(), 1);
+        assert_eq!(read.session_sources[0].name, "Work");
+    }
+
+    #[test]
+    fn normalizes_invalid_auto_delete_retention() {
+        let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let path = temp_dir.join("settings.json");
+        let mut settings = AppSettings::default();
+        settings.auto_delete_archived_threads_days = 7;
+
+        write_settings(&path, &settings).expect("write settings");
+        let read = read_settings(&path).expect("read settings");
+
+        assert_eq!(read.auto_delete_archived_threads_days, 30);
+        let _ = std::fs::remove_dir_all(temp_dir);
     }
 }

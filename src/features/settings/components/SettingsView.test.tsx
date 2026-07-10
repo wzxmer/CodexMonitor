@@ -94,6 +94,7 @@ const baseSettings: AppSettings = {
   codexBin: null,
   codexHome: null,
   codexArgs: null,
+  sessionSources: [],
   codexKeyProfiles: [],
   activeCodexKeyProfileId: null,
   backendMode: "local",
@@ -137,6 +138,7 @@ const baseSettings: AppSettings = {
   appLanguage: "system",
   theme: "system",
   themeAccent: "codex",
+  showCodexUsage: true,
   usageShowRemaining: false,
   thirdPartyUsageMultiplier: 1,
   showMessageFilePath: true,
@@ -152,22 +154,25 @@ const baseSettings: AppSettings = {
   threadTitleAutogenerationEnabled: false,
   autoArchiveThreadsEnabled: false,
   autoArchiveThreadsDays: 7,
+  autoDeleteArchivedThreadsEnabled: false,
+  autoDeleteArchivedThreadsDays: 30,
   automaticAppUpdateChecksEnabled: true,
   uiFontFamily:
     'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   uiLatinFontFamily:
     '"Segoe UI", Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
   uiCjkFontFamily:
-    '"Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif',
-  uiFontSize: 13,
-  uiFontWeight: 400,
+    '"PingFang SC", "Noto Sans SC Variable", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif',
+  uiFontSize: 14,
+  uiFontWeight: 450,
   codeFontFamily:
     'ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-  messageFontSize: 13,
+  messageFontSize: 14,
+  processFontSize: 12,
   messageFontWeight: 450,
   messageFontFamily:
-    '"Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif',
-  codeFontSize: 11,
+    '"Segoe UI", "PingFang SC", "Noto Sans SC Variable", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif',
+  codeFontSize: 13,
   notificationSoundsEnabled: true,
   systemNotificationsEnabled: true,
   subagentSystemNotificationsEnabled: true,
@@ -670,7 +675,7 @@ describe("SettingsView Display", () => {
     renderDisplaySection({ onUpdateAppSettings });
 
     const row = screen
-      .getByText("显示 Codex 剩余额度")
+      .getByText("用量显示为剩余量")
       .closest(".settings-toggle-row") as HTMLElement | null;
     if (!row) {
       throw new Error("Expected remaining limits row");
@@ -846,7 +851,7 @@ describe("SettingsView Display", () => {
       );
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
         expect.objectContaining({
-          uiCjkFontFamily: expect.stringContaining("Microsoft YaHei UI"),
+          uiCjkFontFamily: expect.stringContaining("PingFang SC"),
         }),
       );
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -934,6 +939,45 @@ describe("SettingsView About", () => {
 
     await waitFor(() => {
       expect(onToggleAutomaticAppUpdateChecks).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("toggles sidebar Codex usage visibility", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderDisplaySection({ onUpdateAppSettings });
+
+    fireEvent.click(screen.getByRole("button", { name: "显示 Codex 用量" }));
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ showCodexUsage: false }),
+      );
+    });
+  });
+
+  it("resets all font size categories together", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderDisplaySection({
+      onUpdateAppSettings,
+      appSettings: {
+        uiFontSize: 17,
+        messageFontSize: 19,
+        processFontSize: 15,
+        codeFontSize: 16,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "全部恢复默认" }));
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uiFontSize: 14,
+          messageFontSize: 14,
+          processFontSize: 12,
+          codeFontSize: 13,
+        }),
+      );
     });
   });
 
