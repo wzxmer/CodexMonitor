@@ -16,9 +16,11 @@ import {
   getGitLog,
   getGitStatus,
   getOpenAppIcon,
+  getWorkspaceThirdPartyKeyUsage,
   listThreads,
   listMcpServerStatus,
   readThread,
+  rollbackThread,
   readGlobalAgentsMd,
   readGlobalCodexConfigToml,
   listWorkspaces,
@@ -30,6 +32,7 @@ import {
   sendUserMessage,
   steerTurn,
   sendNotification,
+  sendTransientNotification,
   setCodexFeatureFlag,
   setAgentsCoreSettings,
   setTrayLabels,
@@ -70,6 +73,7 @@ vi.mock("@tauri-apps/plugin-notification", () => ({
   isPermissionGranted: vi.fn(),
   requestPermission: vi.fn(),
   sendNotification: vi.fn(),
+  removeActive: vi.fn(),
 }));
 
 describe("tauri invoke wrappers", () => {
@@ -360,6 +364,34 @@ describe("tauri invoke wrappers", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("set_tray_recent_threads", {
       entries,
+    });
+  });
+
+  it("maps workspaceId/threadId/numTurns for rollback_thread", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await rollbackThread("ws-9", "thread-9", 1);
+
+    expect(invokeMock).toHaveBeenCalledWith("rollback_thread", {
+      workspaceId: "ws-9",
+      threadId: "thread-9",
+      numTurns: 1,
+    });
+  });
+
+  it("maps workspaceId and timezone for workspace third-party usage", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      balance: 12.5,
+      usage: { today: { actual_cost: 1.25 } },
+    });
+
+    await getWorkspaceThirdPartyKeyUsage("ws-usage");
+
+    expect(invokeMock).toHaveBeenCalledWith("workspace_third_party_key_usage", {
+      workspaceId: "ws-usage",
+      timezone: expect.any(String),
     });
   });
 
@@ -1059,6 +1091,36 @@ describe("tauri invoke wrappers", () => {
       body: "World",
       extra: { kind: "thread", workspaceId: "ws-1", threadId: "t-1" },
     });
+  });
+
+  it("removes a transient notification after its duration", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const isPermissionGrantedMock = vi.mocked(notification.isPermissionGranted);
+    const sendNotificationMock = vi.mocked(notification.sendNotification);
+    const removeActiveMock = vi.mocked(notification.removeActive);
+    isPermissionGrantedMock.mockResolvedValueOnce(true);
+    removeActiveMock.mockResolvedValueOnce();
+
+    await sendTransientNotification("Update", "Already current", 3000);
+
+    const payload = sendNotificationMock.mock.calls[0]?.[0];
+    if (typeof payload === "string" || !payload) {
+      throw new Error("Expected object notification payload");
+    }
+    expect(payload).toMatchObject({
+      title: "Update",
+      body: "Already current",
+      autoCancel: true,
+      id: expect.any(Number),
+    });
+    expect(removeActiveMock).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(3000);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(removeActiveMock).toHaveBeenCalledWith([{ id: payload?.id }]);
+    vi.useRealTimers();
   });
 
   it("requests permission once when needed and sends on grant", async () => {

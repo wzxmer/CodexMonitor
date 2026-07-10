@@ -1,6 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import type { Options as NotificationOptions } from "@tauri-apps/plugin-notification";
+import {
+  removeActive,
+  type Options as NotificationOptions,
+} from "@tauri-apps/plugin-notification";
 import type {
   AppSettings,
   CodexProviderStatus,
@@ -328,6 +331,17 @@ export async function getThirdPartyKeyUsage(
   const response = await invoke<unknown>("third_party_key_usage", {
     baseUrl: usageUrl,
     apiKey,
+    timezone,
+  });
+  return normalizeThirdPartyUsagePayload(response);
+}
+
+export async function getWorkspaceThirdPartyKeyUsage(
+  workspaceId: string,
+): Promise<ThirdPartyKeyUsageSnapshot | null> {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const response = await invoke<unknown>("workspace_third_party_key_usage", {
+    workspaceId,
     timezone,
   });
   return normalizeThirdPartyUsagePayload(response);
@@ -987,6 +1001,14 @@ export async function isMobileRuntime(): Promise<boolean> {
   return invoke<boolean>("is_mobile_runtime");
 }
 
+export async function rollbackThread(
+  workspaceId: string,
+  threadId: string,
+  numTurns = 1,
+) {
+  return invoke("rollback_thread", { workspaceId, threadId, numTurns });
+}
+
 export async function cleanupDownloadedReleaseAssets(): Promise<void> {
   return invoke("cleanup_downloaded_release_assets");
 }
@@ -1350,4 +1372,21 @@ export async function sendNotification(
   }
 
   await attemptFallback();
+}
+
+let transientNotificationId = Math.floor(Date.now() % 2_000_000_000);
+
+export async function sendTransientNotification(
+  title: string,
+  body: string,
+  durationMs: number,
+): Promise<void> {
+  transientNotificationId = (transientNotificationId + 1) % 2_000_000_000;
+  const id = transientNotificationId;
+  await sendNotification(title, body, { id, autoCancel: true });
+  globalThis.setTimeout(() => {
+    void removeActive([{ id }]).catch(() => {
+      // Fallback notifications and unsupported runtimes cannot be removed explicitly.
+    });
+  }, durationMs);
 }

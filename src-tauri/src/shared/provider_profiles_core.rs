@@ -43,6 +43,18 @@ fn append_url_path_segment(mut url: reqwest::Url, segment: &str) -> reqwest::Url
     url
 }
 
+pub(crate) fn build_provider_usage_url(base_url: &str) -> Result<reqwest::Url, String> {
+    let parsed_base_url = normalize_http_url(
+        base_url,
+        "Invalid third-party provider base URL",
+        "Third-party provider base URL must use HTTP or HTTPS",
+    )?;
+    let mut usage_url = append_url_path_segment(parsed_base_url, "usage");
+    usage_url.set_query(None);
+    usage_url.set_fragment(None);
+    Ok(usage_url)
+}
+
 pub(crate) fn build_provider_models_url(base_url: &str) -> Result<reqwest::Url, String> {
     let parsed_base_url = normalize_http_url(
         base_url,
@@ -243,7 +255,7 @@ pub(crate) fn active_profile_codex_args(
     merge_profile_codex_args(codex_args, profile)
 }
 
-fn resolve_profile_base_url(profile: &crate::types::CodexKeyProfile) -> Option<String> {
+pub(crate) fn resolve_profile_base_url(profile: &crate::types::CodexKeyProfile) -> Option<String> {
     profile
         .base_url
         .as_deref()
@@ -321,7 +333,7 @@ fn merge_profile_codex_args(
 
 #[cfg(test)]
 mod tests {
-    use super::{active_codex_key_runtime, build_provider_models_url};
+    use super::{active_codex_key_runtime, build_provider_models_url, build_provider_usage_url};
     use crate::codex::args::parse_codex_args;
     use crate::types::{AppSettings, CodexKeyProfile};
 
@@ -341,6 +353,15 @@ mod tests {
             .to_string();
 
         assert_eq!(url, "https://api.deepseek.com/v1/models");
+    }
+
+    #[test]
+    fn provider_usage_url_preserves_explicit_api_path() {
+        let url = build_provider_usage_url("https://fcodex.top/v1/")
+            .expect("usage url")
+            .to_string();
+
+        assert_eq!(url, "https://fcodex.top/v1/usage");
     }
 
     #[test]

@@ -99,6 +99,13 @@ pub(crate) fn read_auth_account(codex_home: Option<PathBuf>) -> Option<AuthAccou
     })
 }
 
+pub(crate) fn read_auth_api_key(codex_home: &PathBuf) -> Option<String> {
+    let auth_path = codex_home.join("auth.json");
+    let data = fs::read(auth_path).ok()?;
+    let auth_value: Value = serde_json::from_slice(&data).ok()?;
+    normalize_string(auth_value.get("OPENAI_API_KEY"))
+}
+
 fn extract_account_map(value: &Value) -> Option<Map<String, Value>> {
     let account = value
         .get("account")
@@ -151,6 +158,7 @@ fn normalize_string(value: Option<&Value>) -> Option<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn fallback_account() -> AuthAccount {
         AuthAccount {
@@ -217,5 +225,27 @@ mod tests {
             account.get("planType").and_then(Value::as_str),
             Some("plus")
         );
+    }
+
+    #[test]
+    fn read_auth_api_key_reads_trimmed_default_key() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let codex_home = std::env::temp_dir().join(format!("codex-monitor-auth-{nonce}"));
+        std::fs::create_dir_all(&codex_home).expect("create codex home");
+        std::fs::write(
+            codex_home.join("auth.json"),
+            r#"{"OPENAI_API_KEY":"  sk-default  "}"#,
+        )
+        .expect("write auth");
+
+        assert_eq!(
+            read_auth_api_key(&codex_home).as_deref(),
+            Some("sk-default")
+        );
+
+        std::fs::remove_dir_all(codex_home).expect("cleanup codex home");
     }
 }

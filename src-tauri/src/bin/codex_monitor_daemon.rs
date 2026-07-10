@@ -806,6 +806,15 @@ impl DaemonState {
         codex_core::fork_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
+    async fn rollback_thread(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+        num_turns: u32,
+    ) -> Result<Value, String> {
+        codex_core::rollback_thread_core(&self.sessions, workspace_id, thread_id, num_turns).await
+    }
+
     async fn list_threads(
         &self,
         workspace_id: String,
@@ -1010,6 +1019,21 @@ impl DaemonState {
     async fn get_provider_status(&self, workspace_id: String) -> Result<Value, String> {
         let settings = self.app_settings.lock().await.clone();
         codex_core::get_provider_status_core(&self.workspaces, &settings, workspace_id).await
+    }
+
+    async fn workspace_third_party_key_usage(
+        &self,
+        workspace_id: String,
+        timezone: Option<String>,
+    ) -> Result<Value, String> {
+        let settings = self.app_settings.lock().await.clone();
+        codex_core::workspace_third_party_key_usage_core(
+            &self.workspaces,
+            &settings,
+            workspace_id,
+            timezone,
+        )
+        .await
     }
 
     async fn add_clone(

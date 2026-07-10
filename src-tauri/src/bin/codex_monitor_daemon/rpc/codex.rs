@@ -67,6 +67,18 @@ pub(super) async fn try_handle(
                     .await,
             )
         }
+        "workspace_third_party_key_usage" => {
+            let workspace_id = match parse_string(params, "workspaceId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let timezone = parse_optional_string(params, "timezone");
+            Some(
+                state
+                    .workspace_third_party_key_usage(workspace_id, timezone)
+                    .await,
+            )
+        }
         "provider_model_list" => {
             let base_url = match parse_string(params, "baseUrl") {
                 Ok(value) => value,
@@ -139,6 +151,22 @@ pub(super) async fn try_handle(
                 Err(err) => return Some(Err(err)),
             };
             Some(state.fork_thread(workspace_id, thread_id).await)
+        }
+        "rollback_thread" => {
+            let workspace_id = match parse_string(params, "workspaceId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let thread_id = match parse_string(params, "threadId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let num_turns = parse_optional_u32(params, "numTurns").unwrap_or(1);
+            Some(
+                state
+                    .rollback_thread(workspace_id, thread_id, num_turns)
+                    .await,
+            )
         }
         "list_threads" => {
             let workspace_id = match parse_string(params, "workspaceId") {

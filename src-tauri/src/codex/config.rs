@@ -209,7 +209,7 @@ fn normalize_optional_string(value: Option<&str>) -> Option<String> {
         .map(str::to_string)
 }
 
-fn is_official_openai_url(raw: &str) -> bool {
+pub(crate) fn is_official_openai_url(raw: &str) -> bool {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return false;

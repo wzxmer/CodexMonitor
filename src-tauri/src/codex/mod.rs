@@ -236,6 +236,31 @@ pub(crate) async fn fork_thread(
 }
 
 #[tauri::command]
+pub(crate) async fn rollback_thread(
+    workspace_id: String,
+    thread_id: String,
+    num_turns: u32,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "rollback_thread",
+            json!({
+                "workspaceId": workspace_id,
+                "threadId": thread_id,
+                "numTurns": num_turns,
+            }),
+        )
+        .await;
+    }
+
+    codex_core::rollback_thread_core(&state.sessions, workspace_id, thread_id, num_turns).await
+}
+
+#[tauri::command]
 pub(crate) async fn list_threads(
     workspace_id: String,
     cursor: Option<String>,
@@ -950,6 +975,36 @@ pub(crate) async fn third_party_key_usage(
     }
 
     provider_profiles_core::third_party_key_usage_core(base_url, api_key, timezone).await
+}
+
+#[tauri::command]
+pub(crate) async fn workspace_third_party_key_usage(
+    workspace_id: String,
+    timezone: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "workspace_third_party_key_usage",
+            json!({
+                "workspaceId": workspace_id,
+                "timezone": timezone,
+            }),
+        )
+        .await;
+    }
+
+    let settings = state.app_settings.lock().await.clone();
+    codex_core::workspace_third_party_key_usage_core(
+        &state.workspaces,
+        &settings,
+        workspace_id,
+        timezone,
+    )
+    .await
 }
 
 #[tauri::command]

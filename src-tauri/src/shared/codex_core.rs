@@ -18,7 +18,8 @@ use crate::codex::home::{
     resolve_default_codex_home, resolve_home_dir, resolve_workspace_codex_home,
 };
 use crate::rules;
-use crate::shared::account::{build_account_response, read_auth_account};
+use crate::shared::account::{build_account_response, read_auth_account, read_auth_api_key};
+use crate::shared::{config_toml_core, provider_profiles_core};
 use crate::types::{AppSettings, WorkspaceEntry};
 
 const LOGIN_START_TIMEOUT: Duration = Duration::from_secs(30);
@@ -467,6 +468,22 @@ pub(crate) async fn fork_thread_core(
     let params = json!({ "threadId": thread_id });
     session
         .send_request_for_workspace(&workspace_id, "thread/fork", params)
+        .await
+}
+
+pub(crate) async fn rollback_thread_core(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    thread_id: String,
+    num_turns: u32,
+) -> Result<Value, String> {
+    if num_turns == 0 {
+        return Err("numTurns must be at least 1".to_string());
+    }
+    let session = get_session_clone(sessions, &workspace_id).await?;
+    let params = json!({ "threadId": thread_id, "numTurns": num_turns });
+    session
+        .send_request_for_workspace(&workspace_id, "thread/rollback", params)
         .await
 }
 
@@ -1057,10 +1074,76 @@ pub(crate) async fn get_provider_status_core(
     serde_json::to_value(status).map_err(|err| err.to_string())
 }
 
+fn resolve_third_party_usage_credentials(
+    settings: &AppSettings,
+    document: &toml_edit::Document,
+    default_api_key: Option<String>,
+) -> Option<(String, String)> {
+    let active_profile = settings
+        .active_codex_key_profile_id
+        .as_deref()
+        .and_then(|active_id| {
+            settings
+                .codex_key_profiles
+                .iter()
+                .find(|profile| profile.id == active_id)
+        });
+    if let Some(profile) = active_profile {
+        if profile.provider_kind.eq_ignore_ascii_case("openai") {
+            return None;
+        }
+        return provider_profiles_core::resolve_profile_base_url(profile)
+            .map(|base_url| (base_url, profile.key.clone()));
+    }
+
+    let provider_name = config_toml_core::read_top_level_string(document, "model_provider");
+    let base_url = provider_name.as_deref().and_then(|provider| {
+        config_toml_core::read_nested_string(document, &["model_providers", provider, "base_url"])
+    })?;
+    if codex_config::is_official_openai_url(&base_url) {
+        return None;
+    }
+    default_api_key.map(|api_key| (base_url, api_key))
+}
+
+pub(crate) async fn workspace_third_party_key_usage_core(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    settings: &AppSettings,
+    workspace_id: String,
+    timezone: Option<String>,
+) -> Result<Value, String> {
+    let codex_home = resolve_codex_home_for_workspace_core(workspaces, &workspace_id).await?;
+    let active_profile_selected =
+        settings
+            .active_codex_key_profile_id
+            .as_deref()
+            .is_some_and(|active_id| {
+                settings
+                    .codex_key_profiles
+                    .iter()
+                    .any(|profile| profile.id == active_id)
+            });
+    let (document, default_api_key) = if active_profile_selected {
+        (toml_edit::Document::new(), None)
+    } else {
+        let (_, document) = config_toml_core::load_global_config_document(&codex_home)?;
+        (document, read_auth_api_key(&codex_home))
+    };
+    let credentials = resolve_third_party_usage_credentials(settings, &document, default_api_key);
+
+    let Some((base_url, api_key)) = credentials else {
+        return Ok(Value::Null);
+    };
+    let usage_url = provider_profiles_core::build_provider_usage_url(&base_url)?.to_string();
+    provider_profiles_core::third_party_key_usage_core(usage_url, api_key, timezone).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::CodexKeyProfile;
     use serde_json::Value;
+    use toml_edit::Document;
 
     #[test]
     fn normalize_strips_file_uri_prefix() {
@@ -1068,6 +1151,84 @@ mod tests {
             normalize_file_path("file:///var/mobile/Containers/Data/photo.jpg"),
             "/var/mobile/Containers/Data/photo.jpg"
         );
+    }
+
+    fn provider_document(base_url: &str) -> Document {
+        format!(
+            r#"
+model_provider = "custom"
+
+[model_providers.custom]
+base_url = "{base_url}"
+"#,
+        )
+        .parse()
+        .expect("provider config")
+    }
+
+    #[test]
+    fn third_party_usage_credentials_use_default_codex_provider() {
+        let credentials = resolve_third_party_usage_credentials(
+            &AppSettings::default(),
+            &provider_document("https://fcodex.top/v1"),
+            Some("sk-default".to_string()),
+        );
+
+        assert_eq!(
+            credentials,
+            Some((
+                "https://fcodex.top/v1".to_string(),
+                "sk-default".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn third_party_usage_credentials_prefer_active_profile() {
+        let mut settings = AppSettings::default();
+        settings.codex_key_profiles = vec![CodexKeyProfile {
+            id: "profile".to_string(),
+            name: "Profile".to_string(),
+            provider_kind: "deepseek".to_string(),
+            key_env_var: "OPENAI_API_KEY".to_string(),
+            key: "sk-profile".to_string(),
+            base_url_env_var: "OPENAI_BASE_URL".to_string(),
+            base_url: Some("https://api.deepseek.com/v1".to_string()),
+            model: None,
+            context_window: None,
+            max_output_tokens: None,
+            use_gateway: false,
+            last_model_refresh_at_ms: None,
+            cached_models: Vec::new(),
+            group_name: None,
+            group_multiplier: None,
+        }];
+        settings.active_codex_key_profile_id = Some("profile".to_string());
+
+        let credentials = resolve_third_party_usage_credentials(
+            &settings,
+            &provider_document("https://fcodex.top/v1"),
+            Some("sk-default".to_string()),
+        );
+
+        assert_eq!(
+            credentials,
+            Some((
+                "https://api.deepseek.com/v1".to_string(),
+                "sk-profile".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn third_party_usage_credentials_ignore_official_openai_provider() {
+        let credentials = resolve_third_party_usage_credentials(
+            &AppSettings::default(),
+            &provider_document("https://api.openai.com/v1"),
+            Some("sk-default".to_string()),
+        );
+
+        assert_eq!(credentials, None);
     }
 
     #[test]
