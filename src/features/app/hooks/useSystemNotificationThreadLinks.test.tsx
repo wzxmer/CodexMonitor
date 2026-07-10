@@ -9,8 +9,18 @@ const notificationMocks = vi.hoisted(() => ({
   unregister: vi.fn(),
 }));
 
+const windowMocks = vi.hoisted(() => ({
+  show: vi.fn(),
+  unminimize: vi.fn(),
+  setFocus: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/plugin-notification", () => ({
   onAction: notificationMocks.onAction,
+}));
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => windowMocks,
 }));
 
 let actionHandler: ((notification: { extra?: Record<string, unknown> }) => void) | null;
@@ -34,6 +44,9 @@ describe("useSystemNotificationThreadLinks", () => {
       actionHandler = handler;
       return { unregister: notificationMocks.unregister };
     });
+    windowMocks.show.mockResolvedValue(undefined);
+    windowMocks.unminimize.mockResolvedValue(undefined);
+    windowMocks.setFocus.mockResolvedValue(undefined);
   });
 
   it("navigates only after a notification action", async () => {
@@ -130,5 +143,31 @@ describe("useSystemNotificationThreadLinks", () => {
     });
 
     expect(openThreadLink).not.toHaveBeenCalled();
+  });
+
+  it("restores the main window after an update notification action", async () => {
+    const workspace = makeWorkspace();
+
+    renderHook(() =>
+      useSystemNotificationThreadLinks({
+        hasLoadedWorkspaces: true,
+        workspacesById: new Map([[workspace.id, workspace]]),
+        refreshWorkspaces: vi.fn(async () => [workspace]),
+        connectWorkspace: vi.fn(async () => {}),
+        openThreadLink: vi.fn(),
+      }),
+    );
+
+    await waitFor(() => expect(notificationMocks.onAction).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      actionHandler?.({ extra: { kind: "update_available", version: "1.2.3" } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(windowMocks.show).toHaveBeenCalledTimes(1);
+    expect(windowMocks.unminimize).toHaveBeenCalledTimes(1);
+    expect(windowMocks.setFocus).toHaveBeenCalledTimes(1);
   });
 });

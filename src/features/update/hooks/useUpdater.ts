@@ -80,22 +80,25 @@ export function useUpdater({
 
   const checkForUpdates = useCallback(async () => {
     if (!enabled) {
-      return;
+      return undefined;
     }
     try {
       setState({ stage: "checking" });
       const update = await fetchLatestReleaseUpdate(__APP_VERSION__);
       if (!update) {
         updateRef.current = null;
-        setState({ stage: "upToDate" });
-        return;
+        const nextState: UpdateState = { stage: "upToDate" };
+        setState(nextState);
+        return nextState;
       }
 
       updateRef.current = update;
-      setState({
+      const nextState: UpdateState = {
         stage: "available",
         version: update.version,
-      });
+      };
+      setState(nextState);
+      return nextState;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : JSON.stringify(error);
@@ -106,7 +109,9 @@ export function useUpdater({
         label: "updater/error",
         payload: message,
       });
-      setState({ stage: "error", error: message });
+      const nextState: UpdateState = { stage: "error", error: message };
+      setState(nextState);
+      return nextState;
     }
   }, [enabled, onDebug]);
 

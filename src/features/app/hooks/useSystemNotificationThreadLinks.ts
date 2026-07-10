@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { onAction } from "@tauri-apps/plugin-notification";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { WorkspaceInfo } from "../../../types";
 
 type ThreadDeepLink = {
@@ -97,6 +98,17 @@ export function useSystemNotificationThreadLinks({
       const kind = extra?.kind;
       const workspaceId = extra?.workspaceId;
       const threadId = extra?.threadId;
+      if (kind === "update_available") {
+        const window = getCurrentWindow();
+        void window
+          .show()
+          .then(() => window.unminimize())
+          .then(() => window.setFocus())
+          .catch(() => {
+            // The notification may be handled while the window is shutting down.
+          });
+        return;
+      }
       if (kind !== "thread" && kind !== "response_required") {
         return;
       }

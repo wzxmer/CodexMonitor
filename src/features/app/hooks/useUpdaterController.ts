@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useUpdater } from "../../update/hooks/useUpdater";
 import { useAgentSoundNotifications } from "../../notifications/hooks/useAgentSoundNotifications";
 import { useAgentSystemNotifications } from "../../notifications/hooks/useAgentSystemNotifications";
@@ -6,7 +6,10 @@ import { useWindowFocusState } from "../../layout/hooks/useWindowFocusState";
 import { useTauriEvent } from "./useTauriEvent";
 import { playNotificationSound } from "../../../utils/notificationSounds";
 import { subscribeUpdaterCheck } from "../../../services/events";
-import { sendNotification } from "../../../services/tauri";
+import {
+  sendNotification,
+  sendTransientNotification,
+} from "../../../services/tauri";
 import type { DebugEntry } from "../../../types";
 
 type Params = {
@@ -17,6 +20,9 @@ type Params = {
   subagentSystemNotificationsEnabled: boolean;
   isSubagentThread?: (workspaceId: string, threadId: string) => boolean;
   getWorkspaceName?: (workspaceId: string) => string | undefined;
+  updateNotificationTitle: string;
+  upToDateNotificationBody: string;
+  updateAvailableNotificationBody: string;
   onDebug: (entry: DebugEntry) => void;
   successSoundUrl: string;
   errorSoundUrl: string;
@@ -30,6 +36,9 @@ export function useUpdaterController({
   subagentSystemNotificationsEnabled,
   isSubagentThread,
   getWorkspaceName,
+  updateNotificationTitle,
+  upToDateNotificationBody,
+  updateAvailableNotificationBody,
   onDebug,
   successSoundUrl,
   errorSoundUrl,
@@ -48,6 +57,7 @@ export function useUpdaterController({
   });
   const isWindowFocused = useWindowFocusState();
   const nextTestSoundIsError = useRef(false);
+  const handledAvailableVersionRef = useRef<string | null>(null);
 
   const subscribeUpdaterCheckEvent = useCallback(
     (handler: () => void) =>
@@ -68,10 +78,57 @@ export function useUpdaterController({
   useTauriEvent(
     subscribeUpdaterCheckEvent,
     () => {
-      void checkForUpdates();
+      void checkForUpdates().then((result) => {
+        if (result?.stage !== "upToDate" || !systemNotificationsEnabled) {
+          return;
+        }
+        void sendTransientNotification(
+          updateNotificationTitle,
+          upToDateNotificationBody,
+          3000,
+        ).catch((error) => {
+          onDebug({
+            id: `${Date.now()}-client-updater-current-notification-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "updater/current-notification-error",
+            payload: error instanceof Error ? error.message : String(error),
+          });
+        });
+      });
     },
     { enabled },
   );
+
+  useEffect(() => {
+    if (updaterState.stage !== "available") {
+      handledAvailableVersionRef.current = null;
+      return;
+    }
+    const version = updaterState.version ?? "unknown";
+    if (handledAvailableVersionRef.current === version) {
+      return;
+    }
+    handledAvailableVersionRef.current = version;
+    if (isWindowFocused || !systemNotificationsEnabled) {
+      return;
+    }
+    void sendNotification(
+      updateNotificationTitle,
+      updateAvailableNotificationBody,
+      {
+        autoCancel: true,
+        extra: { kind: "update_available", version },
+      },
+    );
+  }, [
+    isWindowFocused,
+    systemNotificationsEnabled,
+    updateAvailableNotificationBody,
+    updateNotificationTitle,
+    updaterState.stage,
+    updaterState.version,
+  ]);
 
   useAgentSoundNotifications({
     enabled: notificationSoundsEnabled,

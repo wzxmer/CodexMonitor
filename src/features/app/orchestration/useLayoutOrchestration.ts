@@ -1,6 +1,7 @@
 import { useMemo, type CSSProperties } from "react";
 import type { AppSettings } from "@/types";
 import { isWindowsPlatform } from "@utils/platformPaths";
+import { composeContentFontFamily, composeUiFontFamily } from "@utils/fonts";
 
 type UseAppShellOrchestrationOptions = {
   isCompact: boolean;
@@ -28,9 +29,6 @@ type UseAppShellOrchestrationOptions = {
     | "uiFontSize"
     | "uiFontWeight"
     | "codeFontFamily"
-    | "messageFontSize"
-    | "messageFontFamily"
-    | "messageFontWeight"
     | "codeFontSize"
   >;
 };
@@ -58,6 +56,16 @@ export function useAppShellOrchestration({
   const isWindows = isWindowsPlatform();
   const showGitDetail = Boolean(selectedDiffPath) && isPhone && centerMode === "diff";
   const isThreadOpen = Boolean(activeThreadId && showComposer);
+  const uiFontFamily = composeUiFontFamily(
+    appSettings.uiLatinFontFamily,
+    appSettings.uiCjkFontFamily,
+    appSettings.uiFontFamily,
+  );
+  const codeFontFamily = composeContentFontFamily(
+    appSettings.codeFontFamily,
+    appSettings.uiCjkFontFamily,
+    appSettings.uiFontFamily,
+  );
 
   const appClassName = `app ${isCompact ? "layout-compact" : "layout-desktop"}${
     isPhone ? " layout-phone" : ""
@@ -77,13 +85,13 @@ export function useAppShellOrchestration({
       "--plan-panel-height": `${planPanelHeight}px`,
       "--terminal-panel-height": `${terminalPanelHeight}px`,
       "--debug-panel-height": `${debugPanelHeight}px`,
-      "--ui-font-family": `${appSettings.uiLatinFontFamily}, ${appSettings.uiCjkFontFamily}, ${appSettings.uiFontFamily}`,
+      "--ui-font-family": uiFontFamily,
       "--ui-font-size": `${appSettings.uiFontSize}px`,
       "--ui-font-weight": `${appSettings.uiFontWeight}`,
-      "--code-font-family": appSettings.codeFontFamily,
-      "--message-font-size": `${appSettings.messageFontSize}px`,
-      "--message-font-family": appSettings.messageFontFamily,
-      "--message-font-weight": `${appSettings.messageFontWeight}`,
+      "--code-font-family": codeFontFamily,
+      "--message-font-size": `${appSettings.uiFontSize}px`,
+      "--message-font-family": uiFontFamily,
+      "--message-font-weight": `${appSettings.uiFontWeight}`,
       "--code-font-size": `${appSettings.codeFontSize}px`,
       "--sidebar-top-padding": isWindows ? "10px" : "36px",
       "--right-panel-top-padding": isWindows
@@ -111,14 +119,12 @@ export function useAppShellOrchestration({
     [
       appSettings.codeFontFamily,
       appSettings.codeFontSize,
-      appSettings.messageFontFamily,
-      appSettings.messageFontSize,
-      appSettings.messageFontWeight,
       appSettings.uiCjkFontFamily,
       appSettings.uiFontFamily,
       appSettings.uiFontSize,
       appSettings.uiFontWeight,
       appSettings.uiLatinFontFamily,
+      codeFontFamily,
       chatDiffSplitPositionPercent,
       debugPanelHeight,
       isWindows,
@@ -129,6 +135,7 @@ export function useAppShellOrchestration({
       sidebarCollapsed,
       sidebarWidth,
       terminalPanelHeight,
+      uiFontFamily,
     ],
   );
 

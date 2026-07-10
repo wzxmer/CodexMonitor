@@ -124,12 +124,14 @@ describe("useUpdater", () => {
   it("reports up-to-date when no update is available for manual checks", async () => {
     fetchMock.mockResolvedValue(latestReleaseResponse(__APP_VERSION__));
     const { result } = renderHook(() => useUpdater({}));
+    let checkResult: Awaited<ReturnType<typeof result.current.checkForUpdates>>;
 
     await act(async () => {
-      await result.current.checkForUpdates();
+      checkResult = await result.current.checkForUpdates();
     });
 
     expect(result.current.state.stage).toBe("upToDate");
+    expect(checkResult).toEqual({ stage: "upToDate" });
   });
 
   it("surfaces an error when the latest release has no compatible installer", async () => {
