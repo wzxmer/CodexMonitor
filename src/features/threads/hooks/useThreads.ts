@@ -1013,6 +1013,7 @@ export function useThreads({
 
   const {
     interruptTurn,
+    retryEditedUserMessage,
     sendUserMessage,
     sendUserMessageToThread,
     startFork,
@@ -1174,6 +1175,7 @@ export function useThreads({
     refreshAccountRateLimits,
     refreshAccountInfo,
     interruptTurn,
+    retryEditedUserMessage,
     removeThread,
     pinThread,
     unpinThread,

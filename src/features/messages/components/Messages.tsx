@@ -114,9 +114,6 @@ type MessagesProps = {
   messageAssistantBubbleColor?: string;
   messageAssistantAccentColor?: string;
   messageAssistantTextColor?: string;
-  messageFontFamily?: string;
-  messageFontSize?: number;
-  messageFontWeight?: number;
   chatHistoryScrollbackItems?: number | null;
   interruptedStatus?: { timestamp: number } | null;
   activeTurnDiff?: string | null;
@@ -130,9 +127,6 @@ type MessagesProps = {
     messageAssistantBubbleColor?: string;
     messageAssistantAccentColor?: string;
     messageAssistantTextColor?: string;
-    messageFontFamily?: string;
-    messageFontSize?: number;
-    messageFontWeight?: number;
     messageToolGroupsCollapsedByDefault?: boolean;
   }) => void;
   userInputRequests?: RequestUserInputRequest[];
@@ -150,6 +144,45 @@ type MessagesProps = {
     options?: { replaceMessageId?: string },
   ) => void;
 };
+
+export function getRetryableUserMessageId(
+  items: ConversationItem[],
+  interruptedStatus?: { timestamp: number } | null,
+) {
+  let lastUserMessageId: string | null = null;
+  let hasAssistantMessageAfterLastUser = false;
+  for (const item of items) {
+    if (item.kind !== "message") {
+      continue;
+    }
+    if (item.role === "user") {
+      lastUserMessageId = item.id;
+      hasAssistantMessageAfterLastUser = false;
+      continue;
+    }
+    if (lastUserMessageId) {
+      hasAssistantMessageAfterLastUser = true;
+    }
+  }
+  if (!lastUserMessageId) {
+    return null;
+  }
+  if (interruptedStatus) {
+    return lastUserMessageId;
+  }
+  if (!hasAssistantMessageAfterLastUser) {
+    return null;
+  }
+  const lastAssistantMessage = [...items]
+    .reverse()
+    .find(
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
+        item.kind === "message" && item.role === "assistant",
+    );
+  return lastAssistantMessage?.text.trim().startsWith("Turn failed")
+    ? lastUserMessageId
+    : null;
+}
 
 export const Messages = memo(function Messages({
   items,
@@ -174,9 +207,6 @@ export const Messages = memo(function Messages({
   messageAssistantBubbleColor = "#f7f9fc",
   messageAssistantAccentColor = "#8aa8d8",
   messageAssistantTextColor = "#263040",
-  messageFontFamily = "",
-  messageFontSize = 13,
-  messageFontWeight = 500,
   chatHistoryScrollbackItems = null,
   interruptedStatus = null,
   activeTurnDiff = null,
@@ -218,6 +248,10 @@ export const Messages = memo(function Messages({
   );
 
   const hasActiveUserInputRequest = activeUserInputRequestId !== null;
+  const retryableUserMessageId = useMemo(
+    () => getRetryableUserMessageId(items, interruptedStatus),
+    [interruptedStatus, items],
+  );
   const hasVisibleUserInputRequest = hasActiveUserInputRequest && Boolean(onUserInputSubmit);
   const userInputNode =
     hasActiveUserInputRequest && onUserInputSubmit ? (
@@ -387,18 +421,12 @@ export const Messages = memo(function Messages({
         "--conversation-assistant-bg": messageAssistantBubbleColor,
         "--conversation-assistant-accent": messageAssistantAccentColor,
         "--conversation-assistant-text": messageAssistantTextColor,
-        "--conversation-font-family": messageFontFamily || "var(--message-font-family)",
-        "--message-font-size": `${messageFontSize}px`,
-        "--message-font-weight": `${messageFontWeight}`,
       }) as CSSProperties,
     [
       messageAssistantAccentColor,
       messageAssistantBubbleColor,
       messageAssistantTextColor,
       messageCanvasColor,
-      messageFontFamily,
-      messageFontSize,
-      messageFontWeight,
       messageUserBubbleColor,
       messageUserTextColor,
     ],
@@ -539,11 +567,9 @@ export const Messages = memo(function Messages({
           onCopy={handleCopyMessage}
           onQuote={onQuoteMessage ? handleQuoteMessage : undefined}
           onResendUserMessage={
-            onResendUserMessage
+            onResendUserMessage && item.id === retryableUserMessageId
               ? (message, text) =>
-                  onResendUserMessage(text, message.images ?? [], {
-                    replaceMessageId: message.id,
-                  })
+                  onResendUserMessage(text, message.images ?? [])
               : undefined
           }
           codeBlockCopyUseModifier={codeBlockCopyUseModifier}
@@ -903,53 +929,6 @@ export const Messages = memo(function Messages({
                       />
                     </label>
                   </div>
-                  <label>
-                    <span>{t("messages.font")}</span>
-                    <input
-                      type="text"
-                      value={messageFontFamily}
-                      placeholder="Segoe UI, Microsoft YaHei UI"
-                      onChange={(event) =>
-                        updateConversationStyle({
-                          messageFontFamily: event.target.value,
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>
-                      {t("messages.fontSize")} {messageFontSize}px
-                    </span>
-                    <input
-                      type="range"
-                      min={12}
-                      max={18}
-                      step={1}
-                      value={messageFontSize}
-                      onChange={(event) =>
-                        updateConversationStyle({
-                          messageFontSize: Number(event.target.value),
-                        })
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>
-                      {t("messages.fontWeight")} {messageFontWeight}
-                    </span>
-                    <input
-                      type="range"
-                      min={400}
-                      max={650}
-                      step={50}
-                      value={messageFontWeight}
-                      onChange={(event) =>
-                        updateConversationStyle({
-                          messageFontWeight: Number(event.target.value),
-                        })
-                      }
-                    />
-                  </label>
                 </div>
               )}
             </div>

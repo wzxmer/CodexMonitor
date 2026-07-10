@@ -160,13 +160,13 @@ export function buildResumeHydrationPlan({
       ? localItems.filter(isOptimisticLocalItem)
       : localItems;
   const mergedItems =
-    items.length > 0
-      ? replaceLocal
-        ? items
-        : mergeCandidates.length > 0
+    replaceLocal
+      ? items
+      : items.length > 0
+        ? mergeCandidates.length > 0
           ? mergeThreadItems(items, mergeCandidates)
           : items
-      : localItems;
+        : localItems;
   const preview = asString(thread.preview ?? "");
   const customName = getCustomName(workspaceId, threadId);
   const threadName = !customName ? getThreadDisplayTitle(thread) : null;

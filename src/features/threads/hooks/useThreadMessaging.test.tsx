@@ -11,6 +11,7 @@ import {
   listMcpServerStatus as listMcpServerStatusService,
   compactThread as compactThreadService,
   readWorkspaceFile,
+  rollbackThread as rollbackThreadService,
 } from "@services/tauri";
 import type { WorkspaceInfo } from "@/types";
 import { useThreadMessaging } from "./useThreadMessaging";
@@ -30,6 +31,7 @@ vi.mock("@services/tauri", () => ({
   listMcpServerStatus: vi.fn(),
   compactThread: vi.fn(),
   readWorkspaceFile: vi.fn(),
+  rollbackThread: vi.fn(),
 }));
 
 vi.mock("./useReviewPrompt", () => ({
@@ -97,6 +99,7 @@ describe("useThreadMessaging telemetry", () => {
     vi.mocked(compactThreadService).mockResolvedValue(
       {} as Awaited<ReturnType<typeof compactThreadService>>,
     );
+    vi.mocked(rollbackThreadService).mockResolvedValue({});
     vi.mocked(readWorkspaceFile).mockResolvedValue({
       content: "file body",
       truncated: false,
@@ -396,6 +399,110 @@ describe("useThreadMessaging telemetry", () => {
         }),
         replaceExisting: true,
       }),
+    );
+  });
+
+  it("rolls back and refreshes before retrying an edited failed message", async () => {
+    const callOrder: string[] = [];
+    vi.mocked(rollbackThreadService).mockImplementation(async () => {
+      callOrder.push("rollback");
+      return {};
+    });
+    vi.mocked(sendUserMessageService).mockImplementation(async () => {
+      callOrder.push("send");
+      return { result: { turn: { id: "turn-retry" } } } as Awaited<
+        ReturnType<typeof sendUserMessageService>
+      >;
+    });
+    const refreshThread = vi.fn(async () => {
+      callOrder.push("refresh");
+      return "thread-1";
+    });
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch: vi.fn(),
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread,
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.retryEditedUserMessage("edited retry");
+    });
+
+    expect(rollbackThreadService).toHaveBeenCalledWith("ws-1", "thread-1", 1);
+    expect(callOrder).toEqual(["rollback", "refresh", "send"]);
+  });
+
+  it("does not resend when rollback fails", async () => {
+    vi.mocked(rollbackThreadService).mockRejectedValue(new Error("rollback unavailable"));
+    const pushThreadErrorMessage = vi.fn();
+    const refreshThread = vi.fn(async () => "thread-1");
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch: vi.fn(),
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage,
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread,
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.retryEditedUserMessage("edited retry");
+    });
+
+    expect(refreshThread).not.toHaveBeenCalled();
+    expect(sendUserMessageService).not.toHaveBeenCalled();
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "thread-1",
+      "Failed to retry edited message: rollback unavailable",
     );
   });
 

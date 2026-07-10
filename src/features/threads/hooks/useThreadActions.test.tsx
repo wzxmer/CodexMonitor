@@ -262,6 +262,33 @@ describe("useThreadActions", () => {
     });
   });
 
+  it("clears local history when a forced refresh returns an empty rolled-back thread", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: { thread: { id: "thread-1", turns: [] } },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(mergeThreadItems).mockReturnValue([]);
+
+    const { result, dispatch } = renderActions({
+      itemsByThread: {
+        "thread-1": [
+          { id: "stale-user", kind: "message", role: "user", text: "retry" },
+        ],
+      },
+    });
+
+    await act(async () => {
+      await result.current.refreshThread("ws-1", "thread-1");
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "thread-1",
+      items: [],
+      trimItems: false,
+    });
+  });
+
   it("does not activate an explicit thread id when resume fails", async () => {
     vi.mocked(resumeThread).mockRejectedValue(new Error("thread not found"));
     const { result, dispatch } = renderActions();

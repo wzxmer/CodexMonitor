@@ -210,6 +210,7 @@ type UseMainAppLayoutSurfacesArgs = {
   confirmCustom: ComposerProps["onReviewPromptConfirmCustom"];
   handleComposerSendWithDraftStart: ComposerProps["onSend"];
   interruptTurn: () => void;
+  retryEditedUserMessage: (text: string, images?: string[]) => Promise<unknown>;
   terminalOpen: boolean;
   debugOpen: boolean;
   debugEntries: LayoutNodesOptions["secondary"]["debugPanelProps"]["entries"];
@@ -387,6 +388,7 @@ function buildPrimarySurface({
   confirmCustom,
   handleComposerSendWithDraftStart,
   interruptTurn,
+  retryEditedUserMessage,
   terminalOpen,
   isCompact,
   activeTab,
@@ -552,9 +554,6 @@ function buildPrimarySurface({
       messageAssistantBubbleColor: appSettings.messageAssistantBubbleColor,
       messageAssistantAccentColor: appSettings.messageAssistantAccentColor,
       messageAssistantTextColor: appSettings.messageAssistantTextColor,
-      messageFontFamily: appSettings.messageFontFamily,
-      messageFontSize: appSettings.messageFontSize,
-      messageFontWeight: appSettings.messageFontWeight,
       chatHistoryScrollbackItems: appSettings.chatHistoryScrollbackItems,
       interruptedStatus: activeThreadId
         ? interruptedThreadById[activeThreadId] ?? null
@@ -574,8 +573,8 @@ function buildPrimarySurface({
       onQuoteMessage: composerWorkspaceState.canInsertComposerText
         ? composerWorkspaceState.handleInsertComposerText
         : undefined,
-      onResendUserMessage: (text, images, options) => {
-        void composerWorkspaceState.handleSend(text, images, [], "default", options);
+      onResendUserMessage: (text, images) => {
+        void retryEditedUserMessage(text, images);
       },
       isThinking: composerWorkspaceState.isProcessing,
       isLoadingMessages: activeThreadId
@@ -1235,6 +1234,7 @@ export function useMainAppLayoutSurfaces({
   confirmCustom,
   handleComposerSendWithDraftStart,
   interruptTurn,
+  retryEditedUserMessage,
   terminalOpen,
   debugOpen,
   debugEntries,
@@ -1329,10 +1329,9 @@ export function useMainAppLayoutSurfaces({
   const thirdPartyProviderUsage = useThirdPartyKeyUsage({
     enabled:
       Boolean(activeWorkspaceId) &&
-      Boolean(activeCodexKeyProfile) &&
-      activeCodexKeyProfile?.providerKind !== "openai",
-    baseUrl: activeProfileBaseUrl,
-    apiKey: activeCodexKeyProfile?.key ?? null,
+      codexProviderStatus?.isConfigured === true &&
+      codexProviderStatus.isThirdParty,
+    workspaceId: activeWorkspaceId,
   });
 
   const context: MainAppLayoutSurfacesContext = {
@@ -1473,6 +1472,7 @@ export function useMainAppLayoutSurfaces({
     confirmCustom,
     handleComposerSendWithDraftStart,
     interruptTurn,
+    retryEditedUserMessage,
     terminalOpen,
     debugOpen,
     debugEntries,

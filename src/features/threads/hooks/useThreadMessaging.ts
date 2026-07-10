@@ -22,6 +22,7 @@ import {
   getAppsList as getAppsListService,
   listMcpServerStatus as listMcpServerStatusService,
   readWorkspaceFile,
+  rollbackThread as rollbackThreadService,
 } from "@services/tauri";
 import { expandCustomPromptText } from "@utils/customPrompts";
 import {
@@ -593,6 +594,45 @@ export function useThreadMessaging({
     ],
   );
 
+  const retryEditedUserMessage = useCallback(
+    async (
+      text: string,
+      images: string[] = [],
+    ): Promise<SendMessageResult> => {
+      if (!activeWorkspace || !activeThreadId) {
+        return { status: "blocked" };
+      }
+      try {
+        await rollbackThreadService(activeWorkspace.id, activeThreadId, 1);
+        const refreshedThreadId = await refreshThread(activeWorkspace.id, activeThreadId);
+        if (!refreshedThreadId) {
+          pushThreadErrorMessage(
+            activeThreadId,
+            "Thread rollback succeeded, but the refreshed history could not be loaded.",
+          );
+          safeMessageActivity();
+          return { status: "blocked" };
+        }
+        return sendMessageToThread(activeWorkspace, activeThreadId, text, images);
+      } catch (error) {
+        pushThreadErrorMessage(
+          activeThreadId,
+          `Failed to retry edited message: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        safeMessageActivity();
+        return { status: "blocked" };
+      }
+    },
+    [
+      activeThreadId,
+      activeWorkspace,
+      pushThreadErrorMessage,
+      refreshThread,
+      safeMessageActivity,
+      sendMessageToThread,
+    ],
+  );
+
   const sendUserMessageToThread = useCallback(
     async (
       workspace: WorkspaceInfo,
@@ -1113,6 +1153,7 @@ export function useThreadMessaging({
 
   return {
     interruptTurn,
+    retryEditedUserMessage,
     sendUserMessage,
     sendUserMessageToThread,
     startFork,

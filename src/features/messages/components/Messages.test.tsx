@@ -382,7 +382,7 @@ describe("Messages", () => {
         id: "msg-edit-assistant-1",
         kind: "message",
         role: "assistant",
-        text: "收到。",
+        text: "Turn failed: Service unavailable",
       },
     ];
 
@@ -408,9 +408,44 @@ describe("Messages", () => {
     expect(onResendUserMessage).toHaveBeenCalledWith(
       "重新打包后的现在还有问题吗？",
       ["data:image/png;base64,AAA"],
-      { replaceMessageId: "msg-edit-user-1" },
     );
     expect(screen.queryByLabelText("编辑消息")).toBeNull();
+  });
+
+  it("does not offer edit and resend for successful history", () => {
+    render(
+      <Messages
+        items={[
+          { id: "msg-user", kind: "message", role: "user", text: "Hello" },
+          { id: "msg-assistant", kind: "message", role: "assistant", text: "Done" },
+        ]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        onResendUserMessage={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "编辑并重新发送" })).toBeNull();
+  });
+
+  it("offers edit and resend for interrupted final user message", () => {
+    render(
+      <Messages
+        items={[{ id: "msg-user", kind: "message", role: "user", text: "Continue" }]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        interruptedStatus={{ timestamp: Date.now() }}
+        openTargets={[]}
+        selectedOpenAppId=""
+        onResendUserMessage={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "编辑并重新发送" })).toBeTruthy();
   });
 
   it("opens linked review thread when clicking thread link", () => {
@@ -2169,7 +2204,7 @@ describe("Messages", () => {
     expect(screen.getByText("Session stopped.")).toBeTruthy();
   });
 
-  it("updates conversation colors and font from the style popover without changing reading style", () => {
+  it("updates conversation colors without changing reading style", () => {
     const onUpdateConversationStyle = vi.fn();
     const items: ConversationItem[] = [
       {
@@ -2194,9 +2229,6 @@ describe("Messages", () => {
         messageAssistantBubbleColor="#f7f9fc"
         messageAssistantAccentColor="#8aa8d8"
         messageAssistantTextColor="#263040"
-        messageFontFamily="Segoe UI"
-        messageFontSize={13}
-        messageFontWeight={500}
         onUpdateConversationStyle={onUpdateConversationStyle}
       />,
     );
@@ -2216,9 +2248,6 @@ describe("Messages", () => {
     });
     fireEvent.change(screen.getByDisplayValue("#263040"), {
       target: { value: "#334155" },
-    });
-    fireEvent.change(screen.getByDisplayValue("Segoe UI"), {
-      target: { value: "Microsoft YaHei UI" },
     });
 
     expect(onUpdateConversationStyle).toHaveBeenCalledWith(
@@ -2259,9 +2288,9 @@ describe("Messages", () => {
     expect(onUpdateConversationStyle).toHaveBeenCalledWith({
       messageAssistantTextColor: "#334155",
     });
-    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
-      messageFontFamily: "Microsoft YaHei UI",
-    });
+    expect(screen.queryByText("字体")).toBeNull();
+    expect(screen.queryByText(/字号/)).toBeNull();
+    expect(screen.queryByText(/字重/)).toBeNull();
   });
 
   it("keeps the style popover open when the native color picker blurs the color input", () => {

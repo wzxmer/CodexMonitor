@@ -294,7 +294,7 @@ export function useThreadActions({
             threadId,
             isReviewing: hydrationPlan.reviewing,
           });
-          if (hydrationPlan.mergedItems.length > 0) {
+          if (shouldReplace || hydrationPlan.mergedItems.length > 0) {
             dispatch({
               type: "setThreadItems",
               threadId,
