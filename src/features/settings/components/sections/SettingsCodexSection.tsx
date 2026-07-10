@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import Check from "lucide-react/dist/esm/icons/check";
+import Pencil from "lucide-react/dist/esm/icons/pencil";
 import Stethoscope from "lucide-react/dist/esm/icons/stethoscope";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import type { Dispatch, SetStateAction } from "react";
 import type {
   AppSettings,
@@ -860,47 +863,86 @@ export function SettingsCodexSection({
       ) : null}
       {mode === "providers" ? (
       <div className="settings-field">
-        <label className="settings-field-label" htmlFor="codex-key-profile">
+        <div className="settings-field-label">
           {t("settings.codex.keyProfile")}
-        </label>
+        </div>
         <div className="settings-help">
           {t("settings.codex.keyProfileHelp")}
         </div>
-        <div className="settings-field-row">
-          <select
-            id="codex-key-profile"
-            className="settings-select"
-            value={appSettings.activeCodexKeyProfileId ?? "__codex_default__"}
-            onChange={(event) => handleSelectKeyProfile(event.target.value)}
+        <div className="settings-provider-profile-list">
+          <button
+            type="button"
+            className={`settings-provider-profile ${selectedKeyProfile ? "" : "is-active"}`}
+            onClick={() => handleSelectKeyProfile("__codex_default__")}
+            aria-pressed={!selectedKeyProfile}
           >
-            <option value="__codex_default__">{t("settings.codex.defaultEnvVars")}</option>
-            {keyProfiles.map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.name}
-              </option>
-            ))}
-          </select>
-          {selectedKeyProfile && (
-            <>
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => handleEditKeyProfile(selectedKeyProfile)}
+            <span className="settings-provider-profile-copy">
+              <span className="settings-provider-profile-name">
+                {t("settings.codex.defaultEnvVars")}
+              </span>
+              <span className="settings-provider-profile-url">
+                {t("settings.codex.defaultConfigSource")}
+              </span>
+            </span>
+            <span className="settings-provider-profile-status">
+              {!selectedKeyProfile ? <Check size={13} aria-hidden="true" /> : null}
+              {t(selectedKeyProfile ? "settings.codex.profileDisabled" : "settings.codex.profileEnabled")}
+            </span>
+          </button>
+          {keyProfiles.map((profile) => {
+            const isActive = profile.id === selectedKeyProfile?.id;
+            const profileUrl = resolveCodexProviderBaseUrl(
+              profile.providerKind,
+              profile.baseUrl ?? "",
+            );
+            return (
+              <div
+                key={profile.id}
+                className={`settings-provider-profile-shell ${isActive ? "is-active" : ""}`}
               >
-                {t("common.edit")}
-              </button>
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => handleDeleteKeyProfile(selectedKeyProfile.id)}
-              >
-                {t("common.delete")}
-              </button>
-            </>
-          )}
+                <button
+                  type="button"
+                  className="settings-provider-profile settings-provider-profile--managed"
+                  onClick={() => handleSelectKeyProfile(profile.id)}
+                  aria-pressed={isActive}
+                >
+                  <span className="settings-provider-profile-copy">
+                    <span className="settings-provider-profile-name">{profile.name}</span>
+                    <span className="settings-provider-profile-url">
+                      {profileUrl || t("settings.codex.providerUrlNotSet")}
+                    </span>
+                  </span>
+                  <span className="settings-provider-profile-status">
+                    {isActive ? <Check size={13} aria-hidden="true" /> : null}
+                    {t(isActive ? "settings.codex.profileEnabled" : "settings.codex.profileDisabled")}
+                  </span>
+                </button>
+                <div className="settings-provider-profile-actions">
+                  <button
+                    type="button"
+                    className="ghost settings-provider-profile-action"
+                    onClick={() => handleEditKeyProfile(profile)}
+                    aria-label={`${t("common.edit")} ${profile.name}`}
+                    title={t("common.edit")}
+                  >
+                    <Pencil size={14} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost settings-provider-profile-action"
+                    onClick={() => handleDeleteKeyProfile(profile.id)}
+                    aria-label={`${t("common.delete")} ${profile.name}`}
+                    title={t("common.delete")}
+                  >
+                    <Trash2 size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
         {selectedKeyProfile && (
-          <div className="settings-help">
+          <div className="settings-help settings-provider-profile-injection">
             {t("settings.codex.currentInject")} <code>{DEFAULT_CODEX_KEY_ENV_VAR}</code>
             {resolveCodexProviderBaseUrl(
               selectedKeyProfile.providerKind,

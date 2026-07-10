@@ -330,7 +330,7 @@ export function SettingsServerSection({
               <div className="settings-field-row">
                 <button
                   type="button"
-                  className="button settings-button-compact"
+                  className="ghost settings-button-compact"
                   onClick={openAddRemoteModal}
                 >
                   {t("settings.server.addRemote")}
@@ -439,7 +439,7 @@ export function SettingsServerSection({
             <div className="settings-field-row">
               <button
                 type="button"
-                className="button settings-button-compact"
+                className="ghost settings-button-compact"
                 onClick={onMobileConnectTest}
                 disabled={mobileConnectBusy}
               >
@@ -465,7 +465,7 @@ export function SettingsServerSection({
             <div className="settings-field-row">
               <button
                 type="button"
-                className="button settings-button-compact"
+                className="ghost settings-button-compact"
                 onClick={() => {
                   void onTcpDaemonStart();
                 }}
@@ -477,7 +477,7 @@ export function SettingsServerSection({
               </button>
               <button
                 type="button"
-                className="button settings-button-compact"
+                className="ghost settings-button-compact"
                 onClick={() => {
                   void onTcpDaemonStop();
                 }}
@@ -489,7 +489,7 @@ export function SettingsServerSection({
               </button>
               <button
                 type="button"
-                className="button settings-button-compact"
+                className="ghost settings-button-compact"
                 onClick={() => {
                   void onTcpDaemonStatus();
                 }}
@@ -520,7 +520,7 @@ export function SettingsServerSection({
             <div className="settings-field-row">
               <button
                 type="button"
-                className="button settings-button-compact"
+                className="ghost settings-button-compact"
                 onClick={onRefreshTailscaleStatus}
                 disabled={tailscaleStatusBusy}
               >
@@ -530,7 +530,7 @@ export function SettingsServerSection({
               </button>
               <button
                 type="button"
-                className="button settings-button-compact"
+                className="ghost settings-button-compact"
                 onClick={onRefreshTailscaleCommandPreview}
                 disabled={tailscaleCommandBusy}
               >
@@ -540,7 +540,7 @@ export function SettingsServerSection({
               </button>
               <button
                 type="button"
-                className="button settings-button-compact"
+                className="ghost settings-button-compact"
                 disabled={!tailscaleStatus?.suggestedRemoteHost}
                 onClick={() => {
                   void onUseSuggestedTailscaleHost();

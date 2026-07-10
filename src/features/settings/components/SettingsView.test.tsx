@@ -1368,6 +1368,19 @@ describe("SettingsView Codex section", () => {
       expect(screen.getByLabelText("远程后端地址")).toBeTruthy();
       expect(screen.getByLabelText("远程后端令牌")).toBeTruthy();
     });
+
+    for (const name of [
+      "启动守护进程",
+      "停止守护进程",
+      "刷新状态",
+      "检测 Tailscale",
+      "刷新守护进程命令",
+      "使用建议地址",
+    ]) {
+      const button = screen.getByRole("button", { name });
+      expect(button.classList.contains("ghost")).toBe(true);
+      expect(button.classList.contains("settings-button-compact")).toBe(true);
+    }
   });
 
   it("shows mobile-only server controls on iOS runtime", async () => {
@@ -1441,6 +1454,10 @@ describe("SettingsView Codex section", () => {
         expect(screen.getByLabelText("远程后端令牌")).toBeTruthy();
         expect(screen.getByRole("button", { name: "连接并测试" })).toBeTruthy();
       });
+
+      const connectButton = screen.getByRole("button", { name: "连接并测试" });
+      expect(connectButton.classList.contains("ghost")).toBe(true);
+      expect(connectButton.classList.contains("settings-button-compact")).toBe(true);
 
       expect(screen.queryByLabelText("后端模式")).toBeNull();
       expect(screen.queryByRole("button", { name: "启动守护进程" })).toBeNull();
@@ -1559,6 +1576,9 @@ describe("SettingsView Codex section", () => {
         expect(screen.getByRole("list", { name: "已保存远程端" })).toBeTruthy();
         expect(screen.getByLabelText("远程端名称")).toBeTruthy();
       });
+      const addRemoteButton = screen.getByRole("button", { name: "添加远程端" });
+      expect(addRemoteButton.classList.contains("ghost")).toBe(true);
+      expect(addRemoteButton.classList.contains("settings-button-compact")).toBe(true);
       expect(screen.getAllByText(/上次连接：\s*从未/).length).toBeGreaterThan(0);
 
       fireEvent.click(screen.getByRole("button", { name: "使用 Office Mac 远程端" }));
@@ -1685,15 +1705,54 @@ describe("SettingsView Codex defaults", () => {
   it("explains that provider profiles only affect CodexMonitor-launched sessions", () => {
     renderCodexSection({ initialSection: "providers" });
 
-    expect((screen.getByLabelText("Provider 配置") as HTMLSelectElement).value).toBe(
-      "__codex_default__",
-    );
-    expect(screen.getByText("使用 Codex 默认配置")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /使用 Codex 默认配置/ }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.getByText("沿用本机 Codex 配置")).toBeTruthy();
     expect(
       screen.getAllByText(
         /只覆盖 CodexMonitor 新启动会话的 key、URL、模型和上下文，不修改 CODEX_HOME、sessions、MCP、agents 或全局 config\.toml/,
       ).length,
     ).toBeGreaterThan(0);
+  });
+
+  it("renders provider profiles as compact URL buttons and switches the active profile", () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderCodexSection({
+      initialSection: "providers",
+      onUpdateAppSettings,
+      appSettings: {
+        codexKeyProfiles: [
+          {
+            id: "profile-a",
+            name: "配置 A",
+            providerKind: "custom",
+            keyEnvVar: "OPENAI_API_KEY",
+            key: "secret",
+            baseUrlEnvVar: "OPENAI_BASE_URL",
+            baseUrl: "https://api.example.com/v1",
+            model: null,
+            contextWindow: null,
+            maxOutputTokens: null,
+            useGateway: false,
+            lastModelRefreshAtMs: null,
+            cachedModels: [],
+            groupName: "配置 A",
+            groupMultiplier: null,
+          },
+        ],
+      },
+    });
+
+    const profileButton = screen.getByRole("button", { name: /配置 A.*https:\/\/api\.example\.com\/v1/ });
+    expect(screen.getByText("https://api.example.com/v1")).toBeTruthy();
+    expect(profileButton.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(profileButton);
+
+    expect(onUpdateAppSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ activeCodexKeyProfileId: "profile-a" }),
+    );
   });
 
   it("fills the recommended base URL when selecting a known provider", () => {
