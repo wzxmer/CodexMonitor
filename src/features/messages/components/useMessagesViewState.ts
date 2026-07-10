@@ -17,6 +17,13 @@ import {
   type MessageListBaseEntry,
   type MessageListEntry,
 } from "../utils/messageRenderUtils";
+import { useMessageHistoryWindow } from "./useMessageHistoryWindow";
+
+function baseEntryContainsItem(entry: MessageListBaseEntry, itemId: string) {
+  return entry.kind === "toolGroup"
+    ? entry.group.items.some((item) => item.id === itemId)
+    : entry.item.id === itemId;
+}
 
 function toMarkdownQuote(text: string): string {
   const trimmed = text.trim();
@@ -37,6 +44,7 @@ type UseMessagesViewStateArgs = {
   activeUserInputRequestId: string | number | null;
   hasVisibleUserInputRequest: boolean;
   defaultToolGroupsCollapsed?: boolean;
+  chatHistoryScrollbackItems?: number | null;
   onPlanAccept?: () => void;
   onPlanSubmitChanges?: (changes: string) => void;
   onQuoteMessage?: (text: string) => void;
@@ -49,6 +57,7 @@ export function useMessagesViewState({
   activeUserInputRequestId,
   hasVisibleUserInputRequest,
   defaultToolGroupsCollapsed = false,
+  chatHistoryScrollbackItems,
   onPlanAccept,
   onPlanSubmitChanges,
   onQuoteMessage,
@@ -71,6 +80,22 @@ export function useMessagesViewState({
   const [dismissedPlanFollowupByThread, setDismissedPlanFollowupByThread] =
     useState<Record<string, string>>({});
 
+  const {
+    visibleItems: historyItems,
+    hiddenBeforeCount,
+    hiddenAfterCount,
+    handleHistoryScroll,
+    loadEarlier,
+    loadLater,
+    revealItemAtIndex,
+    showLatest,
+  } = useMessageHistoryWindow({
+    items,
+    threadId,
+    batchSize: chatHistoryScrollbackItems,
+    containerRef,
+  });
+
   const scrollKey = `${scrollKeyForItems(items)}-${activeUserInputRequestId ?? "no-input"}`;
 
   const isNearBottom = useCallback(
@@ -83,10 +108,11 @@ export function useMessagesViewState({
     if (!containerRef.current) {
       return;
     }
+    handleHistoryScroll(containerRef.current);
     const nearBottom = isNearBottom(containerRef.current);
     autoScrollRef.current = nearBottom;
     setShowScrollToLatest(!nearBottom);
-  }, [isNearBottom]);
+  }, [handleHistoryScroll, isNearBottom]);
 
   const requestAutoScroll = useCallback(() => {
     const container = containerRef.current;
@@ -106,6 +132,7 @@ export function useMessagesViewState({
 
   const scrollToLatest = useCallback(() => {
     autoScrollRef.current = true;
+    showLatest();
     const container = containerRef.current;
     if (container) {
       container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
@@ -113,7 +140,7 @@ export function useMessagesViewState({
       bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
     }
     setShowScrollToLatest(false);
-  }, []);
+  }, [showLatest]);
 
   useLayoutEffect(() => {
     autoScrollRef.current = true;
@@ -211,17 +238,17 @@ export function useMessagesViewState({
 
   const reasoningMetaById = useMemo(() => {
     const meta = new Map<string, ReturnType<typeof parseReasoning>>();
-    items.forEach((item) => {
+    historyItems.forEach((item) => {
       if (item.kind === "reasoning") {
         meta.set(item.id, parseReasoning(item));
       }
     });
     return meta;
-  }, [items]);
+  }, [historyItems]);
 
   const latestReasoningLabel = useMemo(() => {
-    for (let index = items.length - 1; index >= 0; index -= 1) {
-      const item = items[index];
+    for (let index = historyItems.length - 1; index >= 0; index -= 1) {
+      const item = historyItems[index];
       if (item.kind === "message") {
         break;
       }
@@ -234,11 +261,11 @@ export function useMessagesViewState({
       }
     }
     return null;
-  }, [items, reasoningMetaById]);
+  }, [historyItems, reasoningMetaById]);
 
   const visibleItems = useMemo(
     () =>
-      items.filter((item) => {
+      historyItems.filter((item) => {
         if (
           item.kind === "message" &&
           item.role === "user" &&
@@ -251,7 +278,7 @@ export function useMessagesViewState({
         }
         return reasoningMetaById.get(item.id)?.hasBody ?? false;
       }),
-    [items, reasoningMetaById],
+    [historyItems, reasoningMetaById],
   );
 
   useEffect(() => {
@@ -372,6 +399,46 @@ export function useMessagesViewState({
     flushTurn();
     return result;
   }, [baseGroupedItems]);
+
+  const revealGroupedItem = useCallback(
+    (itemId: string) => {
+      const containingEntry = groupedItems.find((entry) => {
+        if (entry.kind === "processGroup") {
+          return entry.group.entries.some((processEntry) =>
+            baseEntryContainsItem(processEntry, itemId),
+          );
+        }
+        return baseEntryContainsItem(entry, itemId);
+      });
+      if (!containingEntry) {
+        return;
+      }
+      if (
+        containingEntry.kind === "toolGroup" ||
+        containingEntry.kind === "processGroup"
+      ) {
+        const groupId = containingEntry.group.id;
+        manuallyToggledToolGroupsRef.current.add(groupId);
+        setCollapsedToolGroups((previous) => {
+          if (!previous.has(groupId)) {
+            return previous;
+          }
+          const next = new Set(previous);
+          next.delete(groupId);
+          return next;
+        });
+      }
+      setExpandedItems((previous) => {
+        if (previous.has(itemId)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.add(itemId);
+        return next;
+      });
+    },
+    [groupedItems],
+  );
 
   const finalAssistantCollapseTarget = useMemo(() => {
     let finalAssistantIndex = -1;
@@ -582,6 +649,12 @@ export function useMessagesViewState({
     requestAutoScroll,
     showScrollToLatest,
     scrollToLatest,
+    hiddenBeforeCount,
+    hiddenAfterCount,
+    loadEarlierHistory: loadEarlier,
+    loadLaterHistory: loadLater,
+    revealHistoryItemAtIndex: revealItemAtIndex,
+    revealGroupedItem,
     expandedItems,
     toggleExpanded,
     collapsedToolGroups: isToolGroupsAutoCollapsed

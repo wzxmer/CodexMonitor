@@ -55,7 +55,7 @@ describe("contextUsage", () => {
     expect(getCompactionCyclePercent(usage(1_000, 50, 1_000), 200)).toBe(25);
   });
 
-  it("returns null when compaction threshold is missing", () => {
+  it("does not fall back to the model context window when the compaction threshold is missing", () => {
     expect(getCompactionCyclePercent(usage(0, 20, 1_000))).toBeNull();
   });
 

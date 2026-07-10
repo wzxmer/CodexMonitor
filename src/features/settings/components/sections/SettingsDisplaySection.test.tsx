@@ -10,6 +10,7 @@ import type { AppSettings } from "@/types";
 import {
   DEFAULT_UI_CJK_FONT_FAMILY,
   DEFAULT_UI_LATIN_FONT_FAMILY,
+  WINDOWS_UI_CJK_FONT_FAMILY,
 } from "@utils/fonts";
 import { SettingsDisplaySection } from "./SettingsDisplaySection";
 
@@ -166,7 +167,7 @@ describe("SettingsDisplaySection", () => {
             threadTitleAutogenerationEnabled: false,
             uiLatinFontFamily: "Arial, sans-serif",
             uiCjkFontFamily: "SimSun, serif",
-            uiFontWeight: 400,
+            uiFontWeight: 450,
             messageFontWeight: 450,
             codeFontFamily: "",
             codeFontSize: 11,
@@ -180,7 +181,7 @@ describe("SettingsDisplaySection", () => {
         scaleDraft="100%"
         uiLatinFontDraft="Arial, sans-serif"
         uiCjkFontDraft="SimSun, serif"
-        uiFontWeightDraft={400}
+        uiFontWeightDraft={450}
         codeFontDraft=""
         codeFontSizeDraft={11}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -208,12 +209,12 @@ describe("SettingsDisplaySection", () => {
     expect(onSetUiLatinFontDraft).toHaveBeenCalledWith(
       DEFAULT_UI_LATIN_FONT_FAMILY,
     );
-    expect(onSetUiCjkFontDraft).toHaveBeenCalledWith(DEFAULT_UI_CJK_FONT_FAMILY);
+    expect(onSetUiCjkFontDraft).toHaveBeenCalledWith(WINDOWS_UI_CJK_FONT_FAMILY);
     expect(onSetUiFontWeightDraft).toHaveBeenCalledWith(500);
     expect(onUpdateAppSettings).toHaveBeenCalledWith(
       expect.objectContaining({
         uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
-        uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
+        uiCjkFontFamily: WINDOWS_UI_CJK_FONT_FAMILY,
         uiFontWeight: 500,
       }),
     );
@@ -233,7 +234,7 @@ describe("SettingsDisplaySection", () => {
             threadTitleAutogenerationEnabled: false,
             uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
             uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
-            uiFontWeight: 400,
+            uiFontWeight: 450,
             messageFontWeight: 450,
             codeFontFamily: "",
             codeFontSize: 11,
@@ -247,7 +248,7 @@ describe("SettingsDisplaySection", () => {
         scaleDraft="100%"
         uiLatinFontDraft={DEFAULT_UI_LATIN_FONT_FAMILY}
         uiCjkFontDraft={DEFAULT_UI_CJK_FONT_FAMILY}
-        uiFontWeightDraft={400}
+        uiFontWeightDraft={450}
         codeFontDraft=""
         codeFontSizeDraft={11}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -278,7 +279,7 @@ describe("SettingsDisplaySection", () => {
             chatHistoryScrollbackItems: 200,
             threadTitleAutogenerationEnabled: false,
             uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
-            uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
+            uiCjkFontFamily: WINDOWS_UI_CJK_FONT_FAMILY,
             uiFontWeight: 500,
             messageFontWeight: 500,
             codeFontFamily: "",
@@ -292,7 +293,7 @@ describe("SettingsDisplaySection", () => {
         scaleShortcutText=""
         scaleDraft="100%"
         uiLatinFontDraft={DEFAULT_UI_LATIN_FONT_FAMILY}
-        uiCjkFontDraft={DEFAULT_UI_CJK_FONT_FAMILY}
+        uiCjkFontDraft={WINDOWS_UI_CJK_FONT_FAMILY}
         uiFontWeightDraft={500}
         codeFontDraft=""
         codeFontSizeDraft={11}
@@ -317,7 +318,7 @@ describe("SettingsDisplaySection", () => {
     ).toBe("true");
   });
 
-  it("does not expose conversation-specific font controls", () => {
+  it("exposes independent font size categories", () => {
     render(
       <SettingsDisplaySection
         appSettings={
@@ -356,8 +357,55 @@ describe("SettingsDisplaySection", () => {
       />,
     );
 
-    expect(screen.queryByLabelText("消息字号")).toBeNull();
-    expect(screen.queryByLabelText("消息字重")).toBeNull();
+    expect(screen.getByLabelText("UI 字号")).toBeTruthy();
+    expect(screen.getByLabelText("会话字号")).toBeTruthy();
+    expect(screen.getByLabelText("过程与状态字号")).toBeTruthy();
+    expect(screen.getByLabelText("代码字号")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "全部恢复默认" })).toBeTruthy();
+  });
+
+  it("disables remaining-mode selection when usage is hidden", () => {
+    render(
+      <SettingsDisplaySection
+        appSettings={
+          ({
+            theme: "system",
+            showCodexUsage: false,
+            usageShowRemaining: false,
+            showMessageFilePath: true,
+            uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
+            uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
+            uiFontWeight: 400,
+            codeFontFamily: "",
+            codeFontSize: 11,
+            notificationSoundsEnabled: true,
+            systemNotificationsEnabled: true,
+          } as unknown) as AppSettings
+        }
+        reduceTransparency={false}
+        scaleShortcutTitle=""
+        scaleShortcutText=""
+        scaleDraft="100%"
+        codeFontDraft=""
+        codeFontSizeDraft={11}
+        onUpdateAppSettings={vi.fn(async () => {})}
+        onToggleTransparency={vi.fn()}
+        onSetScaleDraft={vi.fn() as any}
+        onCommitScale={vi.fn(async () => {})}
+        onResetScale={vi.fn(async () => {})}
+        onSetCodeFontDraft={vi.fn() as any}
+        onCommitCodeFont={vi.fn(async () => {})}
+        onSetCodeFontSizeDraft={vi.fn() as any}
+        onCommitCodeFontSize={vi.fn(async () => {})}
+        onTestNotificationSound={vi.fn()}
+        onTestSystemNotification={vi.fn()}
+      />,
+    );
+
+    const remainingToggle = screen.getByRole("button", {
+      name: "用量显示为剩余量",
+    });
+    expect(remainingToggle.hasAttribute("disabled")).toBe(true);
   });
 
   it("keeps notification test controls available", async () => {

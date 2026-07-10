@@ -34,8 +34,6 @@ import {
   parseReasoning,
   type MessageListBaseEntry,
   type MessageListEntry,
-  type ProcessGroup,
-  type ToolGroup,
 } from "../utils/messageRenderUtils";
 import { CONVERSATION_STYLE_PRESETS } from "../utils/conversationStylePresets";
 import { useI18n } from "@/features/i18n/I18nProvider";
@@ -52,37 +50,32 @@ import {
 } from "./MessageRows";
 import { useMessagesViewState } from "./useMessagesViewState";
 
-function getToolGroupSearchText(group: ToolGroup) {
-  return group.items.map(getConversationItemSearchText).join("\n");
-}
-
-function getBaseEntrySearchText(entry: MessageListBaseEntry) {
-  return entry.kind === "toolGroup"
-    ? getToolGroupSearchText(entry.group)
-    : getConversationItemSearchText(entry.item);
-}
-
-function getProcessGroupSearchText(group: ProcessGroup) {
-  return group.entries.map(getBaseEntrySearchText).join("\n");
-}
-
 function getSearchTargetForEntry(entry: MessageListEntry) {
   if (entry.kind === "processGroup") {
-    return {
-      id: `process-group-${entry.group.id}`,
-      text: getProcessGroupSearchText(entry.group),
-    };
+    return `process-group-${entry.group.id}`;
   }
   if (entry.kind === "toolGroup") {
-    return {
-      id: `tool-group-${entry.group.id}`,
-      text: getToolGroupSearchText(entry.group),
-    };
+    return `tool-group-${entry.group.id}`;
   }
-  return {
-    id: `item-${entry.item.id}`,
-    text: getConversationItemSearchText(entry.item),
-  };
+  return `item-${entry.item.id}`;
+}
+
+function baseEntryContainsItem(entry: MessageListBaseEntry, itemId: string) {
+  return entry.kind === "toolGroup"
+    ? entry.group.items.some((item) => item.id === itemId)
+    : entry.item.id === itemId;
+}
+
+function getSearchTargetForItem(entries: MessageListEntry[], itemId: string) {
+  const entry = entries.find((candidate) => {
+    if (candidate.kind === "processGroup") {
+      return candidate.group.entries.some((processEntry) =>
+        baseEntryContainsItem(processEntry, itemId),
+      );
+    }
+    return baseEntryContainsItem(candidate, itemId);
+  });
+  return entry ? getSearchTargetForEntry(entry) : null;
 }
 
 function isNativeColorPickerBlur(event: ReactFocusEvent<HTMLElement>) {
@@ -222,11 +215,14 @@ export const Messages = memo(function Messages({
   const { t } = useI18n();
   const [stylePanelOpen, setStylePanelOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchThreadId, setSearchThreadId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
+  const [searchNavigationVersion, setSearchNavigationVersion] = useState(0);
   const styleMenuRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchTargetRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const handledSearchNavigationVersionRef = useRef(0);
   const activeUserInputRequestId =
     threadId && userInputRequests.length
       ? (userInputRequests.find(
@@ -269,6 +265,12 @@ export const Messages = memo(function Messages({
     requestAutoScroll,
     showScrollToLatest,
     scrollToLatest,
+    hiddenBeforeCount,
+    hiddenAfterCount,
+    loadEarlierHistory,
+    loadLaterHistory,
+    revealHistoryItemAtIndex,
+    revealGroupedItem,
     expandedItems,
     toggleExpanded,
     collapsedToolGroups,
@@ -290,35 +292,44 @@ export const Messages = memo(function Messages({
     activeUserInputRequestId,
     hasVisibleUserInputRequest,
     defaultToolGroupsCollapsed,
+    chatHistoryScrollbackItems,
     onPlanAccept,
     onPlanSubmitChanges,
     onQuoteMessage,
   });
-  const searchTargets = useMemo(
-    () => groupedItems.map(getSearchTargetForEntry),
-    [groupedItems],
-  );
+  const isSearchActiveForThread = searchOpen && searchThreadId === threadId;
   const searchMatches = useMemo(() => {
+    if (!isSearchActiveForThread) {
+      return [];
+    }
     const query = searchQuery.trim().toLowerCase();
     if (!query) {
       return [];
     }
-    return searchTargets.filter((target) =>
-      target.text.toLowerCase().includes(query),
+    return items.flatMap((item, itemIndex) =>
+      getConversationItemSearchText(item).toLowerCase().includes(query)
+        ? [{ itemId: item.id, itemIndex }]
+        : [],
     );
-  }, [searchQuery, searchTargets]);
+  }, [isSearchActiveForThread, items, searchQuery]);
   const activeSearchMatch =
     searchMatches.length > 0
       ? searchMatches[Math.min(activeSearchIndex, searchMatches.length - 1)]
       : null;
+  const activeSearchTargetId = activeSearchMatch
+    ? getSearchTargetForItem(groupedItems, activeSearchMatch.itemId)
+    : null;
   const activeSearchDisplayIndex =
     searchMatches.length > 0
       ? Math.min(activeSearchIndex, searchMatches.length - 1) + 1
       : 0;
 
   useEffect(() => {
+    setSearchOpen(false);
+    setSearchThreadId(null);
+    setSearchQuery("");
     setActiveSearchIndex(0);
-  }, [searchQuery, threadId]);
+  }, [threadId]);
 
   useEffect(() => {
     if (!searchOpen) {
@@ -351,20 +362,40 @@ export const Messages = memo(function Messages({
     if (!activeSearchMatch) {
       return;
     }
-    const node = searchTargetRefs.current[activeSearchMatch.id];
+    revealHistoryItemAtIndex(activeSearchMatch.itemIndex);
+    revealGroupedItem(activeSearchMatch.itemId);
+  }, [activeSearchMatch, revealGroupedItem, revealHistoryItemAtIndex]);
+
+  useEffect(() => {
+    if (
+      handledSearchNavigationVersionRef.current === searchNavigationVersion
+    ) {
+      return;
+    }
+    if (!isSearchActiveForThread || !activeSearchTargetId) {
+      return;
+    }
+    const node = searchTargetRefs.current[activeSearchTargetId];
     if (!node) {
       return;
     }
-    window.requestAnimationFrame(() => {
+    handledSearchNavigationVersionRef.current = searchNavigationVersion;
+    const frameId = window.requestAnimationFrame(() => {
       node.scrollIntoView({ block: "center", behavior: "smooth" });
     });
-  }, [activeSearchMatch]);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeSearchTargetId, isSearchActiveForThread, searchNavigationVersion]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
       if ((event.ctrlKey || event.metaKey) && key === "f") {
         event.preventDefault();
+        if (searchThreadId !== threadId) {
+          setSearchThreadId(threadId);
+          setSearchQuery("");
+          setActiveSearchIndex(0);
+        }
         setSearchOpen(true);
         return;
       }
@@ -375,7 +406,7 @@ export const Messages = memo(function Messages({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [searchOpen]);
+  }, [searchOpen, searchThreadId, threadId]);
 
   const registerSearchTarget = useCallback(
     (id: string) => (node: HTMLDivElement | null) => {
@@ -396,9 +427,16 @@ export const Messages = memo(function Messages({
       setActiveSearchIndex((current) =>
         (current + direction + searchMatches.length) % searchMatches.length,
       );
+      setSearchNavigationVersion((current) => current + 1);
     },
     [searchMatches.length],
   );
+
+  const handleSearchQueryChange = useCallback((value: string) => {
+    setSearchQuery(value);
+    setActiveSearchIndex(0);
+    setSearchNavigationVersion((current) => current + 1);
+  }, []);
 
   const handleSearchInputKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -534,10 +572,6 @@ export const Messages = memo(function Messages({
       </span>
     );
   }, [activeTurnLineChangeStats]);
-  const showScrollbackNotice =
-    typeof chatHistoryScrollbackItems === "number" &&
-    chatHistoryScrollbackItems > 0 &&
-    items.length > chatHistoryScrollbackItems;
   const statusSeparator = t("messages.statusSeparator");
   const assistantColorPresets = [
     { label: t("color.defaultBlue"), bg: "#f7f9fc", accent: "#7dadff", text: "#263040" },
@@ -668,13 +702,13 @@ export const Messages = memo(function Messages({
       style={messagesStyle}
     >
       <div className="messages-inner">
-        {searchOpen && (
+        {isSearchActiveForThread && (
           <div className="messages-session-search" role="search">
             <Search size={14} aria-hidden />
             <input
               ref={searchInputRef}
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => handleSearchQueryChange(event.target.value)}
               onKeyDown={handleSearchInputKeyDown}
               aria-label={t("messages.searchCurrentSession")}
               placeholder={t("messages.searchCurrentSession")}
@@ -934,19 +968,28 @@ export const Messages = memo(function Messages({
             </div>
           </div>
         )}
-        {showScrollbackNotice && (
-          <div className="messages-history-notice" role="note">
-            {t("messages.historyLimitNotice")
-              .replace("{count}", String(chatHistoryScrollbackItems))
-              .replace("{total}", String(items.length))}
-          </div>
+        {hiddenBeforeCount > 0 && (
+          <button
+            type="button"
+            className="messages-history-notice"
+            onClick={loadEarlierHistory}
+          >
+            {t("messages.historyEarlierNotice").replace(
+              "{count}",
+              String(hiddenBeforeCount),
+            )}
+          </button>
         )}
         {groupedItems.map((entry) => {
           const searchTarget = getSearchTargetForEntry(entry);
-          const isActiveSearchMatch = activeSearchMatch?.id === searchTarget.id;
+          const isActiveSearchMatch = activeSearchTargetId === searchTarget;
+          const isUserMessageSearchTarget =
+            entry.kind === "item" &&
+            entry.item.kind === "message" &&
+            entry.item.role === "user";
           const searchTargetClassName = `messages-search-target${
             isActiveSearchMatch ? " is-active-search-match" : ""
-          }`;
+          }${isUserMessageSearchTarget ? " is-user-message-search-target" : ""}`;
           if (entry.kind === "processGroup") {
             const { group } = entry;
             const isCollapsed = collapsedToolGroups.has(group.id);
@@ -976,7 +1019,7 @@ export const Messages = memo(function Messages({
             return (
               <div
                 key={`process-group-${group.id}`}
-                ref={registerSearchTarget(searchTarget.id)}
+                ref={registerSearchTarget(searchTarget)}
                 className={`tool-group process-group ${searchTargetClassName} ${
                   isCollapsed ? "tool-group-collapsed" : ""
                 }`}
@@ -1054,7 +1097,7 @@ export const Messages = memo(function Messages({
             return (
               <div
                 key={`tool-group-${group.id}`}
-                ref={registerSearchTarget(searchTarget.id)}
+                ref={registerSearchTarget(searchTarget)}
                 className={`tool-group ${searchTargetClassName} ${
                   isCollapsed ? "tool-group-collapsed" : ""
                 }`}
@@ -1090,13 +1133,25 @@ export const Messages = memo(function Messages({
           return (
             <div
               key={`item-search-${entry.item.id}`}
-              ref={registerSearchTarget(searchTarget.id)}
+              ref={registerSearchTarget(searchTarget)}
               className={searchTargetClassName}
             >
               {renderItem(entry.item)}
             </div>
           );
         })}
+        {hiddenAfterCount > 0 && (
+          <button
+            type="button"
+            className="messages-history-notice"
+            onClick={loadLaterHistory}
+          >
+            {t("messages.historyLaterNotice").replace(
+              "{count}",
+              String(hiddenAfterCount),
+            )}
+          </button>
+        )}
         {planFollowupNode}
         {userInputNode}
         <WorkingIndicator

@@ -13,6 +13,7 @@ import type { ThirdPartyKeyUsageSnapshot } from "../utils/thirdPartyKeyUsage";
 import type { CodexKeyProfile } from "@/types";
 
 type SidebarBottomRailProps = {
+  showUsage: boolean;
   sessionPercent: number | null;
   weeklyPercent: number | null;
   sessionResetLabel: string | null;
@@ -262,6 +263,7 @@ function ThirdPartyUsageSummary({
 }
 
 export function SidebarBottomRail({
+  showUsage,
   sessionPercent,
   weeklyPercent,
   sessionResetLabel,
@@ -305,41 +307,43 @@ export function SidebarBottomRail({
 
   return (
     <div className="sidebar-bottom-rail">
-      <div className="sidebar-usage-panel">
-        <div className="sidebar-usage-header">
-          <div className="sidebar-usage-kicker">{t("sidebar.usage")}</div>
-          {thirdPartyUsageTokens === null && creditsLabel && (
-            <div className="sidebar-usage-credits">{creditsLabel}</div>
-          )}
-        </div>
-        {thirdPartyUsageTokens !== null ? (
-          <ThirdPartyUsageSummary
-            tokens={thirdPartyUsageTokens}
-            costUsd={thirdPartyUsageCostUsd}
-            providerUsage={thirdPartyProviderUsage}
-            multiplier={thirdPartyUsageMultiplier}
-            keyProfiles={codexKeyProfiles}
-            activeKeyProfileId={activeCodexKeyProfileId}
-            onSelectKeyProfile={onSelectCodexKeyProfile}
-            onMultiplierChange={onThirdPartyUsageMultiplierChange}
-          />
-        ) : (
-          <div className="sidebar-usage-list">
-            <UsageRow
-              label={t("sidebar.session")}
-              percent={sessionPercent}
-              resetLabel={sessionResetLabel}
-            />
-            {showWeekly && (
-              <UsageRow
-                label={t("sidebar.weekly")}
-                percent={weeklyPercent}
-                resetLabel={weeklyResetLabel}
-              />
+      {showUsage && (
+        <div className="sidebar-usage-panel">
+          <div className="sidebar-usage-header">
+            <div className="sidebar-usage-kicker">{t("sidebar.usage")}</div>
+            {thirdPartyUsageTokens === null && creditsLabel && (
+              <div className="sidebar-usage-credits">{creditsLabel}</div>
             )}
           </div>
-        )}
-      </div>
+          {thirdPartyUsageTokens !== null ? (
+            <ThirdPartyUsageSummary
+              tokens={thirdPartyUsageTokens}
+              costUsd={thirdPartyUsageCostUsd}
+              providerUsage={thirdPartyProviderUsage}
+              multiplier={thirdPartyUsageMultiplier}
+              keyProfiles={codexKeyProfiles}
+              activeKeyProfileId={activeCodexKeyProfileId}
+              onSelectKeyProfile={onSelectCodexKeyProfile}
+              onMultiplierChange={onThirdPartyUsageMultiplierChange}
+            />
+          ) : (
+            <div className="sidebar-usage-list">
+              <UsageRow
+                label={t("sidebar.session")}
+                percent={sessionPercent}
+                resetLabel={sessionResetLabel}
+              />
+              {showWeekly && (
+                <UsageRow
+                  label={t("sidebar.weekly")}
+                  percent={weeklyPercent}
+                  resetLabel={weeklyResetLabel}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )}
       <div
         className={`sidebar-bottom-actions${showAccountSwitcher ? "" : " is-compact"}`}
       >

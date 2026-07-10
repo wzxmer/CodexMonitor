@@ -4,13 +4,19 @@ import type { AppSettings } from "@/types";
 import { clampUiScale } from "@utils/uiScale";
 import {
   DEFAULT_CODE_FONT_FAMILY,
-  DEFAULT_UI_CJK_FONT_FAMILY,
   DEFAULT_UI_FONT_FAMILY,
   DEFAULT_UI_LATIN_FONT_FAMILY,
+  CODE_FONT_SIZE_DEFAULT,
+  MESSAGE_FONT_SIZE_DEFAULT,
+  PROCESS_FONT_SIZE_DEFAULT,
+  UI_FONT_SIZE_DEFAULT,
   clampCodeFontSize,
+  clampMessageFontSize,
+  clampProcessFontSize,
   clampUiFontSize,
   clampUiFontWeight,
   normalizeFontFamily,
+  normalizeUiCjkFontFamily,
 } from "@utils/fonts";
 
 type UseSettingsDisplaySectionArgs = {
@@ -34,6 +40,8 @@ export type SettingsDisplaySectionProps = {
   uiLatinFontDraft: string;
   uiCjkFontDraft: string;
   uiFontSizeDraft: number;
+  messageFontSizeDraft: number;
+  processFontSizeDraft: number;
   uiFontWeightDraft: number;
   codeFontDraft: string;
   codeFontSizeDraft: number;
@@ -50,12 +58,17 @@ export type SettingsDisplaySectionProps = {
   onCommitUiCjkFont: () => Promise<void>;
   onSetUiFontSizeDraft: Dispatch<SetStateAction<number>>;
   onCommitUiFontSize: (nextSize: number) => Promise<void>;
+  onSetMessageFontSizeDraft: Dispatch<SetStateAction<number>>;
+  onCommitMessageFontSize: (nextSize: number) => Promise<void>;
+  onSetProcessFontSizeDraft: Dispatch<SetStateAction<number>>;
+  onCommitProcessFontSize: (nextSize: number) => Promise<void>;
   onSetUiFontWeightDraft: Dispatch<SetStateAction<number>>;
   onCommitUiFontWeight: (nextWeight: number) => Promise<void>;
   onSetCodeFontDraft: Dispatch<SetStateAction<string>>;
   onCommitCodeFont: () => Promise<void>;
   onSetCodeFontSizeDraft: Dispatch<SetStateAction<number>>;
   onCommitCodeFontSize: (nextSize: number) => Promise<void>;
+  onResetAllFontSizes: () => Promise<void>;
   onTestNotificationSound: () => void;
   onTestSystemNotification: () => void;
 };
@@ -79,6 +92,12 @@ export const useSettingsDisplaySection = ({
   );
   const [uiCjkFontDraft, setUiCjkFontDraft] = useState(appSettings.uiCjkFontFamily);
   const [uiFontSizeDraft, setUiFontSizeDraft] = useState(appSettings.uiFontSize);
+  const [messageFontSizeDraft, setMessageFontSizeDraft] = useState(
+    appSettings.messageFontSize,
+  );
+  const [processFontSizeDraft, setProcessFontSizeDraft] = useState(
+    appSettings.processFontSize,
+  );
   const [uiFontWeightDraft, setUiFontWeightDraft] = useState(
     appSettings.uiFontWeight,
   );
@@ -104,6 +123,14 @@ export const useSettingsDisplaySection = ({
   useEffect(() => {
     setUiFontSizeDraft(appSettings.uiFontSize);
   }, [appSettings.uiFontSize]);
+
+  useEffect(() => {
+    setMessageFontSizeDraft(appSettings.messageFontSize);
+  }, [appSettings.messageFontSize]);
+
+  useEffect(() => {
+    setProcessFontSizeDraft(appSettings.processFontSize);
+  }, [appSettings.processFontSize]);
 
   useEffect(() => {
     setUiFontWeightDraft(appSettings.uiFontWeight);
@@ -179,10 +206,7 @@ export const useSettingsDisplaySection = ({
   };
 
   const handleCommitUiCjkFont = async () => {
-    const nextFont = normalizeFontFamily(
-      uiCjkFontDraft,
-      DEFAULT_UI_CJK_FONT_FAMILY,
-    );
+    const nextFont = normalizeUiCjkFontFamily(uiCjkFontDraft);
     setUiCjkFontDraft(nextFont);
     if (nextFont === appSettings.uiCjkFontFamily) {
       return;
@@ -202,6 +226,30 @@ export const useSettingsDisplaySection = ({
     await onUpdateAppSettings({
       ...appSettings,
       uiFontSize: clampedSize,
+    });
+  };
+
+  const handleCommitMessageFontSize = async (nextSize: number) => {
+    const clampedSize = clampMessageFontSize(nextSize);
+    setMessageFontSizeDraft(clampedSize);
+    if (clampedSize === appSettings.messageFontSize) {
+      return;
+    }
+    await onUpdateAppSettings({
+      ...appSettings,
+      messageFontSize: clampedSize,
+    });
+  };
+
+  const handleCommitProcessFontSize = async (nextSize: number) => {
+    const clampedSize = clampProcessFontSize(nextSize);
+    setProcessFontSizeDraft(clampedSize);
+    if (clampedSize === appSettings.processFontSize) {
+      return;
+    }
+    await onUpdateAppSettings({
+      ...appSettings,
+      processFontSize: clampedSize,
     });
   };
 
@@ -241,6 +289,28 @@ export const useSettingsDisplaySection = ({
     });
   };
 
+  const handleResetAllFontSizes = async () => {
+    setUiFontSizeDraft(UI_FONT_SIZE_DEFAULT);
+    setMessageFontSizeDraft(MESSAGE_FONT_SIZE_DEFAULT);
+    setProcessFontSizeDraft(PROCESS_FONT_SIZE_DEFAULT);
+    setCodeFontSizeDraft(CODE_FONT_SIZE_DEFAULT);
+    if (
+      appSettings.uiFontSize === UI_FONT_SIZE_DEFAULT &&
+      appSettings.messageFontSize === MESSAGE_FONT_SIZE_DEFAULT &&
+      appSettings.processFontSize === PROCESS_FONT_SIZE_DEFAULT &&
+      appSettings.codeFontSize === CODE_FONT_SIZE_DEFAULT
+    ) {
+      return;
+    }
+    await onUpdateAppSettings({
+      ...appSettings,
+      uiFontSize: UI_FONT_SIZE_DEFAULT,
+      messageFontSize: MESSAGE_FONT_SIZE_DEFAULT,
+      processFontSize: PROCESS_FONT_SIZE_DEFAULT,
+      codeFontSize: CODE_FONT_SIZE_DEFAULT,
+    });
+  };
+
   return {
     appSettings,
     reduceTransparency,
@@ -251,6 +321,8 @@ export const useSettingsDisplaySection = ({
     uiLatinFontDraft,
     uiCjkFontDraft,
     uiFontSizeDraft,
+    messageFontSizeDraft,
+    processFontSizeDraft,
     uiFontWeightDraft,
     codeFontDraft,
     codeFontSizeDraft,
@@ -267,12 +339,17 @@ export const useSettingsDisplaySection = ({
     onCommitUiCjkFont: handleCommitUiCjkFont,
     onSetUiFontSizeDraft: setUiFontSizeDraft,
     onCommitUiFontSize: handleCommitUiFontSize,
+    onSetMessageFontSizeDraft: setMessageFontSizeDraft,
+    onCommitMessageFontSize: handleCommitMessageFontSize,
+    onSetProcessFontSizeDraft: setProcessFontSizeDraft,
+    onCommitProcessFontSize: handleCommitProcessFontSize,
     onSetUiFontWeightDraft: setUiFontWeightDraft,
     onCommitUiFontWeight: handleCommitUiFontWeight,
     onSetCodeFontDraft: setCodeFontDraft,
     onCommitCodeFont: handleCommitCodeFont,
     onSetCodeFontSizeDraft: setCodeFontSizeDraft,
     onCommitCodeFontSize: handleCommitCodeFontSize,
+    onResetAllFontSizes: handleResetAllFontSizes,
     onTestNotificationSound,
     onTestSystemNotification,
   };

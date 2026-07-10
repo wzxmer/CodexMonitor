@@ -40,6 +40,7 @@ const baseProps = {
   activeThreadId: null,
   accountRateLimits: null,
   activeTokenUsage: null,
+  showCodexUsage: true,
   usageShowRemaining: false,
   useTokenUsageStats: false,
   thirdPartyProviderUsage: null,
@@ -86,6 +87,13 @@ const baseProps = {
 };
 
 describe("Sidebar", () => {
+  it("hides usage without removing bottom actions", () => {
+    render(<Sidebar {...baseProps} showCodexUsage={false} />);
+
+    expect(screen.queryByText("用量")).toBeNull();
+    expect(screen.getByRole("button", { name: "打开设置" })).toBeTruthy();
+  });
+
   it("toggles the search bar from the header icon", () => {
     render(<Sidebar {...baseProps} />);
 
@@ -107,6 +115,19 @@ describe("Sidebar", () => {
     expect(reopened.value).toBe("");
   });
 
+  it("switches session manager mode without losing workspace search", () => {
+    render(<Sidebar {...baseProps} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
+    fireEvent.change(screen.getByLabelText("搜索会话"), { target: { value: "alpha" } });
+    fireEvent.click(screen.getByRole("button", { name: "本地会话管理" }));
+
+    expect(screen.getByLabelText("搜索本地会话")).toBeTruthy();
+    expect(screen.queryByLabelText("搜索会话")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "本地会话管理" }));
+    expect((screen.getByLabelText("搜索会话") as HTMLInputElement).value).toBe("alpha");
+  });
   it("opens thread sort menu from the header filter button", () => {
     const onSetThreadListSortKey = vi.fn();
     render(

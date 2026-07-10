@@ -8,6 +8,7 @@ import ListFilter from "lucide-react/dist/esm/icons/list-filter";
 import ListTree from "lucide-react/dist/esm/icons/list-tree";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import Search from "lucide-react/dist/esm/icons/search";
+import Library from "lucide-react/dist/esm/icons/library";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ThreadListOrganizeMode, ThreadListSortKey } from "../../../types";
 import {
@@ -20,6 +21,8 @@ import { useMenuController } from "../hooks/useMenuController";
 
 type SidebarHeaderProps = {
   onSelectHome: () => void;
+  sessionManagerActive: boolean;
+  onToggleSessionManager: () => void;
   onAddWorkspace: () => void;
   onToggleSearch: () => void;
   isSearchOpen: boolean;
@@ -34,6 +37,8 @@ type SidebarHeaderProps = {
 
 export function SidebarHeader({
   onSelectHome,
+  sessionManagerActive,
+  onToggleSessionManager,
   onAddWorkspace,
   onToggleSearch,
   isSearchOpen,
@@ -153,10 +158,21 @@ export function SidebarHeader({
           >
             <House aria-hidden />
           </button>
+          <button
+            className={`sidebar-home-toggle ds-tooltip-trigger${sessionManagerActive ? " is-active" : ""}`}
+            onClick={onToggleSessionManager}
+            aria-label={t("sessionManager.title")}
+            data-tooltip={t("sessionManager.title")}
+            data-tooltip-placement="bottom"
+            aria-pressed={sessionManagerActive}
+            type="button"
+          >
+            <Library aria-hidden />
+          </button>
         </div>
       </div>
       <div className="sidebar-header-actions">
-        <div className="sidebar-sort-menu" ref={sortMenuRef}>
+        {!sessionManagerActive && <div className="sidebar-sort-menu" ref={sortMenuRef}>
           <MenuTrigger
             isOpen={sortMenuOpen}
             activeClassName="is-active"
@@ -242,15 +258,15 @@ export function SidebarHeader({
               </PopoverMenuItem>
             </PopoverSurface>
           )}
-        </div>
+        </div>}
         <button
           className="ghost sidebar-refresh-toggle ds-tooltip-trigger"
           onClick={onRefreshAllThreads}
           data-tauri-drag-region="false"
-          aria-label={t("sidebar.refreshThreads")}
+          aria-label={sessionManagerActive ? t("sessionManager.refresh") : t("sidebar.refreshThreads")}
           type="button"
-          title={t("sidebar.refreshThreads")}
-          data-tooltip={t("sidebar.refreshThreads")}
+          title={sessionManagerActive ? t("sessionManager.refresh") : t("sidebar.refreshThreads")}
+          data-tooltip={sessionManagerActive ? t("sessionManager.refresh") : t("sidebar.refreshThreads")}
           data-tooltip-align="end"
           data-tooltip-placement="bottom"
           disabled={refreshDisabled}
@@ -261,7 +277,7 @@ export function SidebarHeader({
             aria-hidden
           />
         </button>
-        <button
+        {!sessionManagerActive && <button
           className={`ghost sidebar-search-toggle ds-tooltip-trigger${isSearchOpen ? " is-active" : ""}`}
           onClick={onToggleSearch}
           data-tauri-drag-region="false"
@@ -273,7 +289,7 @@ export function SidebarHeader({
           type="button"
         >
           <Search aria-hidden />
-        </button>
+        </button>}
       </div>
     </div>
   );

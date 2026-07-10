@@ -18,6 +18,7 @@ describe("useCodeCssVars", () => {
       codeFontSize: 12,
       messageFontFamily: '"Legacy Message Font", sans-serif',
       messageFontSize: 18,
+      processFontSize: 12,
       messageFontWeight: 650,
     } as AppSettings;
 
@@ -28,7 +29,8 @@ describe("useCodeCssVars", () => {
       '"Segoe UI", "LXGW WenKai Screen", system-ui, sans-serif';
     expect(rootStyle.getPropertyValue("--ui-font-family")).toBe(uiFontFamily);
     expect(rootStyle.getPropertyValue("--message-font-family")).toBe(uiFontFamily);
-    expect(rootStyle.getPropertyValue("--message-font-size")).toBe("15px");
+    expect(rootStyle.getPropertyValue("--message-font-size")).toBe("18px");
+    expect(rootStyle.getPropertyValue("--process-font-size")).toBe("12px");
     expect(rootStyle.getPropertyValue("--message-font-weight")).toBe("500");
     expect(rootStyle.getPropertyValue("--code-font-family")).toBe(
       '"JetBrains Mono", "LXGW WenKai Screen", ui-monospace, monospace, sans-serif, system-ui',

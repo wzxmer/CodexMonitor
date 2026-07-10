@@ -213,6 +213,17 @@
   outline-offset: 4px;
 }
 
+.messages-search-target.is-active-search-match.is-user-message-search-target {
+  outline: none;
+}
+
+.messages-search-target.is-active-search-match.is-user-message-search-target
+  > .message.user
+  .bubble {
+  outline: 2px solid color-mix(in srgb, var(--border-accent) 72%, transparent);
+  outline-offset: 4px;
+}
+
 .messages-toggle-pill {
   max-width: 100%;
 }
@@ -228,6 +239,13 @@
   font-size: 12px;
   line-height: 1.35;
   text-align: center;
+  cursor: pointer;
+}
+
+.messages-history-notice:hover {
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+  background: var(--surface-accent-soft);
 }
 
 .messages-reading-segmented {
@@ -2111,6 +2129,24 @@
   border-radius: 6px;
   font-size: 0.97em;
   cursor: text;
+}
+
+.messages .tool-group-toggle,
+.messages .tool-group-timestamp,
+.messages .tool-group-line-change-stats,
+.messages .tool-inline-summary,
+.messages .tool-inline-detail,
+.messages .explore-inline-item,
+.messages .working,
+.messages .turn-complete,
+.messages .message-interrupted-status,
+.messages .item-title,
+.messages .item-subtitle,
+.messages .item-status,
+.messages .item-body,
+.messages .file-change-header,
+.messages .file-change-path {
+  font-size: var(--process-font-size, 12px);
 }
 
 .message .markdown .message-file-link {

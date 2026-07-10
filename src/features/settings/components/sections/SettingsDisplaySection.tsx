@@ -13,6 +13,12 @@ import {
   DEFAULT_CODE_FONT_FAMILY,
   DEFAULT_UI_CJK_FONT_FAMILY,
   DEFAULT_UI_LATIN_FONT_FAMILY,
+  MESSAGE_FONT_SIZE_DEFAULT,
+  MESSAGE_FONT_SIZE_MAX,
+  MESSAGE_FONT_SIZE_MIN,
+  PROCESS_FONT_SIZE_DEFAULT,
+  PROCESS_FONT_SIZE_MAX,
+  PROCESS_FONT_SIZE_MIN,
   UI_CJK_FONT_FAMILY_PRESETS,
   UI_FONT_SIZE_DEFAULT,
   UI_FONT_SIZE_MAX,
@@ -21,6 +27,7 @@ import {
   UI_FONT_WEIGHT_MAX,
   UI_FONT_WEIGHT_MIN,
   UI_LATIN_FONT_FAMILY_PRESETS,
+  WINDOWS_UI_CJK_FONT_FAMILY,
 } from "@utils/fonts";
 import { listSystemFonts } from "@services/tauri";
 
@@ -74,7 +81,7 @@ const FONT_CLARITY_PRESETS: Array<{
   {
     id: "windows-clear",
     uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
-    uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
+    uiCjkFontFamily: WINDOWS_UI_CJK_FONT_FAMILY,
     uiFontWeight: 500,
   },
   {
@@ -100,6 +107,8 @@ type SettingsDisplaySectionProps = {
   uiLatinFontDraft?: string;
   uiCjkFontDraft?: string;
   uiFontSizeDraft?: number;
+  messageFontSizeDraft?: number;
+  processFontSizeDraft?: number;
   uiFontWeightDraft?: number;
   codeFontDraft: string;
   codeFontSizeDraft: number;
@@ -114,12 +123,17 @@ type SettingsDisplaySectionProps = {
   onCommitUiCjkFont?: () => Promise<void>;
   onSetUiFontSizeDraft?: Dispatch<SetStateAction<number>>;
   onCommitUiFontSize?: (nextSize: number) => Promise<void>;
+  onSetMessageFontSizeDraft?: Dispatch<SetStateAction<number>>;
+  onCommitMessageFontSize?: (nextSize: number) => Promise<void>;
+  onSetProcessFontSizeDraft?: Dispatch<SetStateAction<number>>;
+  onCommitProcessFontSize?: (nextSize: number) => Promise<void>;
   onSetUiFontWeightDraft?: Dispatch<SetStateAction<number>>;
   onCommitUiFontWeight?: (nextWeight: number) => Promise<void>;
   onSetCodeFontDraft: Dispatch<SetStateAction<string>>;
   onCommitCodeFont: () => Promise<void>;
   onSetCodeFontSizeDraft: Dispatch<SetStateAction<number>>;
   onCommitCodeFontSize: (nextSize: number) => Promise<void>;
+  onResetAllFontSizes?: () => Promise<void>;
   onTestNotificationSound: () => void;
   onTestSystemNotification: () => void;
 };
@@ -133,6 +147,8 @@ export function SettingsDisplaySection({
   uiLatinFontDraft = DEFAULT_UI_LATIN_FONT_FAMILY,
   uiCjkFontDraft = DEFAULT_UI_CJK_FONT_FAMILY,
   uiFontSizeDraft = UI_FONT_SIZE_DEFAULT,
+  messageFontSizeDraft = MESSAGE_FONT_SIZE_DEFAULT,
+  processFontSizeDraft = PROCESS_FONT_SIZE_DEFAULT,
   uiFontWeightDraft = UI_FONT_WEIGHT_DEFAULT,
   codeFontDraft,
   codeFontSizeDraft,
@@ -147,16 +163,22 @@ export function SettingsDisplaySection({
   onCommitUiCjkFont = async () => {},
   onSetUiFontSizeDraft = () => {},
   onCommitUiFontSize = async () => {},
+  onSetMessageFontSizeDraft = () => {},
+  onCommitMessageFontSize = async () => {},
+  onSetProcessFontSizeDraft = () => {},
+  onCommitProcessFontSize = async () => {},
   onSetUiFontWeightDraft = () => {},
   onCommitUiFontWeight = async () => {},
   onSetCodeFontDraft,
   onCommitCodeFont,
   onSetCodeFontSizeDraft,
   onCommitCodeFontSize,
+  onResetAllFontSizes = async () => {},
   onTestNotificationSound,
   onTestSystemNotification,
 }: SettingsDisplaySectionProps) {
   const { t } = useI18n();
+  const showCodexUsage = appSettings.showCodexUsage !== false;
   const languageOptions = [
     { value: "system", label: t("language.auto") },
     { value: "zh", label: t("language.zh") },
@@ -365,11 +387,28 @@ export function SettingsDisplaySection({
         </div>
       </div>
       <SettingsToggleRow
+        title={t("settings.display.showCodexUsageTitle")}
+        subtitle={t("settings.display.showCodexUsageSubtitle")}
+      >
+        <SettingsToggleSwitch
+          aria-label={t("settings.display.showCodexUsageTitle")}
+          pressed={showCodexUsage}
+          onClick={() =>
+            void onUpdateAppSettings({
+              ...appSettings,
+              showCodexUsage: !showCodexUsage,
+            })
+          }
+        />
+      </SettingsToggleRow>
+      <SettingsToggleRow
         title={t("settings.display.showRemainingTitle")}
         subtitle={t("settings.display.showRemainingSubtitle")}
       >
         <SettingsToggleSwitch
+          aria-label={t("settings.display.showRemainingTitle")}
           pressed={appSettings.usageShowRemaining}
+          disabled={!showCodexUsage}
           onClick={() =>
             void onUpdateAppSettings({
               ...appSettings,
@@ -615,6 +654,26 @@ export function SettingsDisplaySection({
         </div>
       </div>
       <div className="settings-field">
+        <div className="settings-field-row settings-field-row-between">
+          <div>
+            <div className="settings-field-label">
+              {t("settings.display.fontSizeCategories")}
+            </div>
+            <div className="settings-help">
+              {t("settings.display.fontSizeCategoriesHelp")}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="ghost settings-button-compact"
+            onClick={() => void onResetAllFontSizes()}
+          >
+            {t("settings.display.resetAllFontSizes")}
+          </button>
+        </div>
+      </div>
+      <div className="settings-font-size-grid">
+      <div className="settings-field">
         <label className="settings-field-label" htmlFor="ui-font-size">
           {t("settings.display.uiFontSize")}
         </label>
@@ -646,6 +705,110 @@ export function SettingsDisplaySection({
           </button>
         </div>
         <div className="settings-help">{t("settings.display.uiFontSizeHelp")}</div>
+      </div>
+      <div className="settings-field">
+        <label className="settings-field-label" htmlFor="message-font-size">
+          {t("settings.display.messageFontSize")}
+        </label>
+        <div className="settings-field-row">
+          <input
+            id="message-font-size"
+            type="range"
+            min={MESSAGE_FONT_SIZE_MIN}
+            max={MESSAGE_FONT_SIZE_MAX}
+            step={1}
+            className="settings-input settings-input--range"
+            value={messageFontSizeDraft}
+            onChange={(event) => {
+              const nextValue = Number(event.target.value);
+              onSetMessageFontSizeDraft(nextValue);
+              void onCommitMessageFontSize(nextValue);
+            }}
+          />
+          <div className="settings-scale-value">{messageFontSizeDraft}px</div>
+          <button
+            type="button"
+            className="ghost settings-button-compact"
+            onClick={() => {
+              onSetMessageFontSizeDraft(MESSAGE_FONT_SIZE_DEFAULT);
+              void onCommitMessageFontSize(MESSAGE_FONT_SIZE_DEFAULT);
+            }}
+          >
+            {t("common.reset")}
+          </button>
+        </div>
+        <div className="settings-help">
+          {t("settings.display.messageFontSizeHelp")}
+        </div>
+      </div>
+      <div className="settings-field">
+        <label className="settings-field-label" htmlFor="process-font-size">
+          {t("settings.display.processFontSize")}
+        </label>
+        <div className="settings-field-row">
+          <input
+            id="process-font-size"
+            type="range"
+            min={PROCESS_FONT_SIZE_MIN}
+            max={PROCESS_FONT_SIZE_MAX}
+            step={1}
+            className="settings-input settings-input--range"
+            value={processFontSizeDraft}
+            onChange={(event) => {
+              const nextValue = Number(event.target.value);
+              onSetProcessFontSizeDraft(nextValue);
+              void onCommitProcessFontSize(nextValue);
+            }}
+          />
+          <div className="settings-scale-value">{processFontSizeDraft}px</div>
+          <button
+            type="button"
+            className="ghost settings-button-compact"
+            onClick={() => {
+              onSetProcessFontSizeDraft(PROCESS_FONT_SIZE_DEFAULT);
+              void onCommitProcessFontSize(PROCESS_FONT_SIZE_DEFAULT);
+            }}
+          >
+            {t("common.reset")}
+          </button>
+        </div>
+        <div className="settings-help">
+          {t("settings.display.processFontSizeHelp")}
+        </div>
+      </div>
+      <div className="settings-field">
+        <label className="settings-field-label" htmlFor="code-font-size">
+          {t("settings.display.codeFontSize")}
+        </label>
+        <div className="settings-field-row">
+          <input
+            id="code-font-size"
+            type="range"
+            min={CODE_FONT_SIZE_MIN}
+            max={CODE_FONT_SIZE_MAX}
+            step={1}
+            className="settings-input settings-input--range"
+            value={codeFontSizeDraft}
+            onChange={(event) => {
+              const nextValue = Number(event.target.value);
+              onSetCodeFontSizeDraft(nextValue);
+              void onCommitCodeFontSize(nextValue);
+            }}
+          />
+          <div className="settings-scale-value">{codeFontSizeDraft}px</div>
+          <button
+            type="button"
+            className="ghost settings-button-compact"
+            onClick={() => {
+              onSetCodeFontSizeDraft(CODE_FONT_SIZE_DEFAULT);
+              void onCommitCodeFontSize(CODE_FONT_SIZE_DEFAULT);
+            }}
+          >
+            {t("common.reset")}
+          </button>
+        </div>
+        <div className="settings-help">{t("settings.display.codeFontSizeHelp")}</div>
+      </div>
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="ui-font-weight">
@@ -737,39 +900,6 @@ export function SettingsDisplaySection({
           </button>
         </div>
         <div className="settings-help">{t("settings.display.codeFontHelp")}</div>
-      </div>
-      <div className="settings-field">
-        <label className="settings-field-label" htmlFor="code-font-size">
-          {t("settings.display.codeFontSize")}
-        </label>
-        <div className="settings-field-row">
-          <input
-            id="code-font-size"
-            type="range"
-            min={CODE_FONT_SIZE_MIN}
-            max={CODE_FONT_SIZE_MAX}
-            step={1}
-            className="settings-input settings-input--range"
-            value={codeFontSizeDraft}
-            onChange={(event) => {
-              const nextValue = Number(event.target.value);
-              onSetCodeFontSizeDraft(nextValue);
-              void onCommitCodeFontSize(nextValue);
-            }}
-          />
-          <div className="settings-scale-value">{codeFontSizeDraft}px</div>
-          <button
-            type="button"
-            className="ghost settings-button-compact"
-            onClick={() => {
-              onSetCodeFontSizeDraft(CODE_FONT_SIZE_DEFAULT);
-              void onCommitCodeFontSize(CODE_FONT_SIZE_DEFAULT);
-            }}
-          >
-            {t("common.reset")}
-          </button>
-        </div>
-        <div className="settings-help">{t("settings.display.codeFontSizeHelp")}</div>
       </div>
       <div className="settings-subsection-title">{t("settings.display.sound")}</div>
       <div className="settings-subsection-subtitle">{t("settings.display.soundSubtitle")}</div>

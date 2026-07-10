@@ -54,11 +54,11 @@ describe("Messages", () => {
     exportMarkdownFileMock.mockReset();
   });
 
-  it("shows a notice when loaded messages exceed the initial history limit", () => {
+  it("renders only the latest configured history batch initially", () => {
     const items: ConversationItem[] = Array.from({ length: 3 }, (_, index) => ({
       id: `msg-${index}`,
       kind: "message",
-      role: "assistant",
+      role: "user",
       text: `Message ${index}`,
     }));
 
@@ -74,7 +74,137 @@ describe("Messages", () => {
       />,
     );
 
-    expect(screen.getByText(/超过初始加载上限 2 条/)).toBeTruthy();
+    expect(screen.queryByText("Message 0")).toBeNull();
+    expect(screen.getByText("Message 1")).toBeTruthy();
+    expect(screen.getByText("Message 2")).toBeTruthy();
+    expect(screen.getByText(/上方还有 1 条/)).toBeTruthy();
+  });
+
+  it("keeps unlimited history DOM bounded to the safe default batch", () => {
+    const items: ConversationItem[] = Array.from({ length: 3000 }, (_, index) => ({
+      id: `large-msg-${index}`,
+      kind: "message",
+      role: "user",
+      text: `Large message ${index}`,
+    }));
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-large"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        chatHistoryScrollbackItems={null}
+      />,
+    );
+
+    expect(container.querySelectorAll(".message")).toHaveLength(200);
+    expect(screen.queryByText("Large message 0")).toBeNull();
+    expect(screen.getByText("Large message 2999")).toBeTruthy();
+    expect(screen.getByText(/上方还有 2800 条/)).toBeTruthy();
+  });
+
+  it("recalculates the visible history batch when the setting changes", () => {
+    const items: ConversationItem[] = Array.from({ length: 5 }, (_, index) => ({
+      id: `resize-msg-${index}`,
+      kind: "message",
+      role: "user",
+      text: `Resize message ${index}`,
+    }));
+    const renderMessages = (batchSize: number) => (
+      <Messages
+        items={items}
+        threadId="thread-resize"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        chatHistoryScrollbackItems={batchSize}
+      />
+    );
+
+    const { container, rerender } = render(renderMessages(2));
+    expect(container.querySelectorAll(".message")).toHaveLength(2);
+
+    rerender(renderMessages(4));
+    expect(container.querySelectorAll(".message")).toHaveLength(4);
+    expect(screen.getByText("Resize message 1")).toBeTruthy();
+  });
+
+  it("loads earlier history when scrolling to the top", async () => {
+    const items: ConversationItem[] = Array.from({ length: 4 }, (_, index) => ({
+      id: `msg-${index}`,
+      kind: "message",
+      role: "user",
+      text: `Message ${index}`,
+    }));
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        chatHistoryScrollbackItems={2}
+      />,
+    );
+
+    const messages = container.querySelector(".messages") as HTMLDivElement;
+    let scrollHeightReads = 0;
+    Object.defineProperties(messages, {
+      scrollTop: { configurable: true, writable: true, value: 0 },
+      scrollHeight: {
+        configurable: true,
+        get: () => (scrollHeightReads++ < 2 ? 800 : 1200),
+      },
+      clientHeight: { configurable: true, value: 400 },
+    });
+    scrollHeightReads = 0;
+    fireEvent.scroll(messages);
+
+    await waitFor(() => {
+      expect(screen.getByText("Message 0")).toBeTruthy();
+      expect(screen.getByText("Message 1")).toBeTruthy();
+      expect(messages.scrollTop).toBe(400);
+    });
+  });
+
+  it("reveals hidden history when session search finds it", async () => {
+    const scrollIntoViewMock = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+    const items: ConversationItem[] = Array.from({ length: 4 }, (_, index) => ({
+      id: `msg-${index}`,
+      kind: "message",
+      role: "user",
+      text: `Searchable message ${index}`,
+    }));
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        chatHistoryScrollbackItems={2}
+      />,
+    );
+
+    expect(screen.queryByText("Searchable message 0")).toBeNull();
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    fireEvent.change(screen.getByLabelText("搜索当前会话"), {
+      target: { value: "message 0" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Searchable message 0")).toBeTruthy();
+      expect(scrollIntoViewMock).toHaveBeenCalled();
+    });
   });
 
   it("renders structured process items for skills and agents", () => {
@@ -150,6 +280,8 @@ describe("Messages", () => {
       expect(screen.getByText("1/1")).toBeTruthy();
       expect(scrollIntoViewMock).toHaveBeenCalled();
     });
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
   });
 
   it("renders image grid above message text and opens lightbox", () => {
@@ -410,6 +542,115 @@ describe("Messages", () => {
       ["data:image/png;base64,AAA"],
     );
     expect(screen.queryByLabelText("编辑消息")).toBeNull();
+  });
+
+  it("marks user search matches so the highlight can follow the bubble", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    render(
+      <Messages
+        items={[
+          {
+            id: "msg-user-target",
+            kind: "message",
+            role: "user",
+            text: "User target content",
+          },
+        ]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    fireEvent.change(screen.getByLabelText("搜索当前会话"), {
+      target: { value: "target" },
+    });
+
+    await waitFor(() => {
+      const target = screen
+        .getByText("User target content")
+        .closest(".messages-search-target");
+      expect(target?.className).toContain("is-active-search-match");
+      expect(target?.className).toContain("is-user-message-search-target");
+    });
+  });
+
+  it("clears current-session search when switching threads", async () => {
+    const scrollIntoViewMock = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+    const renderMessages = (threadId: string, text: string) => (
+      <Messages
+        items={[
+          {
+            id: `${threadId}-message`,
+            kind: "message" as const,
+            role: "assistant" as const,
+            text,
+          },
+        ]}
+        threadId={threadId}
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />
+    );
+    const { rerender } = render(renderMessages("thread-1", "Shared target in thread one"));
+
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    fireEvent.change(screen.getByLabelText("搜索当前会话"), {
+      target: { value: "target" },
+    });
+    await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalled());
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+    scrollIntoViewMock.mockClear();
+
+    rerender(renderMessages("thread-2", "Shared target in thread two"));
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText("搜索当前会话")).toBeNull();
+    });
+    expect(scrollIntoViewMock).not.toHaveBeenCalled();
+  });
+
+  it("does not repeat search positioning after an unrelated rerender", async () => {
+    const scrollIntoViewMock = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+    const makeItems = (): ConversationItem[] => [
+      {
+        id: "stable-target",
+        kind: "message",
+        role: "assistant",
+        text: "Stable target output",
+      },
+    ];
+    const renderMessages = (items: ConversationItem[]) => (
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />
+    );
+    const { rerender } = render(renderMessages(makeItems()));
+
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    fireEvent.change(screen.getByLabelText("搜索当前会话"), {
+      target: { value: "target" },
+    });
+    await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalled());
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+    scrollIntoViewMock.mockClear();
+
+    rerender(renderMessages(makeItems()));
+    await Promise.resolve();
+
+    expect(scrollIntoViewMock).not.toHaveBeenCalled();
   });
 
   it("does not offer edit and resend for successful history", () => {
