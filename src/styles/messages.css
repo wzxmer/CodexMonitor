@@ -986,8 +986,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 34px;
-  padding: 0 12px;
+  min-height: 38px;
+  padding: 0 16px;
   border: 1px solid var(--messages-process-border);
   border-radius: 11px;
   background: color-mix(in srgb, var(--conversation-assistant-accent) 10%, var(--messages-solid-control));
@@ -1002,8 +1002,8 @@
   flex: 1 1 auto;
   min-width: 0;
   width: auto;
-  min-height: 32px;
-  padding: 0;
+  min-height: 36px;
+  padding: 2px 0;
   border: 0;
   border-radius: 7px;
   background: transparent;

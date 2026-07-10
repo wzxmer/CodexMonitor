@@ -154,7 +154,6 @@ describe("SettingsDisplaySection", () => {
     const onSetUiLatinFontDraft = vi.fn();
     const onSetUiCjkFontDraft = vi.fn();
     const onSetUiFontWeightDraft = vi.fn();
-    const onSetMessageFontWeightDraft = vi.fn();
 
     render(
       <SettingsDisplaySection
@@ -182,7 +181,6 @@ describe("SettingsDisplaySection", () => {
         uiLatinFontDraft="Arial, sans-serif"
         uiCjkFontDraft="SimSun, serif"
         uiFontWeightDraft={400}
-        messageFontWeightDraft={450}
         codeFontDraft=""
         codeFontSizeDraft={11}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -198,8 +196,6 @@ describe("SettingsDisplaySection", () => {
         onCommitUiFontWeight={vi.fn(async () => {})}
         onSetCodeFontDraft={vi.fn() as any}
         onCommitCodeFont={vi.fn(async () => {})}
-        onSetMessageFontWeightDraft={onSetMessageFontWeightDraft as any}
-        onCommitMessageFontWeight={vi.fn(async () => {})}
         onSetCodeFontSizeDraft={vi.fn() as any}
         onCommitCodeFontSize={vi.fn(async () => {})}
         onTestNotificationSound={vi.fn()}
@@ -214,13 +210,11 @@ describe("SettingsDisplaySection", () => {
     );
     expect(onSetUiCjkFontDraft).toHaveBeenCalledWith(DEFAULT_UI_CJK_FONT_FAMILY);
     expect(onSetUiFontWeightDraft).toHaveBeenCalledWith(500);
-    expect(onSetMessageFontWeightDraft).toHaveBeenCalledWith(500);
     expect(onUpdateAppSettings).toHaveBeenCalledWith(
       expect.objectContaining({
         uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
         uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
         uiFontWeight: 500,
-        messageFontWeight: 500,
       }),
     );
   });
@@ -254,7 +248,6 @@ describe("SettingsDisplaySection", () => {
         uiLatinFontDraft={DEFAULT_UI_LATIN_FONT_FAMILY}
         uiCjkFontDraft={DEFAULT_UI_CJK_FONT_FAMILY}
         uiFontWeightDraft={400}
-        messageFontWeightDraft={450}
         codeFontDraft=""
         codeFontSizeDraft={11}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -301,7 +294,6 @@ describe("SettingsDisplaySection", () => {
         uiLatinFontDraft={DEFAULT_UI_LATIN_FONT_FAMILY}
         uiCjkFontDraft={DEFAULT_UI_CJK_FONT_FAMILY}
         uiFontWeightDraft={500}
-        messageFontWeightDraft={500}
         codeFontDraft=""
         codeFontSizeDraft={11}
         onUpdateAppSettings={onUpdateAppSettings}
@@ -323,6 +315,49 @@ describe("SettingsDisplaySection", () => {
         .getByRole("radio", { name: /Windows 清晰/ })
         .getAttribute("aria-checked"),
     ).toBe("true");
+  });
+
+  it("does not expose conversation-specific font controls", () => {
+    render(
+      <SettingsDisplaySection
+        appSettings={
+          ({
+            theme: "system",
+            usageShowRemaining: false,
+            showMessageFilePath: true,
+            chatHistoryScrollbackItems: 200,
+            threadTitleAutogenerationEnabled: false,
+            uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
+            uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
+            uiFontWeight: 400,
+            codeFontFamily: "",
+            codeFontSize: 11,
+            notificationSoundsEnabled: true,
+            systemNotificationsEnabled: true,
+          } as unknown) as AppSettings
+        }
+        reduceTransparency={false}
+        scaleShortcutTitle=""
+        scaleShortcutText=""
+        scaleDraft="100%"
+        codeFontDraft=""
+        codeFontSizeDraft={11}
+        onUpdateAppSettings={vi.fn(async () => {})}
+        onToggleTransparency={vi.fn()}
+        onSetScaleDraft={vi.fn() as any}
+        onCommitScale={vi.fn(async () => {})}
+        onResetScale={vi.fn(async () => {})}
+        onSetCodeFontDraft={vi.fn() as any}
+        onCommitCodeFont={vi.fn(async () => {})}
+        onSetCodeFontSizeDraft={vi.fn() as any}
+        onCommitCodeFontSize={vi.fn(async () => {})}
+        onTestNotificationSound={vi.fn()}
+        onTestSystemNotification={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText("消息字号")).toBeNull();
+    expect(screen.queryByLabelText("消息字重")).toBeNull();
   });
 
   it("keeps notification test controls available", async () => {

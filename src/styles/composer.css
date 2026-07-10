@@ -812,6 +812,21 @@
   border-radius: 999px;
   background: var(--cm-surface-panel-strong);
   width: max-content;
+  transition: background-color 0.15s ease;
+}
+
+.composer-select-wrap:has(.composer-select-trigger:hover:not(:disabled)) {
+  background: var(--cm-surface-panel-hover);
+}
+
+.composer-select-wrap:has(.composer-select-trigger:active:not(:disabled)) {
+  background: var(--cm-surface-panel-hover);
+}
+
+.composer-select-trigger:hover:not(:disabled),
+.composer-select-trigger:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
 }
 
 .composer-select-wrap:has(.composer-select)::after {
@@ -966,6 +981,13 @@
 .composer-model-refresh:hover:not(:disabled) {
   color: var(--text-primary);
   background: var(--surface-hover);
+  transform: none;
+  box-shadow: none;
+}
+
+.composer-model-refresh:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
 }
 
 .composer-model-refresh:disabled {

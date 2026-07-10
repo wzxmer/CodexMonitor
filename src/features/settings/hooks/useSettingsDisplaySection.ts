@@ -8,8 +8,6 @@ import {
   DEFAULT_UI_FONT_FAMILY,
   DEFAULT_UI_LATIN_FONT_FAMILY,
   clampCodeFontSize,
-  clampMessageFontSize,
-  clampMessageFontWeight,
   clampUiFontSize,
   clampUiFontWeight,
   normalizeFontFamily,
@@ -38,8 +36,6 @@ export type SettingsDisplaySectionProps = {
   uiFontSizeDraft: number;
   uiFontWeightDraft: number;
   codeFontDraft: string;
-  messageFontSizeDraft: number;
-  messageFontWeightDraft: number;
   codeFontSizeDraft: number;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
   onToggleTransparency: (value: boolean) => void;
@@ -58,10 +54,6 @@ export type SettingsDisplaySectionProps = {
   onCommitUiFontWeight: (nextWeight: number) => Promise<void>;
   onSetCodeFontDraft: Dispatch<SetStateAction<string>>;
   onCommitCodeFont: () => Promise<void>;
-  onSetMessageFontSizeDraft: Dispatch<SetStateAction<number>>;
-  onCommitMessageFontSize: (nextSize: number) => Promise<void>;
-  onSetMessageFontWeightDraft: Dispatch<SetStateAction<number>>;
-  onCommitMessageFontWeight: (nextWeight: number) => Promise<void>;
   onSetCodeFontSizeDraft: Dispatch<SetStateAction<number>>;
   onCommitCodeFontSize: (nextSize: number) => Promise<void>;
   onTestNotificationSound: () => void;
@@ -91,12 +83,6 @@ export const useSettingsDisplaySection = ({
     appSettings.uiFontWeight,
   );
   const [codeFontDraft, setCodeFontDraft] = useState(appSettings.codeFontFamily);
-  const [messageFontSizeDraft, setMessageFontSizeDraft] = useState(
-    appSettings.messageFontSize,
-  );
-  const [messageFontWeightDraft, setMessageFontWeightDraft] = useState(
-    appSettings.messageFontWeight,
-  );
   const [codeFontSizeDraft, setCodeFontSizeDraft] = useState(appSettings.codeFontSize);
 
   useEffect(() => {
@@ -126,14 +112,6 @@ export const useSettingsDisplaySection = ({
   useEffect(() => {
     setCodeFontDraft(appSettings.codeFontFamily);
   }, [appSettings.codeFontFamily]);
-
-  useEffect(() => {
-    setMessageFontSizeDraft(appSettings.messageFontSize);
-  }, [appSettings.messageFontSize]);
-
-  useEffect(() => {
-    setMessageFontWeightDraft(appSettings.messageFontWeight);
-  }, [appSettings.messageFontWeight]);
 
   useEffect(() => {
     setCodeFontSizeDraft(appSettings.codeFontSize);
@@ -251,30 +229,6 @@ export const useSettingsDisplaySection = ({
     });
   };
 
-  const handleCommitMessageFontSize = async (nextSize: number) => {
-    const clampedSize = clampMessageFontSize(nextSize);
-    setMessageFontSizeDraft(clampedSize);
-    if (clampedSize === appSettings.messageFontSize) {
-      return;
-    }
-    await onUpdateAppSettings({
-      ...appSettings,
-      messageFontSize: clampedSize,
-    });
-  };
-
-  const handleCommitMessageFontWeight = async (nextWeight: number) => {
-    const clampedWeight = clampMessageFontWeight(nextWeight);
-    setMessageFontWeightDraft(clampedWeight);
-    if (clampedWeight === appSettings.messageFontWeight) {
-      return;
-    }
-    await onUpdateAppSettings({
-      ...appSettings,
-      messageFontWeight: clampedWeight,
-    });
-  };
-
   const handleCommitCodeFontSize = async (nextSize: number) => {
     const clampedSize = clampCodeFontSize(nextSize);
     setCodeFontSizeDraft(clampedSize);
@@ -299,8 +253,6 @@ export const useSettingsDisplaySection = ({
     uiFontSizeDraft,
     uiFontWeightDraft,
     codeFontDraft,
-    messageFontSizeDraft,
-    messageFontWeightDraft,
     codeFontSizeDraft,
     onUpdateAppSettings,
     onToggleTransparency,
@@ -319,10 +271,6 @@ export const useSettingsDisplaySection = ({
     onCommitUiFontWeight: handleCommitUiFontWeight,
     onSetCodeFontDraft: setCodeFontDraft,
     onCommitCodeFont: handleCommitCodeFont,
-    onSetMessageFontSizeDraft: setMessageFontSizeDraft,
-    onCommitMessageFontSize: handleCommitMessageFontSize,
-    onSetMessageFontWeightDraft: setMessageFontWeightDraft,
-    onCommitMessageFontWeight: handleCommitMessageFontWeight,
     onSetCodeFontSizeDraft: setCodeFontSizeDraft,
     onCommitCodeFontSize: handleCommitCodeFontSize,
     onTestNotificationSound,

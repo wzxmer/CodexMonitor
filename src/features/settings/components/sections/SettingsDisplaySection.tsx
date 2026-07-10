@@ -13,12 +13,6 @@ import {
   DEFAULT_CODE_FONT_FAMILY,
   DEFAULT_UI_CJK_FONT_FAMILY,
   DEFAULT_UI_LATIN_FONT_FAMILY,
-  MESSAGE_FONT_SIZE_DEFAULT,
-  MESSAGE_FONT_SIZE_MAX,
-  MESSAGE_FONT_SIZE_MIN,
-  MESSAGE_FONT_WEIGHT_DEFAULT,
-  MESSAGE_FONT_WEIGHT_MAX,
-  MESSAGE_FONT_WEIGHT_MIN,
   UI_CJK_FONT_FAMILY_PRESETS,
   UI_FONT_SIZE_DEFAULT,
   UI_FONT_SIZE_MAX,
@@ -70,35 +64,30 @@ const FONT_CLARITY_PRESETS: Array<{
   uiLatinFontFamily: string;
   uiCjkFontFamily: string;
   uiFontWeight: number;
-  messageFontWeight: number;
 }> = [
   {
     id: "standard",
     uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
     uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
     uiFontWeight: UI_FONT_WEIGHT_DEFAULT,
-    messageFontWeight: MESSAGE_FONT_WEIGHT_DEFAULT,
   },
   {
     id: "windows-clear",
     uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
     uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
     uiFontWeight: 500,
-    messageFontWeight: 500,
   },
   {
     id: "bold-reading",
     uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
     uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
     uiFontWeight: 550,
-    messageFontWeight: 550,
   },
   {
     id: "light",
     uiLatinFontFamily: DEFAULT_UI_LATIN_FONT_FAMILY,
     uiCjkFontFamily: DEFAULT_UI_CJK_FONT_FAMILY,
     uiFontWeight: 400,
-    messageFontWeight: 450,
   },
 ];
 
@@ -113,8 +102,6 @@ type SettingsDisplaySectionProps = {
   uiFontSizeDraft?: number;
   uiFontWeightDraft?: number;
   codeFontDraft: string;
-  messageFontSizeDraft?: number;
-  messageFontWeightDraft?: number;
   codeFontSizeDraft: number;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
   onToggleTransparency: (value: boolean) => void;
@@ -131,10 +118,6 @@ type SettingsDisplaySectionProps = {
   onCommitUiFontWeight?: (nextWeight: number) => Promise<void>;
   onSetCodeFontDraft: Dispatch<SetStateAction<string>>;
   onCommitCodeFont: () => Promise<void>;
-  onSetMessageFontSizeDraft?: Dispatch<SetStateAction<number>>;
-  onCommitMessageFontSize?: (nextSize: number) => Promise<void>;
-  onSetMessageFontWeightDraft?: Dispatch<SetStateAction<number>>;
-  onCommitMessageFontWeight?: (nextWeight: number) => Promise<void>;
   onSetCodeFontSizeDraft: Dispatch<SetStateAction<number>>;
   onCommitCodeFontSize: (nextSize: number) => Promise<void>;
   onTestNotificationSound: () => void;
@@ -152,8 +135,6 @@ export function SettingsDisplaySection({
   uiFontSizeDraft = UI_FONT_SIZE_DEFAULT,
   uiFontWeightDraft = UI_FONT_WEIGHT_DEFAULT,
   codeFontDraft,
-  messageFontSizeDraft = MESSAGE_FONT_SIZE_DEFAULT,
-  messageFontWeightDraft = MESSAGE_FONT_WEIGHT_DEFAULT,
   codeFontSizeDraft,
   onUpdateAppSettings,
   onToggleTransparency,
@@ -170,10 +151,6 @@ export function SettingsDisplaySection({
   onCommitUiFontWeight = async () => {},
   onSetCodeFontDraft,
   onCommitCodeFont,
-  onSetMessageFontSizeDraft = () => {},
-  onCommitMessageFontSize = async () => {},
-  onSetMessageFontWeightDraft = () => {},
-  onCommitMessageFontWeight = async () => {},
   onSetCodeFontSizeDraft,
   onCommitCodeFontSize,
   onTestNotificationSound,
@@ -240,13 +217,11 @@ export function SettingsDisplaySection({
     onSetUiLatinFontDraft(preset.uiLatinFontFamily);
     onSetUiCjkFontDraft(preset.uiCjkFontFamily);
     onSetUiFontWeightDraft(preset.uiFontWeight);
-    onSetMessageFontWeightDraft(preset.messageFontWeight);
     void onUpdateAppSettings({
       ...appSettings,
       uiLatinFontFamily: preset.uiLatinFontFamily,
       uiCjkFontFamily: preset.uiCjkFontFamily,
       uiFontWeight: preset.uiFontWeight,
-      messageFontWeight: preset.messageFontWeight,
     });
   };
 
@@ -255,8 +230,7 @@ export function SettingsDisplaySection({
       (preset) =>
         preset.uiLatinFontFamily === appSettings.uiLatinFontFamily &&
         preset.uiCjkFontFamily === appSettings.uiCjkFontFamily &&
-        preset.uiFontWeight === appSettings.uiFontWeight &&
-        preset.messageFontWeight === appSettings.messageFontWeight,
+        preset.uiFontWeight === appSettings.uiFontWeight,
     )?.id ?? null;
   const activeStylePresetId =
     CONVERSATION_STYLE_PRESETS.find((preset) =>
@@ -763,72 +737,6 @@ export function SettingsDisplaySection({
           </button>
         </div>
         <div className="settings-help">{t("settings.display.codeFontHelp")}</div>
-      </div>
-      <div className="settings-field">
-        <label className="settings-field-label" htmlFor="message-font-size">
-          {t("settings.display.messageFontSize")}
-        </label>
-        <div className="settings-field-row">
-          <input
-            id="message-font-size"
-            type="range"
-            min={MESSAGE_FONT_SIZE_MIN}
-            max={MESSAGE_FONT_SIZE_MAX}
-            step={1}
-            className="settings-input settings-input--range"
-            value={messageFontSizeDraft}
-            onChange={(event) => {
-              const nextValue = Number(event.target.value);
-              onSetMessageFontSizeDraft(nextValue);
-              void onCommitMessageFontSize(nextValue);
-            }}
-          />
-          <div className="settings-scale-value">{messageFontSizeDraft}px</div>
-          <button
-            type="button"
-            className="ghost settings-button-compact"
-            onClick={() => {
-              onSetMessageFontSizeDraft(MESSAGE_FONT_SIZE_DEFAULT);
-              void onCommitMessageFontSize(MESSAGE_FONT_SIZE_DEFAULT);
-            }}
-          >
-            {t("common.reset")}
-          </button>
-        </div>
-        <div className="settings-help">{t("settings.display.messageFontSizeHelp")}</div>
-      </div>
-      <div className="settings-field">
-        <label className="settings-field-label" htmlFor="message-font-weight">
-          {t("settings.display.messageFontWeight")}
-        </label>
-        <div className="settings-field-row">
-          <input
-            id="message-font-weight"
-            type="range"
-            min={MESSAGE_FONT_WEIGHT_MIN}
-            max={MESSAGE_FONT_WEIGHT_MAX}
-            step={50}
-            className="settings-input settings-input--range"
-            value={messageFontWeightDraft}
-            onChange={(event) => {
-              const nextValue = Number(event.target.value);
-              onSetMessageFontWeightDraft(nextValue);
-              void onCommitMessageFontWeight(nextValue);
-            }}
-          />
-          <div className="settings-scale-value">{messageFontWeightDraft}</div>
-          <button
-            type="button"
-            className="ghost settings-button-compact"
-            onClick={() => {
-              onSetMessageFontWeightDraft(MESSAGE_FONT_WEIGHT_DEFAULT);
-              void onCommitMessageFontWeight(MESSAGE_FONT_WEIGHT_DEFAULT);
-            }}
-          >
-            {t("common.reset")}
-          </button>
-        </div>
-        <div className="settings-help">{t("settings.display.messageFontWeightHelp")}</div>
       </div>
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="code-font-size">
