@@ -24,4 +24,13 @@ describe("composer select interaction styles", () => {
     const elevationOverrides = composerCss.match(/transform: none;\s*box-shadow: none;/g);
     expect(elevationOverrides?.length).toBeGreaterThanOrEqual(3);
   });
+
+  it("keeps the model caret clear of refresh and fast controls", () => {
+    expect(composerCss).toContain(
+      ".composer-select-wrap--model:has(.composer-model-refresh):not(:has(.composer-fast-indicator))::after",
+    );
+    expect(composerCss).toContain(
+      ".composer-select-wrap--model:has(.composer-model-refresh):has(.composer-fast-indicator)::after",
+    );
+  });
 });

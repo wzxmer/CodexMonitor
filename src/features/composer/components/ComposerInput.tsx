@@ -48,6 +48,7 @@ type ComposerInputProps = {
   onAddAttachment?: () => void;
   onAttachImages?: (paths: string[]) => void;
   onRemoveAttachment?: (path: string) => void;
+  onRestoreTextAttachment?: (path: string, text: string) => void;
   onTextChange: (next: string, selectionStart: number | null) => void;
   onTextPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   onSelectionChange: (selectionStart: number | null) => void;
@@ -108,6 +109,7 @@ export function ComposerInput({
   onAddAttachment,
   onAttachImages,
   onRemoveAttachment,
+  onRestoreTextAttachment,
   onTextChange,
   onTextPaste,
   onSelectionChange,
@@ -343,6 +345,7 @@ export function ComposerInput({
           attachments={attachments}
           disabled={disabled}
           onRemoveAttachment={onRemoveAttachment}
+          onRestoreTextAttachment={onRestoreTextAttachment}
         />
         <div className="composer-input-row">
           <button

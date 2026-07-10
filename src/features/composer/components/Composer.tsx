@@ -50,6 +50,11 @@ import { isMacPlatform } from "../../../utils/platformPaths";
 import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
 import { getCompactionCyclePercent } from "@/features/threads/utils/contextUsage";
 import {
+  analyzeLargePaste,
+  createPastedTextAttachment,
+  normalizeLargePasteText,
+} from "../utils/largePaste";
+import {
   buildSkillInsertion,
   resolveSkillSuggestion,
 } from "../utils/skillSuggestions";
@@ -174,6 +179,7 @@ const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
   fenceWrapSelection: false,
   autoWrapPasteMultiline: false,
   autoWrapPasteCodeLike: false,
+  largePasteBehavior: "smart",
   continueListOnShiftEnter: false,
 };
 
@@ -307,6 +313,7 @@ export const Composer = memo(function Composer({
     fenceWrapSelection,
     autoWrapPasteMultiline,
     autoWrapPasteCodeLike,
+    largePasteBehavior = "smart",
     continueListOnShiftEnter,
   } = editorSettings;
 
@@ -513,11 +520,22 @@ export const Composer = memo(function Composer({
       if (disabled) {
         return;
       }
-      if (!autoWrapPasteMultiline && !autoWrapPasteCodeLike) {
-        return;
-      }
       const pasted = event.clipboardData?.getData("text/plain") ?? "";
       if (!pasted) {
+        return;
+      }
+      const normalized = normalizeLargePasteText(pasted);
+      const largePaste = analyzeLargePaste(normalized);
+      if (
+        largePasteBehavior === "smart" &&
+        largePaste.shouldAttach &&
+        onAttachImages
+      ) {
+        event.preventDefault();
+        onAttachImages([createPastedTextAttachment(normalized)]);
+        return;
+      }
+      if (!autoWrapPasteMultiline && !autoWrapPasteCodeLike) {
         return;
       }
       const textarea = textareaRef.current;
@@ -529,28 +547,28 @@ export const Composer = memo(function Composer({
       if (isCursorInsideFence(text, start)) {
         return;
       }
-      const normalized = normalizePastedText(pasted);
-      if (!normalized) {
+      const normalizedForFence = normalizePastedText(pasted);
+      if (!normalizedForFence) {
         return;
       }
-      const isMultiline = normalized.includes("\n");
+      const isMultiline = normalizedForFence.includes("\n");
       if (isMultiline && !autoWrapPasteMultiline) {
         return;
       }
       if (
         !isMultiline &&
-        !(autoWrapPasteCodeLike && isCodeLikeSingleLine(normalized))
+        !(autoWrapPasteCodeLike && isCodeLikeSingleLine(normalizedForFence))
       ) {
         return;
       }
       event.preventDefault();
       const indent = getLineIndent(text, start);
       const content = indent
-        ? normalized
+        ? normalizedForFence
             .split("\n")
             .map((line) => `${indent}${line}`)
             .join("\n")
-        : normalized;
+        : normalizedForFence;
       const before = text.slice(0, start);
       const after = text.slice(end);
       const block = `${indent}\`\`\`\n${content}\n${indent}\`\`\``;
@@ -562,12 +580,25 @@ export const Composer = memo(function Composer({
       applyTextInsertion,
       autoWrapPasteCodeLike,
       autoWrapPasteMultiline,
+      largePasteBehavior,
+      onAttachImages,
       disabled,
       text,
       textareaRef,
     ],
   );
 
+  const handleRestoreTextAttachment = useCallback(
+    (path: string, restoredText: string) => {
+      const textarea = textareaRef.current;
+      const start = textarea?.selectionStart ?? text.length;
+      const end = textarea?.selectionEnd ?? start;
+      const nextText = `${text.slice(0, start)}${restoredText}${text.slice(end)}`;
+      applyTextInsertion(nextText, start + restoredText.length);
+      onRemoveImage?.(path);
+    },
+    [applyTextInsertion, onRemoveImage, text, textareaRef],
+  );
   const tryExpandFence = useCallback(
     (start: number, end: number) => {
       if (start !== end && !fenceWrapSelection) {
@@ -697,6 +728,7 @@ export const Composer = memo(function Composer({
         onAddAttachment={onPickImages}
         onAttachImages={onAttachImages}
         onRemoveAttachment={onRemoveImage}
+        onRestoreTextAttachment={handleRestoreTextAttachment}
         onTextChange={handleTextChangeWithHistory}
         onSelectionChange={handleSelectionChange}
         onTextPaste={handleTextPaste}

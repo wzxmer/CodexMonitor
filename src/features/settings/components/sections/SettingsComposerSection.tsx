@@ -177,7 +177,30 @@ export function SettingsComposerSection({
       </SettingsToggleRow>
       <div className="settings-divider" />
       <div className="settings-subsection-title">{t("settings.composer.paste")}</div>
-      <SettingsToggleRow
+      <div className="settings-field">
+        <label className="settings-field-label" htmlFor="composer-large-paste-behavior">
+          {t("settings.composer.largePasteTitle")}
+        </label>
+        <select
+          id="composer-large-paste-behavior"
+          className="settings-select"
+          value={appSettings.composerLargePasteBehavior ?? "smart"}
+          onChange={(event) =>
+            void onUpdateAppSettings({
+              ...appSettings,
+              composerLargePasteBehavior: event.target.value as NonNullable<
+                AppSettings["composerLargePasteBehavior"]
+              >,
+            })
+          }
+        >
+          <option value="smart">{t("settings.composer.largePasteSmart")}</option>
+          <option value="keepText">{t("settings.composer.largePasteKeepText")}</option>
+        </select>
+        <div className="settings-help">
+          {t("settings.composer.largePasteHelp")}
+        </div>
+      </div>      <SettingsToggleRow
         title={t("settings.composer.wrapMultilinePasteTitle")}
         subtitle={t("settings.composer.wrapMultilinePasteSubtitle")}
       >

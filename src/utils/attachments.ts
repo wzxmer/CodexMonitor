@@ -103,6 +103,30 @@ export function extractAttachedFilesFromText(text: string): {
   };
 }
 
+export function decodeTextAttachmentDataUrl(path: string) {
+  if (!path.startsWith("data:text/")) {
+    return null;
+  }
+  const commaIndex = path.indexOf(",");
+  if (commaIndex < 0) {
+    return null;
+  }
+  const meta = path.slice(0, commaIndex);
+  const payload = path.slice(commaIndex + 1);
+  try {
+    const text = meta.includes(";base64")
+      ? new TextDecoder().decode(
+          Uint8Array.from(atob(payload), (character) => character.charCodeAt(0)),
+        )
+      : decodeURIComponent(payload);
+    return {
+      name: attachmentNameFromDataUrl(path) || "pasted-text.txt",
+      text,
+    };
+  } catch {
+    return null;
+  }
+}
 export function withFileNameInDataUrl(dataUrl: string, fileName: string) {
   if (!dataUrl.startsWith("data:") || !fileName.trim()) {
     return dataUrl;

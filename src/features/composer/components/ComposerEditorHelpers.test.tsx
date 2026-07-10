@@ -20,6 +20,7 @@ type HarnessProps = {
 
 function ComposerHarness({ initialText = "", editorSettings }: HarnessProps) {
   const [draftText, setDraftText] = useState(initialText);
+  const [attachments, setAttachments] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   return (
@@ -51,6 +52,9 @@ function ComposerHarness({ initialText = "", editorSettings }: HarnessProps) {
       files={[]}
       draftText={draftText}
       onDraftChange={setDraftText}
+      attachedImages={attachments}
+      onAttachImages={(paths) => setAttachments((current) => [...current, ...paths])}
+      onRemoveImage={(path) => setAttachments((current) => current.filter((item) => item !== path))}
       textareaRef={textareaRef}
       dictationEnabled={false}
       editorSettings={editorSettings}
@@ -169,6 +173,71 @@ describe("Composer editor helpers", () => {
       "```\nline one\nline two\n```",
     );
 
+    harness.unmount();
+  });
+  it("converts a large paste into a restorable text attachment", async () => {
+    const harness = renderComposerHarness({
+      initialText: "Keep this",
+      editorSettings: { ...smartSettings, largePasteBehavior: "smart" },
+    });
+    const textarea = getTextarea(harness.container);
+    textarea.setSelectionRange(4, 4);
+    const pasted = Array(200).fill("日志内容").join("\n");
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { getData: () => pasted, items: [] },
+    });
+
+    await act(async () => {
+      textarea.dispatchEvent(event);
+    });
+
+    expect(getTextarea(harness.container).value).toBe("Keep this");
+    expect(harness.container.querySelector(".composer-attachment-name")?.textContent).toMatch(
+      /^pasted-text-.*\.txt$/,
+    );
+    expect(harness.container.querySelector(".composer-attachment-meta")?.textContent).toContain(
+      "200",
+    );
+
+    const previewButton = Array.from(
+      harness.container.querySelectorAll(".composer-attachment-action"),
+    ).find((button) => button.textContent?.includes("预览"));
+    act(() => {
+      (previewButton as HTMLButtonElement).click();
+    });
+    expect(harness.container.querySelector(".composer-attachment-text-preview")?.textContent).toBe(
+      pasted,
+    );
+
+    const restoreButton = Array.from(
+      harness.container.querySelectorAll(".composer-attachment-action"),
+    ).find((button) => button.textContent?.includes("恢复"));
+    act(() => {
+      (restoreButton as HTMLButtonElement).click();
+    });
+    expect(getTextarea(harness.container).value).toBe(`Keep${pasted} this`);
+    expect(harness.container.querySelector(".composer-attachment-name")).toBeNull();
+
+    harness.unmount();
+  });
+
+  it("keeps large paste in the editor when configured", async () => {
+    const harness = renderComposerHarness({
+      editorSettings: { ...smartSettings, largePasteBehavior: "keepText" },
+    });
+    const textarea = getTextarea(harness.container);
+    const pasted = "x".repeat(12_000);
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { getData: () => pasted, items: [] },
+    });
+
+    await act(async () => {
+      textarea.dispatchEvent(event);
+    });
+
+    expect(harness.container.querySelector(".composer-attachment-name")).toBeNull();
     harness.unmount();
   });
 });
