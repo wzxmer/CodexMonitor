@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { BrainCog, RefreshCw, Repeat2, SlidersHorizontal, Zap } from "lucide-react";
 import { RoundedSelect } from "@/features/design-system/components/select/RoundedSelect";
 import { useI18n } from "@/features/i18n/I18nProvider";
@@ -39,6 +40,32 @@ type ComposerMetaBarProps = {
   selectedCodexArgsOverride?: string | null;
   onSelectCodexArgsOverride?: (value: string | null) => void;
 };
+
+const formatComposerModelLabel = (label: string) =>
+  label.replace(/\s+\(config\)$/i, "");
+
+const estimateLabelWidth = (label: string) =>
+  [...label].reduce((width, character) => width + (/^[\x00-\x7F]$/.test(character) ? 7 : 12), 0);
+
+const getControlWidthStyle = (
+  label: string,
+  chromeWidth: number,
+  minWidth: number,
+  maxWidth: number,
+) => {
+  const contentWidth = estimateLabelWidth(label);
+  const contentEndGap = 4;
+  const width = Math.min(
+    maxWidth,
+    Math.max(minWidth, contentWidth + chromeWidth + contentEndGap),
+  );
+  return { "--composer-control-width": `${width}px` } as CSSProperties;
+};
+
+const getSelectedLabel = <T extends string>(
+  options: Array<{ value: T; label: string }>,
+  value: T | null,
+) => options.find((option) => option.value === value)?.label ?? "";
 
 export function ComposerMetaBar({
   disabled,
@@ -88,8 +115,8 @@ export function ComposerMetaBar({
     models.length > 0
       ? models.map((model) => ({
           value: model.id,
-          label: model.displayName || model.model,
-          title: model.displayName || model.model,
+          label: formatComposerModelLabel(model.displayName || model.model),
+          title: formatComposerModelLabel(model.displayName || model.model),
         }))
       : [{ value: "", label: t("composer.noModel"), disabled: true }];
   const reasoningSelectOptions =
@@ -195,7 +222,15 @@ export function ComposerMetaBar({
             </div>
           )
         )}
-        <div className="composer-select-wrap composer-select-wrap--model">
+        <div
+          className="composer-select-wrap composer-select-wrap--model"
+          style={getControlWidthStyle(
+            getSelectedLabel(modelOptions, selectedModelId ?? ""),
+            72,
+            116,
+            260,
+          )}
+        >
           <span className="composer-icon composer-icon--model" aria-hidden>
             <svg viewBox="0 0 24 24" fill="none">
               <path
@@ -262,7 +297,15 @@ export function ComposerMetaBar({
             </span>
           )}
         </div>
-        <div className="composer-select-wrap composer-select-wrap--effort">
+        <div
+          className="composer-select-wrap composer-select-wrap--effort"
+          style={getControlWidthStyle(
+            getSelectedLabel(reasoningSelectOptions, selectedEffort ?? ""),
+            64,
+            76,
+            160,
+          )}
+        >
           <span className="composer-icon composer-icon--effort" aria-hidden>
             <BrainCog size={14} strokeWidth={1.8} />
           </span>
@@ -276,7 +319,15 @@ export function ComposerMetaBar({
           />
         </div>
         {codexArgsOptions.length > 1 && onSelectCodexArgsOverride && (
-          <div className="composer-select-wrap composer-select-wrap--args">
+          <div
+            className="composer-select-wrap composer-select-wrap--args"
+            style={getControlWidthStyle(
+              getSelectedLabel(codexArgsSelectOptions, selectedCodexArgsOverride ?? ""),
+              64,
+              80,
+              180,
+            )}
+          >
             <span className="composer-icon" aria-hidden>
               <SlidersHorizontal size={14} strokeWidth={1.8} />
             </span>
@@ -290,7 +341,15 @@ export function ComposerMetaBar({
             />
           </div>
         )}
-        <div className="composer-select-wrap composer-select-wrap--access">
+        <div
+          className="composer-select-wrap composer-select-wrap--access"
+          style={getControlWidthStyle(
+            getSelectedLabel(accessModeOptions, accessMode),
+            64,
+            80,
+            180,
+          )}
+        >
           <span className="composer-icon" aria-hidden>
             <svg viewBox="0 0 24 24" fill="none">
               <path
@@ -320,7 +379,20 @@ export function ComposerMetaBar({
         </div>
         <div className="composer-meta-secondary">
         {onSelectComposerSendShortcut && (
-          <div className="composer-select-wrap composer-select-wrap--shortcut">
+          <div
+            className="composer-select-wrap composer-select-wrap--shortcut"
+            style={getControlWidthStyle(
+              getSelectedLabel(
+                sendShortcutOptions,
+                composerSendShortcut === "enter-and-ctrl-enter"
+                  ? "enter"
+                  : composerSendShortcut,
+              ),
+              64,
+              112,
+              220,
+            )}
+          >
             <span className="composer-icon" aria-hidden>
               <svg viewBox="0 0 24 24" fill="none">
                 <path
@@ -355,7 +427,15 @@ export function ComposerMetaBar({
           </div>
         )}
         {onSelectComposerTriggerMode && (
-          <div className="composer-select-wrap composer-select-wrap--trigger">
+          <div
+            className="composer-select-wrap composer-select-wrap--trigger"
+            style={getControlWidthStyle(
+              getSelectedLabel(triggerModeOptions, composerTriggerMode),
+              64,
+              84,
+              180,
+            )}
+          >
             <span className="composer-icon" aria-hidden>
               <Repeat2 size={14} strokeWidth={1.8} />
             </span>

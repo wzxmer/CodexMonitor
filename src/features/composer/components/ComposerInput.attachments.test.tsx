@@ -196,6 +196,8 @@ describe("Composer attachments integration", () => {
       const copyButton = harness.container.querySelector(".composer-attachment-copy-image");
       expect(openButton).toBeTruthy();
       expect(copyButton).toBeTruthy();
+      expect(copyButton?.textContent).toBe("");
+      expect(copyButton?.getAttribute("aria-label")).toContain("复制图片");
 
       await act(async () => {
         (openButton as HTMLButtonElement).click();

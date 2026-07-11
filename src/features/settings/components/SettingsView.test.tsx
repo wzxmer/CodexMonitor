@@ -22,6 +22,7 @@ import {
   isMobileRuntime,
   getModelList,
   listWorkspaces,
+  windowsInstallerKind,
 } from "@services/tauri";
 import { DEFAULT_COMMIT_MESSAGE_PROMPT } from "@utils/commitMessagePrompt";
 import { SettingsView } from "./SettingsView";
@@ -50,6 +51,7 @@ vi.mock("@services/tauri", async () => {
     getCodexStatus: vi.fn(),
     isMobileRuntime: vi.fn(),
     listWorkspaces: vi.fn(),
+    windowsInstallerKind: vi.fn(),
   };
 });
 
@@ -62,12 +64,14 @@ const getAgentsSettingsMock = vi.mocked(getAgentsSettings);
 const getCodexStatusMock = vi.mocked(getCodexStatus);
 const isMobileRuntimeMock = vi.mocked(isMobileRuntime);
 const listWorkspacesMock = vi.mocked(listWorkspaces);
+const windowsInstallerKindMock = vi.mocked(windowsInstallerKind);
 const openUrlMock = vi.mocked(openUrl);
 connectWorkspaceMock.mockResolvedValue(undefined);
 getAppBuildTypeMock.mockResolvedValue("release");
 getConfigModelMock.mockResolvedValue(null);
 isMobileRuntimeMock.mockResolvedValue(false);
 listWorkspacesMock.mockResolvedValue([]);
+windowsInstallerKindMock.mockResolvedValue("msi");
 getAgentsSettingsMock.mockResolvedValue({
   configPath: "/Users/me/.codex/config.toml",
   multiAgentEnabled: false,

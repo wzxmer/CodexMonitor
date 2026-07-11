@@ -238,7 +238,6 @@ export function ComposerAttachments({
                   title={t("composer.copyImage")}
                 >
                   <Copy size={13} aria-hidden />
-                  <span>{t("common.copy")}</span>
                 </button>
               )}
               {textAttachment && (

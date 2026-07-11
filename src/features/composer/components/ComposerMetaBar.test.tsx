@@ -4,6 +4,35 @@ import { describe, expect, it, vi } from "vitest";
 import { ComposerMetaBar } from "./ComposerMetaBar";
 
 describe("ComposerMetaBar", () => {
+  it("hides the config suffix from model labels", () => {
+    const { unmount } = render(
+      <ComposerMetaBar
+        disabled={false}
+        collaborationModes={[]}
+        selectedCollaborationModeId={null}
+        onSelectCollaborationMode={() => {}}
+        models={[
+          { id: "config-model", model: "gpt-5.6-sol", displayName: "gpt-5.6-sol (config)" },
+        ]}
+        selectedModelId="config-model"
+        onSelectModel={() => {}}
+        reasoningOptions={[]}
+        selectedEffort={null}
+        onSelectEffort={() => {}}
+        selectedServiceTier={null}
+        reasoningSupported={false}
+        accessMode="current"
+        onSelectAccessMode={() => {}}
+        composerSendShortcut="enter"
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "模型" });
+    expect(trigger.textContent).toBe("gpt-5.6-sol");
+    expect(trigger.getAttribute("title")).toBe("gpt-5.6-sol");
+    unmount();
+  });
+
   it("keeps long model labels available in the trigger and model popover", () => {
     const longModelLabel = "gpt-5.6-sol-max-with-long-provider-name";
     render(
@@ -44,6 +73,40 @@ describe("ComposerMetaBar", () => {
     expect(screen.getByRole("option", { name: longModelLabel }).textContent).toContain(
       longModelLabel,
     );
+  });
+
+  it("sizes controls from the selected label instead of the longest option", () => {
+    const view = render(
+      <ComposerMetaBar
+        disabled={false}
+        collaborationModes={[]}
+        selectedCollaborationModeId={null}
+        onSelectCollaborationMode={() => {}}
+        models={[
+          { id: "short", model: "gpt-5.6-sol", displayName: "gpt-5.6-sol" },
+          {
+            id: "long",
+            model: "long-model",
+            displayName: "a-very-long-model-name-that-should-only-affect-the-menu",
+          },
+        ]}
+        selectedModelId="short"
+        onSelectModel={() => {}}
+        reasoningOptions={[]}
+        selectedEffort={null}
+        onSelectEffort={() => {}}
+        selectedServiceTier={null}
+        reasoningSupported={false}
+        accessMode="current"
+        onSelectAccessMode={() => {}}
+        composerSendShortcut="enter"
+      />,
+    );
+
+    const wrapper = view.container.querySelector<HTMLElement>(
+      ".composer-select-wrap--model",
+    );
+    expect(wrapper?.style.getPropertyValue("--composer-control-width")).toBe("153px");
   });
 
   it("shows full shortcut mappings as hover titles", () => {

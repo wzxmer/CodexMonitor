@@ -88,11 +88,25 @@
 }
 
 .settings-content {
+  --settings-control-surface: var(--surface-control);
+  --settings-control-surface-hover: var(--surface-control-hover);
   flex: 1;
   min-height: 0;
   padding: 20px 24px;
   overflow-y: auto;
   background: var(--surface-messages);
+}
+
+:root[data-theme="light"] .settings-content {
+  --settings-control-surface: #e6e8ec;
+  --settings-control-surface-hover: #dde0e5;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] .settings-content {
+    --settings-control-surface: #e6e8ec;
+    --settings-control-surface-hover: #dde0e5;
+  }
 }
 
 .settings-mobile-detail-header {
@@ -218,7 +232,7 @@
   padding: 8px 10px;
   border: 1px solid var(--border-muted);
   border-radius: 10px;
-  background: var(--surface-control);
+  background: var(--settings-control-surface);
   color: var(--text-strong);
   text-align: left;
   cursor: pointer;
@@ -234,7 +248,7 @@
 .settings-provider-profile:hover,
 .settings-provider-profile-shell:hover .settings-provider-profile {
   border-color: var(--cm-border-emphasis);
-  background: color-mix(in srgb, var(--surface-hover) 72%, var(--surface-control));
+  background: var(--settings-control-surface-hover);
 }
 
 .settings-provider-profile:focus-visible,
@@ -247,7 +261,11 @@
 .settings-provider-profile.is-active,
 .settings-provider-profile-shell.is-active .settings-provider-profile {
   border-color: var(--border-accent-soft);
-  background: color-mix(in srgb, var(--surface-active) 58%, var(--surface-control));
+  background: color-mix(
+    in srgb,
+    var(--settings-control-surface) 84%,
+    var(--surface-active)
+  );
 }
 
 .settings-provider-profile-copy {
@@ -809,7 +827,7 @@
   padding: 4px 6px;
   border-radius: 10px;
   border: 1px solid var(--border-muted);
-  background: var(--surface-control);
+  background: var(--settings-control-surface);
 }
 
 .settings-agents-stepper-value {
@@ -952,7 +970,7 @@
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--border-muted);
-  background: var(--surface-control);
+  background: var(--settings-control-surface);
   color: var(--text-strong);
   font-size: 12px;
   transition: border-color var(--ds-dur-normal) var(--ds-ease-out-soft),
@@ -1001,7 +1019,7 @@
   padding-right: 32px;
   border-radius: 10px;
   border: 1px solid var(--border-muted);
-  background: var(--surface-control);
+  background: var(--settings-control-surface);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'%3E%3Cpath d='m4 5.5 3 3 3-3' stroke='%238B949E' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-position: right 11px center;
   background-size: 14px 14px;
@@ -1014,10 +1032,22 @@
               background-color var(--ds-dur-normal) var(--ds-ease-out-soft);
 }
 
+.settings-input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.settings-input[type="number"]::-webkit-inner-spin-button,
+.settings-input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
 .settings-select:hover:not(:disabled),
 .settings-select:focus-visible {
   border-color: var(--border-accent);
-  background-color: color-mix(in srgb, var(--surface-control) 74%, var(--surface-hover));
+  background-color: var(--settings-control-surface-hover);
   outline: none;
 }
 
@@ -1045,6 +1075,15 @@
   width: min(100%, 520px);
 }
 
+.settings-content .ds-rounded-select > .composer-select-trigger {
+  background-color: var(--settings-control-surface);
+}
+
+.settings-content .ds-rounded-select > .composer-select-trigger:hover:not(:disabled),
+.settings-content .ds-rounded-select > .composer-select-trigger:focus-visible {
+  background-color: var(--settings-control-surface-hover);
+}
+
 .settings-font-select {
   width: 100%;
 }
@@ -1070,7 +1109,7 @@
   padding: 4px;
   border-radius: 999px;
   border: 1px solid var(--border-muted);
-  background: var(--surface-control);
+  background: var(--settings-control-surface);
 }
 
 .settings-segmented::before {
@@ -1249,7 +1288,7 @@
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid var(--border-muted);
-  background: var(--surface-control);
+  background: var(--settings-control-surface);
   color: var(--text-strong);
   font-size: 11px;
   white-space: nowrap;
@@ -1357,7 +1396,7 @@
   height: 24px;
   border-radius: 8px;
   border: 1px solid var(--border-muted);
-  background: var(--surface-control);
+  background: var(--settings-control-surface);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1579,7 +1618,7 @@
   height: 24px;
   border-radius: 999px;
   border: 1px solid var(--border-strong);
-  background: var(--surface-control);
+  background: var(--settings-control-surface);
   padding: 3px;
   display: inline-flex;
   align-items: center;
