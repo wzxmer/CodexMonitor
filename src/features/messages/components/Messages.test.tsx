@@ -2677,6 +2677,96 @@ describe("Messages", () => {
     expect(scrollNode.scrollTop).toBe(900);
   });
 
+  it("keeps the latest content pinned when message layout grows after opening", () => {
+    let resizeCallback: ResizeObserverCallback | null = null;
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal("ResizeObserver", class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback;
+      }
+      observe = observe;
+      unobserve = vi.fn();
+      disconnect = disconnect;
+    });
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+
+    const { container } = render(
+      <Messages
+        items={[{ id: "msg-1", kind: "message", role: "assistant", text: "Latest" }]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    let scrollHeight = 600;
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    scrollNode.scrollTop = 600;
+    scrollHeight = 900;
+
+    (resizeCallback as ResizeObserverCallback | null)?.([], {} as ResizeObserver);
+
+    expect(observe).toHaveBeenCalled();
+    expect(scrollNode.scrollTop).toBe(900);
+
+    requestAnimationFrameSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it("does not reclaim scroll position after the user scrolls away from latest", () => {
+    let resizeCallback: ResizeObserverCallback | null = null;
+    vi.stubGlobal("ResizeObserver", class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback;
+      }
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    });
+    const requestAnimationFrameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+
+    const { container } = render(
+      <Messages
+        items={[{ id: "msg-1", kind: "message", role: "assistant", text: "Latest" }]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    Object.defineProperty(scrollNode, "clientHeight", { configurable: true, value: 200 });
+    Object.defineProperty(scrollNode, "scrollHeight", { configurable: true, value: 900 });
+    scrollNode.scrollTop = 200;
+    fireEvent.scroll(scrollNode);
+
+    (resizeCallback as ResizeObserverCallback | null)?.([], {} as ResizeObserver);
+
+    expect(scrollNode.scrollTop).toBe(200);
+
+    requestAnimationFrameSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
   it("shows a plan-ready follow-up prompt after a completed plan tool item", () => {
     const onPlanAccept = vi.fn();
     const onPlanSubmitChanges = vi.fn();

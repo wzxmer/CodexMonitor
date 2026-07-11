@@ -54,6 +54,7 @@ export function useMessagesViewState({
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const autoScrollRef = useRef(true);
+  const resizeScrollFrameRef = useRef<number | null>(null);
   const copyTimeoutRef = useRef<number | null>(null);
   const manuallyToggledExpandedRef = useRef<Set<string>>(new Set());
   const manuallyToggledToolGroupsRef = useRef<Set<string>>(new Set());
@@ -157,6 +158,38 @@ export function useMessagesViewState({
     bottomRef.current?.scrollIntoView({ block: "end" });
     setShowScrollToLatest(false);
   }, [scrollKey, isThinking, isNearBottom, threadId]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const content = container?.querySelector<HTMLElement>(".messages-inner");
+    if (!container || !content || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      if (!autoScrollRef.current) {
+        return;
+      }
+      if (resizeScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeScrollFrameRef.current);
+      }
+      resizeScrollFrameRef.current = window.requestAnimationFrame(() => {
+        resizeScrollFrameRef.current = null;
+        if (!autoScrollRef.current || !containerRef.current) {
+          return;
+        }
+        containerRef.current.scrollTop = containerRef.current.scrollHeight;
+        setShowScrollToLatest(false);
+      });
+    });
+    observer.observe(content);
+    return () => {
+      observer.disconnect();
+      if (resizeScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeScrollFrameRef.current);
+        resizeScrollFrameRef.current = null;
+      }
+    };
+  }, [threadId]);
 
   useEffect(() => {
     return () => {
