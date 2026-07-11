@@ -12,4 +12,21 @@ describe("global font styles", () => {
     const terminalCss = readFileSync(new URL("./terminal.css", import.meta.url), "utf8");
     expect(terminalCss).toContain("--terminal-font-family: var(--code-font-family);");
   });
+
+  it("derives interface typography from the runtime UI font size", () => {
+    const baseCss = readFileSync(new URL("./base.css", import.meta.url), "utf8");
+    const typographyCss = readFileSync(
+      new URL("./ui-typography.css", import.meta.url),
+      "utf8",
+    );
+    expect(baseCss).toContain("--ui-font-size-sm:");
+    expect(baseCss).toContain("--ui-font-size-control:");
+    expect(typographyCss).toContain(".sidebar");
+    expect(typographyCss).toContain(".settings-overlay");
+    expect(typographyCss).toContain(".composer");
+    expect(typographyCss).toContain(".file-tree-panel");
+    expect(typographyCss).toContain(".terminal-header");
+    expect(typographyCss).toContain(".diff-viewer");
+    expect(typographyCss).toContain("font-size: var(--ui-font-size-md)");
+  });
 });

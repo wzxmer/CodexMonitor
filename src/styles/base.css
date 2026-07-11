@@ -1,5 +1,14 @@
 @import "./themes.css";
 
+:root {
+  --ui-font-size-xs: max(9px, calc(var(--ui-font-size, 14px) - 4px));
+  --ui-font-size-sm: max(10px, calc(var(--ui-font-size, 14px) - 3px));
+  --ui-font-size-md: max(11px, calc(var(--ui-font-size, 14px) - 2px));
+  --ui-font-size-control: max(12px, calc(var(--ui-font-size, 14px) - 1px));
+  --ui-font-size-lg: var(--ui-font-size, 14px);
+  --ui-font-size-xl: calc(var(--ui-font-size, 14px) + 4px);
+}
+
 :root[data-theme-accent="blue"] {
   --border-accent: rgba(92, 168, 255, 0.62);
   --border-accent-soft: rgba(92, 168, 255, 0.32);

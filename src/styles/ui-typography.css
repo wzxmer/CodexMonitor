@@ -1,0 +1,140 @@
+:is(
+  .sidebar,
+  .settings-overlay,
+  .home,
+  .workspace-home,
+  .file-tree-panel,
+  .file-preview-popover,
+  .terminal-header,
+  .debug-panel,
+  .prompt-panel,
+  .diff-viewer,
+  .main-topbar,
+  .tabbar,
+  .composer,
+  .ds-modal,
+  .ds-panel,
+  .ds-popover,
+  .ds-rounded-select,
+  .ds-rounded-select-popover,
+  .approval-toasts,
+  .error-toasts,
+  .update-toasts
+) {
+  font-size: var(--ui-font-size, 14px);
+}
+
+:is(
+  .sidebar,
+  .settings-overlay,
+  .home,
+  .workspace-home,
+  .file-tree-panel,
+  .file-preview-popover,
+  .terminal-header,
+  .debug-panel,
+  .prompt-panel,
+  .diff-viewer,
+  .main-topbar,
+  .tabbar,
+  .composer,
+  .ds-modal,
+  .ds-panel,
+  .ds-popover,
+  .ds-rounded-select,
+  .ds-rounded-select-popover,
+  .approval-toasts,
+  .error-toasts,
+  .update-toasts
+) :is(button, input, select, textarea, label) {
+  font-size: var(--ui-font-size-control);
+}
+
+:is(
+  .sidebar,
+  .settings-overlay,
+  .home,
+  .workspace-home,
+  .file-tree-panel,
+  .file-preview-popover,
+  .terminal-header,
+  .debug-panel,
+  .prompt-panel,
+  .diff-viewer,
+  .main-topbar,
+  .tabbar,
+  .composer,
+  .ds-modal,
+  .ds-panel,
+  .ds-popover,
+  .ds-rounded-select,
+  .ds-rounded-select-popover
+) :is(
+  [class$="-title"],
+  [class*="-title "],
+  [class$="-label"],
+  [class*="-label "]
+) {
+  font-size: var(--ui-font-size-md);
+}
+
+:is(
+  .sidebar,
+  .settings-overlay,
+  .home,
+  .workspace-home,
+  .file-tree-panel,
+  .file-preview-popover,
+  .terminal-header,
+  .debug-panel,
+  .prompt-panel,
+  .diff-viewer,
+  .main-topbar,
+  .tabbar,
+  .composer,
+  .ds-modal,
+  .ds-panel,
+  .ds-popover,
+  .ds-rounded-select,
+  .ds-rounded-select-popover,
+  .approval-toasts,
+  .error-toasts,
+  .update-toasts
+) :is(
+  [class*="subtitle"],
+  [class*="help"],
+  [class*="hint"],
+  [class*="meta"],
+  [class*="badge"],
+  [class*="status"]
+) {
+  font-size: var(--ui-font-size-xs);
+}
+
+:is(.home, .workspace-home, .settings-overlay, .ds-modal)
+  :is(h1, h2, h3, [class*="heading"]) {
+  font-size: var(--ui-font-size-lg);
+}
+
+.diff-viewer-pr-title {
+  font-size: var(--ui-font-size-xl);
+}
+
+.diff-viewer-pr-markdown,
+.diff-viewer-pr-empty {
+  font-size: var(--ui-font-size-md);
+}
+
+.debug-payload {
+  font-size: var(--code-font-size, 13px);
+}
+
+.file-tree-row,
+.terminal-tab,
+.prompt-action,
+.diff-viewer-pr-jump,
+.diff-viewer-pr-checkout,
+.diff-viewer-pr-timeline-button {
+  font-size: var(--ui-font-size-sm);
+}
+
