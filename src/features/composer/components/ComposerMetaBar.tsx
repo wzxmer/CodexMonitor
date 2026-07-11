@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import { BrainCog, RefreshCw, Repeat2, SlidersHorizontal, Zap } from "lucide-react";
 import { RoundedSelect } from "@/features/design-system/components/select/RoundedSelect";
 import { useI18n } from "@/features/i18n/I18nProvider";
@@ -32,6 +31,10 @@ type ComposerMetaBarProps = {
   onSelectComposerSendShortcut?: (shortcut: ComposerSendShortcut) => void;
   composerTriggerMode?: ComposerTriggerMode;
   onSelectComposerTriggerMode?: (mode: ComposerTriggerMode) => void;
+  autoReconnectEnabled?: boolean;
+  autoReconnectPhase?: "idle" | "waiting" | "sending" | "running";
+  autoReconnectAttempt?: number;
+  onAutoReconnectChange?: (enabled: boolean) => void;
   codexArgsOptions?: CodexArgsOption[];
   selectedCodexArgsOverride?: string | null;
   onSelectCodexArgsOverride?: (value: string | null) => void;
@@ -58,18 +61,15 @@ export function ComposerMetaBar({
   onSelectComposerSendShortcut,
   composerTriggerMode = "default",
   onSelectComposerTriggerMode,
+  autoReconnectEnabled = false,
+  autoReconnectPhase = "idle",
+  autoReconnectAttempt = 0,
+  onAutoReconnectChange,
   codexArgsOptions = [],
   selectedCodexArgsOverride = null,
   onSelectCodexArgsOverride,
 }: ComposerMetaBarProps) {
   const { t } = useI18n();
-  const selectedModel =
-    models.find((model) => model.id === selectedModelId) ?? null;
-  const selectedModelLabel =
-    selectedModel?.displayName || selectedModel?.model || t("composer.noModel");
-  const modelSelectStyle = {
-    "--composer-model-select-width": `${Math.max(selectedModelLabel.length + 4, 12)}ch`,
-  } as CSSProperties;
   const planMode =
     collaborationModes.find((mode) => mode.id === "plan") ?? null;
   const defaultMode =
@@ -89,6 +89,7 @@ export function ComposerMetaBar({
       ? models.map((model) => ({
           value: model.id,
           label: model.displayName || model.model,
+          title: model.displayName || model.model,
         }))
       : [{ value: "", label: t("composer.noModel"), disabled: true }];
   const reasoningSelectOptions =
@@ -136,6 +137,7 @@ export function ComposerMetaBar({
   return (
     <div className="composer-bar">
       <div className="composer-meta">
+        <div className="composer-meta-primary">
         {collaborationModes.length > 0 && (
           canUsePlanToggle ? (
             <div className="composer-select-wrap composer-plan-toggle-wrap">
@@ -232,7 +234,6 @@ export function ComposerMetaBar({
             options={modelOptions}
             onChange={onSelectModel}
             disabled={disabled}
-            style={modelSelectStyle}
           />
           {onRefreshModels && (
             <button
@@ -275,7 +276,7 @@ export function ComposerMetaBar({
           />
         </div>
         {codexArgsOptions.length > 1 && onSelectCodexArgsOverride && (
-          <div className="composer-select-wrap">
+          <div className="composer-select-wrap composer-select-wrap--args">
             <span className="composer-icon" aria-hidden>
               <SlidersHorizontal size={14} strokeWidth={1.8} />
             </span>
@@ -289,7 +290,7 @@ export function ComposerMetaBar({
             />
           </div>
         )}
-        <div className="composer-select-wrap">
+        <div className="composer-select-wrap composer-select-wrap--access">
           <span className="composer-icon" aria-hidden>
             <svg viewBox="0 0 24 24" fill="none">
               <path
@@ -316,6 +317,8 @@ export function ComposerMetaBar({
             onChange={(nextValue) => onSelectAccessMode(nextValue as AccessMode)}
           />
         </div>
+        </div>
+        <div className="composer-meta-secondary">
         {onSelectComposerSendShortcut && (
           <div className="composer-select-wrap composer-select-wrap--shortcut">
             <span className="composer-icon" aria-hidden>
@@ -368,6 +371,34 @@ export function ComposerMetaBar({
             />
           </div>
         )}
+        {onAutoReconnectChange ? (
+          <label
+            className={`composer-auto-reconnect${autoReconnectEnabled ? " is-on" : ""}`}
+            title={t("composer.autoReconnectHelp")}
+          >
+            <input
+              type="checkbox"
+              role="switch"
+              checked={autoReconnectEnabled}
+              aria-label={t("composer.autoReconnect")}
+              onChange={(event) => onAutoReconnectChange(event.target.checked)}
+            />
+            <span className="composer-auto-reconnect-track" aria-hidden="true">
+              <span className="composer-auto-reconnect-knob" />
+            </span>
+            <span className="composer-auto-reconnect-label">
+              {t("composer.autoReconnect")}
+            </span>
+            {autoReconnectEnabled && autoReconnectPhase !== "idle" ? (
+              <span className="composer-auto-reconnect-status" role="status">
+                {autoReconnectPhase === "waiting"
+                  ? `${t("composer.autoReconnectWaiting")} · ${autoReconnectAttempt}`
+                  : t("composer.autoReconnectRunning")}
+              </span>
+            ) : null}
+          </label>
+        ) : null}
+        </div>
       </div>
     </div>
   );

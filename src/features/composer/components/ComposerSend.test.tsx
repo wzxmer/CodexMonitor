@@ -129,8 +129,9 @@ describe("Composer send triggers", () => {
     const toggle = screen.getByRole("switch", { name: "自动重连" });
     expect((toggle as HTMLInputElement).checked).toBe(false);
     expect(toggle.closest("label")?.getAttribute("title")).toContain(
-      "不会占用 Codex 当前任务的尝试次数",
+      "不会占用 Codex 当前任务的尝试次数，仅对当前会话有效",
     );
+    expect(toggle.closest(".composer-meta-secondary")).toBeTruthy();
     fireEvent.click(toggle);
     expect(onAutoReconnectChange).toHaveBeenCalledWith(true);
   });

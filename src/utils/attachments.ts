@@ -50,7 +50,15 @@ export function attachmentDisplayName(path: string) {
   }
   const normalized = path.replace(/\\/g, "/");
   const parts = normalized.split("/").filter(Boolean);
-  return parts.length ? parts[parts.length - 1] : path;
+  const fileName = parts.length ? parts[parts.length - 1] : path;
+  const generatedImageMatch = fileName.match(
+    /^image-(\d{8})-(\d{6})(?:\.\d+)?-[0-9a-f-]+(\.[a-z0-9]+)$/i,
+  );
+  if (generatedImageMatch) {
+    const time = generatedImageMatch[2];
+    return `image-${time.slice(0, 2)}${time.slice(2, 4)}${time.slice(4, 6)}${generatedImageMatch[3]}`;
+  }
+  return fileName;
 }
 
 export function isImageAttachment(path: string) {

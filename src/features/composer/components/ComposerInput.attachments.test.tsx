@@ -5,15 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { useComposerImages } from "../hooks/useComposerImages";
 import { ComposerInput } from "./ComposerInput";
 
-const { openPathMock } = vi.hoisted(() => ({
-  openPathMock: vi.fn(),
-}));
-
-vi.mock("@tauri-apps/plugin-opener", () => ({
-  openPath: openPathMock,
-  openUrl: vi.fn(),
-}));
-
 vi.mock("../../../services/dragDrop", () => ({
   subscribeWindowDragDrop: vi.fn(() => () => {}),
 }));
@@ -173,7 +164,7 @@ function setMockFileReader() {
 }
 
 describe("Composer attachments integration", () => {
-  it("opens image files and copies image data from attachment actions", async () => {
+  it("previews image files in-app and copies image data from attachment actions", async () => {
     const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     const originalClipboardItem = globalThis.ClipboardItem;
     const originalFetch = globalThis.fetch;
@@ -209,7 +200,15 @@ describe("Composer attachments integration", () => {
       await act(async () => {
         (openButton as HTMLButtonElement).click();
       });
-      expect(openPathMock).toHaveBeenCalledWith("/tmp/photo.png");
+      expect(document.body.querySelector(".composer-image-preview")).toBeTruthy();
+      expect(document.body.querySelector(".composer-image-preview img")?.getAttribute("src")).toBe(
+        "tauri:///tmp/photo.png",
+      );
+
+      act(() => {
+        (document.body.querySelector(".composer-image-preview-close") as HTMLButtonElement).click();
+      });
+      expect(document.body.querySelector(".composer-image-preview")).toBeNull();
 
       await act(async () => {
         (copyButton as HTMLButtonElement).click();
@@ -224,6 +223,24 @@ describe("Composer attachments integration", () => {
       globalThis.ClipboardItem = originalClipboardItem;
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("shortens generated image storage names in attachment pills", async () => {
+    const harness = renderComposerHarness({
+      activeThreadId: "thread-1",
+      activeWorkspaceId: "ws-1",
+    });
+    const textarea = getTextarea(harness.container);
+    const image = new File(["data"], "generated.png", { type: "image/png" });
+    (image as File & { path?: string }).path =
+      "C:\\attachments\\image-20260711-131154.846-69cc1234-1234-5678-9012-abcdefabcdef.png";
+
+    await act(async () => {
+      dispatchDrop(textarea, [image]);
+    });
+
+    expect(getAttachmentNames(harness.container)).toEqual(["image-131154.png"]);
+    harness.unmount();
   });
 
   it("attaches dropped files and dedupes paths", async () => {

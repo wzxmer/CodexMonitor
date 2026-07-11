@@ -1,5 +1,4 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import Copy from "lucide-react/dist/esm/icons/copy";
@@ -7,7 +6,8 @@ import FileText from "lucide-react/dist/esm/icons/file-text";
 import Image from "lucide-react/dist/esm/icons/image";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
 import X from "lucide-react/dist/esm/icons/x";
-import { useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
 import {
   attachmentDisplayName,
   decodeTextAttachmentDataUrl,
@@ -43,16 +43,50 @@ function attachmentPreviewSrc(path: string) {
   }
 }
 
-async function openImageAttachment(path: string, previewSrc: string) {
-  if (path.startsWith("http://") || path.startsWith("https://")) {
-    await openUrl(path);
-    return;
-  }
-  if (!path.startsWith("data:")) {
-    await openPath(path);
-    return;
-  }
-  window.open(previewSrc, "_blank", "noopener,noreferrer");
+function ComposerImagePreview({
+  src,
+  label,
+  onClose,
+}: {
+  src: string;
+  label: string;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  return createPortal(
+    <div className="composer-image-preview" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="composer-image-preview-content" onClick={(event) => event.stopPropagation()}>
+        <button
+          type="button"
+          className="composer-image-preview-close"
+          onClick={onClose}
+          aria-label={t("common.close")}
+        >
+          <X size={16} aria-hidden />
+        </button>
+        <img src={src} alt={label} />
+      </div>
+    </div>,
+    document.body,
+  );
 }
 
 async function copyImageAttachment(previewSrc: string, fallbackText: string) {
@@ -111,6 +145,7 @@ export function ComposerAttachments({
   const [expandedAttachments, setExpandedAttachments] = useState<Set<string>>(
     () => new Set(),
   );
+  const [previewImage, setPreviewImage] = useState<{ src: string; label: string } | null>(null);
   if (attachments.length === 0) {
     return null;
   }
@@ -161,11 +196,7 @@ export function ComposerAttachments({
                 <button
                   type="button"
                   className="composer-attachment-open"
-                  onClick={() => {
-                    void openImageAttachment(path, previewSrc).catch((error) => {
-                      console.warn("Failed to open image attachment.", error);
-                    });
-                  }}
+                  onClick={() => setPreviewImage({ src: previewSrc, label: title })}
                   disabled={disabled}
                   aria-label={`${t("composer.openImage")} ${title}`}
                 >
@@ -249,6 +280,13 @@ export function ComposerAttachments({
           </div>
         );
       })}
+      {previewImage && (
+        <ComposerImagePreview
+          src={previewImage.src}
+          label={previewImage.label}
+          onClose={() => setPreviewImage(null)}
+        />
+      )}
     </div>
   );
 }

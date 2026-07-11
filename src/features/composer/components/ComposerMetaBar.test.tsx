@@ -34,9 +34,8 @@ describe("ComposerMetaBar", () => {
 
     const trigger = screen.getByRole("button", { name: "模型" });
     expect(trigger.textContent).toBe(longModelLabel);
-    expect(trigger.style.getPropertyValue("--composer-model-select-width")).toBe(
-      `${longModelLabel.length + 4}ch`,
-    );
+    expect(trigger.getAttribute("title")).toBe(longModelLabel);
+    expect(trigger.closest(".composer-select-wrap--model")).toBeTruthy();
 
     fireEvent.click(trigger);
 

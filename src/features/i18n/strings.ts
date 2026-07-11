@@ -1127,7 +1127,7 @@ export const I18N_STRINGS = {
     "composer.queueTitle": "队列中",
     "composer.autoReconnect": "自动重连",
     "composer.autoReconnectHelp":
-      "任务非主动中止时持续尝试恢复连接并继续，包括中转返回的认证、额度及限流错误。不会占用 Codex 当前任务的尝试次数。仅对当前会话生效。",
+      "任务非主动中止时，持续尝试恢复连接并继续，不会占用 Codex 当前任务的尝试次数，仅对当前会话有效。",
     "composer.autoReconnectWaiting": "等待自动重连",
     "composer.autoReconnectRunning": "自动重连已发起",
     "composer.attachment": "附件",
@@ -2366,7 +2366,7 @@ export const I18N_STRINGS = {
     "composer.queueTitle": "Queued",
     "composer.autoReconnect": "Auto reconnect",
     "composer.autoReconnectHelp":
-      "Keeps reconnecting and continuing after non-manual interruptions, including authentication, quota, and rate-limit errors returned by relays. It does not consume the current Codex turn's retry attempts and only applies to this conversation.",
+      "After non-manual interruptions, keeps reconnecting and continuing without consuming the current Codex turn's retry attempts. Only applies to this conversation.",
     "composer.autoReconnectWaiting": "Waiting to reconnect",
     "composer.autoReconnectRunning": "Auto reconnect started",
     "composer.attachment": "Attachment",
