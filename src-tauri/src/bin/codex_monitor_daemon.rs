@@ -770,6 +770,19 @@ impl DaemonState {
         .await
     }
 
+    async fn fetch_managed_session_preview(
+        &self,
+        request: types::ManagedSessionPreviewRequest,
+    ) -> Result<types::ManagedSessionPreviewResponse, String> {
+        settings_core::get_app_settings_core(&self.app_settings, &self.settings_path).await;
+        shared::session_manager_core::service::fetch_managed_session_preview_core(
+            request,
+            &self.app_settings,
+            &self.session_manager,
+        )
+        .await
+    }
+
     async fn search_managed_sessions(
         &self,
         request: types::SessionSearchRequest,

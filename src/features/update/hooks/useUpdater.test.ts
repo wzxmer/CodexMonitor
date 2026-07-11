@@ -5,6 +5,7 @@ import type { DebugEntry } from "../../../types";
 import {
   cleanupDownloadedReleaseAssets,
   downloadAndOpenReleaseAsset,
+  windowsInstallerKind,
 } from "../../../services/tauri";
 import { subscribeReleaseAssetDownloadProgress } from "../../../services/events";
 import { useUpdater } from "./useUpdater";
@@ -18,6 +19,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("../../../services/tauri", () => ({
   cleanupDownloadedReleaseAssets: vi.fn(() => Promise.resolve()),
   downloadAndOpenReleaseAsset: vi.fn(() => Promise.resolve({ path: "installer.msi" })),
+  windowsInstallerKind: vi.fn(() => Promise.resolve("msi")),
 }));
 
 vi.mock("../../../services/events", () => ({
@@ -26,6 +28,7 @@ vi.mock("../../../services/events", () => ({
 
 const cleanupDownloadedReleaseAssetsMock = vi.mocked(cleanupDownloadedReleaseAssets);
 const downloadAndOpenReleaseAssetMock = vi.mocked(downloadAndOpenReleaseAsset);
+const windowsInstallerKindMock = vi.mocked(windowsInstallerKind);
 const subscribeReleaseAssetDownloadProgressMock = vi.mocked(
   subscribeReleaseAssetDownloadProgress,
 );
@@ -73,6 +76,7 @@ describe("useUpdater", () => {
     vi.clearAllMocks();
     cleanupDownloadedReleaseAssetsMock.mockResolvedValue(undefined);
     downloadAndOpenReleaseAssetMock.mockResolvedValue({ path: "installer.msi" });
+    windowsInstallerKindMock.mockResolvedValue("msi");
     progressListener = null;
     subscribeReleaseAssetDownloadProgressMock.mockImplementation((listener) => {
       progressListener = listener;

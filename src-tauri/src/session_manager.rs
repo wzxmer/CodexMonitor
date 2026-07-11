@@ -8,9 +8,9 @@ use uuid::Uuid;
 use crate::remote_backend;
 use crate::shared::session_manager_core::runtime::SourceThreadRuntimeBinding;
 use crate::shared::session_manager_core::service::{
-    cancel_session_task_core, fetch_managed_sessions_page_core, fetch_session_search_results_core,
-    list_session_sources_core, scan_managed_sessions_core, search_managed_sessions_core,
-    update_session_source_core,
+    cancel_session_task_core, fetch_managed_session_preview_core, fetch_managed_sessions_page_core,
+    fetch_session_search_results_core, list_session_sources_core, scan_managed_sessions_core,
+    search_managed_sessions_core, update_session_source_core,
 };
 use crate::shared::settings_core;
 use crate::state::AppState;
@@ -19,6 +19,7 @@ use crate::types::{
     ManagedSessionCleanupRequest, ManagedSessionCleanupResponse,
     ManagedSessionCleanupSchedulerRequest, ManagedSessionCleanupSchedulerResponse,
     ManagedSessionDerivationPreview, ManagedSessionPage, ManagedSessionPageRequest,
+    ManagedSessionPreviewRequest, ManagedSessionPreviewResponse,
     PermanentlyDeleteManagedSessionRequest, PermanentlyDeleteManagedSessionResponse,
     PrepareManagedSessionDerivationRequest, ResumeManagedSessionRequest,
     ResumeManagedSessionResponse, SessionScanRequest, SessionScanSummary, SessionSearchProgress,
@@ -559,6 +560,26 @@ pub(crate) async fn fetch_managed_sessions_page(
         return Ok(value);
     }
     fetch_managed_sessions_page_core(request, &state.session_manager).await
+}
+
+#[tauri::command]
+pub(crate) async fn fetch_managed_session_preview(
+    request: ManagedSessionPreviewRequest,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<ManagedSessionPreviewResponse, String> {
+    if let Some(value) = remote_typed_if_enabled(
+        &state,
+        &app,
+        "fetch_managed_session_preview",
+        json!({ "request": request }),
+    )
+    .await?
+    {
+        return Ok(value);
+    }
+    settings_core::get_app_settings_core(&state.app_settings, &state.settings_path).await;
+    fetch_managed_session_preview_core(request, &state.app_settings, &state.session_manager).await
 }
 
 #[tauri::command]

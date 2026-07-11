@@ -201,6 +201,41 @@ pub(crate) struct ManagedSessionPage {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedSessionPreviewRequest {
+    pub(crate) source_id: String,
+    pub(crate) thread_id: String,
+    #[serde(default = "default_managed_session_preview_limit")]
+    pub(crate) limit: usize,
+}
+
+fn default_managed_session_preview_limit() -> usize {
+    6
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum ManagedSessionPreviewRole {
+    User,
+    Assistant,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedSessionPreviewItem {
+    pub(crate) role: ManagedSessionPreviewRole,
+    pub(crate) text: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManagedSessionPreviewResponse {
+    pub(crate) opening_message: Option<String>,
+    pub(crate) items: Vec<ManagedSessionPreviewItem>,
+    pub(crate) incomplete: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ResumeManagedSessionRequest {
     pub(crate) source_id: String,
     pub(crate) thread_id: String,

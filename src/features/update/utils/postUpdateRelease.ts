@@ -40,6 +40,7 @@ export type PostUpdateReleaseInfo = {
 };
 
 export type ReleasePlatform = "windows" | "macos" | "linux" | "unknown";
+export type WindowsInstallerKind = "msi" | "nsis" | "unknown";
 
 export type ReleaseAsset = {
   name: string;
@@ -128,6 +129,7 @@ export function isReleaseVersionNewer(
 export function selectReleaseAsset(
   assets: ReleaseAsset[],
   platform: ReleasePlatform,
+  windowsInstallerKind: WindowsInstallerKind = "unknown",
 ): ReleaseAsset | null {
   const usableAssets = assets.filter((asset) => {
     const name = asset.name.toLowerCase();
@@ -142,7 +144,9 @@ export function selectReleaseAsset(
   });
   const preferredExtensions =
     platform === "windows"
-      ? [".msi", ".exe"]
+      ? windowsInstallerKind === "nsis"
+        ? [".exe", ".msi"]
+        : [".msi", ".exe"]
       : platform === "macos"
         ? [".dmg"]
         : platform === "linux"
@@ -163,10 +167,13 @@ export function selectReleaseAsset(
 function selectMirrorReleaseAsset(
   assets: ReleaseAsset[],
   platform: ReleasePlatform,
+  windowsInstallerKind: WindowsInstallerKind,
 ): ReleaseAsset | null {
   const preferredExtensions =
     platform === "windows"
-      ? [".msi", ".exe"]
+      ? windowsInstallerKind === "nsis"
+        ? [".exe", ".msi"]
+        : [".msi", ".exe"]
       : platform === "macos"
         ? [".dmg"]
         : platform === "linux"
@@ -183,6 +190,7 @@ function parseMirrorUpdate(
   payload: MirrorReleaseManifest,
   currentVersion: string,
   platform: ReleasePlatform,
+  windowsInstallerKind: WindowsInstallerKind,
 ): ReleaseUpdateInfo | null {
   const version = normalizeStoredVersion(payload.version ?? "");
   if (!version || !isReleaseVersionNewer(version, currentVersion)) return null;
@@ -195,7 +203,7 @@ function parseMirrorUpdate(
       return { name, urls: [url], size: asset.size, sha256 };
     })
     .filter((asset): asset is ReleaseAsset => asset !== null);
-  const selectedAsset = selectMirrorReleaseAsset(assets, platform);
+  const selectedAsset = selectMirrorReleaseAsset(assets, platform, windowsInstallerKind);
   if (!selectedAsset) {
     throw new Error("No compatible installer asset found in the update mirror.");
   }
@@ -211,6 +219,7 @@ async function fetchMirrorUpdate(
   manifestUrl: string,
   currentVersion: string,
   platform: ReleasePlatform,
+  windowsInstallerKind: WindowsInstallerKind,
 ): Promise<ReleaseUpdateInfo | null> {
   const response = await fetch(manifestUrl, {
     cache: "no-store",
@@ -223,6 +232,7 @@ async function fetchMirrorUpdate(
     (await response.json()) as MirrorReleaseManifest,
     currentVersion,
     platform,
+    windowsInstallerKind,
   );
 }
 
@@ -230,6 +240,7 @@ export async function fetchLatestReleaseUpdate(
   currentVersion: string,
   platform: ReleasePlatform = detectReleasePlatform(),
   mirrorManifestUrls: string[] = MIRROR_MANIFEST_URLS,
+  windowsInstallerKind: WindowsInstallerKind = "unknown",
 ): Promise<ReleaseUpdateInfo | null> {
   let githubError: unknown;
   try {
@@ -258,14 +269,19 @@ export async function fetchLatestReleaseUpdate(
         };
       })
       .filter((asset): asset is ReleaseAsset => asset !== null);
-    const selectedAsset = selectReleaseAsset(assets, platform);
+    const selectedAsset = selectReleaseAsset(assets, platform, windowsInstallerKind);
     if (!selectedAsset) {
       throw new Error("No compatible installer asset found in the latest release.");
     }
 
     for (const manifestUrl of mirrorManifestUrls) {
       try {
-        const mirrorUpdate = await fetchMirrorUpdate(manifestUrl, currentVersion, platform);
+        const mirrorUpdate = await fetchMirrorUpdate(
+          manifestUrl,
+          currentVersion,
+          platform,
+          windowsInstallerKind,
+        );
         if (mirrorUpdate?.version === releaseVersion && mirrorUpdate.asset.name === selectedAsset.name) {
           selectedAsset.urls.push(...mirrorUpdate.asset.urls);
           selectedAsset.sha256 ??= mirrorUpdate.asset.sha256;
@@ -288,7 +304,12 @@ export async function fetchLatestReleaseUpdate(
   let mirrorUpdate: ReleaseUpdateInfo | null = null;
   for (const manifestUrl of mirrorManifestUrls) {
     try {
-      const candidate = await fetchMirrorUpdate(manifestUrl, currentVersion, platform);
+      const candidate = await fetchMirrorUpdate(
+        manifestUrl,
+        currentVersion,
+        platform,
+        windowsInstallerKind,
+      );
       if (!candidate) continue;
       if (!mirrorUpdate) {
         mirrorUpdate = candidate;

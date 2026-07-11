@@ -312,6 +312,23 @@ export type ManagedSessionPage = {
   nextOffset: number | null;
 };
 
+export type ManagedSessionPreviewRequest = {
+  sourceId: string;
+  threadId: string;
+  limit?: number;
+};
+
+export type ManagedSessionPreviewItem = {
+  role: "user" | "assistant";
+  text: string;
+};
+
+export type ManagedSessionPreviewResponse = {
+  openingMessage: string | null;
+  items: ManagedSessionPreviewItem[];
+  incomplete: boolean;
+};
+
 export type ResumeManagedSessionRequest = {
   sourceId: string;
   threadId: string;

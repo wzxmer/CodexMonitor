@@ -19,6 +19,8 @@ import type {
   DictationSessionState,
   LocalUsageSnapshot,
   ManagedSessionPage,
+  ManagedSessionPreviewRequest,
+  ManagedSessionPreviewResponse,
   ManagedSessionCleanupPreview,
   ManagedSessionCleanupRequest,
   ManagedSessionCleanupResponse,
@@ -1081,6 +1083,12 @@ export async function fetchManagedSessionsPage(
   return invoke<ManagedSessionPage>("fetch_managed_sessions_page", { request });
 }
 
+export async function fetchManagedSessionPreview(
+  request: ManagedSessionPreviewRequest,
+): Promise<ManagedSessionPreviewResponse> {
+  return invoke<ManagedSessionPreviewResponse>("fetch_managed_session_preview", { request });
+}
+
 export async function searchManagedSessions(
   request: SessionSearchRequest,
 ): Promise<SessionSearchProgress> {
@@ -1110,6 +1118,10 @@ export async function rollbackThread(
 
 export async function cleanupDownloadedReleaseAssets(): Promise<void> {
   return invoke("cleanup_downloaded_release_assets");
+}
+
+export async function windowsInstallerKind(): Promise<"msi" | "nsis" | "unknown"> {
+  return invoke<"msi" | "nsis" | "unknown">("windows_installer_kind");
 }
 
 export async function downloadAndOpenReleaseAsset(

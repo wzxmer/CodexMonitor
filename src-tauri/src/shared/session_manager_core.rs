@@ -5,6 +5,7 @@ pub(crate) mod derivation;
 pub(crate) mod file_map;
 pub(crate) mod ledger;
 pub(crate) mod parser;
+pub(crate) mod preview;
 pub(crate) mod runtime;
 pub(crate) mod scanner;
 pub(crate) mod search;

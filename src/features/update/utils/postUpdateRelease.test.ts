@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchLatestReleaseUpdate } from "./postUpdateRelease";
+import { fetchLatestReleaseUpdate, selectReleaseAsset } from "./postUpdateRelease";
 
 const checksum = "a".repeat(64);
 
@@ -73,5 +73,26 @@ describe("fetchLatestReleaseUpdate", () => {
 
     expect(update?.asset.urls).toEqual([githubUrl, mirrorUrl]);
     expect(update?.asset.sha256).toBe(checksum);
+  });
+});
+
+describe("selectReleaseAsset", () => {
+  const assets = [
+    {
+      name: "CodexMonitor_9.9.9_x64.msi",
+      urls: ["https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x64.msi"],
+    },
+    {
+      name: "CodexMonitor_9.9.9_x64-setup.exe",
+      urls: ["https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x64-setup.exe"],
+    },
+  ];
+
+  it("keeps NSIS installations on NSIS updates", () => {
+    expect(selectReleaseAsset(assets, "windows", "nsis")?.name).toContain(".exe");
+  });
+
+  it("keeps MSI installations on MSI updates", () => {
+    expect(selectReleaseAsset(assets, "windows", "msi")?.name).toContain(".msi");
   });
 });

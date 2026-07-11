@@ -1,15 +1,30 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ManagedSession } from "@/types";
 
+const { managerMock, fetchPreviewMock } = vi.hoisted(() => ({
+  managerMock: { indexedSessions: [] as ManagedSession[], sessions: [] as ManagedSession[] },
+  fetchPreviewMock: vi.fn(),
+}));
+
 vi.mock("../hooks/useSessionManager", () => ({
-  useSessionManager: () => ({ indexedSessions: [], sessions: [] }),
+  useSessionManager: () => managerMock,
+}));
+
+vi.mock("@services/tauri", () => ({
+  fetchManagedSessionPreview: fetchPreviewMock,
 }));
 
 import { SessionManagerProvider, useSessionManagerContext } from "./SessionManagerContext";
 
 afterEach(cleanup);
+
+beforeEach(() => {
+  managerMock.indexedSessions = [];
+  managerMock.sessions = [];
+  fetchPreviewMock.mockReset();
+});
 
 const session: ManagedSession = {
   key: "source:thread",
@@ -41,7 +56,35 @@ function Probe() {
   </>;
 }
 
+function PreviewProbe() {
+  const context = useSessionManagerContext();
+  return <>
+    <span>{context.focusedSession?.title ?? "no focus"}</span>
+    <span>{context.sessionPreview?.items[0]?.text ?? "no preview"}</span>
+  </>;
+}
+
 describe("SessionManagerProvider", () => {
+  it("focuses the first visible session and loads its latest preview", async () => {
+    managerMock.indexedSessions = [session];
+    managerMock.sessions = [session];
+    fetchPreviewMock.mockResolvedValue({
+      openingMessage: "opening",
+      items: [{ role: "assistant", text: "latest result" }],
+      incomplete: false,
+    });
+
+    render(<SessionManagerProvider active onActiveChange={vi.fn()} onResumeSession={vi.fn()} onDeriveSession={vi.fn()}><PreviewProbe /></SessionManagerProvider>);
+
+    expect(screen.getByText("B session")).toBeTruthy();
+    expect(await screen.findByText("latest result")).toBeTruthy();
+    expect(fetchPreviewMock).toHaveBeenCalledWith({
+      sourceId: "source",
+      threadId: "thread",
+      limit: 6,
+    });
+  });
+
   it("resumes directly when the current project matches", async () => {
     const onResumeSession = vi.fn(async () => false);
     render(<SessionManagerProvider active onActiveChange={vi.fn()} onResumeSession={onResumeSession} onDeriveSession={vi.fn()} currentWorkspace={{ name: "B", path: "d:/project/b/" }}><Probe /></SessionManagerProvider>);

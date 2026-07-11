@@ -4,6 +4,7 @@ import type { DebugEntry } from "../../../types";
 import {
   cleanupDownloadedReleaseAssets,
   downloadAndOpenReleaseAsset,
+  windowsInstallerKind,
 } from "../../../services/tauri";
 import { subscribeReleaseAssetDownloadProgress } from "../../../services/events";
 import {
@@ -84,7 +85,13 @@ export function useUpdater({
     }
     try {
       setState({ stage: "checking" });
-      const update = await fetchLatestReleaseUpdate(__APP_VERSION__);
+      const installerKind = await windowsInstallerKind();
+      const update = await fetchLatestReleaseUpdate(
+        __APP_VERSION__,
+        undefined,
+        undefined,
+        installerKind,
+      );
       if (!update) {
         updateRef.current = null;
         const nextState: UpdateState = { stage: "upToDate" };

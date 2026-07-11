@@ -14,6 +14,7 @@ import {
   createGitHubRepo,
   fetchGit,
   fetchManagedSessionsPage,
+  fetchManagedSessionPreview,
   fetchSessionSearchResults,
   forkThread,
   getAppsList,
@@ -185,6 +186,7 @@ describe("tauri invoke wrappers", () => {
     });
     await scanManagedSessions({ requestId: "scan-a", sourceIds: ["source-a"] });
     await fetchManagedSessionsPage({ requestId: "scan-a", offset: 0, limit: 50 });
+    await fetchManagedSessionPreview({ sourceId: "source-a", threadId: "thread-a", limit: 6 });
     await searchManagedSessions({ requestId: "search-a", query: "alpha", sourceIds: [], includeArchived: true, includeSubagents: false });
     await fetchSessionSearchResults("search-a");
     await cancelSessionTask("scan-a");
@@ -209,6 +211,9 @@ describe("tauri invoke wrappers", () => {
     });
     expect(invokeMock).toHaveBeenCalledWith("fetch_managed_sessions_page", {
       request: { requestId: "scan-a", offset: 0, limit: 50 },
+    });
+    expect(invokeMock).toHaveBeenCalledWith("fetch_managed_session_preview", {
+      request: { sourceId: "source-a", threadId: "thread-a", limit: 6 },
     });
     expect(invokeMock).toHaveBeenCalledWith("search_managed_sessions", {
       request: { requestId: "search-a", query: "alpha", sourceIds: [], includeArchived: true, includeSubagents: false },

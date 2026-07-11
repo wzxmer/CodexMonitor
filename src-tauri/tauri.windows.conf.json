@@ -17,6 +17,12 @@
     ]
   },
   "bundle": {
-    "createUpdaterArtifacts": false
+    "createUpdaterArtifacts": false,
+    "windows": {
+      "wix": {
+        "upgradeCode": "06bba22c-3339-58fb-b277-3c5bf68443ef",
+        "template": "windows/wix/main.wxs"
+      }
+    }
   }
 }

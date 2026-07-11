@@ -7,14 +7,22 @@ use tauri::Emitter;
 use tauri::Manager;
 use tokio::io::AsyncWriteExt;
 
+#[cfg(target_os = "windows")]
+use winreg::{
+    enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE},
+    RegKey,
+};
+
 const RELEASE_HOST: &str = "github.com";
 const RELEASE_PATH_PREFIX: &str = "/wzxmer/CodexMonitor/releases/download/";
 const INSTALLER_DIR_NAME: &str = "release-installers";
 const DOWNLOAD_STALL_TIMEOUT_SECS: u64 = 30;
 const TENCENT_UPDATE_BASE_URL: Option<&str> = option_env!("CODEXMONITOR_TENCENT_UPDATE_BASE_URL");
 const ALIYUN_UPDATE_BASE_URL: Option<&str> = option_env!("CODEXMONITOR_ALIYUN_UPDATE_BASE_URL");
-const TENCENT_CODEX_CLI_BASE_URL: Option<&str> = option_env!("CODEXMONITOR_TENCENT_CODEX_CLI_BASE_URL");
-const ALIYUN_CODEX_CLI_BASE_URL: Option<&str> = option_env!("CODEXMONITOR_ALIYUN_CODEX_CLI_BASE_URL");
+const TENCENT_CODEX_CLI_BASE_URL: Option<&str> =
+    option_env!("CODEXMONITOR_TENCENT_CODEX_CLI_BASE_URL");
+const ALIYUN_CODEX_CLI_BASE_URL: Option<&str> =
+    option_env!("CODEXMONITOR_ALIYUN_CODEX_CLI_BASE_URL");
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +40,93 @@ pub struct InstalledManagedCodex {
 #[tauri::command]
 pub fn managed_codex_platform() -> String {
     format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
+}
+
+#[tauri::command]
+pub fn windows_installer_kind() -> String {
+    windows_installer_kind_impl().to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn windows_installer_kind_impl() -> &'static str {
+    let current_version = env!("CARGO_PKG_VERSION");
+    let msi_versions = read_uninstall_versions(
+        RegKey::predef(HKEY_LOCAL_MACHINE),
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        true,
+    )
+    .into_iter()
+    .chain(read_uninstall_versions(
+        RegKey::predef(HKEY_LOCAL_MACHINE),
+        "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        true,
+    ))
+    .chain(read_uninstall_versions(
+        RegKey::predef(HKEY_CURRENT_USER),
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        true,
+    ));
+    let nsis_versions = read_uninstall_versions(
+        RegKey::predef(HKEY_CURRENT_USER),
+        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        false,
+    );
+    select_windows_installer_kind(current_version, msi_versions, nsis_versions)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn windows_installer_kind_impl() -> &'static str {
+    "unknown"
+}
+
+#[cfg(target_os = "windows")]
+fn read_uninstall_versions(
+    root: RegKey,
+    path: &str,
+    require_windows_installer: bool,
+) -> Vec<String> {
+    let Ok(uninstall_key) = root.open_subkey(path) else {
+        return Vec::new();
+    };
+    uninstall_key
+        .enum_keys()
+        .filter_map(Result::ok)
+        .filter_map(|name| uninstall_key.open_subkey(name).ok())
+        .filter(|key| {
+            key.get_value::<String, _>("DisplayName").ok().as_deref() == Some("Codex Monitor")
+        })
+        .filter(|key| {
+            let is_windows_installer = key.get_value::<u32, _>("WindowsInstaller").ok() == Some(1);
+            if require_windows_installer {
+                is_windows_installer
+            } else {
+                !is_windows_installer
+                    && key
+                        .get_value::<String, _>("UninstallString")
+                        .ok()
+                        .is_some_and(|value| value.to_ascii_lowercase().contains("uninstall.exe"))
+            }
+        })
+        .filter_map(|key| key.get_value::<String, _>("DisplayVersion").ok())
+        .collect()
+}
+
+fn select_windows_installer_kind(
+    current_version: &str,
+    msi_versions: impl IntoIterator<Item = String>,
+    nsis_versions: impl IntoIterator<Item = String>,
+) -> &'static str {
+    let has_current_msi = msi_versions
+        .into_iter()
+        .any(|version| version == current_version);
+    let has_current_nsis = nsis_versions
+        .into_iter()
+        .any(|version| version == current_version);
+    match (has_current_msi, has_current_nsis) {
+        (true, false) => "msi",
+        (false, true) => "nsis",
+        _ => "unknown",
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -187,7 +282,10 @@ pub async fn install_managed_codex(
     }
     if !downloaded {
         let _ = tokio::fs::remove_file(&temp_path).await;
-        return Err(format!("All Codex CLI download routes failed: {}", errors.join(" | ")));
+        return Err(format!(
+            "All Codex CLI download routes failed: {}",
+            errors.join(" | ")
+        ));
     }
     tokio::fs::rename(&temp_path, &archive_path)
         .await
@@ -212,12 +310,19 @@ pub async fn install_managed_codex(
     })
 }
 
-fn extract_managed_codex_archive(archive_path: &Path, install_root: &Path) -> Result<PathBuf, String> {
+fn extract_managed_codex_archive(
+    archive_path: &Path,
+    install_root: &Path,
+) -> Result<PathBuf, String> {
     let archive_file = std::fs::File::open(archive_path)
         .map_err(|error| format!("Failed to open Codex CLI package: {error}"))?;
     let mut archive = zip::ZipArchive::new(archive_file)
         .map_err(|error| format!("Invalid Codex CLI package: {error}"))?;
-    let expected_name = if cfg!(target_os = "windows") { "codex.exe" } else { "codex" };
+    let expected_name = if cfg!(target_os = "windows") {
+        "codex.exe"
+    } else {
+        "codex"
+    };
     let mut executable_path = None;
     for index in 0..archive.len() {
         let mut entry = archive
@@ -231,8 +336,9 @@ fn extract_managed_codex_archive(archive_path: &Path, install_root: &Path) -> Re
         }
         let target = install_root.join(&relative_path);
         if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|error| format!("Failed to create managed Codex package directory: {error}"))?;
+            std::fs::create_dir_all(parent).map_err(|error| {
+                format!("Failed to create managed Codex package directory: {error}")
+            })?;
         }
         let mut output = std::fs::File::create(&target)
             .map_err(|error| format!("Failed to create managed Codex package file: {error}"))?;
@@ -242,8 +348,9 @@ fn extract_managed_codex_archive(archive_path: &Path, install_root: &Path) -> Re
         {
             use std::os::unix::fs::PermissionsExt;
             if let Some(mode) = entry.unix_mode() {
-                std::fs::set_permissions(&target, std::fs::Permissions::from_mode(mode))
-                    .map_err(|error| format!("Failed to apply Codex package permissions: {error}"))?;
+                std::fs::set_permissions(&target, std::fs::Permissions::from_mode(mode)).map_err(
+                    |error| format!("Failed to apply Codex package permissions: {error}"),
+                )?;
             }
         }
         if relative_path.file_name().and_then(|value| value.to_str()) == Some(expected_name) {
@@ -259,17 +366,17 @@ fn validate_release_asset_url(url: &str, expected_file_name: &str) -> Result<(),
     if parsed.scheme() != "https" {
         return Err("Only HTTPS release assets can be downloaded.".to_string());
     }
-    let is_github = parsed.host_str() == Some(RELEASE_HOST)
-        && parsed.path().starts_with(RELEASE_PATH_PREFIX);
+    let is_github =
+        parsed.host_str() == Some(RELEASE_HOST) && parsed.path().starts_with(RELEASE_PATH_PREFIX);
     let is_configured_mirror = [
         TENCENT_UPDATE_BASE_URL,
         ALIYUN_UPDATE_BASE_URL,
         TENCENT_CODEX_CLI_BASE_URL,
         ALIYUN_CODEX_CLI_BASE_URL,
     ]
-        .into_iter()
-        .flatten()
-        .any(|base_url| url.starts_with(&format!("{}/", base_url.trim_end_matches('/'))));
+    .into_iter()
+    .flatten()
+    .any(|base_url| url.starts_with(&format!("{}/", base_url.trim_end_matches('/'))));
     if !is_github && !is_configured_mirror {
         return Err("Release asset URL is not on the configured allowlist.".to_string());
     }
@@ -278,7 +385,9 @@ fn validate_release_asset_url(url: &str, expected_file_name: &str) -> Result<(),
         .and_then(|segments| segments.last())
         .ok_or_else(|| "Release asset URL has no file name.".to_string())?;
     if url_file_name != expected_file_name {
-        return Err("Release asset URL file name does not match the selected installer.".to_string());
+        return Err(
+            "Release asset URL file name does not match the selected installer.".to_string(),
+        );
     }
     Ok(())
 }
@@ -425,7 +534,12 @@ async fn download_to_path(
             return Err("Installer SHA-256 verification failed.".to_string());
         }
     }
-    emit_download_progress(app_handle, request_id, downloaded_bytes, Some(downloaded_bytes));
+    emit_download_progress(
+        app_handle,
+        request_id,
+        downloaded_bytes,
+        Some(downloaded_bytes),
+    );
     Ok(())
 }
 
@@ -471,15 +585,17 @@ fn open_installer(path: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_managed_codex_archive, sanitize_release_asset_file_name, validate_release_asset_url};
+    use super::{
+        extract_managed_codex_archive, sanitize_release_asset_file_name,
+        select_windows_installer_kind, validate_release_asset_url,
+    };
     use std::io::Write;
 
     #[test]
     fn accepts_matching_github_release_asset() {
         let file_name = "CodexMonitor_1.2.3_x64.msi";
-        let url = format!(
-            "https://github.com/wzxmer/CodexMonitor/releases/download/v1.2.3/{file_name}"
-        );
+        let url =
+            format!("https://github.com/wzxmer/CodexMonitor/releases/download/v1.2.3/{file_name}");
         assert!(validate_release_asset_url(&url, file_name).is_ok());
     }
 
@@ -487,6 +603,22 @@ mod tests {
     fn rejects_mismatched_release_asset_file_name() {
         let url = "https://github.com/wzxmer/CodexMonitor/releases/download/v1.2.3/other.msi";
         assert!(validate_release_asset_url(url, "CodexMonitor_1.2.3_x64.msi").is_err());
+    }
+
+    #[test]
+    fn detects_installer_kind_from_current_registered_version() {
+        assert_eq!(
+            select_windows_installer_kind("1.2.3", ["1.2.3".into()], ["1.2.2".into()]),
+            "msi"
+        );
+        assert_eq!(
+            select_windows_installer_kind("1.2.3", ["1.2.2".into()], ["1.2.3".into()]),
+            "nsis"
+        );
+        assert_eq!(
+            select_windows_installer_kind("1.2.3", ["1.2.3".into()], ["1.2.3".into()]),
+            "unknown"
+        );
     }
 
     #[test]
@@ -499,13 +631,20 @@ mod tests {
 
     #[test]
     fn extracts_managed_codex_executable() {
-        let root = std::env::temp_dir().join(format!("codex-monitor-updater-{}", uuid::Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("codex-monitor-updater-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let archive_path = root.join("codex.zip");
         let file = std::fs::File::create(&archive_path).unwrap();
         let mut archive = zip::ZipWriter::new(file);
-        let executable_name = if cfg!(target_os = "windows") { "codex.exe" } else { "codex" };
-        archive.start_file(executable_name, zip::write::SimpleFileOptions::default()).unwrap();
+        let executable_name = if cfg!(target_os = "windows") {
+            "codex.exe"
+        } else {
+            "codex"
+        };
+        archive
+            .start_file(executable_name, zip::write::SimpleFileOptions::default())
+            .unwrap();
         archive.write_all(b"test-codex").unwrap();
         archive.finish().unwrap();
 

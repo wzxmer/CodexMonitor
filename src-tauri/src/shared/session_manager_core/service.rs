@@ -706,6 +706,42 @@ pub(crate) async fn resolve_managed_session_core(
     resolve_indexed_managed_session(source_id, thread_id, app_settings, runtime, true).await
 }
 
+pub(crate) async fn fetch_managed_session_preview_core(
+    request: crate::types::ManagedSessionPreviewRequest,
+    app_settings: &Mutex<AppSettings>,
+    runtime: &SessionManagerRuntime,
+) -> Result<crate::types::ManagedSessionPreviewResponse, String> {
+    let (_, session) = resolve_indexed_managed_session(
+        &request.source_id,
+        &request.thread_id,
+        app_settings,
+        runtime,
+        false,
+    )
+    .await?;
+    let path = runtime
+        .latest_scan
+        .lock()
+        .await
+        .as_ref()
+        .and_then(|scan| scan.files_by_key.get(&session.key))
+        .map(|file| file.path.clone())
+        .ok_or_else(|| "Managed session preview file is unavailable".to_string())?;
+    let limit = request.limit.clamp(1, 12);
+    let preview = tokio::task::spawn_blocking(move || {
+        crate::shared::session_manager_core::preview::read_session_conversation_preview(
+            &path, limit,
+        )
+    })
+    .await
+    .map_err(|error| format!("Managed session preview task failed: {error}"))??;
+    Ok(crate::types::ManagedSessionPreviewResponse {
+        opening_message: preview.opening_message,
+        items: preview.items,
+        incomplete: preview.incomplete,
+    })
+}
+
 async fn resolve_indexed_managed_session(
     source_id: &str,
     thread_id: &str,

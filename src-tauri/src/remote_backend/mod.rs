@@ -115,6 +115,7 @@ fn request_timeout_for_method(method: &str) -> Duration {
         "send_user_message"
             | "start_review"
             | "preview_managed_session_cleanup"
+            | "fetch_managed_session_preview"
             | "cleanup_managed_sessions_now"
             | "run_managed_session_cleanup_scheduler"
     ) {
@@ -198,6 +199,7 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "model_list"
             | "read_thread"
             | "fetch_managed_sessions_page"
+            | "fetch_managed_session_preview"
             | "search_managed_sessions"
             | "fetch_session_search_results"
             | "rollback_thread"

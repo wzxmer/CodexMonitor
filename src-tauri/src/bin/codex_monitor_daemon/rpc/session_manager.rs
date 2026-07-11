@@ -58,6 +58,18 @@ pub(super) async fn try_handle(
                     .and_then(to_value),
             )
         }
+        "fetch_managed_session_preview" => {
+            let request = match parse_request::<types::ManagedSessionPreviewRequest>(params) {
+                Ok(request) => request,
+                Err(error) => return Some(Err(error)),
+            };
+            Some(
+                state
+                    .fetch_managed_session_preview(request)
+                    .await
+                    .and_then(to_value),
+            )
+        }
         "search_managed_sessions" => {
             let request = match parse_request::<types::SessionSearchRequest>(params) {
                 Ok(request) => request,
