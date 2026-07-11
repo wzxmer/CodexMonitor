@@ -1,5 +1,6 @@
 use futures_util::StreamExt;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::Emitter;
@@ -9,11 +10,28 @@ use tokio::io::AsyncWriteExt;
 const RELEASE_HOST: &str = "github.com";
 const RELEASE_PATH_PREFIX: &str = "/wzxmer/CodexMonitor/releases/download/";
 const INSTALLER_DIR_NAME: &str = "release-installers";
+const DOWNLOAD_STALL_TIMEOUT_SECS: u64 = 30;
+const TENCENT_UPDATE_BASE_URL: Option<&str> = option_env!("CODEXMONITOR_TENCENT_UPDATE_BASE_URL");
+const ALIYUN_UPDATE_BASE_URL: Option<&str> = option_env!("CODEXMONITOR_ALIYUN_UPDATE_BASE_URL");
+const TENCENT_CODEX_CLI_BASE_URL: Option<&str> = option_env!("CODEXMONITOR_TENCENT_CODEX_CLI_BASE_URL");
+const ALIYUN_CODEX_CLI_BASE_URL: Option<&str> = option_env!("CODEXMONITOR_ALIYUN_CODEX_CLI_BASE_URL");
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadedReleaseAsset {
     path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledManagedCodex {
+    path: String,
+    version: String,
+}
+
+#[tauri::command]
+pub fn managed_codex_platform() -> String {
+    format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -32,12 +50,19 @@ pub async fn cleanup_downloaded_release_assets(app_handle: tauri::AppHandle) -> 
 #[tauri::command]
 pub async fn download_and_open_release_asset(
     app_handle: tauri::AppHandle,
-    url: String,
+    urls: Vec<String>,
     file_name: String,
     request_id: String,
+    expected_size: Option<u64>,
+    expected_sha256: Option<String>,
 ) -> Result<DownloadedReleaseAsset, String> {
-    validate_release_asset_url(&url)?;
+    if urls.is_empty() {
+        return Err("No release asset download URL was provided.".to_string());
+    }
     let safe_file_name = sanitize_release_asset_file_name(&file_name)?;
+    for url in &urls {
+        validate_release_asset_url(url, &safe_file_name)?;
+    }
     let dir = installer_dir(&app_handle)?;
     tokio::fs::create_dir_all(&dir)
         .await
@@ -53,7 +78,34 @@ pub async fn download_and_open_release_asset(
             .unwrap_or_default()
     ));
 
-    download_to_path(&app_handle, &request_id, &url, &temp_path).await?;
+    let mut errors = Vec::new();
+    let mut downloaded = false;
+    for url in &urls {
+        let _ = tokio::fs::remove_file(&temp_path).await;
+        match download_to_path(
+            &app_handle,
+            &request_id,
+            url,
+            &temp_path,
+            expected_size,
+            expected_sha256.as_deref(),
+        )
+        .await
+        {
+            Ok(()) => {
+                downloaded = true;
+                break;
+            }
+            Err(error) => errors.push(error),
+        }
+    }
+    if !downloaded {
+        let _ = tokio::fs::remove_file(&temp_path).await;
+        return Err(format!(
+            "All update download routes failed: {}",
+            errors.join(" | ")
+        ));
+    }
     tokio::fs::rename(&temp_path, &target_path)
         .await
         .map_err(|error| {
@@ -71,14 +123,162 @@ pub async fn download_and_open_release_asset(
     })
 }
 
-fn validate_release_asset_url(url: &str) -> Result<(), String> {
+#[tauri::command]
+pub async fn install_managed_codex(
+    app_handle: tauri::AppHandle,
+    urls: Vec<String>,
+    file_name: String,
+    request_id: String,
+    version: String,
+    expected_size: u64,
+    expected_sha256: String,
+) -> Result<InstalledManagedCodex, String> {
+    if urls.is_empty() {
+        return Err("No Codex CLI download URL was provided.".to_string());
+    }
+    let safe_file_name = sanitize_release_asset_file_name(&file_name)?;
+    if !safe_file_name.to_ascii_lowercase().ends_with(".zip") {
+        return Err("Managed Codex package must be a ZIP archive.".to_string());
+    }
+    for url in &urls {
+        validate_release_asset_url(url, &safe_file_name)?;
+    }
+    let normalized_version = version.trim().trim_start_matches(['v', 'V']);
+    if normalized_version.is_empty()
+        || !normalized_version
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_'))
+    {
+        return Err("Invalid managed Codex version.".to_string());
+    }
+
+    let mut root = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Failed to resolve app data directory: {error}"))?;
+    root.push("managed-codex");
+    root.push(normalized_version);
+    tokio::fs::create_dir_all(&root)
+        .await
+        .map_err(|error| format!("Failed to create managed Codex directory: {error}"))?;
+    let archive_path = root.join(&safe_file_name);
+    let temp_path = archive_path.with_extension("zip.download");
+
+    let mut errors = Vec::new();
+    let mut downloaded = false;
+    for url in &urls {
+        let _ = tokio::fs::remove_file(&temp_path).await;
+        match download_to_path(
+            &app_handle,
+            &request_id,
+            url,
+            &temp_path,
+            Some(expected_size),
+            Some(&expected_sha256),
+        )
+        .await
+        {
+            Ok(()) => {
+                downloaded = true;
+                break;
+            }
+            Err(error) => errors.push(error),
+        }
+    }
+    if !downloaded {
+        let _ = tokio::fs::remove_file(&temp_path).await;
+        return Err(format!("All Codex CLI download routes failed: {}", errors.join(" | ")));
+    }
+    tokio::fs::rename(&temp_path, &archive_path)
+        .await
+        .map_err(|error| format!("Failed to finalize Codex CLI package: {error}"))?;
+
+    let install_root = root.clone();
+    let archive_for_extract = archive_path.clone();
+    let executable_path = tokio::task::spawn_blocking(move || {
+        extract_managed_codex_archive(&archive_for_extract, &install_root)
+    })
+    .await
+    .map_err(|error| format!("Codex CLI extraction task failed: {error}"))??;
+    let _ = tokio::fs::remove_file(&archive_path).await;
+
+    let detected_version = crate::backend::app_server::check_codex_installation(Some(
+        executable_path.to_string_lossy().into_owned(),
+    ))
+    .await?;
+    Ok(InstalledManagedCodex {
+        path: executable_path.to_string_lossy().into_owned(),
+        version: detected_version.unwrap_or_else(|| normalized_version.to_string()),
+    })
+}
+
+fn extract_managed_codex_archive(archive_path: &Path, install_root: &Path) -> Result<PathBuf, String> {
+    let archive_file = std::fs::File::open(archive_path)
+        .map_err(|error| format!("Failed to open Codex CLI package: {error}"))?;
+    let mut archive = zip::ZipArchive::new(archive_file)
+        .map_err(|error| format!("Invalid Codex CLI package: {error}"))?;
+    let expected_name = if cfg!(target_os = "windows") { "codex.exe" } else { "codex" };
+    let mut executable_path = None;
+    for index in 0..archive.len() {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|error| format!("Failed to read Codex CLI package: {error}"))?;
+        let Some(relative_path) = entry.enclosed_name() else {
+            continue;
+        };
+        if entry.is_dir() {
+            continue;
+        }
+        let target = install_root.join(&relative_path);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| format!("Failed to create managed Codex package directory: {error}"))?;
+        }
+        let mut output = std::fs::File::create(&target)
+            .map_err(|error| format!("Failed to create managed Codex package file: {error}"))?;
+        std::io::copy(&mut entry, &mut output)
+            .map_err(|error| format!("Failed to extract managed Codex package file: {error}"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Some(mode) = entry.unix_mode() {
+                std::fs::set_permissions(&target, std::fs::Permissions::from_mode(mode))
+                    .map_err(|error| format!("Failed to apply Codex package permissions: {error}"))?;
+            }
+        }
+        if relative_path.file_name().and_then(|value| value.to_str()) == Some(expected_name) {
+            executable_path = Some(target);
+        }
+    }
+    executable_path.ok_or_else(|| format!("Codex CLI package does not contain {expected_name}."))
+}
+
+fn validate_release_asset_url(url: &str, expected_file_name: &str) -> Result<(), String> {
     let parsed =
         reqwest::Url::parse(url).map_err(|error| format!("Invalid release asset URL: {error}"))?;
-    if parsed.scheme() != "https"
-        || parsed.host_str() != Some(RELEASE_HOST)
-        || !parsed.path().starts_with(RELEASE_PATH_PREFIX)
-    {
-        return Err("Only CodexMonitor GitHub release assets can be downloaded.".to_string());
+    if parsed.scheme() != "https" {
+        return Err("Only HTTPS release assets can be downloaded.".to_string());
+    }
+    let is_github = parsed.host_str() == Some(RELEASE_HOST)
+        && parsed.path().starts_with(RELEASE_PATH_PREFIX);
+    let is_configured_mirror = [
+        TENCENT_UPDATE_BASE_URL,
+        ALIYUN_UPDATE_BASE_URL,
+        TENCENT_CODEX_CLI_BASE_URL,
+        ALIYUN_CODEX_CLI_BASE_URL,
+    ]
+        .into_iter()
+        .flatten()
+        .any(|base_url| url.starts_with(&format!("{}/", base_url.trim_end_matches('/'))));
+    if !is_github && !is_configured_mirror {
+        return Err("Release asset URL is not on the configured allowlist.".to_string());
+    }
+    let url_file_name = parsed
+        .path_segments()
+        .and_then(|segments| segments.last())
+        .ok_or_else(|| "Release asset URL has no file name.".to_string())?;
+    if url_file_name != expected_file_name {
+        return Err("Release asset URL file name does not match the selected installer.".to_string());
     }
     Ok(())
 }
@@ -166,8 +366,13 @@ async fn download_to_path(
     request_id: &str,
     url: &str,
     target_path: &Path,
+    expected_size: Option<u64>,
+    expected_sha256: Option<&str>,
 ) -> Result<(), String> {
-    let response = reqwest::Client::new()
+    let response = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|error| format!("Failed to create update client: {error}"))?
         .get(url)
         .header(reqwest::header::ACCEPT, "application/octet-stream")
         .send()
@@ -187,8 +392,17 @@ async fn download_to_path(
         .map_err(|error| format!("Failed to create installer file: {error}"))?;
     let mut stream = response.bytes_stream();
     let mut downloaded_bytes = 0_u64;
-    while let Some(chunk) = stream.next().await {
+    let mut hasher = Sha256::new();
+    loop {
+        let next_chunk = tokio::time::timeout(
+            std::time::Duration::from_secs(DOWNLOAD_STALL_TIMEOUT_SECS),
+            stream.next(),
+        )
+        .await
+        .map_err(|_| "Installer download stalled.".to_string())?;
+        let Some(chunk) = next_chunk else { break };
         let chunk = chunk.map_err(|error| format!("Failed to read installer download: {error}"))?;
+        hasher.update(&chunk);
         file.write_all(&chunk)
             .await
             .map_err(|error| format!("Failed to write installer file: {error}"))?;
@@ -198,7 +412,20 @@ async fn download_to_path(
     file.flush()
         .await
         .map_err(|error| format!("Failed to flush installer file: {error}"))?;
-    emit_download_progress(app_handle, request_id, downloaded_bytes, total_bytes);
+    if let Some(expected_size) = expected_size {
+        if downloaded_bytes != expected_size {
+            return Err(format!(
+                "Installer size mismatch: expected {expected_size}, got {downloaded_bytes}."
+            ));
+        }
+    }
+    if let Some(expected_sha256) = expected_sha256 {
+        let actual_sha256 = format!("{:x}", hasher.finalize());
+        if !actual_sha256.eq_ignore_ascii_case(expected_sha256) {
+            return Err("Installer SHA-256 verification failed.".to_string());
+        }
+    }
+    emit_download_progress(app_handle, request_id, downloaded_bytes, Some(downloaded_bytes));
     Ok(())
 }
 
@@ -239,5 +466,51 @@ fn open_installer(path: &Path) -> Result<(), String> {
             .spawn()
             .map_err(|error| format!("Failed to open installer: {error}"))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_managed_codex_archive, sanitize_release_asset_file_name, validate_release_asset_url};
+    use std::io::Write;
+
+    #[test]
+    fn accepts_matching_github_release_asset() {
+        let file_name = "CodexMonitor_1.2.3_x64.msi";
+        let url = format!(
+            "https://github.com/wzxmer/CodexMonitor/releases/download/v1.2.3/{file_name}"
+        );
+        assert!(validate_release_asset_url(&url, file_name).is_ok());
+    }
+
+    #[test]
+    fn rejects_mismatched_release_asset_file_name() {
+        let url = "https://github.com/wzxmer/CodexMonitor/releases/download/v1.2.3/other.msi";
+        assert!(validate_release_asset_url(url, "CodexMonitor_1.2.3_x64.msi").is_err());
+    }
+
+    #[test]
+    fn strips_directory_components_from_release_asset_name() {
+        assert_eq!(
+            sanitize_release_asset_file_name("../CodexMonitor 1.2.3.msi").unwrap(),
+            "CodexMonitor_1.2.3.msi"
+        );
+    }
+
+    #[test]
+    fn extracts_managed_codex_executable() {
+        let root = std::env::temp_dir().join(format!("codex-monitor-updater-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let archive_path = root.join("codex.zip");
+        let file = std::fs::File::create(&archive_path).unwrap();
+        let mut archive = zip::ZipWriter::new(file);
+        let executable_name = if cfg!(target_os = "windows") { "codex.exe" } else { "codex" };
+        archive.start_file(executable_name, zip::write::SimpleFileOptions::default()).unwrap();
+        archive.write_all(b"test-codex").unwrap();
+        archive.finish().unwrap();
+
+        let path = extract_managed_codex_archive(&archive_path, &root).unwrap();
+        assert_eq!(std::fs::read(path).unwrap(), b"test-codex");
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

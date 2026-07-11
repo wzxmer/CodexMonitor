@@ -16,6 +16,21 @@ type GitHubReleaseAssetResponse = {
   name?: string;
   browser_download_url?: string;
   size?: number;
+  digest?: string | null;
+};
+
+type MirrorReleaseManifest = {
+  version?: string;
+  htmlUrl?: string;
+  body?: string | null;
+  assets?: MirrorReleaseAsset[];
+};
+
+type MirrorReleaseAsset = {
+  name?: string;
+  size?: number;
+  sha256?: string;
+  url?: string;
 };
 
 export type PostUpdateReleaseInfo = {
@@ -28,8 +43,9 @@ export type ReleasePlatform = "windows" | "macos" | "linux" | "unknown";
 
 export type ReleaseAsset = {
   name: string;
-  url: string;
+  urls: string[];
   size?: number;
+  sha256?: string;
 };
 
 export type ReleaseUpdateInfo = {
@@ -38,6 +54,16 @@ export type ReleaseUpdateInfo = {
   body: string | null;
   asset: ReleaseAsset;
 };
+
+const MIRROR_MANIFEST_URLS = [
+  import.meta.env.VITE_TENCENT_UPDATE_MANIFEST_URL,
+  import.meta.env.VITE_ALIYUN_UPDATE_MANIFEST_URL,
+].filter((value): value is string => Boolean(value?.trim()));
+
+function normalizeSha256(value: string | null | undefined): string | undefined {
+  const normalized = value?.trim().replace(/^sha256:/i, "").toLowerCase();
+  return normalized && /^[a-f0-9]{64}$/.test(normalized) ? normalized : undefined;
+}
 
 function normalizeStoredVersion(value: string): string {
   let normalized = value.trim();
@@ -106,7 +132,9 @@ export function selectReleaseAsset(
   const usableAssets = assets.filter((asset) => {
     const name = asset.name.toLowerCase();
     return (
-      asset.url.startsWith("https://github.com/wzxmer/CodexMonitor/releases/download/") &&
+      asset.urls.some((url) =>
+        url.startsWith("https://github.com/wzxmer/CodexMonitor/releases/download/"),
+      ) &&
       !name.endsWith(".sig") &&
       !name.endsWith(".zip") &&
       !name.endsWith(".blockmap")
@@ -132,53 +160,150 @@ export function selectReleaseAsset(
   return null;
 }
 
-export async function fetchLatestReleaseUpdate(
+function selectMirrorReleaseAsset(
+  assets: ReleaseAsset[],
+  platform: ReleasePlatform,
+): ReleaseAsset | null {
+  const preferredExtensions =
+    platform === "windows"
+      ? [".msi", ".exe"]
+      : platform === "macos"
+        ? [".dmg"]
+        : platform === "linux"
+          ? [".appimage", ".rpm"]
+          : [".msi", ".exe", ".dmg", ".appimage", ".rpm"];
+  return preferredExtensions
+    .map((extension) =>
+      assets.find((asset) => asset.name.toLowerCase().endsWith(extension)),
+    )
+    .find((asset): asset is ReleaseAsset => Boolean(asset)) ?? null;
+}
+
+function parseMirrorUpdate(
+  payload: MirrorReleaseManifest,
   currentVersion: string,
-  platform: ReleasePlatform = detectReleasePlatform(),
-): Promise<ReleaseUpdateInfo | null> {
-  const response = await fetch(`${GITHUB_RELEASES_API_BASE}/latest`, {
-    headers: {
-      Accept: "application/vnd.github+json",
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`GitHub releases request failed (${response.status}).`);
-  }
-
-  const payload = (await response.json()) as GitHubReleaseResponse;
-  const releaseVersion = normalizeStoredVersion(payload.tag_name ?? "");
-  if (!releaseVersion || !isReleaseVersionNewer(releaseVersion, currentVersion)) {
-    return null;
-  }
-
+  platform: ReleasePlatform,
+): ReleaseUpdateInfo | null {
+  const version = normalizeStoredVersion(payload.version ?? "");
+  if (!version || !isReleaseVersionNewer(version, currentVersion)) return null;
   const assets = (payload.assets ?? [])
     .map((asset): ReleaseAsset | null => {
       const name = asset.name?.trim();
-      const url = asset.browser_download_url?.trim();
-      if (!name || !url) {
-        return null;
-      }
-      return {
-        name,
-        url,
-        size: asset.size,
-      };
+      const url = asset.url?.trim();
+      const sha256 = normalizeSha256(asset.sha256);
+      if (!name || !url || !sha256) return null;
+      return { name, urls: [url], size: asset.size, sha256 };
     })
     .filter((asset): asset is ReleaseAsset => asset !== null);
-  const selectedAsset = selectReleaseAsset(assets, platform);
+  const selectedAsset = selectMirrorReleaseAsset(assets, platform);
   if (!selectedAsset) {
-    throw new Error("No compatible installer asset found in the latest release.");
+    throw new Error("No compatible installer asset found in the update mirror.");
   }
-
   return {
-    version: releaseVersion,
-    htmlUrl:
-      payload.html_url && payload.html_url.trim().length > 0
-        ? payload.html_url
-        : buildReleaseTagUrl(releaseVersion),
+    version,
+    htmlUrl: payload.htmlUrl?.trim() || buildReleaseTagUrl(version),
     body: payload.body?.trim() ? payload.body : null,
     asset: selectedAsset,
   };
+}
+
+async function fetchMirrorUpdate(
+  manifestUrl: string,
+  currentVersion: string,
+  platform: ReleasePlatform,
+): Promise<ReleaseUpdateInfo | null> {
+  const response = await fetch(manifestUrl, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) {
+    throw new Error(`Update mirror request failed (${response.status}).`);
+  }
+  return parseMirrorUpdate(
+    (await response.json()) as MirrorReleaseManifest,
+    currentVersion,
+    platform,
+  );
+}
+
+export async function fetchLatestReleaseUpdate(
+  currentVersion: string,
+  platform: ReleasePlatform = detectReleasePlatform(),
+  mirrorManifestUrls: string[] = MIRROR_MANIFEST_URLS,
+): Promise<ReleaseUpdateInfo | null> {
+  let githubError: unknown;
+  try {
+    const response = await fetch(`${GITHUB_RELEASES_API_BASE}/latest`, {
+      headers: { Accept: "application/vnd.github+json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      throw new Error(`GitHub releases request failed (${response.status}).`);
+    }
+
+    const payload = (await response.json()) as GitHubReleaseResponse;
+    const releaseVersion = normalizeStoredVersion(payload.tag_name ?? "");
+    if (!releaseVersion || !isReleaseVersionNewer(releaseVersion, currentVersion)) return null;
+
+    const assets = (payload.assets ?? [])
+      .map((asset): ReleaseAsset | null => {
+        const name = asset.name?.trim();
+        const url = asset.browser_download_url?.trim();
+        if (!name || !url) return null;
+        return {
+          name,
+          urls: [url],
+          size: asset.size,
+          sha256: normalizeSha256(asset.digest),
+        };
+      })
+      .filter((asset): asset is ReleaseAsset => asset !== null);
+    const selectedAsset = selectReleaseAsset(assets, platform);
+    if (!selectedAsset) {
+      throw new Error("No compatible installer asset found in the latest release.");
+    }
+
+    for (const manifestUrl of mirrorManifestUrls) {
+      try {
+        const mirrorUpdate = await fetchMirrorUpdate(manifestUrl, currentVersion, platform);
+        if (mirrorUpdate?.version === releaseVersion && mirrorUpdate.asset.name === selectedAsset.name) {
+          selectedAsset.urls.push(...mirrorUpdate.asset.urls);
+          selectedAsset.sha256 ??= mirrorUpdate.asset.sha256;
+          selectedAsset.size ??= mirrorUpdate.asset.size;
+        }
+      } catch {
+        // GitHub remains usable when a mirror is offline.
+      }
+    }
+    return {
+      version: releaseVersion,
+      htmlUrl: payload.html_url?.trim() || buildReleaseTagUrl(releaseVersion),
+      body: payload.body?.trim() ? payload.body : null,
+      asset: selectedAsset,
+    };
+  } catch (error) {
+    githubError = error;
+  }
+
+  let mirrorUpdate: ReleaseUpdateInfo | null = null;
+  for (const manifestUrl of mirrorManifestUrls) {
+    try {
+      const candidate = await fetchMirrorUpdate(manifestUrl, currentVersion, platform);
+      if (!candidate) continue;
+      if (!mirrorUpdate) {
+        mirrorUpdate = candidate;
+      } else if (
+        candidate.version === mirrorUpdate.version &&
+        candidate.asset.name === mirrorUpdate.asset.name
+      ) {
+        mirrorUpdate.asset.urls.push(...candidate.asset.urls);
+      }
+    } catch {
+      // Continue to the next configured mirror.
+    }
+  }
+  if (mirrorUpdate) return mirrorUpdate;
+  throw githubError;
 }
 
 export function savePendingPostUpdateVersion(version: string): void {

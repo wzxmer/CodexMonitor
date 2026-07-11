@@ -67,6 +67,14 @@ jobs:
     environment: release
     env:
       RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
+      VITE_TENCENT_UPDATE_MANIFEST_URL: ${{ vars.TENCENT_UPDATE_MANIFEST_URL }}
+      VITE_ALIYUN_UPDATE_MANIFEST_URL: ${{ vars.ALIYUN_UPDATE_MANIFEST_URL }}
+      CODEXMONITOR_TENCENT_UPDATE_BASE_URL: ${{ vars.TENCENT_UPDATE_BASE_URL }}
+      CODEXMONITOR_ALIYUN_UPDATE_BASE_URL: ${{ vars.ALIYUN_UPDATE_BASE_URL }}
+      VITE_TENCENT_CODEX_CLI_MANIFEST_URL: ${{ vars.TENCENT_CODEX_CLI_MANIFEST_URL }}
+      VITE_ALIYUN_CODEX_CLI_MANIFEST_URL: ${{ vars.ALIYUN_CODEX_CLI_MANIFEST_URL }}
+      CODEXMONITOR_TENCENT_CODEX_CLI_BASE_URL: ${{ vars.TENCENT_CODEX_CLI_BASE_URL }}
+      CODEXMONITOR_ALIYUN_CODEX_CLI_BASE_URL: ${{ vars.ALIYUN_CODEX_CLI_BASE_URL }}
     strategy:
       fail-fast: false
       matrix:
@@ -193,6 +201,19 @@ jobs:
           cd src-tauri
           cargo build --release --target ${{ matrix.target }} --bin codex_monitor_daemon --bin codex_monitor_daemonctl
 
+      - name: Ad-hoc sign macOS app bundle
+        run: |
+          set -euo pipefail
+          APP_PATH="src-tauri/target/${{ matrix.target }}/release/bundle/macos/Codex Monitor.app"
+          codesign \
+            --force \
+            --deep \
+            --sign - \
+            --timestamp=none \
+            --entitlements src-tauri/Entitlements.plist \
+            "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
       - name: Package artifacts
         run: |
           set -euo pipefail
@@ -209,6 +230,16 @@ jobs:
           rm -rf "release-artifacts/dmg-root/Codex Monitor.app"
           ditto "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Codex Monitor.app" \
             "release-artifacts/dmg-root/Codex Monitor.app"
+          ln -s /Applications "release-artifacts/dmg-root/Applications"
+          cat > "release-artifacts/dmg-root/安装与打开说明.txt" <<'EOF'
+          安装：将 Codex Monitor 拖入 Applications 文件夹。
+
+          本版本未使用 Apple Developer ID 公证。首次打开时：
+          1. 在“应用程序”中右键 Codex Monitor，选择“打开”。
+          2. 如果仍被阻止，前往“系统设置 > 隐私与安全性”，点击“仍要打开”。
+
+          正常情况下不需要执行终端命令。
+          EOF
 
           ditto -c -k --keepParent \
             "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Codex Monitor.app" \
@@ -234,6 +265,14 @@ jobs:
     environment: release
     env:
       RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
+      VITE_TENCENT_UPDATE_MANIFEST_URL: ${{ vars.TENCENT_UPDATE_MANIFEST_URL }}
+      VITE_ALIYUN_UPDATE_MANIFEST_URL: ${{ vars.ALIYUN_UPDATE_MANIFEST_URL }}
+      CODEXMONITOR_TENCENT_UPDATE_BASE_URL: ${{ vars.TENCENT_UPDATE_BASE_URL }}
+      CODEXMONITOR_ALIYUN_UPDATE_BASE_URL: ${{ vars.ALIYUN_UPDATE_BASE_URL }}
+      VITE_TENCENT_CODEX_CLI_MANIFEST_URL: ${{ vars.TENCENT_CODEX_CLI_MANIFEST_URL }}
+      VITE_ALIYUN_CODEX_CLI_MANIFEST_URL: ${{ vars.ALIYUN_CODEX_CLI_MANIFEST_URL }}
+      CODEXMONITOR_TENCENT_CODEX_CLI_BASE_URL: ${{ vars.TENCENT_CODEX_CLI_BASE_URL }}
+      CODEXMONITOR_ALIYUN_CODEX_CLI_BASE_URL: ${{ vars.ALIYUN_CODEX_CLI_BASE_URL }}
     strategy:
       fail-fast: false
       matrix:
@@ -360,6 +399,14 @@ jobs:
     environment: release
     env:
       RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
+      VITE_TENCENT_UPDATE_MANIFEST_URL: ${{ vars.TENCENT_UPDATE_MANIFEST_URL }}
+      VITE_ALIYUN_UPDATE_MANIFEST_URL: ${{ vars.ALIYUN_UPDATE_MANIFEST_URL }}
+      CODEXMONITOR_TENCENT_UPDATE_BASE_URL: ${{ vars.TENCENT_UPDATE_BASE_URL }}
+      CODEXMONITOR_ALIYUN_UPDATE_BASE_URL: ${{ vars.ALIYUN_UPDATE_BASE_URL }}
+      VITE_TENCENT_CODEX_CLI_MANIFEST_URL: ${{ vars.TENCENT_CODEX_CLI_MANIFEST_URL }}
+      VITE_ALIYUN_CODEX_CLI_MANIFEST_URL: ${{ vars.ALIYUN_CODEX_CLI_MANIFEST_URL }}
+      CODEXMONITOR_TENCENT_CODEX_CLI_BASE_URL: ${{ vars.TENCENT_CODEX_CLI_BASE_URL }}
+      CODEXMONITOR_ALIYUN_CODEX_CLI_BASE_URL: ${{ vars.ALIYUN_CODEX_CLI_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -670,6 +717,157 @@ jobs:
           Path("release-artifacts/release-notes.md").write_text(notes + "\n")
           PY
 
+      - name: Build update mirror payloads
+        env:
+          TENCENT_UPDATE_BASE_URL: ${{ vars.TENCENT_UPDATE_BASE_URL }}
+          ALIYUN_UPDATE_BASE_URL: ${{ vars.ALIYUN_UPDATE_BASE_URL }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+
+          version = os.environ["RELEASE_VERSION"]
+          notes = Path("release-artifacts/release-notes.md").read_text()
+          excluded = (".sig", ".zip", ".blockmap")
+          artifacts = [
+              path for path in Path("release-artifacts").rglob("*")
+              if path.is_file()
+              and not path.name.endswith(excluded)
+              and path.suffix.lower() in {".msi", ".exe", ".dmg", ".appimage", ".rpm"}
+          ]
+          for provider, env_name in (
+              ("tencent", "TENCENT_UPDATE_BASE_URL"),
+              ("aliyun", "ALIYUN_UPDATE_BASE_URL"),
+          ):
+              base_url = os.environ.get(env_name, "").strip().rstrip("/")
+              if not base_url:
+                  continue
+              root = Path("update-mirrors") / provider
+              version_dir = root / f"v{version}"
+              version_dir.mkdir(parents=True, exist_ok=True)
+              assets = []
+              for artifact in artifacts:
+                  target = version_dir / artifact.name
+                  shutil.copy2(artifact, target)
+                  digest = hashlib.sha256(target.read_bytes()).hexdigest()
+                  assets.append({
+                      "name": artifact.name,
+                      "size": target.stat().st_size,
+                      "sha256": digest,
+                      "url": f"{base_url}/v{version}/{artifact.name}",
+                  })
+              manifest = {
+                  "version": version,
+                  "htmlUrl": f"https://github.com/wzxmer/CodexMonitor/releases/tag/v{version}",
+                  "body": notes,
+                  "assets": assets,
+              }
+              (root / "latest.json").write_text(
+                  json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+              )
+          PY
+
+      - name: Prepare managed Codex CLI packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TENCENT_CODEX_CLI_BASE_URL: ${{ vars.TENCENT_CODEX_CLI_BASE_URL }}
+          ALIYUN_CODEX_CLI_BASE_URL: ${{ vars.ALIYUN_CODEX_CLI_BASE_URL }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import io
+          import json
+          import os
+          import tarfile
+          import urllib.request
+          import zipfile
+          from pathlib import Path
+
+          request = urllib.request.Request(
+              "https://api.github.com/repos/openai/codex/releases/latest",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                  "User-Agent": "CodexMonitor-release",
+              },
+          )
+          with urllib.request.urlopen(request) as response:
+              release = json.load(response)
+          codex_version = str(release["tag_name"]).removeprefix("rust-v").lstrip("v")
+          assets = release.get("assets", [])
+          targets = {
+              "windows-x86_64": "x86_64-pc-windows-msvc",
+              "windows-aarch64": "aarch64-pc-windows-msvc",
+              "macos-x86_64": "x86_64-apple-darwin",
+              "macos-aarch64": "aarch64-apple-darwin",
+              "linux-x86_64": "x86_64-unknown-linux-musl",
+              "linux-aarch64": "aarch64-unknown-linux-musl",
+          }
+          output_dir = Path("release-artifacts/codex-cli-packages")
+          output_dir.mkdir(parents=True, exist_ok=True)
+          packages = {}
+          cm_version = os.environ["RELEASE_VERSION"]
+          github_base = f"https://github.com/wzxmer/CodexMonitor/releases/download/v{cm_version}"
+          mirror_bases = [
+              os.environ.get("TENCENT_CODEX_CLI_BASE_URL", "").strip().rstrip("/"),
+              os.environ.get("ALIYUN_CODEX_CLI_BASE_URL", "").strip().rstrip("/"),
+          ]
+
+          for platform, target in targets.items():
+              expected_asset_name = f"codex-package-{target}.tar.gz"
+              candidates = [asset for asset in assets if asset["name"] == expected_asset_name]
+              if not candidates:
+                  print(f"Skipping unavailable Codex target: {target}")
+                  continue
+              asset = candidates[0]
+              download = urllib.request.Request(
+                  asset["browser_download_url"],
+                  headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "User-Agent": "CodexMonitor-release"},
+              )
+              with urllib.request.urlopen(download) as response:
+                  archive_bytes = response.read()
+              file_name = f"codex-cli-{codex_version}-{platform}.zip"
+              package_path = output_dir / file_name
+              with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+                  with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as source:
+                      for member in source.getmembers():
+                          if not member.isfile():
+                              continue
+                          relative = Path(member.name)
+                          if relative.is_absolute() or ".." in relative.parts:
+                              raise RuntimeError(f"Unsafe Codex package path: {member.name}")
+                          extracted = source.extractfile(member)
+                          info = zipfile.ZipInfo(relative.as_posix())
+                          info.external_attr = (member.mode & 0xFFFF) << 16
+                          archive.writestr(info, extracted.read(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+              urls = [f"{base}/{file_name}" for base in mirror_bases if base]
+              urls.append(f"{github_base}/{file_name}")
+              packages[platform] = {
+                  "fileName": file_name,
+                  "urls": urls,
+                  "size": package_path.stat().st_size,
+                  "sha256": hashlib.sha256(package_path.read_bytes()).hexdigest(),
+              }
+
+          manifest = {"version": codex_version, "packages": packages}
+          Path("release-artifacts/codex-cli-latest.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+          )
+          PY
+
+          for provider in tencent aliyun; do
+            mkdir -p "update-mirrors/${provider}"
+            if [ -d "update-mirrors/${provider}" ]; then
+              cp release-artifacts/codex-cli-latest.json "update-mirrors/${provider}/"
+              cp release-artifacts/codex-cli-packages/*.zip "update-mirrors/${provider}/"
+            fi
+          done
+
       - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -711,10 +909,50 @@ jobs:
             --target "$GITHUB_SHA" \
             release-artifacts/CodexMonitor_*_*.zip \
             release-artifacts/CodexMonitor_*_*.dmg \
+            release-artifacts/codex-cli-latest.json \
+            release-artifacts/codex-cli-packages/*.zip \
             "${appimages[@]}" \
             "${rpms[@]}" \
             "${windows_exes[@]}" \
             "${windows_msis[@]}"
+
+      - name: Upload Tencent COS mirror
+        if: ${{ vars.TENCENT_COS_BUCKET != '' && vars.TENCENT_COS_REGION != '' }}
+        env:
+          SECRET_ID: ${{ secrets.TENCENT_COS_SECRET_ID }}
+          SECRET_KEY: ${{ secrets.TENCENT_COS_SECRET_KEY }}
+          BUCKET: ${{ vars.TENCENT_COS_BUCKET }}
+          REGION: ${{ vars.TENCENT_COS_REGION }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SECRET_ID" ] || [ -z "$SECRET_KEY" ] || [ ! -d update-mirrors/tencent ]; then
+            echo "Tencent COS mirror is not fully configured; skipping."
+            exit 0
+          fi
+          pip install coscmd
+          coscmd config -a "$SECRET_ID" -s "$SECRET_KEY" -b "$BUCKET" -r "$REGION"
+          coscmd upload -rs update-mirrors/tencent/ /
+
+      - name: Upload Aliyun OSS mirror
+        if: ${{ vars.ALIYUN_OSS_BUCKET != '' && vars.ALIYUN_OSS_ENDPOINT != '' }}
+        env:
+          ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+          ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+          BUCKET: ${{ vars.ALIYUN_OSS_BUCKET }}
+          ENDPOINT: ${{ vars.ALIYUN_OSS_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ACCESS_KEY_ID" ] || [ -z "$ACCESS_KEY_SECRET" ] || [ ! -d update-mirrors/aliyun ]; then
+            echo "Aliyun OSS mirror is not fully configured; skipping."
+            exit 0
+          fi
+          curl -fsSLo ossutil.zip \
+            https://gosspublic.alicdn.com/ossutil/v2/2.3.0/ossutil-2.3.0-linux-amd64.zip
+          unzip -q ossutil.zip -d ossutil-bin
+          OSSUTIL=$(find ossutil-bin -type f -name ossutil -print -quit)
+          chmod +x "$OSSUTIL"
+          "$OSSUTIL" cp -rf update-mirrors/aliyun/ "oss://${BUCKET}/" \
+            -e "$ENDPOINT" -i "$ACCESS_KEY_ID" -k "$ACCESS_KEY_SECRET"
 
       - name: Bump version and open PR
         env:

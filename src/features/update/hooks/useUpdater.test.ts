@@ -176,9 +176,11 @@ describe("useUpdater", () => {
     expect(result.current.state.progress?.totalBytes).toBe(100);
     expect(result.current.state.progress?.downloadedBytes).toBe(100);
     expect(downloadAndOpenReleaseAssetMock).toHaveBeenCalledWith(
-      expect.stringContaining("/releases/download/v9.9.9/"),
+      [expect.stringContaining("/releases/download/v9.9.9/")],
       expect.stringMatching(/\.(msi|dmg|AppImage)$/),
       expect.any(String),
+      100,
+      undefined,
     );
     expect(
       window.localStorage.getItem(STORAGE_KEY_PENDING_POST_UPDATE_VERSION),

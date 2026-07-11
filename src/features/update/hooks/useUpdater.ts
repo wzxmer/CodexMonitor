@@ -139,7 +139,13 @@ export function useUpdater({
     }));
 
     try {
-      await downloadAndOpenReleaseAsset(update.asset.url, update.asset.name, requestId);
+      await downloadAndOpenReleaseAsset(
+        update.asset.urls,
+        update.asset.name,
+        requestId,
+        update.asset.size,
+        update.asset.sha256,
+      );
       activeDownloadIdRef.current = null;
       setState((prev) => ({
         ...prev,
