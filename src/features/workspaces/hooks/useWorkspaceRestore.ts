@@ -47,7 +47,7 @@ export function useWorkspaceRestore({
         const wasConnected = workspace.connected;
         const isLocalCodexWorkspace = isLocalCodexWorkspaceId(workspace.id);
         try {
-          if (!wasConnected || isLocalCodexWorkspace) {
+          if (!wasConnected && !isLocalCodexWorkspace) {
             await connectWorkspace(workspace);
           }
           connectedTargets.push({ ...workspace, connected: true });

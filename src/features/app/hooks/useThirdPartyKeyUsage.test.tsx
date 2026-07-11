@@ -30,6 +30,7 @@ describe("useThirdPartyKeyUsage", () => {
     getWorkspaceThirdPartyKeyUsageMock.mockResolvedValue({
       balanceUsd: 12.5,
       todayCostUsd: 1.25,
+      averageLatencyMs: 842,
     });
 
     const { result } = renderHook(() =>
@@ -38,7 +39,7 @@ describe("useThirdPartyKeyUsage", () => {
 
     await flushPromises();
 
-    expect(result.current).toEqual({ balanceUsd: 12.5, todayCostUsd: 1.25 });
+    expect(result.current).toEqual({ balanceUsd: 12.5, todayCostUsd: 1.25, averageLatencyMs: 842 });
     expect(getWorkspaceThirdPartyKeyUsageMock).toHaveBeenCalledWith("ws-usage");
   });
 

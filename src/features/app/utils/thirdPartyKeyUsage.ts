@@ -1,6 +1,7 @@
 export type ThirdPartyKeyUsageSnapshot = {
   balanceUsd: number | null;
   todayCostUsd: number | null;
+  averageLatencyMs: number | null;
 };
 
 type ThirdPartyUsageTodayPayload = {
@@ -12,6 +13,7 @@ type ThirdPartyUsagePayload = {
   remaining?: unknown;
   usage?: {
     today?: ThirdPartyUsageTodayPayload;
+    average_duration_ms?: unknown;
   };
   subscription?: {
     daily_usage_usd?: unknown;
@@ -62,12 +64,14 @@ export function normalizeThirdPartyUsagePayload(
   const todayCostUsd =
     parseNumericValue(data.usage?.today?.actual_cost) ??
     parseNumericValue(data.subscription?.daily_usage_usd);
+  const averageLatencyMs = parseNumericValue(data.usage?.average_duration_ms);
 
-  if (balanceUsd === null && todayCostUsd === null) {
+  if (balanceUsd === null && todayCostUsd === null && averageLatencyMs === null) {
     return null;
   }
   return {
     balanceUsd,
     todayCostUsd,
+    averageLatencyMs,
   };
 }

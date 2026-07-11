@@ -454,7 +454,8 @@ describe("Messages", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Quote message" }));
+    fireEvent.click(screen.getByRole("button", { name: "引用消息" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /引用到当前会话/ }));
     expect(onQuoteMessage).toHaveBeenCalledWith("> First line\n> Second line\n\n");
   });
 
@@ -492,9 +493,10 @@ describe("Messages", () => {
     selection?.removeAllRanges();
     selection?.addRange(range);
 
-    const quoteButton = screen.getByRole("button", { name: "Quote message" });
-    fireEvent.mouseDown(quoteButton);
+    const quoteButton = screen.getByRole("button", { name: "引用消息" });
+    fireEvent.pointerDown(quoteButton);
     fireEvent.click(quoteButton);
+    fireEvent.click(screen.getByRole("menuitem", { name: /引用到当前会话/ }));
 
     expect(onQuoteMessage).toHaveBeenCalledWith("> beta\n\n");
     selection?.removeAllRanges();

@@ -177,6 +177,8 @@ export type ThreadSummary = {
   isSubagent?: boolean;
   subagentNickname?: string | null;
   subagentRole?: string | null;
+  subagentCheckpointStatus?: "pending" | "delivered" | "failed" | null;
+  subagentCheckpointCount?: number;
 };
 
 export type SessionSourceStatus =
@@ -448,6 +450,7 @@ export type MessageReadingStyle = "bubble" | "native" | "cli";
 export type AppLanguagePreference = "system" | "zh" | "en";
 export type PersonalityPreference = "friendly" | "pragmatic";
 export type FollowUpMessageBehavior = "queue" | "steer";
+export type SubagentCheckpointSyncMode = "finalOnly" | "checkpoints" | "continuous";
 export type ComposerSendShortcut =
   | "enter"
   | "ctrl-enter"
@@ -603,6 +606,7 @@ export type AppSettings = {
   collaborationModesEnabled: boolean;
   steerEnabled: boolean;
   followUpMessageBehavior: FollowUpMessageBehavior;
+  subagentCheckpointSyncMode: SubagentCheckpointSyncMode;
   composerSendShortcut: ComposerSendShortcut;
   composerTriggerMode?: ComposerTriggerMode;
   composerFollowUpHintEnabled: boolean;
@@ -689,6 +693,11 @@ export type CodexDoctorResult = {
   nodeOk: boolean;
   nodeVersion: string | null;
   nodeDetails: string | null;
+};
+
+export type InstalledManagedCodex = {
+  path: string;
+  version: string;
 };
 
 export type CodexStatus = {

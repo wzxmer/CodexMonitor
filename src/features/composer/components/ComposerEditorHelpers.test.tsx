@@ -182,7 +182,7 @@ describe("Composer editor helpers", () => {
     });
     const textarea = getTextarea(harness.container);
     textarea.setSelectionRange(4, 4);
-    const pasted = Array(200).fill("日志内容").join("\n");
+    const pasted = Array(80).fill("日志内容").join("\n");
     const event = new Event("paste", { bubbles: true, cancelable: true });
     Object.defineProperty(event, "clipboardData", {
       value: { getData: () => pasted, items: [] },
@@ -197,7 +197,7 @@ describe("Composer editor helpers", () => {
       /^pasted-text-.*\.txt$/,
     );
     expect(harness.container.querySelector(".composer-attachment-meta")?.textContent).toContain(
-      "200",
+      "80",
     );
 
     const previewButton = Array.from(

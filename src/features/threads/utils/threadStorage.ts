@@ -13,9 +13,14 @@ export type PinnedThreadsMap = Record<string, number>;
 export type CustomNamesMap = Record<string, string>;
 type DetachedReviewLinksMap = Record<string, Record<string, string>>;
 export type ThreadDerivationMetadata = {
-  sourceSessionKey: string;
+  derivationKind?: "session" | "message" | "selection";
+  sourceSessionKey?: string;
   sourceName: string;
   sourceTitle: string;
+  sourceWorkspaceId?: string;
+  sourceThreadId?: string;
+  sourceMessageId?: string;
+  sourceMessageRole?: "user" | "assistant";
   createdAt: number;
 };
 export type ThreadDerivationsMap = Record<string, ThreadDerivationMetadata>;

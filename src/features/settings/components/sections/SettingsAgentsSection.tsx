@@ -426,6 +426,29 @@ export function SettingsAgentsSection({
         />
       </SettingsToggleRow>
 
+      <div className="settings-field">
+        <label className="settings-label" htmlFor="settings-subagent-checkpoint-sync-mode">
+          {t("settings.agents.checkpointSyncMode")}
+        </label>
+        <select
+          id="settings-subagent-checkpoint-sync-mode"
+          className="settings-select"
+          value={appSettings.subagentCheckpointSyncMode}
+          onChange={(event) =>
+            void onUpdateAppSettings({
+              ...appSettings,
+              subagentCheckpointSyncMode: event.target
+                .value as typeof appSettings.subagentCheckpointSyncMode,
+            })
+          }
+        >
+          <option value="finalOnly">{t("settings.agents.checkpointSyncFinalOnly")}</option>
+          <option value="checkpoints">{t("settings.agents.checkpointSyncCheckpoints")}</option>
+          <option value="continuous">{t("settings.agents.checkpointSyncContinuous")}</option>
+        </select>
+        <div className="settings-help">{t("settings.agents.checkpointSyncHelp")}</div>
+      </div>
+
       <SettingsToggleRow
         title={t("settings.agents.maxThreads")}
         subtitle={

@@ -36,6 +36,10 @@ import {
   type MessageListEntry,
 } from "../utils/messageRenderUtils";
 import { CONVERSATION_STYLE_PRESETS } from "../utils/conversationStylePresets";
+import {
+  toMarkdownQuote,
+  type MessageReferenceAction,
+} from "../utils/messageReferences";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import {
   DiffRow,
@@ -131,6 +135,7 @@ type MessagesProps = {
   onPlanSubmitChanges?: (changes: string) => void;
   onOpenThreadLink?: (threadId: string, workspaceId?: string | null) => void;
   onQuoteMessage?: (text: string) => void;
+  onReferenceMessage?: (action: MessageReferenceAction) => void;
   onResendUserMessage?: (
     text: string,
     images?: string[],
@@ -210,6 +215,7 @@ export const Messages = memo(function Messages({
   onPlanSubmitChanges,
   onOpenThreadLink,
   onQuoteMessage,
+  onReferenceMessage,
   onResendUserMessage,
 }: MessagesProps) {
   const { t } = useI18n();
@@ -279,7 +285,6 @@ export const Messages = memo(function Messages({
     setToolGroupsAutoCollapsed,
     copiedMessageId,
     handleCopyMessage,
-    handleQuoteMessage,
     reasoningMetaById,
     latestReasoningLabel,
     groupedItems,
@@ -297,6 +302,18 @@ export const Messages = memo(function Messages({
     onPlanSubmitChanges,
     onQuoteMessage,
   });
+  const handleReferenceMessage = useCallback(
+    (action: MessageReferenceAction) => {
+      if (onReferenceMessage) {
+        onReferenceMessage(action);
+        return;
+      }
+      if (action.destination === "current" && onQuoteMessage) {
+        onQuoteMessage(toMarkdownQuote(action.selectedText ?? action.sourceText));
+      }
+    },
+    [onQuoteMessage, onReferenceMessage],
+  );
   const isSearchActiveForThread = searchOpen && searchThreadId === threadId;
   const searchMatches = useMemo(() => {
     if (!isSearchActiveForThread) {
@@ -599,7 +616,9 @@ export const Messages = memo(function Messages({
           item={item}
           isCopied={isCopied}
           onCopy={handleCopyMessage}
-          onQuote={onQuoteMessage ? handleQuoteMessage : undefined}
+          onReference={
+            onReferenceMessage || onQuoteMessage ? handleReferenceMessage : undefined
+          }
           onResendUserMessage={
             onResendUserMessage && item.id === retryableUserMessageId
               ? (message, text) =>

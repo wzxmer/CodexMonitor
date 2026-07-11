@@ -1,5 +1,5 @@
-export const LARGE_PASTE_CHARACTER_THRESHOLD = 12_000;
-export const LARGE_PASTE_LINE_THRESHOLD = 200;
+export const LARGE_PASTE_CHARACTER_THRESHOLD = 4_000;
+export const LARGE_PASTE_LINE_THRESHOLD = 80;
 export const LARGE_PASTE_MAX_UTF8_BYTES = 1024 * 1024;
 
 export type LargePasteAnalysis = {

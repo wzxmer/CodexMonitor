@@ -5,6 +5,15 @@ import { describe, expect, it, vi } from "vitest";
 import { useComposerImages } from "../hooks/useComposerImages";
 import { ComposerInput } from "./ComposerInput";
 
+const { openPathMock } = vi.hoisted(() => ({
+  openPathMock: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openPath: openPathMock,
+  openUrl: vi.fn(),
+}));
+
 vi.mock("../../../services/dragDrop", () => ({
   subscribeWindowDragDrop: vi.fn(() => () => {}),
 }));
@@ -164,6 +173,59 @@ function setMockFileReader() {
 }
 
 describe("Composer attachments integration", () => {
+  it("opens image files and copies image data from attachment actions", async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    const originalClipboardItem = globalThis.ClipboardItem;
+    const originalFetch = globalThis.fetch;
+    const write = vi.fn().mockResolvedValue(undefined);
+    const imageBlob = new Blob(["image"], { type: "image/png" });
+    Object.defineProperty(navigator, "clipboard", {
+      value: { write },
+      configurable: true,
+    });
+    globalThis.ClipboardItem = class ClipboardItem {
+      constructor(public readonly items: Record<string, Blob>) {}
+    } as unknown as typeof ClipboardItem;
+    globalThis.fetch = vi.fn().mockResolvedValue({ blob: async () => imageBlob }) as typeof fetch;
+
+    try {
+      const harness = renderComposerHarness({
+        activeThreadId: "thread-1",
+        activeWorkspaceId: "ws-1",
+      });
+      const textarea = getTextarea(harness.container);
+      const image = new File(["data"], "photo.png", { type: "image/png" });
+      (image as File & { path?: string }).path = "/tmp/photo.png";
+
+      await act(async () => {
+        dispatchDrop(textarea, [image]);
+      });
+
+      const openButton = harness.container.querySelector(".composer-attachment-open");
+      const copyButton = harness.container.querySelector(".composer-attachment-copy-image");
+      expect(openButton).toBeTruthy();
+      expect(copyButton).toBeTruthy();
+
+      await act(async () => {
+        (openButton as HTMLButtonElement).click();
+      });
+      expect(openPathMock).toHaveBeenCalledWith("/tmp/photo.png");
+
+      await act(async () => {
+        (copyButton as HTMLButtonElement).click();
+      });
+      expect(write).toHaveBeenCalledOnce();
+
+      harness.unmount();
+    } finally {
+      if (originalClipboard) {
+        Object.defineProperty(navigator, "clipboard", originalClipboard);
+      }
+      globalThis.ClipboardItem = originalClipboardItem;
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("attaches dropped files and dedupes paths", async () => {
     const harness = renderComposerHarness({
       activeThreadId: "thread-1",

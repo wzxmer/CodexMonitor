@@ -7,6 +7,7 @@ import {
   type AppBuildType,
 } from "@services/tauri";
 import { useUpdater } from "@/features/update/hooks/useUpdater";
+import { FeatureIntroPrompt } from "@app/components/FeatureIntroPrompt";
 import {
   SettingsSection,
   SettingsToggleRow,
@@ -42,6 +43,7 @@ export function SettingsAboutSection({
   const { t } = useI18n();
   const [appBuildType, setAppBuildType] = useState<AppBuildType | "unknown">("unknown");
   const [updaterEnabled, setUpdaterEnabled] = useState(false);
+  const [featureIntroOpen, setFeatureIntroOpen] = useState(false);
   const { state: updaterState, checkForUpdates, startUpdate } = useUpdater({
     enabled: updaterEnabled,
     autoCheckOnMount: false,
@@ -96,6 +98,13 @@ export function SettingsAboutSection({
 
   return (
     <SettingsSection title={t("about.title")} subtitle={t("about.subtitle")}>
+      <div className="settings-field">
+        <div className="settings-label">{t("featureIntro.title")}</div>
+        <div className="settings-help">{t("featureIntro.settingsDescription")}</div>
+        <button type="button" className="ghost" onClick={() => setFeatureIntroOpen(true)}>
+          {t("featureIntro.action")}
+        </button>
+      </div>
       <div className="settings-field">
         <div className="settings-help">
           {t("about.version")}：<code>{__APP_VERSION__}</code>
@@ -208,6 +217,7 @@ export function SettingsAboutSection({
           )}
         </div>
       </div>
+      <FeatureIntroPrompt open={featureIntroOpen} onClose={() => setFeatureIntroOpen(false)} />
     </SettingsSection>
   );
 }

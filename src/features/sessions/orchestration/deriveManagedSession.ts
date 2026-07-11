@@ -36,6 +36,7 @@ export async function deriveManagedSessionIntoWorkspace(args: Args): Promise<str
   );
   if (result.status !== "sent") throw new Error(args.sendError);
   args.persistDerivation(args.destination.id, threadId, {
+    derivationKind: "session",
     sourceSessionKey: args.preview.sourceSessionKey,
     sourceName: args.preview.sourceName,
     sourceTitle: args.preview.sourceSession.title,

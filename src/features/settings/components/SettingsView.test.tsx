@@ -185,6 +185,7 @@ const baseSettings: AppSettings = {
   collaborationModesEnabled: true,
   steerEnabled: true,
   followUpMessageBehavior: "queue",
+  subagentCheckpointSyncMode: "checkpoints",
   composerSendShortcut: "enter",
   composerFollowUpHintEnabled: true,
   pauseQueuedMessagesWhenResponseRequired: true,
@@ -284,7 +285,7 @@ const renderDisplaySection = (
   };
 
   render(<SettingsView {...props} />);
-  fireEvent.click(screen.getByRole("button", { name: "显示与声音" }));
+  fireEvent.click(screen.getByRole("button", { name: "显示与通知" }));
 
   return { onUpdateAppSettings, onToggleTransparency };
 };
@@ -615,7 +616,7 @@ describe("SettingsView About", () => {
 
     expect(
       screen.getByText(
-        "启用后，汉化版 CodexMonitor 启动时会检查新版本。更新来源为项目 GitHub Releases。",
+        "启用后，汉化版 CodexMonitor 启动时会检查新版本。默认使用 GitHub，发布者配置国内镜像后会自动回退。",
       ),
     ).toBeTruthy();
     expect(screen.getByText("项目仓库：")).toBeTruthy();
@@ -2260,7 +2261,7 @@ describe("SettingsView mobile layout", () => {
 
       fireEvent.click(
         within(rendered.container).getByRole("button", {
-          name: "显示与声音",
+          name: "显示与通知",
         }),
       );
 
@@ -2271,7 +2272,7 @@ describe("SettingsView mobile layout", () => {
           }),
         ).toBeTruthy();
         expect(
-          within(rendered.container).getByText("显示与声音", {
+          within(rendered.container).getByText("显示与通知", {
             selector: ".settings-mobile-detail-title",
           }),
         ).toBeTruthy();

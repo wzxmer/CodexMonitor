@@ -7,6 +7,7 @@ import { SettingsAgentsSection } from "./SettingsAgentsSection";
 
 const baseAppSettings = {
   nativeAgentMarkdownImportEnabled: true,
+  subagentCheckpointSyncMode: "checkpoints",
 } as AppSettings;
 
 const baseProps = (): SettingsAgentsSectionProps => ({
@@ -107,6 +108,28 @@ describe("SettingsAgentsSection", () => {
         nativeAgentMarkdownImportEnabled: false,
       });
       expect(onRefresh).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("updates subagent checkpoint sync mode", async () => {
+    const props = baseProps();
+    const onUpdateAppSettings = vi.fn(async () => {});
+    render(
+      <SettingsAgentsSection
+        {...props}
+        onUpdateAppSettings={onUpdateAppSettings}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("子会话进度同步"), {
+      target: { value: "finalOnly" },
+    });
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith({
+        ...baseAppSettings,
+        subagentCheckpointSyncMode: "finalOnly",
+      });
     });
   });
 

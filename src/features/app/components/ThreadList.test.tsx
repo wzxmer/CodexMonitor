@@ -200,6 +200,26 @@ describe("ThreadList", () => {
     expect(getByText("Nested Agent")).toBeTruthy();
   });
 
+  it("shows subagent checkpoint delivery status", () => {
+    render(
+      <ThreadList
+        {...baseProps}
+        unpinnedRows={[
+          {
+            thread: {
+              ...thread,
+              subagentCheckpointStatus: "delivered",
+              subagentCheckpointCount: 2,
+            },
+            depth: 0,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("已同步 2 个检查点")).toBeTruthy();
+  });
+
   it("auto-collapses completed sub-agent descendants", () => {
     const { queryByText, getByRole } = render(
       <ThreadList

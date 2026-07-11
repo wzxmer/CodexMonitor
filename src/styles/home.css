@@ -817,6 +817,100 @@
   width: 100%;
 }
 
+.home-feature-intro-button {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--text-subtle);
+  font-size: 12px;
+  box-shadow: none;
+}
+
+.home-feature-intro-button:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+  color: var(--text-strong);
+  background: var(--surface-hover);
+}
+
+.feature-intro-modal .ds-modal-card,
+.codex-install-modal .ds-modal-card {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.feature-intro-list {
+  display: grid;
+  gap: 10px;
+}
+
+.feature-intro-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+
+.feature-intro-item svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent-color);
+}
+
+.feature-intro-item div {
+  display: grid;
+  gap: 2px;
+}
+
+.feature-intro-item strong {
+  font-size: 13px;
+}
+
+.feature-intro-item span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.codex-install-details {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.codex-install-progress {
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.codex-install-progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-hover);
+}
+
+.codex-install-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-color);
+  transition: width 160ms ease;
+}
+
 .home-start-no-project-button {
   grid-column: span 1;
 }

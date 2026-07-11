@@ -372,6 +372,71 @@
   object-fit: cover;
 }
 
+.composer-attachment-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.composer-attachment-open:hover:not(:disabled),
+.composer-attachment-open:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+  color: var(--text-strong);
+}
+
+.composer-attachment-open:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.composer-attachment-copy-image {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--surface-item);
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--ds-dur-fast) var(--ds-ease-out-soft),
+              color var(--ds-dur-fast) var(--ds-ease-out-soft),
+              background-color var(--ds-dur-fast) var(--ds-ease-out-soft);
+}
+
+.composer-attachment:hover .composer-attachment-copy-image,
+.composer-attachment:focus-within .composer-attachment-copy-image {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.composer-attachment-copy-image:hover:not(:disabled),
+.composer-attachment-copy-image:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+  background: var(--surface-item-hover);
+  color: var(--text-strong);
+}
+
+.composer-attachment-copy-image:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
 .composer-attachment-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1134,6 +1199,81 @@
   color: var(--text-strong);
 }
 
+.composer-auto-reconnect-row {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+  gap: 10px;
+  padding: 4px 2px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.composer-auto-reconnect {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.composer-auto-reconnect input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.composer-auto-reconnect-track {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-card-strong);
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.composer-auto-reconnect-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.composer-auto-reconnect.is-on {
+  color: var(--text-strong);
+}
+
+.composer-auto-reconnect.is-on .composer-auto-reconnect-track {
+  border-color: var(--border-accent);
+  background: var(--surface-accent-soft);
+}
+
+.composer-auto-reconnect.is-on .composer-auto-reconnect-knob {
+  background: var(--text-accent);
+  transform: translateX(12px);
+}
+
+.composer-auto-reconnect input:focus-visible + .composer-auto-reconnect-track {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+}
+
+.composer-auto-reconnect-status {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 720px) {
   .app.layout-phone .composer-input {
     display: block;
@@ -1221,6 +1361,10 @@
 
   .app.layout-phone .composer-followup-hint {
     display: none;
+  }
+
+  .app.layout-phone .composer-auto-reconnect-row {
+    padding-inline: 0;
   }
 
   .app.layout-phone .composer-select-wrap {

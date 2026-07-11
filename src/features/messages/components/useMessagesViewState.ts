@@ -18,23 +18,12 @@ import {
   type MessageListEntry,
 } from "../utils/messageRenderUtils";
 import { useMessageHistoryWindow } from "./useMessageHistoryWindow";
+import { toMarkdownQuote } from "../utils/messageReferences";
 
 function baseEntryContainsItem(entry: MessageListBaseEntry, itemId: string) {
   return entry.kind === "toolGroup"
     ? entry.group.items.some((item) => item.id === itemId)
     : entry.item.id === itemId;
-}
-
-function toMarkdownQuote(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return "";
-  }
-  return trimmed
-    .split(/\r?\n/)
-    .map((line) => `> ${line}`)
-    .join("\n")
-    .concat("\n\n");
 }
 
 type UseMessagesViewStateArgs = {

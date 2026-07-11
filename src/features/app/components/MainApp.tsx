@@ -27,9 +27,8 @@ import { useMainAppLayoutSurfaces } from "@app/hooks/useMainAppLayoutSurfaces";
 import { useMainAppLayoutNodes } from "@app/hooks/useMainAppLayoutNodes";
 import { useWorkspaceFromUrlPrompt } from "@/features/workspaces/hooks/useWorkspaceFromUrlPrompt";
 import {
-  appendLocalCodexWorkspaceGroup,
   isLocalCodexWorkspaceId,
-  LOCAL_CODEX_GROUP_NAME,
+  LOCAL_CODEX_GROUP_ID,
   LOCAL_CODEX_WORKSPACE_NAME,
   LOCAL_CODEX_WORKSPACE_ID,
 } from "@/features/workspaces/domain/localCodexWorkspace";
@@ -89,11 +88,25 @@ import {
 } from "@app/orchestration/useWorkspaceOrchestration";
 import { useAppShellOrchestration } from "@app/orchestration/useLayoutOrchestration";
 import { normalizeCodexArgsInput } from "@/utils/codexArgsInput";
-import { prepareManagedSessionDerivation, resumeManagedSession } from "@services/tauri";
+import {
+  getManagedCodexPlatform,
+  installManagedCodex,
+  prepareManagedSessionDerivation,
+  createMessageReference,
+  resumeManagedSession,
+} from "@services/tauri";
+import { subscribeReleaseAssetDownloadProgress } from "@services/events";
+import { fetchManagedCodexPackage } from "@/features/codex/utils/managedCodex";
+import { CodexInstallPrompt } from "@/features/codex/components/CodexInstallPrompt";
 import type { ManagedSession, ManagedSessionDerivationPreview } from "@/types";
 import { SessionDerivationPrompt } from "@/features/sessions/components/SessionDerivationPrompt";
 import { loadThreadDerivations, saveThreadDerivation } from "@threads/utils/threadStorage";
 import { deriveManagedSessionIntoWorkspace } from "@/features/sessions/orchestration/deriveManagedSession";
+import { SessionManagerProvider } from "@/features/sessions/context/SessionManagerContext";
+import { SessionManagerWorkspace } from "@/features/sessions/components/SessionManagerWorkspace";
+import { SessionResumeChoicePrompt } from "@/features/sessions/components/SessionResumeChoicePrompt";
+import { applyMessageReference } from "@/features/messages/orchestration/deriveMessageReference";
+import type { MessageReferenceAction } from "@/features/messages/utils/messageReferences";
 
 const SettingsView = lazy(() =>
   import("@settings/components/SettingsView").then((module) => ({
@@ -129,6 +142,7 @@ function resolveWorkspaceIdForLocalCodexPath(
 }
 
 export default function MainApp() {
+  const [sessionManagerOpen, setSessionManagerOpen] = useState(false);
   const [managedSessionSourceByThread, setManagedSessionSourceByThread] = useState<Record<string, string>>({});
   const [threadDerivations, setThreadDerivations] = useState(loadThreadDerivations);
   const [managedSessionDerivation, setManagedSessionDerivation] = useState<{
@@ -137,6 +151,12 @@ export default function MainApp() {
     error: string | null;
     isBusy: boolean;
   } | null>(null);
+  const [codexInstallPromptOpen, setCodexInstallPromptOpen] = useState(false);
+  const [codexInstallStage, setCodexInstallStage] = useState<"ready" | "downloading" | "error">("ready");
+  const [codexInstallProgress, setCodexInstallProgress] = useState(0);
+  const [codexInstallError, setCodexInstallError] = useState<string | null>(null);
+  const codexInstallCheckStartedRef = useRef(false);
+  const codexInstallRequestIdRef = useRef<string | null>(null);
   const {
     appSettings,
     setAppSettings,
@@ -250,6 +270,24 @@ export default function MainApp() {
   });
   const updaterEnabled = !isMobileRuntime;
 
+  useEffect(() => {
+    if (appSettingsLoading || isMobileRuntime || codexInstallCheckStartedRef.current) return;
+    codexInstallCheckStartedRef.current = true;
+    void doctor(appSettings.codexBin, appSettings.codexArgs).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.toLowerCase().includes("codex cli not found")) {
+        setCodexInstallPromptOpen(true);
+      }
+    });
+  }, [appSettings.codexArgs, appSettings.codexBin, appSettingsLoading, doctor, isMobileRuntime]);
+
+  useEffect(() => subscribeReleaseAssetDownloadProgress((progress) => {
+    if (progress.id !== codexInstallRequestIdRef.current) return;
+    if (progress.totalBytes && progress.totalBytes > 0) {
+      setCodexInstallProgress((progress.downloadedBytes / progress.totalBytes) * 100);
+    }
+  }), []);
+
   const localCodexWorkspace = useMemo<WorkspaceInfo>(
     () => ({
       id: LOCAL_CODEX_WORKSPACE_ID,
@@ -268,24 +306,14 @@ export default function MainApp() {
     () => [...storedWorkspaces, localCodexWorkspace],
     [localCodexWorkspace, storedWorkspaces],
   );
-  const groupedWorkspaces = useMemo(
-    () =>
-      appendLocalCodexWorkspaceGroup(storedGroupedWorkspaces, workspaceGroups),
-    [storedGroupedWorkspaces, workspaceGroups],
-  );
+  const groupedWorkspaces = storedGroupedWorkspaces;
   const activeWorkspace = isLocalCodexWorkspaceId(activeWorkspaceId)
     ? localCodexWorkspace
     : storedActiveWorkspace;
   const projectActiveWorkspace = isLocalCodexWorkspaceId(activeWorkspaceId)
     ? null
     : activeWorkspace;
-  const getWorkspaceGroupName = useCallback(
-    (workspaceId: string) =>
-      isLocalCodexWorkspaceId(workspaceId)
-        ? LOCAL_CODEX_GROUP_NAME
-        : getStoredWorkspaceGroupName(workspaceId),
-    [getStoredWorkspaceGroupName],
-  );
+  const getWorkspaceGroupName = getStoredWorkspaceGroupName;
   const workspacesById = useMemo(
     () => new Map(workspaces.map((workspace) => [workspace.id, workspace])),
     [workspaces],
@@ -554,9 +582,11 @@ export default function MainApp() {
     accountByWorkspace,
     planByThread,
     interruptedThreadById,
+    autoContinueStatusByThread,
     lastAgentMessageByThread,
     pinnedThreadsVersion,
     interruptTurn,
+    setThreadAutoContinueEnabled,
     retryEditedUserMessage,
     removeThread,
     pinThread,
@@ -620,6 +650,7 @@ export default function MainApp() {
     ensureWorkspaceRuntimeCodexArgs,
     reviewDeliveryMode: appSettings.reviewDeliveryMode,
     steerEnabled: appSettings.steerEnabled,
+    subagentCheckpointSyncMode: appSettings.subagentCheckpointSyncMode,
     threadTitleAutogenerationEnabled: appSettings.threadTitleAutogenerationEnabled,
     chatHistoryScrollbackItems: appSettingsLoading
       ? null
@@ -1482,6 +1513,70 @@ export default function MainApp() {
     remoteThreadConnectionState,
     refreshThread,
   });
+  const handleMessageReference = useCallback(async (action: MessageReferenceAction) => {
+    if (!activeWorkspace || !activeThreadId) return;
+    try {
+      let nextDerivations = threadDerivations;
+      const threadId = await applyMessageReference({
+        action,
+        workspace: activeWorkspace,
+        sourceThreadId: activeThreadId,
+        createSnapshot: (content, sourceTitle) => createMessageReference({
+          workspaceId: activeWorkspace.id,
+          sourceThreadId: activeThreadId,
+          sourceMessageId: action.messageId,
+          sourceRole: action.sourceRole,
+          sourceTitle,
+          content,
+        }),
+        insertCurrent: composerWorkspaceState.handleInsertComposerText,
+        startThreadForWorkspace,
+        sendUserMessageToThread,
+        persistDerivation: (workspaceId, derivedThreadId, metadata) => {
+          nextDerivations = saveThreadDerivation(workspaceId, derivedThreadId, metadata);
+        },
+        startError: t("messages.referenceStartFailed"),
+        sendError: t("messages.referenceSendFailed"),
+      });
+      if (!threadId) return;
+      setThreadDerivations(nextDerivations);
+      exitDiffView();
+      selectWorkspace(activeWorkspace.id);
+      setActiveThreadId(threadId, activeWorkspace.id);
+      if (isCompact) setActiveTab("codex");
+    } catch (error) {
+      alertError(error instanceof Error ? error.message : String(error));
+    }
+  }, [activeThreadId, activeWorkspace, alertError, composerWorkspaceState.handleInsertComposerText, exitDiffView, isCompact, selectWorkspace, sendUserMessageToThread, setActiveTab, setActiveThreadId, startThreadForWorkspace, t, threadDerivations]);
+
+  const handleInstallManagedCodex = useCallback(async () => {
+    setCodexInstallStage("downloading");
+    setCodexInstallError(null);
+    setCodexInstallProgress(0);
+    const requestId = `${Date.now()}-managed-codex`;
+    codexInstallRequestIdRef.current = requestId;
+    try {
+      const platform = await getManagedCodexPlatform();
+      const packageInfo = await fetchManagedCodexPackage(platform);
+      const installed = await installManagedCodex(
+        packageInfo.urls,
+        packageInfo.fileName,
+        requestId,
+        packageInfo.version,
+        packageInfo.size,
+        packageInfo.sha256,
+      );
+      await queueSaveSettings({ ...appSettings, codexBin: installed.path });
+      setAppSettings((current) => ({ ...current, codexBin: installed.path }));
+      setCodexInstallPromptOpen(false);
+      setCodexInstallStage("ready");
+    } catch (error) {
+      setCodexInstallStage("error");
+      setCodexInstallError(error instanceof Error ? error.message : String(error));
+    } finally {
+      codexInstallRequestIdRef.current = null;
+    }
+  }, [appSettings, queueSaveSettings, setAppSettings]);
   useSessionCleanupScheduler({
     settingsLoading: appSettingsLoading,
     startupReady: initialWorkspaceRestoreComplete,
@@ -1929,7 +2024,7 @@ export default function MainApp() {
     onUpdateAppSettings: queueSaveSettings,
     workspaces,
     groupedWorkspaces,
-    workspaceGroupsCount: workspaceGroups.length,
+    workspaceGroupsCount: workspaceGroups.filter((group) => group.id !== LOCAL_CODEX_GROUP_ID).length,
     deletingWorktreeIds,
     newAgentDraftWorkspaceId,
     startingDraftThreadWorkspaceId,
@@ -1939,6 +2034,8 @@ export default function MainApp() {
     threadStatusById,
     turnDiffByThread,
     interruptedThreadById,
+    autoContinueStatusByThread,
+    setThreadAutoContinueEnabled,
     threadResumeLoadingById,
     threadListLoadingByWorkspace,
     threadListPagingByWorkspace,
@@ -1967,6 +2064,9 @@ export default function MainApp() {
     onUserInputSubmit: handleUserInputSubmit,
     onPlanAccept: handlePlanAccept,
     onPlanSubmitChanges: handlePlanSubmitChanges,
+    onReferenceMessage: (action) => {
+      void handleMessageReference(action);
+    },
     activePlan,
     activeTokenUsage,
     latestAgentRuns,
@@ -2032,8 +2132,6 @@ export default function MainApp() {
     handleAddWorktreeAgent,
     handleAddCloneAgent,
     handleResumeThreadById: openResumeThreadPrompt,
-    handleResumeManagedSession,
-    handleDeriveManagedSession,
     activeManagedSessionSourceName: activeThreadId
       ? (managedSessionSourceByThread[`${activeWorkspaceId}:${activeThreadId}`]
         ?? (threadDerivations[`${activeWorkspaceId}:${activeThreadId}`]
@@ -2191,7 +2289,7 @@ export default function MainApp() {
     appLayout: {
       isPhone,
       isTablet,
-      showHome,
+      showHome: showHome || sessionManagerOpen,
       showGitDetail,
       activeTab,
       tabletTab,
@@ -2206,7 +2304,7 @@ export default function MainApp() {
       approvalToastsNode,
       updateToastNode,
       errorToastsNode,
-      homeNode,
+      homeNode: sessionManagerOpen ? <SessionManagerWorkspace /> : homeNode,
       mainHeaderNode,
       tabletNavNode,
       tabBarNode,
@@ -2235,17 +2333,32 @@ export default function MainApp() {
 
   return (
     <I18nProvider preference={appSettings.appLanguage}>
-      <MainAppShell {...mainAppShellProps} />
-      {managedSessionDerivation && (
-        <SessionDerivationPrompt
-          preview={managedSessionDerivation.preview}
-          destination={managedSessionDerivation.destination}
-          error={managedSessionDerivation.error}
-          isBusy={managedSessionDerivation.isBusy}
-          onCancel={() => setManagedSessionDerivation(null)}
-          onConfirm={() => void confirmManagedSessionDerivation()}
+      <SessionManagerProvider active={sessionManagerOpen} onActiveChange={setSessionManagerOpen} onResumeSession={handleResumeManagedSession} onDeriveSession={handleDeriveManagedSession} currentWorkspace={projectActiveWorkspace ? { name: projectActiveWorkspace.name, path: projectActiveWorkspace.path } : null}>
+        <MainAppShell {...mainAppShellProps} />
+        <CodexInstallPrompt
+          open={codexInstallPromptOpen}
+          stage={codexInstallStage}
+          progress={codexInstallProgress}
+          error={codexInstallError}
+          onInstall={() => void handleInstallManagedCodex()}
+          onChooseExisting={() => {
+            setCodexInstallPromptOpen(false);
+            modalActions.openSettings("codex");
+          }}
+          onLater={() => setCodexInstallPromptOpen(false)}
         />
-      )}
+        <SessionResumeChoicePrompt />
+        {managedSessionDerivation && (
+          <SessionDerivationPrompt
+            preview={managedSessionDerivation.preview}
+            destination={managedSessionDerivation.destination}
+            error={managedSessionDerivation.error}
+            isBusy={managedSessionDerivation.isBusy}
+            onCancel={() => setManagedSessionDerivation(null)}
+            onConfirm={() => void confirmManagedSessionDerivation()}
+          />
+        )}
+      </SessionManagerProvider>
     </I18nProvider>
   );
 }

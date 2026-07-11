@@ -49,6 +49,10 @@ type HarnessProps = {
   canStop?: boolean;
   onStop?: () => void;
   controlledDraft?: boolean;
+  autoReconnectEnabled?: boolean;
+  autoReconnectPhase?: "idle" | "waiting" | "sending" | "running";
+  autoReconnectAttempt?: number;
+  onAutoReconnectChange?: (enabled: boolean) => void;
 };
 
 function ComposerHarness({
@@ -64,6 +68,10 @@ function ComposerHarness({
   canStop = false,
   onStop = () => {},
   controlledDraft = true,
+  autoReconnectEnabled,
+  autoReconnectPhase,
+  autoReconnectAttempt,
+  onAutoReconnectChange,
 }: HarnessProps) {
   const [draftText, setDraftText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -74,6 +82,10 @@ function ComposerHarness({
       onStop={onStop}
       canStop={canStop}
       isProcessing={isProcessing}
+      autoReconnectEnabled={autoReconnectEnabled}
+      autoReconnectPhase={autoReconnectPhase}
+      autoReconnectAttempt={autoReconnectAttempt}
+      onAutoReconnectChange={onAutoReconnectChange}
       appsEnabled={true}
       steerAvailable={steerAvailable}
       followUpMessageBehavior={followUpMessageBehavior}
@@ -104,6 +116,25 @@ function ComposerHarness({
 }
 
 describe("Composer send triggers", () => {
+  it("renders the per-conversation auto reconnect switch", () => {
+    const onAutoReconnectChange = vi.fn();
+    render(
+      <ComposerHarness
+        onSend={vi.fn()}
+        autoReconnectEnabled={false}
+        onAutoReconnectChange={onAutoReconnectChange}
+      />,
+    );
+
+    const toggle = screen.getByRole("switch", { name: "自动重连" });
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    expect(toggle.closest("label")?.getAttribute("title")).toContain(
+      "不会占用 Codex 当前任务的尝试次数",
+    );
+    fireEvent.click(toggle);
+    expect(onAutoReconnectChange).toHaveBeenCalledWith(true);
+  });
+
   afterEach(() => {
     cleanup();
     vi.mocked(isMobilePlatform).mockReturnValue(false);

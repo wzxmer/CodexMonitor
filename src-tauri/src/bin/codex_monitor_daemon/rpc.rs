@@ -6,6 +6,8 @@ mod codex;
 mod daemon;
 #[path = "rpc/dispatcher.rs"]
 mod dispatcher;
+#[path = "rpc/files.rs"]
+mod files;
 #[path = "rpc/git.rs"]
 mod git;
 #[path = "rpc/prompts.rs"]

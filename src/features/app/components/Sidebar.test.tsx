@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render as testingRender, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRef } from "react";
+import { createRef, useState, type ReactElement } from "react";
 import {
   LOCAL_CODEX_GROUP_ID,
   LOCAL_CODEX_GROUP_NAME,
@@ -9,6 +9,15 @@ import {
   LOCAL_CODEX_WORKSPACE_ID,
 } from "@/features/workspaces/domain/localCodexWorkspace";
 import { Sidebar } from "./Sidebar";
+import { SessionManagerProvider } from "@/features/sessions/context/SessionManagerContext";
+
+function render(element: ReactElement) {
+  function Wrapper() {
+    const [active, setActive] = useState(false);
+    return <SessionManagerProvider active={active} onActiveChange={setActive} onResumeSession={async () => false} onDeriveSession={() => {}}>{element}</SessionManagerProvider>;
+  }
+  return testingRender(<Wrapper />);
+}
 
 afterEach(() => {
   if (vi.isFakeTimers()) {
@@ -48,7 +57,6 @@ const baseProps = {
   codexKeyProfiles: [],
   activeCodexKeyProfileId: null,
   onSelectCodexKeyProfile: vi.fn(),
-  onThirdPartyUsageMultiplierChange: vi.fn(),
   accountInfo: null,
   onSwitchAccount: vi.fn(),
   onCancelSwitchAccount: vi.fn(),
@@ -127,6 +135,20 @@ describe("Sidebar", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "本地会话管理" }));
     expect((screen.getByLabelText("搜索会话") as HTMLInputElement).value).toBe("alpha");
+  });
+  it("keeps session manager open when a thread is already active", () => {
+    render(
+      <Sidebar
+        {...baseProps}
+        activeWorkspaceId="workspace-1"
+        activeThreadId="thread-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "本地会话管理" }));
+
+    expect(screen.getByLabelText("搜索本地会话")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "本地会话管理" }).getAttribute("aria-pressed")).toBe("true");
   });
   it("opens thread sort menu from the header filter button", () => {
     const onSetThreadListSortKey = vi.fn();
@@ -285,6 +307,7 @@ describe("Sidebar", () => {
         thirdPartyProviderUsage={{
           balanceUsd: 12.5,
           todayCostUsd: 0.0342,
+          averageLatencyMs: 842,
         }}
         activeTokenUsage={{
           total: {
@@ -312,8 +335,10 @@ describe("Sidebar", () => {
     expect(screen.getByText("$12.50")).toBeTruthy();
     expect(screen.getByText("今日消费")).toBeTruthy();
     expect(screen.getByText("$0.0342")).toBeTruthy();
-    expect(screen.getByText("倍率")).toBeTruthy();
-    expect(screen.getByText("x1")).toBeTruthy();
+    expect(screen.getByText("平均延迟")).toBeTruthy();
+    expect(screen.getByText("842 ms")).toBeTruthy();
+    expect(screen.queryByText("倍率")).toBeNull();
+    expect(screen.queryByText("x1")).toBeNull();
   });
 
   it("switches third-party key profiles from the usage panel", () => {
@@ -375,14 +400,12 @@ describe("Sidebar", () => {
     expect(onSelectCodexKeyProfile).toHaveBeenCalledWith("code");
   });
 
-  it("edits the third-party usage multiplier from the usage panel", () => {
-    const onThirdPartyUsageMultiplierChange = vi.fn();
+  it("shows the configured estimate multiplier as read-only", () => {
     render(
       <Sidebar
         {...baseProps}
         useTokenUsageStats
         thirdPartyUsageMultiplier={1}
-        onThirdPartyUsageMultiplierChange={onThirdPartyUsageMultiplierChange}
         activeTokenUsage={{
           total: {
             totalTokens: 1_000_000,
@@ -405,12 +428,8 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "x1" }));
-    const input = screen.getByLabelText("倍率") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "3.25" } });
-    fireEvent.blur(input);
-
-    expect(onThirdPartyUsageMultiplierChange).toHaveBeenCalledWith(3.25);
+    expect(screen.getByText("x1")).toBeTruthy();
+    expect(screen.queryByLabelText("倍率")).toBeNull();
   });
 
   it("opens the account menu from the bottom rail", () => {
@@ -715,7 +734,7 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "展开 本机 Codex 历史会话" }));
+    fireEvent.click(screen.getByRole("button", { name: `展开 ${LOCAL_CODEX_WORKSPACE_NAME}` }));
 
     expect(screen.getByText("Active project thread")).toBeTruthy();
     expect(screen.queryByText("Duplicate history thread")).toBeNull();

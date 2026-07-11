@@ -14,6 +14,7 @@ import type {
   CodexStatus,
   CodexUpdateResult,
   CodexDoctorResult,
+  InstalledManagedCodex,
   DictationModelStatus,
   DictationSessionState,
   LocalUsageSnapshot,
@@ -271,6 +272,28 @@ export async function promoteComposerImages(
     threadId,
     images,
   });
+}
+
+export type CreateMessageReferenceRequest = {
+  workspaceId: string;
+  sourceThreadId: string;
+  sourceMessageId: string;
+  sourceRole: "user" | "assistant";
+  sourceTitle: string;
+  content: string;
+};
+
+export type MessageReferenceResponse = {
+  referenceId: string;
+  path: string;
+  characterCount: number;
+  estimatedTokens: number;
+};
+
+export async function createMessageReference(
+  request: CreateMessageReferenceRequest,
+): Promise<MessageReferenceResponse> {
+  return invoke<MessageReferenceResponse>("create_message_reference", { request });
 }
 
 export async function readGlobalAgentsMd(): Promise<GlobalAgentsResponse> {
@@ -1090,14 +1113,18 @@ export async function cleanupDownloadedReleaseAssets(): Promise<void> {
 }
 
 export async function downloadAndOpenReleaseAsset(
-  url: string,
+  urls: string[],
   fileName: string,
   requestId: string,
+  expectedSize?: number,
+  expectedSha256?: string,
 ): Promise<{ path: string }> {
   return invoke<{ path: string }>("download_and_open_release_asset", {
-    url,
+    urls,
     fileName,
     requestId,
+    expectedSize,
+    expectedSha256,
   });
 }
 
@@ -1277,6 +1304,28 @@ export async function closeTerminalSession(
   terminalId: string,
 ): Promise<void> {
   return invoke("terminal_close", { workspaceId, terminalId });
+}
+
+export async function installManagedCodex(
+  urls: string[],
+  fileName: string,
+  requestId: string,
+  version: string,
+  expectedSize: number,
+  expectedSha256: string,
+): Promise<InstalledManagedCodex> {
+  return invoke<InstalledManagedCodex>("install_managed_codex", {
+    urls,
+    fileName,
+    requestId,
+    version,
+    expectedSize,
+    expectedSha256,
+  });
+}
+
+export async function getManagedCodexPlatform(): Promise<string> {
+  return invoke<string>("managed_codex_platform");
 }
 
 export async function openExternalTerminal(workspaceId: string): Promise<void> {

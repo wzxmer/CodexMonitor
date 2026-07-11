@@ -71,6 +71,10 @@ type ComposerProps = {
   disabled?: boolean;
   appsEnabled: boolean;
   isProcessing: boolean;
+  autoReconnectEnabled?: boolean;
+  autoReconnectPhase?: "idle" | "waiting" | "sending" | "running";
+  autoReconnectAttempt?: number;
+  onAutoReconnectChange?: (enabled: boolean) => void;
   steerAvailable: boolean;
   followUpMessageBehavior: FollowUpMessageBehavior;
   composerSendShortcut: ComposerSendShortcut;
@@ -190,6 +194,10 @@ export const Composer = memo(function Composer({
   disabled = false,
   appsEnabled,
   isProcessing,
+  autoReconnectEnabled = false,
+  autoReconnectPhase = "idle",
+  autoReconnectAttempt = 0,
+  onAutoReconnectChange,
   steerAvailable,
   followUpMessageBehavior,
   composerSendShortcut,
@@ -763,6 +771,33 @@ export const Composer = memo(function Composer({
         contextCyclePercent={contextCyclePercent}
         contextCompactionCount={contextCompactionCount}
       />
+      {onAutoReconnectChange ? (
+        <div className="composer-auto-reconnect-row">
+          <label
+            className={`composer-auto-reconnect${autoReconnectEnabled ? " is-on" : ""}`}
+            title={t("composer.autoReconnectHelp")}
+          >
+            <input
+              type="checkbox"
+              role="switch"
+              checked={autoReconnectEnabled}
+              aria-label={t("composer.autoReconnect")}
+              onChange={(event) => onAutoReconnectChange(event.target.checked)}
+            />
+            <span className="composer-auto-reconnect-track" aria-hidden="true">
+              <span className="composer-auto-reconnect-knob" />
+            </span>
+            <span>{t("composer.autoReconnect")}</span>
+          </label>
+          {autoReconnectEnabled && autoReconnectPhase !== "idle" ? (
+            <span className="composer-auto-reconnect-status" role="status">
+              {autoReconnectPhase === "waiting"
+                ? `${t("composer.autoReconnectWaiting")} · ${autoReconnectAttempt}`
+                : t("composer.autoReconnectRunning")}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       <ComposerMetaBar
         disabled={disabled}
         collaborationModes={collaborationModes}

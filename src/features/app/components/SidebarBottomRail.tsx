@@ -2,7 +2,7 @@ import ScrollText from "lucide-react/dist/esm/icons/scroll-text";
 import Settings from "lucide-react/dist/esm/icons/settings";
 import User from "lucide-react/dist/esm/icons/user";
 import X from "lucide-react/dist/esm/icons/x";
-import { useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
+import { useEffect } from "react";
 import {
   MenuTrigger,
   PopoverSurface,
@@ -27,7 +27,6 @@ type SidebarBottomRailProps = {
   codexKeyProfiles: CodexKeyProfile[];
   activeCodexKeyProfileId: string | null;
   onSelectCodexKeyProfile: (profileId: string) => void;
-  onThirdPartyUsageMultiplierChange: (multiplier: number) => void;
   onOpenSettings: () => void;
   onOpenDebug: () => void;
   showDebugButton: boolean;
@@ -96,6 +95,14 @@ function formatMultiplier(multiplier: number) {
   }).format(Math.max(0, multiplier));
 }
 
+function formatLatency(latencyMs: number) {
+  const normalized = Math.max(0, latencyMs);
+  if (normalized < 1_000) {
+    return `${Math.round(normalized)} ms`;
+  }
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(normalized / 1_000)} s`;
+}
+
 type ThirdPartyUsageSummaryProps = {
   tokens: number;
   costUsd: number | null;
@@ -104,7 +111,6 @@ type ThirdPartyUsageSummaryProps = {
   keyProfiles: CodexKeyProfile[];
   activeKeyProfileId: string | null;
   onSelectKeyProfile: (profileId: string) => void;
-  onMultiplierChange: (multiplier: number) => void;
 };
 
 function ThirdPartyUsageSummary({
@@ -115,48 +121,8 @@ function ThirdPartyUsageSummary({
   keyProfiles,
   activeKeyProfileId,
   onSelectKeyProfile,
-  onMultiplierChange,
 }: ThirdPartyUsageSummaryProps) {
   const { t } = useI18n();
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState(() => String(multiplier));
-  const skipNextCommitRef = useRef(false);
-
-  useEffect(() => {
-    if (!isEditing) {
-      setDraft(String(multiplier));
-    }
-  }, [isEditing, multiplier]);
-
-  const commitDraft = () => {
-    if (skipNextCommitRef.current) {
-      skipNextCommitRef.current = false;
-      return;
-    }
-    const next = Number(draft);
-    if (Number.isFinite(next) && next >= 0) {
-      onMultiplierChange(next);
-    } else {
-      setDraft(String(multiplier));
-    }
-    setIsEditing(false);
-  };
-
-  const handleMultiplierKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      event.currentTarget.blur();
-    }
-    if (event.key === "Escape") {
-      skipNextCommitRef.current = true;
-      setDraft(String(multiplier));
-      setIsEditing(false);
-      event.currentTarget.blur();
-    }
-  };
-
-  const handleMultiplierBlur = (_event: FocusEvent<HTMLInputElement>) => {
-    commitDraft();
-  };
 
   return (
     <div className="sidebar-usage-third-party">
@@ -188,32 +154,12 @@ function ThirdPartyUsageSummary({
             <span>{t("sidebar.usageTodayCost")}</span>
             <strong>{formatUsdValue(providerUsage.todayCostUsd)}</strong>
           </div>
-          <div className="sidebar-usage-stat">
-            <span>{t("sidebar.usageMultiplier")}</span>
-            {isEditing ? (
-              <input
-                className="sidebar-usage-multiplier-input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={draft}
-                aria-label={t("sidebar.usageMultiplier")}
-                onChange={(event) => setDraft(event.target.value)}
-                onBlur={handleMultiplierBlur}
-                onKeyDown={handleMultiplierKeyDown}
-                autoFocus
-              />
-            ) : (
-              <button
-                type="button"
-                className="sidebar-usage-multiplier-button"
-                onClick={() => setIsEditing(true)}
-                title={t("sidebar.usageEditMultiplier")}
-              >
-                x{formatMultiplier(multiplier)}
-              </button>
-            )}
-          </div>
+          {providerUsage.averageLatencyMs !== null && (
+            <div className="sidebar-usage-stat">
+              <span>{t("sidebar.usageAverageLatency")}</span>
+              <strong>{formatLatency(providerUsage.averageLatencyMs)}</strong>
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -232,29 +178,7 @@ function ThirdPartyUsageSummary({
           </div>
           <div className="sidebar-usage-stat">
             <span>{t("sidebar.usageMultiplier")}</span>
-            {isEditing ? (
-              <input
-                className="sidebar-usage-multiplier-input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={draft}
-                aria-label={t("sidebar.usageMultiplier")}
-                onChange={(event) => setDraft(event.target.value)}
-                onBlur={handleMultiplierBlur}
-                onKeyDown={handleMultiplierKeyDown}
-                autoFocus
-              />
-            ) : (
-              <button
-                type="button"
-                className="sidebar-usage-multiplier-button"
-                onClick={() => setIsEditing(true)}
-                title={t("sidebar.usageEditMultiplier")}
-              >
-                x{formatMultiplier(multiplier)}
-              </button>
-            )}
+            <strong>x{formatMultiplier(multiplier)}</strong>
           </div>
         </>
       )}
@@ -277,7 +201,6 @@ export function SidebarBottomRail({
   codexKeyProfiles,
   activeCodexKeyProfileId,
   onSelectCodexKeyProfile,
-  onThirdPartyUsageMultiplierChange,
   onOpenSettings,
   onOpenDebug,
   showDebugButton,
@@ -324,7 +247,6 @@ export function SidebarBottomRail({
               keyProfiles={codexKeyProfiles}
               activeKeyProfileId={activeCodexKeyProfileId}
               onSelectKeyProfile={onSelectCodexKeyProfile}
-              onMultiplierChange={onThirdPartyUsageMultiplierChange}
             />
           ) : (
             <div className="sidebar-usage-list">

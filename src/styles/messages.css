@@ -2131,6 +2131,123 @@
   cursor: text;
 }
 
+.message-reference-control {
+  position: absolute;
+  right: 34px;
+  bottom: -12px;
+  z-index: 8;
+}
+
+.message-reference-control .message-quote-button {
+  position: static;
+}
+
+.message-reference-control .message-quote-button.is-active {
+  opacity: 1;
+  transform: translateY(0);
+  background: var(--surface-hover);
+}
+
+.message-reference-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: min(300px, calc(100vw - 32px));
+  padding: 8px;
+  color: var(--text-primary);
+}
+
+.message-reference-menu-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 6px 8px;
+}
+
+.message-reference-menu-header strong,
+.message-reference-destination strong {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-stronger);
+}
+
+.message-reference-menu-header span,
+.message-reference-destination small,
+.message-reference-mode-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.message-reference-destination {
+  min-height: 44px;
+}
+
+.message-reference-destination .ds-popover-item-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.message-reference-recommended {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  color: var(--accent-primary);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.message-reference-mode-label {
+  padding: 10px 6px 6px;
+}
+
+.message-reference-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--surface-card-muted);
+}
+
+.message-reference-mode button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.message-reference-mode button:hover:not(:disabled),
+.message-reference-mode button:focus-visible {
+  transform: none;
+  box-shadow: none;
+  color: var(--text-stronger);
+}
+
+.message-reference-mode button.is-active {
+  background: var(--surface-popover);
+  color: var(--text-stronger);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.message-reference-warning {
+  margin: 8px 4px 2px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--status-warning) 12%, transparent);
+  color: color-mix(in srgb, var(--status-warning) 78%, var(--text-stronger));
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .messages .tool-group-toggle,
 .messages .tool-group-timestamp,
 .messages .tool-group-line-change-stats,

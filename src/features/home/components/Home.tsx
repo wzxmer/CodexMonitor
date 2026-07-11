@@ -1,3 +1,7 @@
+import { useState } from "react";
+import { Info } from "lucide-react";
+import { FeatureIntroPrompt } from "@app/components/FeatureIntroPrompt";
+import { useI18n } from "@/features/i18n/I18nProvider";
 import type {
   AccountSnapshot,
   LocalUsageSnapshot,
@@ -53,6 +57,8 @@ export function Home({
   accountInfo,
   onSelectThread,
 }: HomeProps) {
+  const { t } = useI18n();
+  const [featureIntroOpen, setFeatureIntroOpen] = useState(false);
   return (
     <div className="home">
       <div className="home-hero">
@@ -60,6 +66,14 @@ export function Home({
         <div className="home-subtitle">
           Orchestrate agents across your local projects.
         </div>
+        <button
+          type="button"
+          className="home-feature-intro-button"
+          onClick={() => setFeatureIntroOpen(true)}
+        >
+          <Info size={15} aria-hidden="true" />
+          {t("featureIntro.action")}
+        </button>
       </div>
       <HomeLatestAgentsSection
         latestAgentRuns={latestAgentRuns}
@@ -84,6 +98,10 @@ export function Home({
         usageShowRemaining={usageShowRemaining}
         usageWorkspaceId={usageWorkspaceId}
         usageWorkspaceOptions={usageWorkspaceOptions}
+      />
+      <FeatureIntroPrompt
+        open={featureIntroOpen}
+        onClose={() => setFeatureIntroOpen(false)}
       />
     </div>
   );

@@ -42,10 +42,10 @@ describe("SessionManagerList", () => {
     expect((screen.getByRole("button", { name: "归档" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("derives one session without changing selection", () => {
+  it("references one session without changing selection", () => {
     const onDerive = vi.fn();
     render(<SessionManagerList sessions={[managedSession]} sources={[source]} selected={new Set()} resumingKey={null} archivingKeys={new Set()} loading={false} loadingMore={false} error={null} hasMore={false} onToggleSelected={vi.fn()} onResume={vi.fn()} onArchive={vi.fn()} onDerive={onDerive} onLoadMore={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "派生" }));
+    fireEvent.click(screen.getByRole("button", { name: "引用" }));
     expect(onDerive).toHaveBeenCalledWith(managedSession);
   });
 });

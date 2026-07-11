@@ -118,6 +118,17 @@ export function ThreadRow({
       : hasPendingUserInput
         ? "Waiting"
         : null;
+  const checkpointStatusLabel =
+    thread.subagentCheckpointStatus === "pending"
+      ? t("threads.checkpointPending")
+      : thread.subagentCheckpointStatus === "delivered"
+        ? t("threads.checkpointDelivered").replace(
+            "{count}",
+            String(thread.subagentCheckpointCount ?? 0),
+          )
+        : thread.subagentCheckpointStatus === "failed"
+          ? t("threads.checkpointFailed")
+          : null;
   const subagentLabel =
     thread.isSubagent && (thread.subagentNickname || thread.subagentRole)
       ? thread.subagentNickname ?? thread.subagentRole ?? null
@@ -144,7 +155,12 @@ export function ThreadRow({
   const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
   const canToggleSubagents = hasSubagentChildren && Boolean(onToggleSubagents);
   const hasDetails = Boolean(
-    effectiveWorkspaceLabel || subagentLabel || contextLabel || statusLabel || isPinned,
+    effectiveWorkspaceLabel ||
+      subagentLabel ||
+      contextLabel ||
+      statusLabel ||
+      checkpointStatusLabel ||
+      isPinned,
   );
 
   return (
@@ -198,6 +214,11 @@ export function ThreadRow({
             )}
             {statusLabel && (
               <span className={`thread-state-chip ${statusClass}`}>{statusLabel}</span>
+            )}
+            {checkpointStatusLabel && (
+              <span className="thread-context-label" title={checkpointStatusLabel}>
+                {checkpointStatusLabel}
+              </span>
             )}
             {contextLabel && (
               <span className="thread-context-label" title={contextLabel}>

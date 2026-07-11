@@ -100,6 +100,7 @@ describe("useSessionManager", () => {
 
     const { result, rerender } = renderHook(({ enabled }) => useSessionManager(enabled), { initialProps: { enabled: true } });
     await waitFor(() => expect(result.current.nextOffset).toBe(1));
+    expect(result.current.totalSessionCount).toBe(2);
     await act(async () => result.current.loadMore());
     expect(result.current.sessions.map((item) => item.title)).toEqual(["Alpha", "Beta"]);
 

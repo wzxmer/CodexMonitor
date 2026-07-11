@@ -10,6 +10,7 @@ export type SessionManagerStatusFilter = "all" | "active" | "archived" | "missin
 export function useSessionManager(enabled: boolean) {
   const [sources, setSources] = useState<SessionSource[]>([]);
   const [sessions, setSessions] = useState<ManagedSession[]>([]);
+  const [totalSessionCount, setTotalSessionCount] = useState(0);
   const [diagnostics, setDiagnostics] = useState<SessionScanDiagnostic[]>([]);
   const [query, setQuery] = useState("");
   const [showSubagents, setShowSubagents] = useState(false);
@@ -47,6 +48,7 @@ export function useSessionManager(enabled: boolean) {
       const page = await fetchManagedSessionsPage({ requestId, offset: 0, limit: PAGE_LIMIT });
       if (scanRequestIdRef.current !== requestId) return;
       setSessions(page.items);
+      setTotalSessionCount(page.total);
       setDiagnostics(page.diagnostics);
       setNextOffset(page.nextOffset);
       setSelectedSessionKeys(new Set());
@@ -220,5 +222,5 @@ export function useSessionManager(enabled: boolean) {
     }
   }, [nextOffset, sessions]);
 
-  return { sources, sessions: filteredSessions, indexedSessions: sessions, diagnostics, query, setQuery, showSubagents, setShowSubagents, statusFilter, setStatusFilter, sourceFilter, setSourceFilter, selectedSessionKeys, toggleSelected, nextOffset: query.trim().length >= 2 ? null : nextOffset, loading, loadingMore, error, refresh, loadMore, scrollOffset, setScrollOffset, searchProgress, archiveResult, dismissArchiveResult: () => setArchiveResult(null), archivingKeys, archiveSessions, deletingKeys, permanentlyDeleteSession, getPermanentDeleteChildCount };
+  return { sources, sessions: filteredSessions, indexedSessions: sessions, totalSessionCount, diagnostics, query, setQuery, showSubagents, setShowSubagents, statusFilter, setStatusFilter, sourceFilter, setSourceFilter, selectedSessionKeys, toggleSelected, nextOffset: query.trim().length >= 2 ? null : nextOffset, loading, loadingMore, error, refresh, loadMore, scrollOffset, setScrollOffset, searchProgress, archiveResult, dismissArchiveResult: () => setArchiveResult(null), archivingKeys, archiveSessions, deletingKeys, permanentlyDeleteSession, getPermanentDeleteChildCount };
 }

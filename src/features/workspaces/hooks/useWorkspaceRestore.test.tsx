@@ -2,6 +2,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "@/types";
+import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 import { useWorkspaceRestore } from "./useWorkspaceRestore";
 
 const workspace: WorkspaceInfo = {
@@ -52,5 +53,32 @@ describe("useWorkspaceRestore", () => {
     );
 
     await waitFor(() => expect(result.current).toBe(true));
+  });
+
+  it("loads local sessions without connecting the virtual workspace", async () => {
+    const connectWorkspace = vi.fn().mockRejectedValue(new Error("virtual workspace"));
+    const listThreadsForWorkspaces = vi.fn().mockResolvedValue(undefined);
+    const localWorkspace: WorkspaceInfo = {
+      ...workspace,
+      id: LOCAL_CODEX_WORKSPACE_ID,
+      name: "Local sessions",
+      path: "",
+      connected: true,
+    };
+
+    renderHook(() =>
+      useWorkspaceRestore({
+        workspaces: [localWorkspace],
+        hasLoaded: true,
+        connectWorkspace,
+        listThreadsForWorkspaces,
+      }),
+    );
+
+    await waitFor(() => expect(listThreadsForWorkspaces).toHaveBeenCalledWith(
+      [localWorkspace],
+      { maxPages: 6 },
+    ));
+    expect(connectWorkspace).not.toHaveBeenCalled();
   });
 });

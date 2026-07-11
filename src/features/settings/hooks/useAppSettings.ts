@@ -39,6 +39,11 @@ const allowedThemeAccents = new Set(["codex", "blue", "green", "pink", "orange"]
 const allowedMessageReadingStyles = new Set(["bubble", "native", "cli"]);
 const allowedPersonality = new Set(["friendly", "pragmatic"]);
 const allowedFollowUpMessageBehavior = new Set(["queue", "steer"]);
+const allowedSubagentCheckpointSyncMode = new Set([
+  "finalOnly",
+  "checkpoints",
+  "continuous",
+]);
 const allowedComposerSendShortcut = new Set([
   "enter",
   "ctrl-enter",
@@ -331,6 +336,7 @@ function buildDefaultSettings(): AppSettings {
     collaborationModesEnabled: true,
     steerEnabled: true,
     followUpMessageBehavior: "queue",
+    subagentCheckpointSyncMode: "checkpoints",
     composerSendShortcut: "enter",
     composerTriggerMode: "default",
     composerFollowUpHintEnabled: true,
@@ -501,6 +507,11 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
       : settings.steerEnabled
         ? "steer"
         : "queue",
+    subagentCheckpointSyncMode: allowedSubagentCheckpointSyncMode.has(
+      settings.subagentCheckpointSyncMode,
+    )
+      ? settings.subagentCheckpointSyncMode
+      : "checkpoints",
     composerFollowUpHintEnabled:
       typeof settings.composerFollowUpHintEnabled === "boolean"
         ? settings.composerFollowUpHintEnabled

@@ -6,7 +6,6 @@ import type {
   ThreadListOrganizeMode,
   ThreadListSortKey,
   ThreadSummary,
-  ManagedSession,
   WorkspaceInfo,
 } from "../../../types";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -45,11 +44,8 @@ import { getUsageLabels } from "../utils/usageLabels";
 import { formatRelativeTimeShort } from "../../../utils/time";
 import type { ThreadStatusById } from "../../../utils/threadStatus";
 import type { CodexKeyProfile } from "@/types";
-import { useSessionManager } from "@/features/sessions/hooks/useSessionManager";
-import { SessionManagerToolbar } from "@/features/sessions/components/SessionManagerToolbar";
 import { SessionManagerList } from "@/features/sessions/components/SessionManagerList";
-import { SessionArchiveResultSummary } from "@/features/sessions/components/SessionArchiveResultSummary";
-import { SessionPermanentDeletePrompt } from "@/features/sessions/components/SessionPermanentDeletePrompt";
+import { useSessionManagerContext } from "@/features/sessions/context/SessionManagerContext";
 
 const COLLAPSED_GROUPS_STORAGE_KEY = "codexmonitor.collapsedGroups";
 const PINNED_WORKSPACE_FOLDERS_STORAGE_KEY = "codexmonitor.pinnedWorkspaceFolders";
@@ -199,7 +195,6 @@ type SidebarProps = {
   codexKeyProfiles: CodexKeyProfile[];
   activeCodexKeyProfileId: string | null;
   onSelectCodexKeyProfile: (profileId: string) => void;
-  onThirdPartyUsageMultiplierChange: (multiplier: number) => void;
   usageConfigurationWarning?: string | null;
   accountInfo: AccountSnapshot | null;
   onSwitchAccount: () => void;
@@ -216,8 +211,6 @@ type SidebarProps = {
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => void;
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
   onResumeThreadById?: (workspace: WorkspaceInfo) => void;
-  onResumeManagedSession?: (session: ManagedSession) => Promise<boolean>;
-  onDeriveManagedSession?: (session: ManagedSession) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onSelectLocalCodexThread: (cwd: string, threadId: string) => void;
@@ -274,7 +267,6 @@ export const Sidebar = memo(function Sidebar({
   codexKeyProfiles,
   activeCodexKeyProfileId,
   onSelectCodexKeyProfile,
-  onThirdPartyUsageMultiplierChange,
   usageConfigurationWarning = null,
   accountInfo,
   onSwitchAccount,
@@ -291,8 +283,6 @@ export const Sidebar = memo(function Sidebar({
   onAddWorktreeAgent,
   onAddCloneAgent,
   onResumeThreadById = () => {},
-  onResumeManagedSession = async () => false,
-  onDeriveManagedSession = () => {},
   onToggleWorkspaceCollapse,
   onSelectThread,
   onSelectLocalCodexThread,
@@ -316,22 +306,8 @@ export const Sidebar = memo(function Sidebar({
   onWorkspaceDragLeave,
   onWorkspaceDrop,
 }: SidebarProps) {
-  const [sidebarMode, setSidebarMode] = useState<"workspaces" | "sessionManager">("workspaces");
-  const sessionManager = useSessionManager(sidebarMode === "sessionManager");
-  const [permanentDeleteSession, setPermanentDeleteSessionState] = useState<ManagedSession | null>(null);
-  const [permanentDeleteChildCount, setPermanentDeleteChildCount] = useState(0);
-  const setPermanentDeleteSession = useCallback((session: ManagedSession | null) => {
-    if (!session) {
-      setPermanentDeleteSessionState(null);
-      return;
-    }
-    void sessionManager.getPermanentDeleteChildCount(session).then((childCount) => {
-      if (childCount === null) return;
-      setPermanentDeleteChildCount(childCount);
-      setPermanentDeleteSessionState(session);
-    });
-  }, [sessionManager]);
-  const [resumingManagedSessionKey, setResumingManagedSessionKey] = useState<string | null>(null);
+  const { active: sessionManagerActive, setActive: setSessionManagerActive, manager: sessionManager, focusedSessionKey, focusSession, resumingKey, resumeSession, deriveSession } = useSessionManagerContext();
+  const sidebarMode = sessionManagerActive ? "sessionManager" : "workspaces";
   const {
     scrollOffset: sessionManagerScrollOffset,
     setScrollOffset: setSessionManagerScrollOffset,
@@ -1105,37 +1081,10 @@ export const Sidebar = memo(function Sidebar({
         if (sidebarMode === "workspaces") workspaceScrollOffsetRef.current = node.scrollTop;
         else setSessionManagerScrollOffset(node.scrollTop);
       }
-      setSidebarMode(nextMode);
+      setSessionManagerActive(nextMode === "sessionManager");
     },
-    [setSessionManagerScrollOffset, sidebarBodyRef, sidebarMode],
+    [setSessionManagerActive, setSessionManagerScrollOffset, sidebarBodyRef, sidebarMode],
   );
-  const handleResumeManagedSession = useCallback(async (session: ManagedSession) => {
-    if (resumingManagedSessionKey) return;
-    setResumingManagedSessionKey(session.key);
-    try {
-      const resumed = await onResumeManagedSession(session);
-      if (resumed) switchSidebarMode("workspaces");
-    } finally {
-      setResumingManagedSessionKey(null);
-    }
-  }, [onResumeManagedSession, resumingManagedSessionKey, switchSidebarMode]);
-  const selectedManagedSessions = useMemo(
-    () => sessionManager.sessions.filter(
-      (session) => sessionManager.selectedSessionKeys.has(session.key) && !session.isArchived,
-    ),
-    [sessionManager.selectedSessionKeys, sessionManager.sessions],
-  );
-  const archiveManagedSessions = sessionManager.archiveSessions;
-  const handleArchiveManagedSessions = useCallback(async (sessions: ManagedSession[]) => {
-    const result = await archiveManagedSessions(sessions);
-    if (result?.successCount) onRefreshAllThreads();
-  }, [archiveManagedSessions, onRefreshAllThreads]);
-  const handlePermanentDelete = useCallback(async (cascadeRequested: boolean) => {
-    if (!permanentDeleteSession) return;
-    const result = await sessionManager.permanentlyDeleteSession(permanentDeleteSession, cascadeRequested);
-    if (result?.successCount) onRefreshAllThreads();
-    if (result?.results[0]?.success) setPermanentDeleteSession(null);
-  }, [onRefreshAllThreads, permanentDeleteSession, sessionManager, setPermanentDeleteSession]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -1157,10 +1106,6 @@ export const Sidebar = memo(function Sidebar({
     }
     updateScrollFade();
   }, [setSessionManagerScrollOffset, sidebarBodyRef, sidebarMode, updateScrollFade]);
-
-useEffect(() => {
-    if (activeWorkspaceId || activeThreadId) switchSidebarMode("workspaces");
-  }, [activeThreadId, activeWorkspaceId, switchSidebarMode]);
 
   const handleSelectHome = () => {
     switchSidebarMode("workspaces");
@@ -1198,30 +1143,7 @@ useEffect(() => {
         onSearchQueryChange={setSearchQuery}
         onClearSearch={() => setSearchQuery("")}
       />}
-      {sidebarMode === "sessionManager" && (
-        <SessionManagerToolbar
-          query={sessionManager.query}
-          onQueryChange={sessionManager.setQuery}
-          showSubagents={sessionManager.showSubagents}
-          onShowSubagentsChange={sessionManager.setShowSubagents}
-          statusFilter={sessionManager.statusFilter}
-          onStatusFilterChange={sessionManager.setStatusFilter}
-          sourceFilter={sessionManager.sourceFilter}
-          onSourceFilterChange={sessionManager.setSourceFilter}
-          sources={sessionManager.sources}
-          selectedArchiveCount={selectedManagedSessions.length}
-          archiving={sessionManager.archivingKeys.size > 0}
-          onArchiveSelected={() => void handleArchiveManagedSessions(selectedManagedSessions)}
-        />
-      )}
-      {sidebarMode === "sessionManager" && sessionManager.archiveResult && (
-        <SessionArchiveResultSummary
-          result={sessionManager.archiveResult}
-          sources={sessionManager.sources}
-          onDismiss={sessionManager.dismissArchiveResult}
-        />
-      )}
-      {permanentDeleteSession && <SessionPermanentDeletePrompt session={permanentDeleteSession} source={sessionManager.sources.find((source) => source.id === permanentDeleteSession.sourceId)} childCount={permanentDeleteChildCount} busy={sessionManager.deletingKeys.has(permanentDeleteSession.key)} onCancel={() => setPermanentDeleteSession(null)} onConfirm={(cascade) => void handlePermanentDelete(cascade)} />}
+      {sidebarMode === "sessionManager" && <div className="session-manager-sidebar-search"><input className="sidebar-search-input" value={sessionManager.query} onChange={(event) => sessionManager.setQuery(event.target.value)} placeholder={t("sessionManager.search")} aria-label={t("sessionManager.search")} /></div>}
       <div
         className={`workspace-drop-overlay${
           isWorkspaceDropActive ? " is-active" : ""
@@ -1250,7 +1172,7 @@ useEffect(() => {
         onScroll={handleSidebarScroll}
         ref={sidebarBodyRef}
       >
-        {sidebarMode === "sessionManager" ? <SessionManagerList sessions={sessionManager.sessions} sources={sessionManager.sources} selected={sessionManager.selectedSessionKeys} resumingKey={resumingManagedSessionKey} archivingKeys={sessionManager.archivingKeys} deletingKeys={sessionManager.deletingKeys} loading={sessionManager.loading} loadingMore={sessionManager.loadingMore} error={sessionManager.error} searchProgress={sessionManager.searchProgress} hasMore={sessionManager.nextOffset !== null} onToggleSelected={sessionManager.toggleSelected} onResume={handleResumeManagedSession} onArchive={(session) => void handleArchiveManagedSessions([session])} onDerive={onDeriveManagedSession} onPermanentDelete={setPermanentDeleteSession} onLoadMore={sessionManager.loadMore}/> : <div className="workspace-list">
+        {sidebarMode === "sessionManager" ? <SessionManagerList sessions={sessionManager.sessions} sources={sessionManager.sources} selected={sessionManager.selectedSessionKeys} focusedKey={focusedSessionKey} compact resumingKey={resumingKey} archivingKeys={sessionManager.archivingKeys} deletingKeys={sessionManager.deletingKeys} loading={sessionManager.loading} loadingMore={sessionManager.loadingMore} error={sessionManager.error} searchProgress={sessionManager.searchProgress} hasMore={sessionManager.nextOffset !== null} onToggleSelected={sessionManager.toggleSelected} onFocus={focusSession} onResume={(session) => void resumeSession(session)} onArchive={(session) => void sessionManager.archiveSessions([session])} onDerive={deriveSession} onLoadMore={sessionManager.loadMore}/> : <div className="workspace-list">
           {pinnedThreadRows.length > 0 && (
             <div className="pinned-section">
               <div className="sidebar-section-header">
@@ -1383,7 +1305,6 @@ useEffect(() => {
         codexKeyProfiles={codexKeyProfiles}
         activeCodexKeyProfileId={activeCodexKeyProfileId}
         onSelectCodexKeyProfile={onSelectCodexKeyProfile}
-        onThirdPartyUsageMultiplierChange={onThirdPartyUsageMultiplierChange}
         onOpenSettings={onOpenSettings}
         onOpenDebug={onOpenDebug}
         showDebugButton={showDebugButton}

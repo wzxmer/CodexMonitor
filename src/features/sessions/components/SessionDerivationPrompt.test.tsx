@@ -27,7 +27,7 @@ describe("SessionDerivationPrompt", () => {
     expect(screen.getByText(/Primary · Original/)).toBeTruthy();
     expect(screen.getByText(/Target · C:\/target/)).toBeTruthy();
     expect((screen.getByLabelText("交接内容预览") as HTMLTextAreaElement).value).toBe("# Session handoff");
-    fireEvent.click(screen.getByRole("button", { name: "创建新会话并发送" }));
+    fireEvent.click(screen.getByRole("button", { name: "创建引用会话" }));
     expect(onConfirm).toHaveBeenCalled();
   });
 });

@@ -43,6 +43,13 @@ import {
 } from "../utils/messageRenderUtils";
 import { Markdown } from "./Markdown";
 import { isStandaloneMarkdownTable } from "./Markdown";
+import { MessageReferenceMenu } from "./MessageReferenceMenu";
+import {
+  defaultReferenceMode,
+  estimateReferenceTokens,
+  type MessageReferenceAction,
+  type MessageReferenceMode,
+} from "../utils/messageReferences";
 
 type MarkdownFileLinkProps = {
   showMessageFilePath?: boolean;
@@ -66,7 +73,7 @@ type MessageRowProps = MarkdownFileLinkProps & {
   item: Extract<ConversationItem, { kind: "message" }>;
   isCopied: boolean;
   onCopy: (item: Extract<ConversationItem, { kind: "message" }>) => void;
-  onQuote?: (item: Extract<ConversationItem, { kind: "message" }>, selectedText?: string) => void;
+  onReference?: (action: MessageReferenceAction) => void;
   onResendUserMessage?: (
     item: Extract<ConversationItem, { kind: "message" }>,
     text: string,
@@ -448,7 +455,7 @@ export const MessageRow = memo(function MessageRow({
   item,
   isCopied,
   onCopy,
-  onQuote,
+  onReference,
   onResendUserMessage,
   interrupted,
   codeBlockCopyUseModifier,
@@ -463,6 +470,8 @@ export const MessageRow = memo(function MessageRow({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(item.text);
+  const [referenceMenuOpen, setReferenceMenuOpen] = useState(false);
+  const [referenceMode, setReferenceMode] = useState<MessageReferenceMode>("full");
   const fallbackCreatedAtRef = useRef<number>(Date.now());
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -541,14 +550,38 @@ export const MessageRow = memo(function MessageRow({
     return selectedText;
   }, []);
 
-  const handleQuote = useCallback(() => {
-    if (!onQuote) {
+  const handleReferenceMenuToggle = useCallback(() => {
+    if (!onReference) {
       return;
     }
-    const selectedText = getSelectedMessageText() ?? selectionSnapshotRef.current ?? undefined;
-    selectionSnapshotRef.current = null;
-    onQuote(item, selectedText);
-  }, [getSelectedMessageText, item, onQuote]);
+    const selectedText = getSelectedMessageText() ?? selectionSnapshotRef.current;
+    selectionSnapshotRef.current = selectedText;
+    setReferenceMode(defaultReferenceMode(selectedText ?? item.text));
+    setReferenceMenuOpen((open) => !open);
+  }, [getSelectedMessageText, item.text, onReference]);
+
+  const handleReferenceChoose = useCallback(
+    (destination: MessageReferenceAction["destination"]) => {
+      if (!onReference) {
+        return;
+      }
+      onReference({
+        messageId: item.id,
+        sourceRole: item.role,
+        sourceText: item.text,
+        selectedText: selectionSnapshotRef.current,
+        mode: referenceMode,
+        destination,
+      });
+      selectionSnapshotRef.current = null;
+      setReferenceMenuOpen(false);
+    },
+    [item.id, item.role, item.text, onReference, referenceMode],
+  );
+
+  const referenceText = selectionSnapshotRef.current ?? item.text;
+  const referenceCharacterCount = Array.from(referenceText.trim()).length;
+  const referenceEstimatedTokens = estimateReferenceTokens(referenceText);
 
   const startEdit = useCallback(() => {
     setEditText(item.text);
@@ -655,22 +688,35 @@ export const MessageRow = memo(function MessageRow({
             onClose={() => setLightboxIndex(null)}
           />
         )}
-        {onQuote && hasText && (
-          <button
-            type="button"
-            className="ghost message-quote-button"
-            onMouseDown={() => {
-              selectionSnapshotRef.current = getSelectedMessageText();
-            }}
-            onTouchStart={() => {
-              selectionSnapshotRef.current = getSelectedMessageText();
-            }}
-            onClick={handleQuote}
-            aria-label="Quote message"
-            title="Quote message"
-          >
-            <Quote size={14} aria-hidden />
-          </button>
+        {onReference && hasText && (
+          <div className="message-reference-control">
+            <button
+              type="button"
+              className={`ghost message-quote-button${referenceMenuOpen ? " is-active" : ""}`}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                selectionSnapshotRef.current = getSelectedMessageText();
+              }}
+              onClick={handleReferenceMenuToggle}
+              aria-label={t("messages.referenceAction")}
+              title={t("messages.referenceAction")}
+              aria-haspopup="menu"
+              aria-expanded={referenceMenuOpen}
+            >
+              <Quote size={14} aria-hidden />
+            </button>
+            {referenceMenuOpen && (
+              <MessageReferenceMenu
+                mode={referenceMode}
+                characterCount={referenceCharacterCount}
+                estimatedTokens={referenceEstimatedTokens}
+                hasSelection={Boolean(selectionSnapshotRef.current)}
+                onModeChange={setReferenceMode}
+                onChoose={handleReferenceChoose}
+                onClose={() => setReferenceMenuOpen(false)}
+              />
+            )}
+          </div>
         )}
         {canEditUserMessage && hasText && !isEditing && (
           <button

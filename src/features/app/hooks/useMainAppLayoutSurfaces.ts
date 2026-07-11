@@ -24,6 +24,7 @@ import type { StartingDraftMessagePreview } from "@app/hooks/useNewAgentDraft";
 import type { LayoutNodesOptions } from "@/features/layout/hooks/layoutNodes/types";
 import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 import { resolveCodexProviderBaseUrl } from "@/utils/providerProfiles";
+import type { MessageReferenceAction } from "@/features/messages/utils/messageReferences";
 
 type SidebarProps = LayoutNodesOptions["primary"]["sidebarProps"];
 type ComposerProps = NonNullable<LayoutNodesOptions["primary"]["composerProps"]>;
@@ -52,6 +53,16 @@ type UseMainAppLayoutSurfacesArgs = {
   threadStatusById: ThreadState["threadStatusById"];
   turnDiffByThread: ThreadState["turnDiffByThread"];
   interruptedThreadById: ThreadState["interruptedThreadById"];
+  autoContinueStatusByThread: Record<
+    string,
+    {
+      enabled: boolean;
+      phase: "idle" | "waiting" | "sending" | "running";
+      attempt: number;
+      nextRetryAt: number | null;
+    }
+  >;
+  setThreadAutoContinueEnabled: (threadId: string, enabled: boolean) => void;
   threadResumeLoadingById: Record<string, boolean>;
   threadListLoadingByWorkspace: SidebarProps["threadListLoadingByWorkspace"];
   threadListPagingByWorkspace: SidebarProps["threadListPagingByWorkspace"];
@@ -80,6 +91,7 @@ type UseMainAppLayoutSurfacesArgs = {
   onUserInputSubmit: LayoutNodesOptions["primary"]["messagesProps"]["onUserInputSubmit"];
   onPlanAccept: LayoutNodesOptions["primary"]["messagesProps"]["onPlanAccept"];
   onPlanSubmitChanges: LayoutNodesOptions["primary"]["messagesProps"]["onPlanSubmitChanges"];
+  onReferenceMessage: (action: MessageReferenceAction) => void;
   activePlan: LayoutNodesOptions["secondary"]["planPanelProps"]["plan"];
   activeTokenUsage: ComposerProps["contextUsage"];
   latestAgentRuns: LayoutNodesOptions["primary"]["homeProps"]["latestAgentRuns"];
@@ -139,8 +151,6 @@ type UseMainAppLayoutSurfacesArgs = {
   handleAddWorktreeAgent: SidebarProps["onAddWorktreeAgent"];
   handleAddCloneAgent: SidebarProps["onAddCloneAgent"];
   handleResumeThreadById: SidebarProps["onResumeThreadById"];
-  handleResumeManagedSession: NonNullable<SidebarProps["onResumeManagedSession"]>;
-  handleDeriveManagedSession: NonNullable<SidebarProps["onDeriveManagedSession"]>;
   activeManagedSessionSourceName: string | null;
   handleSelectLocalCodexThread: SidebarProps["onSelectLocalCodexThread"];
   handleOpenThreadLink: LayoutNodesOptions["primary"]["messagesProps"]["onOpenThreadLink"];
@@ -272,6 +282,8 @@ function buildPrimarySurface({
   threadStatusById,
   turnDiffByThread,
   interruptedThreadById,
+  autoContinueStatusByThread,
+  setThreadAutoContinueEnabled,
   threadResumeLoadingById,
   threadListLoadingByWorkspace,
   threadListPagingByWorkspace,
@@ -303,6 +315,7 @@ function buildPrimarySurface({
   onUserInputSubmit,
   onPlanAccept,
   onPlanSubmitChanges,
+  onReferenceMessage,
   activeTokenUsage,
   latestAgentRuns,
   isLoadingLatestAgents,
@@ -332,8 +345,6 @@ function buildPrimarySurface({
   handleAddWorktreeAgent,
   handleAddCloneAgent,
   handleResumeThreadById,
-  handleResumeManagedSession,
-  handleDeriveManagedSession,
   activeManagedSessionSourceName,
   handleSelectLocalCodexThread,
   handleOpenThreadLink,
@@ -450,7 +461,7 @@ function buildPrimarySurface({
 
   return {
     sidebarProps: {
-      workspaces,
+      workspaces: workspaces.filter((workspace) => workspace.id !== LOCAL_CODEX_WORKSPACE_ID),
       groupedWorkspaces,
       hasWorkspaceGroups: workspaceGroupsCount > 0,
       deletingWorktreeIds,
@@ -489,23 +500,6 @@ function buildPrimarySurface({
           activeCodexKeyProfileId: profileId || null,
         });
       },
-      onThirdPartyUsageMultiplierChange: (multiplier) => {
-        if (activeCodexKeyProfile) {
-          void onUpdateAppSettings({
-            ...appSettings,
-            codexKeyProfiles: appSettings.codexKeyProfiles.map((profile) =>
-              profile.id === activeCodexKeyProfile.id
-                ? { ...profile, groupMultiplier: multiplier }
-                : profile,
-            ),
-          });
-          return;
-        }
-        void onUpdateAppSettings({
-          ...appSettings,
-          thirdPartyUsageMultiplier: multiplier,
-        });
-      },
       usageConfigurationWarning:
         activeWorkspaceId &&
         (!codexProviderStatus || !codexProviderStatus.isConfigured)
@@ -526,8 +520,6 @@ function buildPrimarySurface({
       onAddWorktreeAgent: handleAddWorktreeAgent,
       onAddCloneAgent: handleAddCloneAgent,
       onResumeThreadById: handleResumeThreadById,
-      onResumeManagedSession: handleResumeManagedSession,
-      onDeriveManagedSession: handleDeriveManagedSession,
       onToggleWorkspaceCollapse: sidebarHandlers.onToggleWorkspaceCollapse,
       onSelectThread: sidebarHandlers.onSelectThread,
       onSelectLocalCodexThread: handleSelectLocalCodexThread,
@@ -588,6 +580,7 @@ function buildPrimarySurface({
       onQuoteMessage: composerWorkspaceState.canInsertComposerText
         ? composerWorkspaceState.handleInsertComposerText
         : undefined,
+      onReferenceMessage,
       onResendUserMessage: (text, images) => {
         void retryEditedUserMessage(text, images);
       },
@@ -641,6 +634,18 @@ function buildPrimarySurface({
             });
           },
           isProcessing: composerWorkspaceState.isProcessing,
+          autoReconnectEnabled: activeThreadId
+            ? autoContinueStatusByThread[activeThreadId]?.enabled ?? false
+            : false,
+          autoReconnectPhase: activeThreadId
+            ? autoContinueStatusByThread[activeThreadId]?.phase ?? "idle"
+            : "idle",
+          autoReconnectAttempt: activeThreadId
+            ? autoContinueStatusByThread[activeThreadId]?.attempt ?? 0
+            : 0,
+          onAutoReconnectChange: activeThreadId
+            ? (enabled) => setThreadAutoContinueEnabled(activeThreadId, enabled)
+            : undefined,
           draftText: composerWorkspaceState.activeDraft,
           onDraftChange: composerWorkspaceState.handleDraftChange,
           attachedImages: composerWorkspaceState.activeImages,
@@ -1127,6 +1132,8 @@ export function useMainAppLayoutSurfaces({
   threadStatusById,
   turnDiffByThread,
   interruptedThreadById,
+  autoContinueStatusByThread,
+  setThreadAutoContinueEnabled,
   threadResumeLoadingById,
   threadListLoadingByWorkspace,
   threadListPagingByWorkspace,
@@ -1155,6 +1162,7 @@ export function useMainAppLayoutSurfaces({
   onUserInputSubmit,
   onPlanAccept,
   onPlanSubmitChanges,
+  onReferenceMessage,
   activePlan,
   activeTokenUsage,
   latestAgentRuns,
@@ -1188,8 +1196,6 @@ export function useMainAppLayoutSurfaces({
   handleAddWorktreeAgent,
   handleAddCloneAgent,
   handleResumeThreadById,
-  handleResumeManagedSession,
-  handleDeriveManagedSession,
   activeManagedSessionSourceName,
   handleSelectLocalCodexThread,
   handleOpenThreadLink,
@@ -1365,6 +1371,8 @@ export function useMainAppLayoutSurfaces({
     threadStatusById,
     turnDiffByThread,
     interruptedThreadById,
+    autoContinueStatusByThread,
+    setThreadAutoContinueEnabled,
     threadResumeLoadingById,
     threadListLoadingByWorkspace,
     threadListPagingByWorkspace,
@@ -1393,6 +1401,7 @@ export function useMainAppLayoutSurfaces({
     onUserInputSubmit,
     onPlanAccept,
     onPlanSubmitChanges,
+    onReferenceMessage,
     activePlan,
     activeTokenUsage,
     latestAgentRuns,
@@ -1426,8 +1435,6 @@ export function useMainAppLayoutSurfaces({
     handleAddWorktreeAgent,
     handleAddCloneAgent,
     handleResumeThreadById,
-    handleResumeManagedSession,
-    handleDeriveManagedSession,
     activeManagedSessionSourceName,
     handleSelectLocalCodexThread,
     handleOpenThreadLink,

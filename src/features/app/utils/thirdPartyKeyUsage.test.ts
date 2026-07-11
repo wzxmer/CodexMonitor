@@ -28,11 +28,13 @@ describe("thirdPartyKeyUsage", () => {
           today: {
             actual_cost: "0.0342",
           },
+          average_duration_ms: 842,
         },
       }),
     ).toEqual({
       balanceUsd: 12.5,
       todayCostUsd: 0.0342,
+      averageLatencyMs: 842,
     });
   });
 
@@ -47,6 +49,7 @@ describe("thirdPartyKeyUsage", () => {
     ).toEqual({
       balanceUsd: 8,
       todayCostUsd: 0.12,
+      averageLatencyMs: null,
     });
   });
 });

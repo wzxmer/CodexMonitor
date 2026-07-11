@@ -4,9 +4,11 @@ import type {
   CollabAgentRef,
   CustomPromptOption,
   DebugEntry,
+  SendMessageResult,
   ServiceTier,
   ThreadListSortKey,
   WorkspaceInfo,
+  SubagentCheckpointSyncMode,
 } from "@/types";
 import { CHAT_SCROLLBACK_DEFAULT } from "@utils/chatScrollback";
 import { useAppServerEvents } from "@app/hooks/useAppServerEvents";
@@ -24,7 +26,9 @@ import { useThreadStatus } from "./useThreadStatus";
 import { useThreadStallWarnings } from "./useThreadStallWarnings";
 import { useThreadUserInput } from "./useThreadUserInput";
 import { useThreadTitleAutogeneration } from "./useThreadTitleAutogeneration";
+import { useSubagentCheckpointSync } from "./useSubagentCheckpointSync";
 import { useDetachedReviewTracking } from "./useDetachedReviewTracking";
+import { useThreadAutoContinue } from "./useThreadAutoContinue";
 import {
   archiveThread as archiveThreadService,
   listThreads as listThreadsService,
@@ -71,6 +75,7 @@ type UseThreadsOptions = {
   onSelectServiceTier?: (tier: ServiceTier | null | undefined) => void;
   reviewDeliveryMode?: "inline" | "detached";
   steerEnabled?: boolean;
+  subagentCheckpointSyncMode?: SubagentCheckpointSyncMode;
   threadTitleAutogenerationEnabled?: boolean;
   chatHistoryScrollbackItems?: number | null;
   autoArchiveThreadsEnabled?: boolean;
@@ -108,6 +113,7 @@ export function useThreads({
   onSelectServiceTier,
   reviewDeliveryMode = "inline",
   steerEnabled = false,
+  subagentCheckpointSyncMode = "checkpoints",
   threadTitleAutogenerationEnabled = true,
   chatHistoryScrollbackItems,
   autoArchiveThreadsEnabled = false,
@@ -148,6 +154,14 @@ export function useThreads({
   const subagentHydrationInFlightRef = useRef<Record<string, true>>({});
   const autoArchiveInFlightRef = useRef(false);
   const workspacesRef = useRef(workspaces);
+  const autoContinueSendRef = useRef<
+    | ((
+        workspace: WorkspaceInfo,
+        threadId: string,
+        message: string,
+      ) => Promise<SendMessageResult>)
+    | null
+  >(null);
   workspacesRef.current = workspaces;
   planByThreadRef.current = state.planByThread;
   itemsByThreadRef.current = state.itemsByThread;
@@ -174,6 +188,32 @@ export function useThreads({
   } = useThreadStorage();
 
   const activeWorkspaceId = activeWorkspace?.id ?? null;
+  const getWorkspaceForAutoContinue = useCallback(
+    (workspaceId: string) =>
+      workspacesRef.current.find((workspace) => workspace.id === workspaceId) ?? null,
+    [],
+  );
+  const isThreadProcessingForAutoContinue = useCallback(
+    (threadId: string) =>
+      Boolean(
+        threadStatusByIdRef.current[threadId]?.isProcessing ||
+          activeTurnIdByThreadRef.current[threadId],
+      ),
+    [],
+  );
+  const {
+    statusByThread: autoContinueStatusByThread,
+    setEnabled: setThreadAutoContinueEnabled,
+    onTurnStarted: handleAutoContinueTurnStarted,
+    onTurnCompleted: handleAutoContinueTurnCompleted,
+    onTurnError: handleAutoContinueTurnError,
+    markManualStop: markAutoContinueManualStop,
+    clearThread: clearAutoContinueThread,
+  } = useThreadAutoContinue({
+    getWorkspace: getWorkspaceForAutoContinue,
+    isThreadProcessing: isThreadProcessingForAutoContinue,
+    sendContinuationRef: autoContinueSendRef,
+  });
   const { activeThreadId, activeItems } = useThreadSelectors({
     activeWorkspaceId,
     activeThreadIdByWorkspace: state.activeThreadIdByWorkspace,
@@ -442,6 +482,35 @@ export function useThreads({
     onDebug,
   });
 
+  const subagentCheckpointSync = useSubagentCheckpointSync({
+    mode: subagentCheckpointSyncMode,
+    threadParentByIdRef,
+    threadStatusByIdRef,
+    activeTurnIdByThreadRef,
+    getChildName: (workspaceId, threadId) => {
+      const summary = threadsByWorkspaceRef.current[workspaceId]?.find(
+        (thread) => thread.id === threadId,
+      );
+      return summary ? getThreadDisplayTitle(summary) : null;
+    },
+    onStatusChange: (workspaceId, parentThreadId, status, deliveredCount) => {
+      const parentSummary = threadsByWorkspaceRef.current[workspaceId]?.find(
+        (thread) => thread.id === parentThreadId,
+      );
+      dispatch({
+        type: "mergeThreadSummary",
+        workspaceId,
+        threadId: parentThreadId,
+        patch: {
+          subagentCheckpointStatus: status,
+          subagentCheckpointCount:
+            (parentSummary?.subagentCheckpointCount ?? 0) + deliveredCount,
+        },
+      });
+    },
+    onDebug,
+  });
+
   const threadHandlers = useThreadEventHandlers({
     activeThreadId,
     dispatch,
@@ -498,6 +567,8 @@ export function useThreads({
         return;
       }
       threadHandlers.onThreadArchived?.(workspaceId, threadId);
+      clearAutoContinueThread(threadId);
+      subagentCheckpointSync.clearThread(threadId);
       unpinThread(workspaceId, threadId);
 
       const skipKey = buildWorkspaceThreadKey(workspaceId, threadId);
@@ -562,7 +633,7 @@ export function useThreads({
         }
       })();
     },
-    [isSubagentThread, onDebug, threadHandlers, unpinThread],
+    [clearAutoContinueThread, isSubagentThread, onDebug, subagentCheckpointSync, threadHandlers, unpinThread],
   );
 
   const handleThreadUnarchived = useCallback(
@@ -575,15 +646,32 @@ export function useThreads({
   const handleTurnStarted = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
       threadHandlers.onTurnStarted?.(workspaceId, threadId, turnId);
+      handleAutoContinueTurnStarted(workspaceId, threadId);
+      subagentCheckpointSync.onTurnStarted(workspaceId, threadId, turnId);
     },
-    [threadHandlers],
+    [handleAutoContinueTurnStarted, subagentCheckpointSync, threadHandlers],
   );
 
   const handleTurnCompleted = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
       threadHandlers.onTurnCompleted?.(workspaceId, threadId, turnId);
+      handleAutoContinueTurnCompleted(workspaceId, threadId);
+      subagentCheckpointSync.onTurnCompleted(workspaceId, threadId, turnId);
     },
-    [threadHandlers],
+    [handleAutoContinueTurnCompleted, subagentCheckpointSync, threadHandlers],
+  );
+
+  const handleAgentMessageCompleted = useCallback(
+    (event: {
+      workspaceId: string;
+      threadId: string;
+      itemId: string;
+      text: string;
+    }) => {
+      threadHandlers.onAgentMessageCompleted?.(event);
+      subagentCheckpointSync.onAgentMessageCompleted(event);
+    },
+    [subagentCheckpointSync, threadHandlers],
   );
 
   const handleTurnError = useCallback(
@@ -594,30 +682,44 @@ export function useThreads({
       payload: { message: string; willRetry: boolean },
     ) => {
       threadHandlers.onTurnError?.(workspaceId, threadId, turnId, payload);
+      handleAutoContinueTurnError(workspaceId, threadId, turnId, payload);
     },
-    [threadHandlers],
+    [handleAutoContinueTurnError, threadHandlers],
+  );
+
+  const handleThreadClosed = useCallback(
+    (workspaceId: string, threadId: string) => {
+      threadHandlers.onThreadClosed?.(workspaceId, threadId);
+      subagentCheckpointSync.clearThread(threadId);
+      clearAutoContinueThread(threadId);
+    },
+    [clearAutoContinueThread, subagentCheckpointSync, threadHandlers],
   );
 
   const handlers = useMemo(
     () => ({
       ...threadHandlers,
+      onAgentMessageCompleted: handleAgentMessageCompleted,
       onThreadStarted: handleThreadStarted,
       onThreadArchived: handleThreadArchived,
       onThreadUnarchived: handleThreadUnarchived,
       onTurnStarted: handleTurnStarted,
       onTurnCompleted: handleTurnCompleted,
       onTurnError: handleTurnError,
+      onThreadClosed: handleThreadClosed,
       onAccountUpdated: handleAccountUpdated,
       onAccountLoginCompleted: handleAccountLoginCompleted,
     }),
     [
       threadHandlers,
+      handleAgentMessageCompleted,
       handleThreadStarted,
       handleThreadArchived,
       handleThreadUnarchived,
       handleTurnStarted,
       handleTurnCompleted,
       handleTurnError,
+      handleThreadClosed,
       handleAccountUpdated,
       handleAccountLoginCompleted,
     ],
@@ -1012,7 +1114,7 @@ export function useThreads({
   );
 
   const {
-    interruptTurn,
+    interruptTurn: interruptTurnRaw,
     retryEditedUserMessage,
     sendUserMessage,
     sendUserMessageToThread,
@@ -1082,6 +1184,20 @@ export function useThreads({
     renameThread,
     onUserMessageCreated,
   });
+  autoContinueSendRef.current = (workspace, threadId, message) =>
+    sendUserMessageToThread(workspace, threadId, message, [], {
+      skipPromptExpansion: true,
+      sendIntent: "queue",
+    });
+  const interruptTurn = useCallback(() => {
+    if (activeThreadId) {
+      markAutoContinueManualStop(
+        activeThreadId,
+        activeTurnIdByThreadRef.current[activeThreadId] ?? "pending",
+      );
+    }
+    return interruptTurnRaw();
+  }, [activeThreadId, interruptTurnRaw, markAutoContinueManualStop]);
 
   const hasLocalThreadSnapshot = useCallback(
     (threadId: string | null) => {
@@ -1142,10 +1258,11 @@ export function useThreads({
   const removeThread = useCallback(
     (workspaceId: string, threadId: string) => {
       unpinThread(workspaceId, threadId);
+      subagentCheckpointSync.clearThread(threadId);
       dispatch({ type: "removeThread", workspaceId, threadId });
       void archiveThread(workspaceId, threadId);
     },
-    [archiveThread, unpinThread],
+    [archiveThread, subagentCheckpointSync, unpinThread],
   );
 
   return {
@@ -1170,11 +1287,13 @@ export function useThreads({
     accountByWorkspace: state.accountByWorkspace,
     planByThread: state.planByThread,
     interruptedThreadById: state.interruptedThreadById,
+    autoContinueStatusByThread,
     lastAgentMessageByThread: state.lastAgentMessageByThread,
     pinnedThreadsVersion,
     refreshAccountRateLimits,
     refreshAccountInfo,
     interruptTurn,
+    setThreadAutoContinueEnabled,
     retryEditedUserMessage,
     removeThread,
     pinThread,

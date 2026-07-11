@@ -77,7 +77,12 @@ export type ThreadAction =
       patch: Partial<
         Pick<
           ThreadSummary,
-          "isSubagent" | "subagentNickname" | "subagentRole" | "createdAt"
+          | "isSubagent"
+          | "subagentNickname"
+          | "subagentRole"
+          | "subagentCheckpointStatus"
+          | "subagentCheckpointCount"
+          | "createdAt"
         >
       >;
     }

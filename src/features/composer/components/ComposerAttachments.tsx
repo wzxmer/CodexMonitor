@@ -1,6 +1,8 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
+import Copy from "lucide-react/dist/esm/icons/copy";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import Image from "lucide-react/dist/esm/icons/image";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
@@ -38,6 +40,64 @@ function attachmentPreviewSrc(path: string) {
     return convertFileSrc(path);
   } catch {
     return "";
+  }
+}
+
+async function openImageAttachment(path: string, previewSrc: string) {
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    await openUrl(path);
+    return;
+  }
+  if (!path.startsWith("data:")) {
+    await openPath(path);
+    return;
+  }
+  window.open(previewSrc, "_blank", "noopener,noreferrer");
+}
+
+async function copyImageAttachment(previewSrc: string, fallbackText: string) {
+  try {
+    if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+      const response = await fetch(previewSrc);
+      const sourceBlob = await response.blob();
+      const clipboardBlob = await convertImageBlobToPng(sourceBlob);
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": clipboardBlob }),
+      ]);
+      return;
+    }
+  } catch {
+    await navigator.clipboard?.writeText(fallbackText);
+    return;
+  }
+  await navigator.clipboard?.writeText(fallbackText);
+}
+
+async function convertImageBlobToPng(blob: Blob) {
+  if (blob.type === "image/png") {
+    return blob;
+  }
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Canvas 2D context unavailable");
+    }
+    context.drawImage(bitmap, 0, 0);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((pngBlob) => {
+        if (pngBlob) {
+          resolve(pngBlob);
+        } else {
+          reject(new Error("Image conversion failed"));
+        }
+      }, "image/png");
+    });
+  } finally {
+    bitmap.close();
   }
 }
 
@@ -98,24 +158,58 @@ export function ComposerAttachments({
                 </span>
               )}
               {previewSrc ? (
-                <span className="composer-attachment-thumb" aria-hidden>
-                  <img src={previewSrc} alt="" />
-                </span>
-              ) : (
-                <span className="composer-icon" aria-hidden>
-                  {isImageAttachment(path) ? <Image size={14} /> : <FileText size={14} />}
-                </span>
-              )}
-              <span className="composer-attachment-copy">
-                <span className="composer-attachment-name">{title}</span>
-                {textAttachment && (
-                  <span className="composer-attachment-meta">
-                    {t("composer.textAttachmentStats")
-                      .replace("{characters}", String(characterCount))
-                      .replace("{lines}", String(lineCount))}
+                <button
+                  type="button"
+                  className="composer-attachment-open"
+                  onClick={() => {
+                    void openImageAttachment(path, previewSrc).catch((error) => {
+                      console.warn("Failed to open image attachment.", error);
+                    });
+                  }}
+                  disabled={disabled}
+                  aria-label={`${t("composer.openImage")} ${title}`}
+                >
+                  <span className="composer-attachment-thumb" aria-hidden>
+                    <img src={previewSrc} alt="" />
                   </span>
-                )}
-              </span>
+                  <span className="composer-attachment-copy">
+                    <span className="composer-attachment-name">{title}</span>
+                  </span>
+                </button>
+              ) : (
+                <>
+                  <span className="composer-icon" aria-hidden>
+                    {isImageAttachment(path) ? <Image size={14} /> : <FileText size={14} />}
+                  </span>
+                  <span className="composer-attachment-copy">
+                    <span className="composer-attachment-name">{title}</span>
+                    {textAttachment && (
+                      <span className="composer-attachment-meta">
+                        {t("composer.textAttachmentStats")
+                          .replace("{characters}", String(characterCount))
+                          .replace("{lines}", String(lineCount))}
+                      </span>
+                    )}
+                  </span>
+                </>
+              )}
+              {previewSrc && (
+                <button
+                  type="button"
+                  className="composer-attachment-copy-image"
+                  onClick={() => {
+                    void copyImageAttachment(previewSrc, path).catch((error) => {
+                      console.warn("Failed to copy image attachment.", error);
+                    });
+                  }}
+                  disabled={disabled}
+                  aria-label={`${t("composer.copyImage")} ${title}`}
+                  title={t("composer.copyImage")}
+                >
+                  <Copy size={13} aria-hidden />
+                  <span>{t("common.copy")}</span>
+                </button>
+              )}
               {textAttachment && (
                 <button
                   type="button"
