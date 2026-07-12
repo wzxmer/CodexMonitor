@@ -9,7 +9,8 @@ use crate::remote_backend;
 use crate::shared::codex_core;
 use crate::shared::files_core::{file_read_core, file_write_core};
 use crate::shared::message_reference_core::{
-    create_message_reference_core, CreateMessageReferenceRequest, MessageReferenceResponse,
+    create_content_reference_core, create_message_reference_core, ContentReferenceResponse,
+    CreateContentReferenceRequest, CreateMessageReferenceRequest, MessageReferenceResponse,
 };
 use crate::state::AppState;
 
@@ -175,6 +176,28 @@ pub(crate) async fn create_message_reference(
     let codex_home = crate::codex::home::resolve_settings_codex_home(&settings)
         .ok_or_else(|| "Unable to resolve CODEX_HOME".to_string())?;
     create_message_reference_core(&codex_home, request)
+}
+
+#[tauri::command]
+pub(crate) async fn create_content_reference(
+    request: CreateContentReferenceRequest,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<ContentReferenceResponse, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "create_content_reference",
+            serde_json::to_value(request).map_err(|error| error.to_string())?,
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|error| error.to_string());
+    }
+    let settings = state.app_settings.lock().await.clone();
+    let codex_home = crate::codex::home::resolve_settings_codex_home(&settings)
+        .ok_or_else(|| "Unable to resolve CODEX_HOME".to_string())?;
+    create_content_reference_core(&codex_home, request)
 }
 
 #[tauri::command]

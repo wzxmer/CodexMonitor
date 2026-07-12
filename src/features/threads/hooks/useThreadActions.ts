@@ -4,6 +4,7 @@ import type {
   DebugEntry,
   ThreadListSortKey,
   ThreadSummary,
+  TokenEfficiencyMode,
   WorkspaceInfo,
 } from "@/types";
 import {
@@ -54,6 +55,7 @@ type UseThreadActionsOptions = {
   threadListCursorByWorkspace: ThreadState["threadListCursorByWorkspace"];
   threadStatusById: ThreadState["threadStatusById"];
   threadSortKey: ThreadListSortKey;
+  tokenEfficiencyMode: TokenEfficiencyMode;
   onDebug?: (entry: DebugEntry) => void;
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
   threadActivityRef: MutableRefObject<Record<string, Record<string, number>>>;
@@ -83,6 +85,7 @@ export function useThreadActions({
   threadListCursorByWorkspace,
   threadStatusById,
   threadSortKey,
+  tokenEfficiencyMode,
   onDebug,
   getCustomName,
   threadActivityRef,
@@ -154,10 +157,10 @@ export function useThreadActions({
         timestamp: Date.now(),
         source: "client",
         label: "thread/start",
-        payload: { workspaceId },
+        payload: { workspaceId, tokenEfficiencyMode },
       });
       try {
-        const response = await startThreadService(workspaceId);
+        const response = await startThreadService(workspaceId, tokenEfficiencyMode);
         onDebug?.({
           id: `${Date.now()}-server-thread-start`,
           timestamp: Date.now(),
@@ -186,7 +189,7 @@ export function useThreadActions({
         throw error;
       }
     },
-    [dispatch, extractThreadId, loadedThreadsRef, onDebug],
+    [dispatch, extractThreadId, loadedThreadsRef, onDebug, tokenEfficiencyMode],
   );
 
   const resumeThreadForWorkspace = useCallback(

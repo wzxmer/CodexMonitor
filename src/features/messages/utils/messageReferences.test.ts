@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSmartReferencePrompt,
+  buildContentReferencePrompt,
   defaultReferenceMode,
   estimateReferenceTokens,
   toMarkdownQuote,
@@ -32,5 +33,20 @@ describe("messageReferences", () => {
     expect(prompt).not.toContain("x".repeat(1_000));
     expect(prompt).toContain("Continue the design.");
   });
-});
 
+  it("formats lightweight content references without inline content", () => {
+    const prompt = buildContentReferencePrompt({
+      referenceId: "ref-attachment",
+      path: "C:/refs/ref-attachment/content.md",
+      sourceKind: "log",
+      sourceName: 'build".log',
+      characterCount: 40_000,
+      estimatedTokens: 10_000,
+    });
+
+    expect(prompt).toContain("<content_reference");
+    expect(prompt).toContain('source_kind="log"');
+    expect(prompt).toContain('source_name="build&quot;.log"');
+    expect(prompt).not.toContain("x".repeat(1_000));
+  });
+});

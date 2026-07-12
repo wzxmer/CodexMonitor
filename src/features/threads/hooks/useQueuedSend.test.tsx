@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "@/types";
 import { useQueuedSend } from "./useQueuedSend";
@@ -250,6 +250,45 @@ describe("useQueuedSend", () => {
     expect(result.current.activeQueue).toHaveLength(0);
   });
 
+  it("removes a queued message before manual steer resolves and ignores duplicate clicks", async () => {
+    let resolveSteer: ((result: { status: "sent" }) => void) | null = null;
+    const sendUserMessage = vi.fn(
+      () =>
+        new Promise<{ status: "sent" }>((resolve) => {
+          resolveSteer = resolve;
+        }),
+    );
+    const options = makeOptions({
+      isProcessing: true,
+      steerEnabled: true,
+      sendUserMessage,
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.queueMessage("Guide once");
+    });
+    const queuedId = result.current.activeQueue[0]?.id;
+    expect(queuedId).toBeTruthy();
+
+    let firstSend: Promise<void> | undefined;
+    await act(async () => {
+      firstSend = result.current.steerQueuedMessage(queuedId!);
+      void result.current.steerQueuedMessage(queuedId!);
+      await Promise.resolve();
+    });
+
+    expect(result.current.activeQueue).toHaveLength(0);
+    expect(sendUserMessage).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveSteer?.({ status: "sent" });
+      await firstSend;
+    });
+  });
+
   it("keeps a queued message when manual steer fails", async () => {
     const options = makeOptions({
       isProcessing: true,
@@ -271,6 +310,32 @@ describe("useQueuedSend", () => {
 
     expect(result.current.activeQueue).toHaveLength(1);
     expect(result.current.activeQueue[0]?.text).toBe("Keep queued");
+  });
+
+  it("restores a failed manual steer at its original queue position", async () => {
+    const options = makeOptions({
+      isProcessing: true,
+      steerEnabled: true,
+      sendUserMessage: vi.fn().mockResolvedValue({ status: "steer_failed" }),
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.queueMessage("First queued");
+      await result.current.queueMessage("Second queued");
+    });
+    const secondId = result.current.activeQueue[1]?.id;
+
+    await act(async () => {
+      await result.current.steerQueuedMessage(secondId!);
+    });
+
+    expect(result.current.activeQueue.map((item) => item.text)).toEqual([
+      "First queued",
+      "Second queued",
+    ]);
   });
 
   it("retries queued send after failure", async () => {
@@ -297,6 +362,49 @@ describe("useQueuedSend", () => {
 
     expect(options.sendUserMessage).toHaveBeenCalledTimes(2);
     expect(options.sendUserMessage).toHaveBeenLastCalledWith("Retry", []);
+  });
+
+  it("retries queued send when sending is blocked", async () => {
+    const options = makeOptions({
+      sendUserMessage: vi
+        .fn()
+        .mockResolvedValueOnce({ status: "blocked" })
+        .mockResolvedValueOnce({ status: "sent" }),
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.queueMessage("Retry blocked");
+    });
+    await waitFor(() => {
+      expect(options.sendUserMessage).toHaveBeenCalledTimes(2);
+    });
+    expect(options.sendUserMessage).toHaveBeenLastCalledWith("Retry blocked", []);
+  });
+
+  it("backs off and resumes automatic retries after repeated blocked sends", async () => {
+    const options = makeOptions({
+      sendUserMessage: vi.fn().mockResolvedValue({ status: "blocked" }),
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.queueMessage("Still blocked");
+    });
+    await waitFor(() => {
+      expect(options.sendUserMessage).toHaveBeenCalledTimes(2);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(options.sendUserMessage).toHaveBeenCalledTimes(2);
+    expect(result.current.activeQueue.map((item) => item.text)).toEqual(["Still blocked"]);
+    await waitFor(
+      () => expect(options.sendUserMessage).toHaveBeenCalledTimes(3),
+      { timeout: 1_500 },
+    );
   });
 
   it("queues messages per thread and only flushes the active thread", async () => {

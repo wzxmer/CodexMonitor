@@ -37,6 +37,20 @@ vi.mock("@services/tauri", () => ({
   respondToUserInputRequest: vi.fn(),
   rememberApprovalRule: vi.fn(),
   sendUserMessage: vi.fn(),
+  workflowPreflightPreview: vi.fn().mockResolvedValue({
+    mode: "shadow",
+    providerKind: "openai",
+    model: null,
+    taskLength: 0,
+    rules: [],
+    knowledgeCandidates: [],
+    impacts: [],
+    impactSummary: "",
+    validationSuggestions: [],
+    sourceErrors: [],
+    knowledgeCacheHit: false,
+    contextFragments: [],
+  }),
   steerTurn: vi.fn(),
   startReview: vi.fn(),
   startThread: vi.fn(),
@@ -172,7 +186,7 @@ describe("useThreads UX integration", () => {
     });
 
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", null);
-    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1");
+    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1", "quality");
     const startEnsureCallOrder = ensureWorkspaceRuntimeCodexArgs.mock.invocationCallOrder[0];
     const startThreadCallOrder = vi.mocked(startThread).mock.invocationCallOrder[0];
     expect(startEnsureCallOrder).toBeLessThan(startThreadCallOrder);
@@ -210,7 +224,7 @@ describe("useThreads UX integration", () => {
     });
 
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", null);
-    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1");
+    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1", "quality");
 
     const ensureCallOrder = ensureWorkspaceRuntimeCodexArgs.mock.invocationCallOrder[0];
     const startThreadCallOrder = vi.mocked(startThread).mock.invocationCallOrder[0];
@@ -441,7 +455,7 @@ describe("useThreads UX integration", () => {
     });
 
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", null);
-    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1");
+    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1", "quality");
     expect(threadId).toBe("thread-new");
   });
 
@@ -1266,13 +1280,13 @@ describe("useThreads UX integration", () => {
       await result.current.sendUserMessage("Steer after user input");
     });
 
-    expect(steerTurn).toHaveBeenCalledWith(
+    expect(vi.mocked(steerTurn).mock.calls[0]?.slice(0, 5)).toEqual([
       "ws-1",
       "thread-1",
       "turn-1",
       "Steer after user input",
       [],
-    );
+    ]);
     expect(sendUserMessageService).not.toHaveBeenCalled();
   });
 

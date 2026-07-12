@@ -94,6 +94,7 @@ describe("useThreadActions", () => {
       threadListCursorByWorkspace: {},
       threadStatusById: {},
       threadSortKey: "updated_at",
+      tokenEfficiencyMode: "quality",
       getCustomName: () => undefined,
       threadActivityRef,
       loadedThreadsRef,
@@ -132,7 +133,7 @@ describe("useThreadActions", () => {
     });
 
     expect(threadId).toBe("thread-1");
-    expect(startThread).toHaveBeenCalledWith("ws-1");
+    expect(startThread).toHaveBeenCalledWith("ws-1", "quality");
     expect(dispatch).toHaveBeenCalledWith({
       type: "ensureThread",
       workspaceId: "ws-1",

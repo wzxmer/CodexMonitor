@@ -11,6 +11,7 @@ export type MessageReferenceAction = {
 };
 
 export const SMART_REFERENCE_TOKEN_THRESHOLD = 2_000;
+export const SMART_CONTENT_REFERENCE_TOKEN_THRESHOLD = 1_000;
 
 export function estimateReferenceTokens(text: string) {
   const normalized = text.trim();
@@ -62,5 +63,28 @@ export function buildSmartReferencePrompt(input: {
     "Read the referenced Markdown file only when its exact content is needed. Prefer targeted searches or partial reads over loading the full file.",
     "</message_reference>",
     ...(instruction ? ["", instruction] : []),
+  ].join("\n");
+}
+
+export function buildContentReferencePrompt(input: {
+  referenceId: string;
+  path: string;
+  sourceKind: "attachment" | "log" | "diff";
+  sourceName: string;
+  characterCount: number;
+  estimatedTokens: number;
+}) {
+  const escapeAttribute = (value: string) => value.replace(/"/g, "&quot;");
+  return [
+    "<content_reference",
+    `  id="${escapeAttribute(input.referenceId)}"`,
+    `  source_kind="${input.sourceKind}"`,
+    `  source_name="${escapeAttribute(input.sourceName)}"`,
+    `  characters="${input.characterCount}"`,
+    `  estimated_tokens="${input.estimatedTokens}"`,
+    `  path="${escapeAttribute(input.path)}"`,
+    ">",
+    "Read the referenced Markdown file only when its exact content is needed. Prefer targeted searches or partial reads over loading the full file.",
+    "</content_reference>",
   ].join("\n");
 }

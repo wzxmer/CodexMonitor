@@ -4,8 +4,13 @@ import type {
   CollabAgentRef,
   CustomPromptOption,
   DebugEntry,
+  CodexProviderKind,
   SendMessageResult,
   ServiceTier,
+  SkillOption,
+  WorkflowAgentOption,
+  WorkflowRuntimeMode,
+  TokenEfficiencyMode,
   ThreadListSortKey,
   WorkspaceInfo,
   SubagentCheckpointSyncMode,
@@ -68,6 +73,11 @@ type UseThreadsOptions = {
     threadId: string | null,
   ) => Promise<void>;
   model?: string | null;
+  workflowProviderKind?: CodexProviderKind;
+  workflowRuntimeMode?: WorkflowRuntimeMode;
+  workflowSkills?: SkillOption[];
+  workflowAgents?: WorkflowAgentOption[];
+  tokenEfficiencyMode?: TokenEfficiencyMode;
   effort?: string | null;
   serviceTier?: ServiceTier | null | undefined;
   collaborationMode?: Record<string, unknown> | null;
@@ -106,6 +116,11 @@ export function useThreads({
   onDebug,
   ensureWorkspaceRuntimeCodexArgs,
   model,
+  workflowProviderKind = "openai",
+  workflowRuntimeMode = "shadow",
+  workflowSkills = [],
+  workflowAgents = [],
+  tokenEfficiencyMode = "quality",
   effort,
   serviceTier,
   collaborationMode,
@@ -748,6 +763,7 @@ export function useThreads({
     threadListCursorByWorkspace: state.threadListCursorByWorkspace,
     threadStatusById: state.threadStatusById,
     threadSortKey,
+    tokenEfficiencyMode,
     onDebug,
     getCustomName,
     threadActivityRef,
@@ -1152,6 +1168,10 @@ export function useThreads({
     activeThreadId,
     accessMode,
     model,
+    workflowProviderKind,
+    workflowRuntimeMode,
+    workflowSkills,
+    workflowAgents,
     effort,
     serviceTier,
     collaborationMode,

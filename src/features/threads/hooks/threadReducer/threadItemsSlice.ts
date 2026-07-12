@@ -271,6 +271,34 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
           nextPendingUserMessageReplacementByThread,
       };
     }
+    case "removeItem": {
+      const list = state.itemsByThread[action.threadId] ?? [];
+      const nextList = list.filter((item) => item.id !== action.itemId);
+      if (nextList.length === list.length) {
+        return state;
+      }
+      const pendingReplacement =
+        state.pendingUserMessageReplacementByThread[action.threadId];
+      const nextPendingUserMessageReplacementByThread =
+        pendingReplacement?.messageId === action.itemId
+          ? (() => {
+              const {
+                [action.threadId]: _,
+                ...rest
+              } = state.pendingUserMessageReplacementByThread;
+              return rest;
+            })()
+          : state.pendingUserMessageReplacementByThread;
+      return {
+        ...state,
+        itemsByThread: {
+          ...state.itemsByThread,
+          [action.threadId]: prepareLiveThreadItems(nextList),
+        },
+        pendingUserMessageReplacementByThread:
+          nextPendingUserMessageReplacementByThread,
+      };
+    }
     case "setThreadItems":
       return {
         ...state,

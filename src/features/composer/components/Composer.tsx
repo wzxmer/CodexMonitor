@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ClipboardEvent,
 } from "react";
 import type {
@@ -60,6 +61,7 @@ import {
 } from "../utils/skillSuggestions";
 
 type ComposerProps = {
+  inputBackgroundColor?: string;
   onSend: (
     text: string,
     images: string[],
@@ -188,6 +190,7 @@ const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
 };
 
 export const Composer = memo(function Composer({
+  inputBackgroundColor,
   onSend,
   onStop,
   canStop,
@@ -668,7 +671,14 @@ export const Composer = memo(function Composer({
 
 
   return (
-    <footer className={`composer${disabled ? " is-disabled" : ""}`}>
+    <footer
+      className={`composer${disabled ? " is-disabled" : ""}`}
+      style={
+        inputBackgroundColor
+          ? ({ "--composer-input-background": inputBackgroundColor } as CSSProperties)
+          : undefined
+      }
+    >
       <ComposerQueue
         queuedMessages={queuedMessages}
         pausedReason={queuePausedReason}

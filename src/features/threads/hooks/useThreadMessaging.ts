@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject } from "react";
 import * as Sentry from "@sentry/react";
 import type {
   AppMention,
+  CodexProviderKind,
   ComposerSendIntent,
   RateLimitSnapshot,
   CustomPromptOption,
@@ -10,11 +11,16 @@ import type {
   ReviewTarget,
   SendMessageResult,
   ServiceTier,
+  SkillOption,
+  WorkflowAgentOption,
+  WorkflowHostPreflightPreview,
+  WorkflowRuntimeMode,
   ThreadTokenUsage,
   WorkspaceInfo,
 } from "@/types";
 import {
   compactThread as compactThreadService,
+  createContentReference,
   promoteComposerImages,
   sendUserMessage as sendUserMessageService,
   steerTurn as steerTurnService,
@@ -24,8 +30,16 @@ import {
   listMcpServerStatus as listMcpServerStatusService,
   readWorkspaceFile,
   rollbackThread as rollbackThreadService,
+  workflowPreflightPreview as workflowPreflightPreviewService,
 } from "@services/tauri";
 import { useI18n } from "@/features/i18n/I18nProvider";
+import { buildWorkflowPreflightPreview } from "@/features/workflow/utils/workflowPreflight";
+import { compileWorkflowAdditionalContext } from "@/features/workflow/utils/workflowContext";
+import {
+  buildContentReferencePrompt,
+  estimateReferenceTokens,
+  SMART_CONTENT_REFERENCE_TOKEN_THRESHOLD,
+} from "@/features/messages/utils/messageReferences";
 import { expandCustomPromptText } from "@utils/customPrompts";
 import {
   attachmentDisplayName,
@@ -52,7 +66,29 @@ import {
   type SendMessageOptions,
 } from "./threadMessagingHelpers";
 
-const TEXT_ATTACHMENT_EXTENSIONS = /\.(txt|md|markdown|json|jsonc|yaml|yml|toml|xml|html?|css|scss|sass|less|js|jsx|ts|tsx|mjs|cjs|rs|go|py|rb|php|java|kt|kts|swift|c|cc|cpp|cxx|h|hpp|cs|sh|bash|zsh|fish|ps1|bat|cmd|sql|csv|tsv|log|ini|env|gitignore|dockerfile)$/i;
+const TEXT_ATTACHMENT_EXTENSIONS = /\.(txt|md|markdown|json|jsonc|yaml|yml|toml|xml|html?|css|scss|sass|less|js|jsx|ts|tsx|mjs|cjs|rs|go|py|rb|php|java|kt|kts|swift|c|cc|cpp|cxx|h|hpp|cs|sh|bash|zsh|fish|ps1|bat|cmd|sql|csv|tsv|log|diff|patch|ini|env|gitignore|dockerfile)$/i;
+const WORKFLOW_PREFLIGHT_TIMEOUT_MS = 1_500;
+
+async function workflowPreflightWithTimeout(
+  promise: Promise<WorkflowHostPreflightPreview>,
+) {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error("workflow preflight timed out")),
+          WORKFLOW_PREFLIGHT_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
 
 function escapeAttachedFileAttr(value: string) {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
@@ -104,6 +140,46 @@ function decodeDataUrlTextAttachment(dataUrl: string): {
   }
 }
 
+function contentReferenceKind(sourceName: string): "attachment" | "log" | "diff" {
+  if (/\.log$/i.test(sourceName)) {
+    return "log";
+  }
+  if (/\.(diff|patch)$/i.test(sourceName)) {
+    return "diff";
+  }
+  return "attachment";
+}
+
+async function buildAttachmentContentBlock(
+  workspaceId: string,
+  sourceName: string,
+  content: string,
+) {
+  if (estimateReferenceTokens(content) < SMART_CONTENT_REFERENCE_TOKEN_THRESHOLD) {
+    return null;
+  }
+  const sourceKind = contentReferenceKind(sourceName);
+  try {
+    const reference = await createContentReference({
+      workspaceId,
+      sourceKind,
+      sourceName,
+      content,
+    });
+    return buildContentReferencePrompt({
+      referenceId: reference.referenceId,
+      path: reference.path,
+      sourceKind,
+      sourceName,
+      characterCount: reference.characterCount,
+      estimatedTokens: reference.estimatedTokens,
+    });
+  } catch {
+    // Older remote daemons may not support content references yet. Preserve send behavior.
+    return null;
+  }
+}
+
 async function prepareMessageAttachmentsForSend({
   workspace,
   text,
@@ -132,6 +208,15 @@ async function prepareMessageAttachmentsForSend({
           `Attachment "${attachmentDisplayName(attachment)}" exceeds the inline text limit and was not sent.`,
         );
       }
+      const contentReference = await buildAttachmentContentBlock(
+        workspace.id,
+        dataText.name,
+        dataText.content,
+      );
+      if (contentReference) {
+        attachedFileBlocks.push(contentReference);
+        continue;
+      }
       attachedFileBlocks.push(
         `<attached_file path="${escapeAttachedFileAttr(dataText.name)}" name="${escapeAttachedFileAttr(dataText.name)}">\n${dataText.content}\n</attached_file>`,
       );
@@ -155,6 +240,15 @@ async function prepareMessageAttachmentsForSend({
         `Attachment "${attachmentDisplayName(attachment)}" exceeds the inline text limit and was not sent.`,
       );
     }
+    const contentReference = await buildAttachmentContentBlock(
+      workspace.id,
+      relativePath,
+      response.content,
+    );
+    if (contentReference) {
+      attachedFileBlocks.push(contentReference);
+      continue;
+    }
     attachedFileBlocks.push(
       `<attached_file path="${escapeAttachedFileAttr(relativePath)}" name="${escapeAttachedFileAttr(attachmentDisplayName(attachment))}">\n${response.content}\n</attached_file>`,
     );
@@ -174,6 +268,10 @@ type UseThreadMessagingOptions = {
   activeThreadId: string | null;
   accessMode?: "read-only" | "current" | "full-access";
   model?: string | null;
+  workflowProviderKind?: CodexProviderKind;
+  workflowRuntimeMode?: WorkflowRuntimeMode;
+  workflowSkills?: SkillOption[];
+  workflowAgents?: WorkflowAgentOption[];
   effort?: string | null;
   serviceTier?: ServiceTier | null | undefined;
   collaborationMode?: Record<string, unknown> | null;
@@ -234,6 +332,10 @@ export function useThreadMessaging({
   activeThreadId,
   accessMode,
   model,
+  workflowProviderKind = "openai",
+  workflowRuntimeMode = "shadow",
+  workflowSkills = [],
+  workflowAgents = [],
   effort,
   serviceTier,
   collaborationMode,
@@ -362,6 +464,42 @@ export function useThreadMessaging({
           activeTurnId,
         },
       });
+      const workflowEnabled = workflowRuntimeMode !== "off";
+      const workflowPreview = workflowEnabled
+        ? buildWorkflowPreflightPreview({
+          task: finalText,
+          skills: workflowSkills,
+          providerKind: workflowProviderKind,
+          model: resolvedModel ?? null,
+          mode: workflowRuntimeMode,
+        })
+        : null;
+      if (workflowPreview) {
+        onDebug?.({
+          id: `${Date.now()}-client-workflow-preflight`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "workflow/preflight",
+          payload: workflowPreview,
+        });
+      }
+      const hostPreviewPromise: Promise<{
+        preview: WorkflowHostPreflightPreview | null;
+        error: unknown;
+      }> = workflowEnabled
+        ? workflowPreflightWithTimeout(
+          workflowPreflightPreviewService(
+            workspace.id,
+            finalText,
+            workflowProviderKind,
+            resolvedModel ?? null,
+            workflowRuntimeMode,
+          ),
+        ).then(
+          (preview) => ({ preview, error: null }),
+          (error: unknown) => ({ preview: null, error }),
+        )
+        : Promise.resolve({ preview: null, error: null });
       Sentry.metrics.count("prompt_sent", 1, {
         attributes: {
           workspace_id: workspace.id,
@@ -376,13 +514,15 @@ export function useThreadMessaging({
         },
       });
       const timestamp = Date.now();
+      const optimisticMessageId =
+        options?.replaceMessageId ?? `local-user-${timestamp}`;
       const customThreadName = getCustomName(workspace.id, threadId) ?? null;
       dispatch({
         type: "upsertItem",
         workspaceId: workspace.id,
         threadId,
         item: {
-          id: options?.replaceMessageId ?? `local-user-${timestamp}`,
+          id: optimisticMessageId,
           kind: "message",
           role: "user",
           text: finalText,
@@ -434,8 +574,96 @@ export function useThreadMessaging({
         ) {
           await ensureWorkspaceRuntimeCodexArgs(workspace.id, threadId);
         }
+        let hostPreview: WorkflowHostPreflightPreview | null = null;
+        const hostPreviewResult = await hostPreviewPromise;
+        if (hostPreviewResult.preview) {
+          hostPreview = hostPreviewResult.preview;
+          onDebug?.({
+            id: `${Date.now()}-client-workflow-host-preflight`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "workflow/host preflight",
+            payload: {
+              mode: hostPreview.mode,
+              providerKind: hostPreview.providerKind,
+              model: hostPreview.model,
+              taskLength: hostPreview.taskLength,
+              rulePaths: hostPreview.rules.map((rule) => rule.path),
+              knowledgePaths: hostPreview.knowledgeCandidates.map((candidate) => candidate.path),
+              impactSummary: hostPreview.impactSummary,
+              validationSummary: hostPreview.validationSuggestions.join(", "),
+              sourceErrors: hostPreview.sourceErrors,
+              knowledgeCacheHit: hostPreview.knowledgeCacheHit,
+              contextPlan: hostPreview.contextPlan ?? null,
+              completionPlan: hostPreview.completionPlan
+                ? {
+                  required: hostPreview.completionPlan.required,
+                  phase: hostPreview.completionPlan.phase,
+                  validations: hostPreview.completionPlan.validations.map((gate) => ({
+                    id: gate.id,
+                    kind: gate.kind,
+                    instruction: gate.instruction,
+                    status: gate.status,
+                  })),
+                  changedDiffReview: hostPreview.completionPlan.changedDiffReview,
+                  knowledgeCapture: {
+                    status: hostPreview.completionPlan.knowledgeCapture.status,
+                    category: hostPreview.completionPlan.knowledgeCapture.category,
+                    submissionMode: hostPreview.completionPlan.knowledgeCapture.submissionMode,
+                  },
+                }
+                : null,
+            },
+          });
+        } else if (hostPreviewResult.error) {
+          const error = hostPreviewResult.error;
+          const errorMessage =
+            extractRpcErrorMessage(error) ??
+            (error instanceof Error ? error.message : String(error));
+          onDebug?.({
+            id: `${Date.now()}-client-workflow-host-preflight-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "workflow/host preflight error",
+            payload: errorMessage,
+          });
+        }
+        const workflowContext = workflowPreview
+          ? compileWorkflowAdditionalContext({
+            task: finalText,
+            preview: workflowPreview,
+            hostPreview,
+            skills: workflowSkills,
+            agents: workflowAgents,
+          })
+          : {
+            additionalContext: {},
+            selectedAgents: [],
+            includedSkills: [],
+            blockedSkills: [],
+            contextSummary: "off",
+          };
+        const appliedWorkflowContext = workflowRuntimeMode === "active"
+          ? workflowContext.additionalContext
+          : {};
+        if (workflowPreview) {
+          onDebug?.({
+            id: `${Date.now()}-client-workflow-context-compiled`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "workflow/context compiled",
+            payload: {
+              mode: workflowRuntimeMode,
+              applied: workflowRuntimeMode === "active",
+              summary: workflowContext.contextSummary,
+              sourceIds: Object.keys(workflowContext.additionalContext),
+              contextFingerprint: hostPreview?.contextPlan?.contextFingerprint ?? null,
+            },
+          });
+        }
         const response: Record<string, unknown> = shouldSteer
-          ? (await (appMentions.length > 0
+          ? (await (appMentions.length > 0 ||
+            Object.keys(appliedWorkflowContext).length > 0
             ? steerTurnService(
               workspace.id,
               threadId,
@@ -443,6 +671,7 @@ export function useThreadMessaging({
               preparedAttachments.text,
               preparedAttachments.images,
               appMentions,
+              appliedWorkflowContext,
             )
             : steerTurnService(
               workspace.id,
@@ -455,15 +684,20 @@ export function useThreadMessaging({
             workspace.id,
             threadId,
             preparedAttachments.text,
-            buildTurnStartPayload({
-              model: resolvedModel,
-              effort: resolvedEffort,
-              serviceTier: resolvedServiceTier,
-              collaborationMode: sanitizedCollaborationMode,
-              accessMode: resolvedAccessMode,
-              images: preparedAttachments.images,
-              appMentions,
-            }),
+            {
+              ...buildTurnStartPayload({
+                model: resolvedModel,
+                effort: resolvedEffort,
+                serviceTier: resolvedServiceTier,
+                collaborationMode: sanitizedCollaborationMode,
+                accessMode: resolvedAccessMode,
+                images: preparedAttachments.images,
+                appMentions,
+              }),
+              ...(Object.keys(appliedWorkflowContext).length > 0
+                ? { additionalContext: appliedWorkflowContext }
+                : {}),
+            },
           )) as Record<string, unknown>;
 
         const rpcError = extractRpcErrorMessage(response);
@@ -487,6 +721,11 @@ export function useThreadMessaging({
             markProcessing(threadId, false);
             setActiveTurnId(threadId, null);
           }
+          dispatch({
+            type: "removeItem",
+            threadId,
+            itemId: optimisticMessageId,
+          });
           pushThreadErrorMessage(
             threadId,
             `Turn steer failed: ${rpcError}`,
@@ -525,6 +764,13 @@ export function useThreadMessaging({
           markProcessing(threadId, false);
           setActiveTurnId(threadId, null);
         }
+        if (requestMode === "steer") {
+          dispatch({
+            type: "removeItem",
+            threadId,
+            itemId: optimisticMessageId,
+          });
+        }
         onDebug?.({
           id: `${Date.now()}-${requestMode === "steer" ? "client-turn-steer-error" : "client-turn-start-error"}`,
           timestamp: Date.now(),
@@ -555,6 +801,10 @@ export function useThreadMessaging({
       getCustomName,
       markProcessing,
       model,
+      workflowProviderKind,
+      workflowRuntimeMode,
+      workflowSkills,
+      workflowAgents,
       onDebug,
       pushThreadErrorMessage,
       recordThreadActivity,

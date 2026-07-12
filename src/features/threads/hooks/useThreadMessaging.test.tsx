@@ -11,8 +11,10 @@ import {
   getAppsList as getAppsListService,
   listMcpServerStatus as listMcpServerStatusService,
   compactThread as compactThreadService,
+  createContentReference,
   readWorkspaceFile,
   rollbackThread as rollbackThreadService,
+  workflowPreflightPreview as workflowPreflightPreviewService,
 } from "@services/tauri";
 import type { WorkspaceInfo } from "@/types";
 import { useThreadMessaging } from "./useThreadMessaging";
@@ -32,8 +34,10 @@ vi.mock("@services/tauri", () => ({
   getAppsList: vi.fn(),
   listMcpServerStatus: vi.fn(),
   compactThread: vi.fn(),
+  createContentReference: vi.fn(),
   readWorkspaceFile: vi.fn(),
   rollbackThread: vi.fn(),
+  workflowPreflightPreview: vi.fn(),
 }));
 
 vi.mock("./useReviewPrompt", () => ({
@@ -104,7 +108,58 @@ describe("useThreadMessaging telemetry", () => {
     vi.mocked(compactThreadService).mockResolvedValue(
       {} as Awaited<ReturnType<typeof compactThreadService>>,
     );
+    vi.mocked(createContentReference).mockResolvedValue({
+      referenceId: "content-ref-1",
+      path: "C:/Codex/references/content-ref-1/content.md",
+      characterCount: 9_000,
+      estimatedTokens: 2_250,
+    });
     vi.mocked(rollbackThreadService).mockResolvedValue({});
+    vi.mocked(workflowPreflightPreviewService).mockResolvedValue({
+      mode: "active",
+      providerKind: "opencode",
+      model: "minimax-m3",
+      taskLength: 5,
+      rules: [{ path: "/tmp/workspace/AGENTS.md", kind: "AGENTS.md", scope: "workspace" }],
+      knowledgeCandidates: [
+        { path: "D:/DevKnowledgeBase/project.md", title: "Project", score: 8, matchedTerms: ["hello"] },
+      ],
+      impacts: [],
+      impactSummary: "capability-runtime",
+      validationSuggestions: ["npm run test"],
+      sourceErrors: [],
+      knowledgeCacheHit: true,
+      contextFragments: [
+        { sourceId: "cm.rule.0", kind: "application", value: "project rules" },
+        {
+          sourceId: "cm.workflow.completion",
+          kind: "application",
+          value: "run focused validation and review the task-owned changed diff",
+        },
+      ],
+      completionPlan: {
+        required: true,
+        phase: "focused_validation",
+        validations: [{
+          id: "validation-1",
+          kind: "command",
+          instruction: "npm run typecheck",
+          status: "pending",
+          sourceAreas: ["project-baseline"],
+        }],
+        changedDiffReview: {
+          required: true,
+          status: "pending",
+          scope: "task-owned-changed-diff",
+        },
+        knowledgeCapture: {
+          status: "evaluate",
+          category: "checkpoint",
+          reason: "validated reusable conclusions only",
+          submissionMode: "candidate-only-concurrency-safe",
+        },
+      },
+    });
     vi.mocked(readWorkspaceFile).mockResolvedValue({
       content: "file body",
       truncated: false,
@@ -113,12 +168,23 @@ describe("useThreadMessaging telemetry", () => {
 
   it("records prompt_sent once for one message send", async () => {
     const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => undefined);
+    const onDebug = vi.fn();
     const { result } = renderHook(() =>
       useThreadMessaging({
         activeWorkspace: workspace,
         activeThreadId: "thread-1",
         accessMode: "current",
-        model: null,
+        model: "minimax-m3",
+        workflowProviderKind: "opencode",
+        workflowRuntimeMode: "active",
+        workflowSkills: [
+          {
+            name: "public-check",
+            path: "/skills/public-check",
+            triggerKeywords: ["hello"],
+            instructions: "Run the public check.",
+          },
+        ],
         effort: null,
         collaborationMode: null,
         reviewDeliveryMode: "inline",
@@ -136,7 +202,7 @@ describe("useThreadMessaging telemetry", () => {
         setActiveTurnId: vi.fn(),
         recordThreadActivity: vi.fn(),
         safeMessageActivity: vi.fn(),
-        onDebug: vi.fn(),
+        onDebug,
         pushThreadErrorMessage: vi.fn(),
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
@@ -170,6 +236,225 @@ describe("useThreadMessaging telemetry", () => {
     );
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledTimes(1);
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", "thread-1");
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "workflow/preflight",
+        payload: expect.objectContaining({
+          mode: "active",
+          providerKind: "opencode",
+          model: "minimax-m3",
+          triggerSummary: "public-check",
+          triggeredSkills: [
+            expect.objectContaining({
+              skillName: "public-check",
+              scope: "public",
+              compatibility: "compatible",
+            }),
+          ],
+        }),
+      }),
+    );
+    expect(workflowPreflightPreviewService).toHaveBeenCalledWith(
+      "ws-1",
+      "hello",
+      "opencode",
+      "minimax-m3",
+      "active",
+    );
+    const hostDebugEntry = onDebug.mock.calls
+      .map(([entry]) => entry)
+      .find((entry) => entry.label === "workflow/host preflight");
+    expect(hostDebugEntry).toEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          knowledgePaths: ["D:/DevKnowledgeBase/project.md"],
+          impactSummary: "capability-runtime",
+          knowledgeCacheHit: true,
+          completionPlan: expect.objectContaining({
+            required: true,
+            phase: "focused_validation",
+            changedDiffReview: expect.objectContaining({ status: "pending" }),
+            knowledgeCapture: expect.objectContaining({ status: "evaluate" }),
+          }),
+        }),
+      }),
+    );
+    expect(JSON.stringify(hostDebugEntry?.payload)).not.toContain("hello");
+    expect(sendUserMessageService).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "hello",
+      expect.objectContaining({
+        additionalContext: expect.objectContaining({
+          "cm.rule.0": { kind: "application", value: "project rules" },
+          "cm.workflow.completion": expect.objectContaining({
+            kind: "application",
+            value: expect.stringContaining("task-owned changed diff"),
+          }),
+          "cm.skill.0": expect.objectContaining({
+            kind: "application",
+            value: expect.stringContaining("public-check"),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("runs shadow preflight without applying additional context", async () => {
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: "minimax-m3",
+        workflowProviderKind: "opencode",
+        workflowRuntimeMode: "shadow",
+        workflowSkills: [{
+          name: "public-check",
+          path: "/skills/public-check",
+          triggerKeywords: ["hello"],
+          instructions: "Run the public check.",
+        }],
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch: vi.fn(),
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(workspace, "thread-1", "hello", []);
+    });
+
+    expect(workflowPreflightPreviewService).toHaveBeenCalledWith(
+      "ws-1",
+      "hello",
+      "opencode",
+      "minimax-m3",
+      "shadow",
+    );
+    expect(sendUserMessageService).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "hello",
+      expect.not.objectContaining({ additionalContext: expect.anything() }),
+    );
+  });
+
+  it("skips workflow preflight and context when runtime mode is off", async () => {
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        workflowRuntimeMode: "off",
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch: vi.fn(),
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(workspace, "thread-1", "hello", []);
+    });
+
+    expect(workflowPreflightPreviewService).not.toHaveBeenCalled();
+    expect(sendUserMessageService).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "hello",
+      expect.not.objectContaining({ additionalContext: expect.anything() }),
+    );
+  });
+
+  it("does not block sending when host workflow preflight fails", async () => {
+    vi.mocked(workflowPreflightPreviewService).mockRejectedValueOnce(
+      new Error("preflight unavailable"),
+    );
+    const onDebug = vi.fn();
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch: vi.fn(),
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug,
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await expect(
+        result.current.sendUserMessageToThread(workspace, "thread-1", "hello", []),
+      ).resolves.toEqual({ status: "sent" });
+    });
+
+    expect(sendUserMessageService).toHaveBeenCalledTimes(1);
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "workflow/host preflight error",
+        payload: "preflight unavailable",
+      }),
+    );
   });
 
   it("promotes draft images before inserting and sending the user message", async () => {
@@ -916,6 +1201,7 @@ describe("useThreadMessaging telemetry", () => {
         steerEnabled: true,
         customPrompts: [],
         ensureWorkspaceRuntimeCodexArgs,
+        workflowRuntimeMode: "active",
         threadStatusById: {
           "thread-1": {
             isProcessing: true,
@@ -962,6 +1248,10 @@ describe("useThreadMessaging telemetry", () => {
       "turn-1",
       "steer this",
       [],
+      [],
+      expect.objectContaining({
+        "cm.rule.0": { kind: "application", value: "project rules" },
+      }),
     );
     expect(sendUserMessageService).not.toHaveBeenCalled();
     expect(ensureWorkspaceRuntimeCodexArgs).not.toHaveBeenCalled();
@@ -981,6 +1271,7 @@ describe("useThreadMessaging telemetry", () => {
     const pushThreadErrorMessage = vi.fn();
     const markProcessing = vi.fn();
     const setActiveTurnId = vi.fn();
+    const dispatch = vi.fn();
     vi.mocked(steerTurnService).mockResolvedValueOnce({
       error: { message: "no active turn to steer" },
     } as unknown as Awaited<ReturnType<typeof steerTurnService>>);
@@ -1010,7 +1301,7 @@ describe("useThreadMessaging telemetry", () => {
         },
         rateLimitsByWorkspace: {},
         pendingInterruptsRef: { current: new Set<string>() },
-        dispatch: vi.fn(),
+        dispatch,
         getCustomName: vi.fn(() => undefined),
         markProcessing,
         markReviewing: vi.fn(),
@@ -1046,6 +1337,19 @@ describe("useThreadMessaging telemetry", () => {
       "thread-1",
       "Turn steer failed: no active turn to steer",
     );
+    const optimisticMessage = vi.mocked(dispatch).mock.calls.find(
+      ([action]) => action.type === "upsertItem",
+    )?.[0];
+    expect(optimisticMessage).toEqual(
+      expect.objectContaining({
+        item: expect.objectContaining({ id: expect.stringMatching(/^local-user-/) }),
+      }),
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "removeItem",
+      threadId: "thread-1",
+      itemId: optimisticMessage?.item.id,
+    });
   });
 
   it("inlines UTF-8 workspace text attachments before sending", async () => {
@@ -1111,6 +1415,84 @@ describe("useThreadMessaging telemetry", () => {
         }),
       }),
     );
+  });
+
+  it("replaces large log attachments with content-addressed references", async () => {
+    const dispatch = vi.fn();
+    const largeLog = "log line\n".repeat(1_000);
+    vi.mocked(readWorkspaceFile).mockResolvedValueOnce({
+      content: largeLog,
+      truncated: false,
+    });
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "inspect failure",
+        ["/tmp/workspace/build.log"],
+      );
+    });
+
+    expect(createContentReference).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      sourceKind: "log",
+      sourceName: "build.log",
+      content: largeLog,
+    });
+    const sendCalls = vi.mocked(sendUserMessageService).mock.calls;
+    const sentText = sendCalls[sendCalls.length - 1]?.[2] ?? "";
+    expect(sentText).toContain("<content_reference");
+    expect(sentText).toContain('source_kind="log"');
+    expect(sentText).not.toContain(largeLog);
+
+    vi.mocked(createContentReference).mockRejectedValueOnce(new Error("method unavailable"));
+    vi.mocked(readWorkspaceFile).mockResolvedValueOnce({
+      content: largeLog,
+      truncated: false,
+    });
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "inspect with old daemon",
+        ["/tmp/workspace/build.log"],
+      );
+    });
+    const fallbackCalls = vi.mocked(sendUserMessageService).mock.calls;
+    const fallbackText = fallbackCalls[fallbackCalls.length - 1]?.[2] ?? "";
+    expect(fallbackText).toContain(largeLog);
   });
 
   it("blocks unsupported binary attachments instead of dropping them silently", async () => {

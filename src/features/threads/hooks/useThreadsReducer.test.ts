@@ -721,6 +721,31 @@ describe("threadReducer", () => {
     expect(next.activeThreadIdByWorkspace["ws-1"]).toBe("thread-fresh");
   });
 
+  it("removes an optimistic user message by id", () => {
+    const next = threadReducer(
+      {
+        ...initialState,
+        itemsByThread: {
+          "thread-1": [
+            {
+              id: "local-user-1",
+              kind: "message",
+              role: "user",
+              text: "failed steer",
+            },
+          ],
+        },
+      },
+      {
+        type: "removeItem",
+        threadId: "thread-1",
+        itemId: "local-user-1",
+      },
+    );
+
+    expect(next.itemsByThread["thread-1"]).toEqual([]);
+  });
+
   it("dedupes repeated thread summaries on complete setThreads payloads", () => {
     const next = threadReducer(initialState, {
       type: "setThreads",

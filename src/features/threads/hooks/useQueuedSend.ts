@@ -79,6 +79,15 @@ type SlashCommandKind =
   | "review"
   | "status";
 
+const QUEUED_RETRY_MAX_DELAY_MS = 60_000;
+
+function queuedRetryDelayMs(failureCount: number) {
+  if (failureCount < 2) {
+    return 0;
+  }
+  return Math.min(1_000 * 2 ** (failureCount - 2), QUEUED_RETRY_MAX_DELAY_MS);
+}
+
 function buildCommandRegex(trigger: string, command: SlashCommandKind) {
   const escaped = trigger.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`^${escaped}${command}\\b`, "i");
@@ -155,6 +164,17 @@ export function useQueuedSend({
     Record<string, boolean>
   >({});
   const queueCancelGenerationByThread = useRef<Record<string, number>>({});
+  const steerInFlightMessageIds = useRef(new Set<string>());
+  const queuedFailureCountByMessageId = useRef(new Map<string, number>());
+  const queuedRetryTimersByMessageId = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  );
+  const [retryWakeVersion, setRetryWakeVersion] = useState(0);
+
+  useEffect(() => () => {
+    queuedRetryTimersByMessageId.current.forEach((timer) => clearTimeout(timer));
+    queuedRetryTimersByMessageId.current.clear();
+  }, []);
 
   const activeQueue = useMemo(
     () => (activeThreadId ? queuedByThread[activeThreadId] ?? [] : []),
@@ -170,6 +190,12 @@ export function useQueuedSend({
 
   const removeQueuedMessage = useCallback(
     (threadId: string, messageId: string) => {
+      queuedFailureCountByMessageId.current.delete(messageId);
+      const retryTimer = queuedRetryTimersByMessageId.current.get(messageId);
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        queuedRetryTimersByMessageId.current.delete(messageId);
+      }
       setQueuedByThread((prev) => ({
         ...prev,
         [threadId]: (prev[threadId] ?? []).filter(
@@ -213,6 +239,27 @@ export function useQueuedSend({
       [threadId]: [item, ...(prev[threadId] ?? [])],
     }));
   }, []);
+
+  const restoreQueuedMessage = useCallback(
+    (threadId: string, item: QueuedMessage, index: number) => {
+      setQueuedByThread((prev) => {
+        const queue = prev[threadId] ?? [];
+        if (queue.some((entry) => entry.id === item.id)) {
+          return prev;
+        }
+        const restoreIndex = Math.min(index, queue.length);
+        return {
+          ...prev,
+          [threadId]: [
+            ...queue.slice(0, restoreIndex),
+            item,
+            ...queue.slice(restoreIndex),
+          ],
+        };
+      });
+    },
+    [],
+  );
 
   const createQueuedItem = useCallback(
     (text: string, images: string[], appMentions: AppMention[]): QueuedMessage => ({
@@ -406,9 +453,13 @@ export function useQueuedSend({
       if (!activeThreadId || !activeTurnId || !isProcessing || !steerEnabled) {
         return;
       }
-      const item = (queuedByThread[activeThreadId] ?? []).find(
-        (entry) => entry.id === messageId,
-      );
+      if (steerInFlightMessageIds.current.has(messageId)) {
+        return;
+      }
+      const threadId = activeThreadId;
+      const queue = queuedByThread[threadId] ?? [];
+      const itemIndex = queue.findIndex((entry) => entry.id === messageId);
+      const item = queue[itemIndex];
       if (!item) {
         return;
       }
@@ -416,17 +467,33 @@ export function useQueuedSend({
       if (!trimmed && (item.images ?? []).length === 0) {
         return;
       }
-      const mentions = item.appMentions ?? [];
-      const result =
-        mentions.length > 0
-          ? await sendUserMessage(trimmed, item.images ?? [], mentions, {
-              sendIntent: "steer",
-            })
-          : await sendUserMessage(trimmed, item.images ?? [], undefined, {
-              sendIntent: "steer",
-            });
-      if (result.status === "sent") {
-        removeQueuedMessage(activeThreadId, messageId);
+      const cancelGeneration = queueCancelGenerationByThread.current[threadId] ?? 0;
+      steerInFlightMessageIds.current.add(messageId);
+      removeQueuedMessage(threadId, messageId);
+      try {
+        const mentions = item.appMentions ?? [];
+        const result =
+          mentions.length > 0
+            ? await sendUserMessage(trimmed, item.images ?? [], mentions, {
+                sendIntent: "steer",
+              })
+            : await sendUserMessage(trimmed, item.images ?? [], undefined, {
+                sendIntent: "steer",
+              });
+        if (
+          result.status !== "sent" &&
+          (queueCancelGenerationByThread.current[threadId] ?? 0) === cancelGeneration
+        ) {
+          restoreQueuedMessage(threadId, item, itemIndex);
+        }
+      } catch {
+        if (
+          (queueCancelGenerationByThread.current[threadId] ?? 0) === cancelGeneration
+        ) {
+          restoreQueuedMessage(threadId, item, itemIndex);
+        }
+      } finally {
+        steerInFlightMessageIds.current.delete(messageId);
       }
     },
     [
@@ -435,6 +502,7 @@ export function useQueuedSend({
       isProcessing,
       queuedByThread,
       removeQueuedMessage,
+      restoreQueuedMessage,
       sendUserMessage,
       steerEnabled,
     ],
@@ -482,6 +550,9 @@ export function useQueuedSend({
     }
     const threadId = activeThreadId;
     const nextItem = queue[0];
+    if (queuedRetryTimersByMessageId.current.has(nextItem.id)) {
+      return;
+    }
     const cancelGeneration =
       queueCancelGenerationByThread.current[threadId] ?? 0;
     setInFlightByThread((prev) => ({ ...prev, [threadId]: nextItem }));
@@ -508,10 +579,24 @@ export function useQueuedSend({
           await runSlashCommand(command, trimmed);
         } else {
           const queuedMentions = nextItem.appMentions ?? [];
+          let result: SendMessageResult;
           if (queuedMentions.length > 0) {
-            await sendUserMessage(nextItem.text, nextItem.images ?? [], queuedMentions);
+            result = await sendUserMessage(
+              nextItem.text,
+              nextItem.images ?? [],
+              queuedMentions,
+            );
           } else {
-            await sendUserMessage(nextItem.text, nextItem.images ?? []);
+            result = await sendUserMessage(nextItem.text, nextItem.images ?? []);
+          }
+          if (result.status !== "sent") {
+            throw new Error(`Queued send did not start: ${result.status}`);
+          }
+          queuedFailureCountByMessageId.current.delete(nextItem.id);
+          const retryTimer = queuedRetryTimersByMessageId.current.get(nextItem.id);
+          if (retryTimer) {
+            clearTimeout(retryTimer);
+            queuedRetryTimersByMessageId.current.delete(nextItem.id);
           }
         }
       } catch {
@@ -523,6 +608,17 @@ export function useQueuedSend({
         }
         setInFlightByThread((prev) => ({ ...prev, [threadId]: null }));
         setHasStartedByThread((prev) => ({ ...prev, [threadId]: false }));
+        const failureCount =
+          (queuedFailureCountByMessageId.current.get(nextItem.id) ?? 0) + 1;
+        queuedFailureCountByMessageId.current.set(nextItem.id, failureCount);
+        const retryDelay = queuedRetryDelayMs(failureCount);
+        if (retryDelay > 0) {
+          const timer = setTimeout(() => {
+            queuedRetryTimersByMessageId.current.delete(nextItem.id);
+            setRetryWakeVersion((version) => version + 1);
+          }, retryDelay);
+          queuedRetryTimersByMessageId.current.set(nextItem.id, timer);
+        }
         prependQueuedMessage(threadId, nextItem);
       }
     })();
@@ -536,6 +632,7 @@ export function useQueuedSend({
     queueFlushPaused,
     prependQueuedMessage,
     queuedByThread,
+    retryWakeVersion,
     runSlashCommand,
     sendUserMessage,
   ]);

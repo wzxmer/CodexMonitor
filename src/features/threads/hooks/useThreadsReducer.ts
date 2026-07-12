@@ -116,6 +116,7 @@ export type ThreadAction =
       replaceExisting?: boolean;
       hasCustomName?: boolean;
     }
+  | { type: "removeItem"; threadId: string; itemId: string }
   | {
       type: "setThreadItems";
       threadId: string;

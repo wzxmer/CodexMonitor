@@ -33,4 +33,25 @@ describe("composer select interaction styles", () => {
       ".composer-select-wrap--model:has(.composer-model-refresh):has(.composer-fast-indicator)::after",
     );
   });
+
+  it("allows light conversation presets to override only the input surface", () => {
+    expect(composerCss).toContain(
+      "background: var(--composer-input-background, var(--cm-surface-panel-elevated));",
+    );
+  });
+
+  it("lets text attachments use the composer width and wrap controls when needed", () => {
+    const textAttachmentRule = composerCss.match(
+      /\.composer-attachment\.is-text-attachment\s*\{([\s\S]*?)\n\}/,
+    );
+    expect(textAttachmentRule?.[1]).toContain("width: min(100%, 720px)");
+    expect(textAttachmentRule?.[1]).toContain("max-width: 100%");
+    expect(composerCss).toContain(
+      ".composer-attachment.is-text-attachment .composer-attachment-main",
+    );
+    expect(composerCss).toContain("flex-wrap: wrap");
+    expect(composerCss).toContain(
+      ".composer-attachment.is-text-attachment .composer-attachment-name",
+    );
+  });
 });
