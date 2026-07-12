@@ -11,7 +11,21 @@ export type ConversationAppearance = Pick<
   | "messageAssistantBubbleColor"
   | "messageAssistantAccentColor"
   | "messageAssistantTextColor"
->;
+> & {
+  composerInputBackgroundColor?: string;
+};
+
+const WHITE_COMPOSER_CANVAS_COLORS = new Set(
+  CONVERSATION_STYLE_PRESETS.filter(
+    (preset) => preset.id === "native-white" || preset.id === "native-light",
+  ).map((preset) => preset.settings.messageCanvasColor.toLowerCase()),
+);
+
+function resolveComposerInputBackgroundColor(messageCanvasColor: string): string | undefined {
+  return WHITE_COMPOSER_CANVAS_COLORS.has(messageCanvasColor.toLowerCase())
+    ? "#ffffff"
+    : undefined;
+}
 
 const blackOrangePreset = CONVERSATION_STYLE_PRESETS.find(
   (preset) => preset.id === "cli-ember",
@@ -31,6 +45,9 @@ export function resolveRuntimeThemeAppearance(
     messageAssistantBubbleColor: settings.messageAssistantBubbleColor,
     messageAssistantAccentColor: settings.messageAssistantAccentColor,
     messageAssistantTextColor: settings.messageAssistantTextColor,
+    composerInputBackgroundColor: resolveComposerInputBackgroundColor(
+      settings.messageCanvasColor,
+    ),
   };
 
   if (settings.theme !== "system" || resolvedTheme !== "dark" || !blackOrangePreset) {
@@ -49,6 +66,9 @@ export function resolveRuntimeThemeAppearance(
       messageAssistantBubbleColor: blackOrangePreset.messageAssistantBubbleColor,
       messageAssistantAccentColor: blackOrangePreset.messageAssistantAccentColor,
       messageAssistantTextColor: blackOrangePreset.messageAssistantTextColor,
+      composerInputBackgroundColor: resolveComposerInputBackgroundColor(
+        blackOrangePreset.messageCanvasColor,
+      ),
     },
   };
 }

@@ -191,7 +191,6 @@ type SidebarProps = {
   usageShowRemaining: boolean;
   useTokenUsageStats: boolean;
   thirdPartyProviderUsage: ThirdPartyKeyUsageSnapshot | null;
-  thirdPartyUsageMultiplier: number;
   codexKeyProfiles: CodexKeyProfile[];
   activeCodexKeyProfileId: string | null;
   onSelectCodexKeyProfile: (profileId: string) => void;
@@ -263,7 +262,6 @@ export const Sidebar = memo(function Sidebar({
   usageShowRemaining,
   useTokenUsageStats,
   thirdPartyProviderUsage,
-  thirdPartyUsageMultiplier,
   codexKeyProfiles,
   activeCodexKeyProfileId,
   onSelectCodexKeyProfile,
@@ -1301,7 +1299,6 @@ export const Sidebar = memo(function Sidebar({
         thirdPartyUsageTokens={thirdPartyUsageTokens}
         thirdPartyUsageCostUsd={thirdPartyUsageCostUsd}
         thirdPartyProviderUsage={thirdPartyProviderUsage}
-        thirdPartyUsageMultiplier={thirdPartyUsageMultiplier}
         codexKeyProfiles={codexKeyProfiles}
         activeCodexKeyProfileId={activeCodexKeyProfileId}
         onSelectCodexKeyProfile={onSelectCodexKeyProfile}

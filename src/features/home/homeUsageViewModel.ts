@@ -44,8 +44,8 @@ export type HomeUsageViewModelText = HomeFormatterText &
     dailyAverage: string;
     total: string;
     cacheHitRate: string;
-    cacheTokens: string;
-    saved: string;
+    cachedInput: string;
+    uncachedInput: string;
     promptShare: string;
     singleAverage: string;
     runsInLast7Days: string;
@@ -103,6 +103,7 @@ export function buildHomeUsageViewModel({
     (total, day) => total + day.cachedInputTokens,
     0,
   );
+  const last7Uncached = Math.max(0, last7Input - last7Cached);
   const last7AgentMs = last7Days.reduce(
     (total, day) => total + (day.agentTimeMs ?? 0),
     0,
@@ -200,9 +201,9 @@ export function buildHomeUsageViewModel({
             caption: labels.last7Days,
           },
           {
-            label: labels.cacheTokens,
+            label: labels.cachedInput,
             value: formatCompactNumber(last7Cached),
-            suffix: labels.saved,
+            suffix: labels.tokens,
             caption:
               last7Input > 0
                 ? labels.promptShare.replace(
@@ -210,6 +211,12 @@ export function buildHomeUsageViewModel({
                     ((last7Cached / last7Input) * 100).toFixed(1),
                   )
                 : labels.last7Days,
+          },
+          {
+            label: labels.uncachedInput,
+            value: formatCompactNumber(last7Uncached),
+            suffix: labels.tokens,
+            caption: labels.last7Days,
           },
           {
             label: labels.singleAverage,

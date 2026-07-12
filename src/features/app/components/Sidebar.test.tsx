@@ -53,7 +53,6 @@ const baseProps = {
   usageShowRemaining: false,
   useTokenUsageStats: false,
   thirdPartyProviderUsage: null,
-  thirdPartyUsageMultiplier: 1,
   codexKeyProfiles: [],
   activeCodexKeyProfileId: null,
   onSelectCodexKeyProfile: vi.fn(),
@@ -212,12 +211,11 @@ describe("Sidebar", () => {
     expect(creditsLabel.textContent ?? "").toContain("120");
   });
 
-  it("shows consumed tokens and estimated cost for third-party key sessions", () => {
+  it("does not estimate cost when the provider reports no cost", () => {
     render(
       <Sidebar
         {...baseProps}
         useTokenUsageStats
-        thirdPartyUsageMultiplier={2.5}
         activeTokenUsage={{
           total: {
             totalTokens: 20_000,
@@ -260,9 +258,10 @@ describe("Sidebar", () => {
 
     expect(screen.getByText("消耗量")).toBeTruthy();
     expect(screen.getByText("20,000")).toBeTruthy();
-    expect(screen.getByText("费用估算")).toBeTruthy();
-    expect(screen.getByText("≈ 0.0500")).toBeTruthy();
-    expect(screen.getByText("x2.5")).toBeTruthy();
+    expect(screen.getByText("费用")).toBeTruthy();
+    expect(screen.getByText("--")).toBeTruthy();
+    expect(screen.queryByText(/^≈/)).toBeNull();
+    expect(screen.queryByText(/^x\d/)).toBeNull();
     expect(screen.queryByText("本周")).toBeNull();
     expect(screen.queryByText(/^可用额度：/)).toBeNull();
     expect(screen.queryByText("62%")).toBeNull();
@@ -273,7 +272,6 @@ describe("Sidebar", () => {
       <Sidebar
         {...baseProps}
         useTokenUsageStats
-        thirdPartyUsageMultiplier={1}
         activeTokenUsage={{
           total: {
             totalTokens: 1_260_000,
@@ -352,7 +350,6 @@ describe("Sidebar", () => {
             id: "discount",
             name: "Discount key",
             groupName: "特惠分组",
-            groupMultiplier: 0.07,
             keyEnvVar: "OPENAI_API_KEY",
             key: "sk-discount",
             baseUrlEnvVar: "OPENAI_BASE_URL",
@@ -362,7 +359,6 @@ describe("Sidebar", () => {
             id: "code",
             name: "Code key",
             groupName: "claude code",
-            groupMultiplier: 1.1,
             keyEnvVar: "OPENAI_API_KEY",
             key: "sk-code",
             baseUrlEnvVar: "OPENAI_BASE_URL",
@@ -398,38 +394,6 @@ describe("Sidebar", () => {
 
     fireEvent.change(groupSelect, { target: { value: "code" } });
     expect(onSelectCodexKeyProfile).toHaveBeenCalledWith("code");
-  });
-
-  it("shows the configured estimate multiplier as read-only", () => {
-    render(
-      <Sidebar
-        {...baseProps}
-        useTokenUsageStats
-        thirdPartyUsageMultiplier={1}
-        activeTokenUsage={{
-          total: {
-            totalTokens: 1_000_000,
-            inputTokens: 700_000,
-            cachedInputTokens: 0,
-            outputTokens: 300_000,
-            reasoningOutputTokens: 0,
-            costUsd: null,
-          },
-          last: {
-            totalTokens: 1_000,
-            inputTokens: 700,
-            cachedInputTokens: 0,
-            outputTokens: 300,
-            reasoningOutputTokens: 0,
-            costUsd: null,
-          },
-          modelContextWindow: null,
-        }}
-      />,
-    );
-
-    expect(screen.getByText("x1")).toBeTruthy();
-    expect(screen.queryByLabelText("倍率")).toBeNull();
   });
 
   it("opens the account menu from the bottom rail", () => {

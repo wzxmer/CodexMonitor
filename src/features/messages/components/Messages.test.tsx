@@ -2677,6 +2677,51 @@ describe("Messages", () => {
     expect(scrollNode.scrollTop).toBe(900);
   });
 
+  it("pins to the latest batch when history arrives after a thread switch", () => {
+    const { container, rerender } = render(
+      <Messages
+        items={[]}
+        threadId="thread-loading"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        chatHistoryScrollbackItems={20}
+      />,
+    );
+
+    const scrollNode = container.querySelector(".messages.messages-full") as HTMLDivElement;
+    let scrollHeight = 0;
+    Object.defineProperty(scrollNode, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+
+    const loadedItems: ConversationItem[] = Array.from({ length: 60 }, (_, index) => ({
+      id: `async-msg-${index}`,
+      kind: "message",
+      role: "assistant",
+      text: `Async message ${index}`,
+    }));
+    scrollHeight = 1200;
+
+    rerender(
+      <Messages
+        items={loadedItems}
+        threadId="thread-loading"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        chatHistoryScrollbackItems={20}
+      />,
+    );
+
+    expect(screen.queryByText("Async message 0")).toBeNull();
+    expect(screen.getByText("Async message 59")).toBeTruthy();
+    expect(scrollNode.scrollTop).toBe(1200);
+  });
+
   it("keeps the latest content pinned when message layout grows after opening", () => {
     let resizeCallback: ResizeObserverCallback | null = null;
     const observe = vi.fn();

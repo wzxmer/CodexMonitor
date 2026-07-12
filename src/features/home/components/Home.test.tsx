@@ -286,7 +286,15 @@ describe("Home", () => {
       />,
     );
 
-    expect(screen.getByText("缓存 tokens")).toBeTruthy();
+    expect(screen.getByText("缓存读取")).toBeTruthy();
+    const uncachedInputCard = screen
+      .getByText("未缓存输入")
+      .closest(".home-usage-card");
+    expect(uncachedInputCard).toBeTruthy();
+    if (!(uncachedInputCard instanceof HTMLElement)) {
+      throw new Error("Expected uncached input usage card");
+    }
+    expect(within(uncachedInputCard).getByText("113")).toBeTruthy();
     expect(screen.getByText("单次平均")).toBeTruthy();
     expect(screen.getByText("最长连续")).toBeTruthy();
     expect(screen.getByText("4 天")).toBeTruthy();

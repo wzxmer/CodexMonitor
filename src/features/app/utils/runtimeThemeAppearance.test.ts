@@ -20,6 +20,7 @@ describe("resolveRuntimeThemeAppearance", () => {
     expect(appearance.themeAccent).toBe("orange");
     expect(appearance.conversationAppearance.messageCanvasColor).toBe("#111315");
     expect(appearance.conversationAppearance.messageAssistantBubbleColor).toBe("#1b1b1c");
+    expect(appearance.conversationAppearance.composerInputBackgroundColor).toBeUndefined();
   });
 
   it("preserves saved colors for system light mode", () => {
@@ -27,13 +28,26 @@ describe("resolveRuntimeThemeAppearance", () => {
 
     expect(appearance.themeAccent).toBe("codex");
     expect(appearance.conversationAppearance.messageCanvasColor).toBe("#ffffff");
+    expect(appearance.conversationAppearance.composerInputBackgroundColor).toBe("#ffffff");
+  });
+
+  it("uses a pure white composer input for the warm white canvas", () => {
+    const settings = { ...baseSettings, theme: "light" as const, messageCanvasColor: "#fffaf5" };
+    const appearance = resolveRuntimeThemeAppearance(settings, "light");
+
+    expect(appearance.conversationAppearance.composerInputBackgroundColor).toBe("#ffffff");
   });
 
   it("preserves explicit dark theme customization", () => {
-    const settings = { ...baseSettings, theme: "dark" as const };
+    const settings = {
+      ...baseSettings,
+      theme: "dark" as const,
+      messageCanvasColor: "#12100e",
+    };
     const appearance = resolveRuntimeThemeAppearance(settings, "dark");
 
     expect(appearance.themeAccent).toBe("codex");
-    expect(appearance.conversationAppearance.messageCanvasColor).toBe("#ffffff");
+    expect(appearance.conversationAppearance.messageCanvasColor).toBe("#12100e");
+    expect(appearance.conversationAppearance.composerInputBackgroundColor).toBeUndefined();
   });
 });

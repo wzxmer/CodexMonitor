@@ -157,17 +157,21 @@ body {
 .drag-strip {
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
+  left: var(--window-drag-strip-left, 0px);
+  right: var(--window-drag-strip-right, 0px);
   height: var(--window-drag-hit-height, var(--titlebar-height, 24px));
-  z-index: var(--titlebar-drag-strip-z-index, 2);
+  z-index: var(--window-drag-strip-z-index, var(--titlebar-drag-strip-z-index, 2));
   pointer-events: var(--window-drag-strip-pointer-events, auto);
+  -webkit-app-region: drag;
 }
 
-.app.is-windows [data-tauri-drag-region],
 .app.is-windows .titlebar,
 .app.is-windows .main-topbar {
   -webkit-app-region: no-drag !important;
+}
+
+.app.is-windows .drag-strip {
+  -webkit-app-region: drag !important;
 }
 
 .titlebar-controls {

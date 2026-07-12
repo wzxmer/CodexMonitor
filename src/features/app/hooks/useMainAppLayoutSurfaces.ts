@@ -454,11 +454,6 @@ function buildPrimarySurface({
   const activeThreadTitleWithSource = activeThreadTitle && activeManagedSessionSourceName
     ? `${activeThreadTitle} · ${activeManagedSessionSourceName}`
     : activeThreadTitle;
-  const activeCodexKeyProfile =
-    appSettings.codexKeyProfiles.find(
-      (profile) => profile.id === appSettings.activeCodexKeyProfileId,
-    ) ?? null;
-
   return {
     sidebarProps: {
       workspaces: workspaces.filter((workspace) => workspace.id !== LOCAL_CODEX_WORKSPACE_ID),
@@ -490,8 +485,6 @@ function buildPrimarySurface({
         codexProviderStatus?.isConfigured === true &&
         codexProviderStatus.isThirdParty,
       thirdPartyProviderUsage,
-      thirdPartyUsageMultiplier:
-        activeCodexKeyProfile?.groupMultiplier ?? appSettings.thirdPartyUsageMultiplier,
       codexKeyProfiles: appSettings.codexKeyProfiles,
       activeCodexKeyProfileId: appSettings.activeCodexKeyProfileId,
       onSelectCodexKeyProfile: (profileId) => {
@@ -599,6 +592,7 @@ function buildPrimarySurface({
     },
     composerProps: composerWorkspaceState.showComposer
       ? {
+          inputBackgroundColor: conversationAppearance.composerInputBackgroundColor,
           onSend: handleComposerSendWithDraftStart,
           onStop: () => {
             composerWorkspaceState.clearQueuedMessages(activeThreadId);

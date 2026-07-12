@@ -107,9 +107,15 @@ export function useAppShellOrchestration({
         ? {
             "--titlebar-height": "8px",
             "--titlebar-drag-strip-z-index": "5",
+            "--window-drag-strip-z-index": "2",
             "--side-panel-drag-strip-height": "56px",
             "--window-drag-hit-height": "44px",
-            "--window-drag-strip-pointer-events": "none",
+            "--window-drag-strip-pointer-events": "auto",
+            "--window-drag-strip-left": isCompact
+              ? "64px"
+              : "var(--sidebar-width, 280px)",
+            "--window-drag-strip-right":
+              "calc(var(--window-caption-width, 138px) + var(--window-caption-gap, 10px))",
             "--titlebar-inset-left": "0px",
             "--titlebar-collapsed-left-extra": "0px",
             "--titlebar-toggle-size": "32px",

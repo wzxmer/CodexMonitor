@@ -53,7 +53,7 @@ export function MainAppShell({
 }: MainAppShellProps) {
   return (
     <div className={`${appClassName}${isResizing ? " is-resizing" : ""}`} style={appStyle} ref={appRef}>
-      <div className="drag-strip" id="titlebar" />
+      <div className="drag-strip" id="titlebar" data-tauri-drag-region />
       <TitlebarExpandControls {...sidebarToggleProps} />
       <WindowCaptionControls />
       {shouldLoadGitHubPanelData ? (

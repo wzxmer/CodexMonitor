@@ -23,7 +23,6 @@ type SidebarBottomRailProps = {
   thirdPartyUsageTokens: number | null;
   thirdPartyUsageCostUsd: number | null;
   thirdPartyProviderUsage: ThirdPartyKeyUsageSnapshot | null;
-  thirdPartyUsageMultiplier: number;
   codexKeyProfiles: CodexKeyProfile[];
   activeCodexKeyProfileId: string | null;
   onSelectCodexKeyProfile: (profileId: string) => void;
@@ -69,14 +68,6 @@ function formatTokenCount(tokens: number) {
   }).format(Math.max(0, tokens));
 }
 
-function formatEstimatedCost(costUsd: number) {
-  const estimate = Math.max(0, costUsd);
-  return new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: estimate >= 1 ? 2 : 4,
-    minimumFractionDigits: estimate > 0 && estimate < 1 ? 4 : 2,
-  }).format(estimate);
-}
-
 function formatUsdValue(value: number | null) {
   if (value === null) {
     return "--";
@@ -87,12 +78,6 @@ function formatUsdValue(value: number | null) {
     minimumFractionDigits: amount > 0 && amount < 1 ? 4 : 2,
   }).format(amount);
   return `$${formatted}`;
-}
-
-function formatMultiplier(multiplier: number) {
-  return new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 4,
-  }).format(Math.max(0, multiplier));
 }
 
 function formatLatency(latencyMs: number) {
@@ -107,7 +92,6 @@ type ThirdPartyUsageSummaryProps = {
   tokens: number;
   costUsd: number | null;
   providerUsage: ThirdPartyKeyUsageSnapshot | null;
-  multiplier: number;
   keyProfiles: CodexKeyProfile[];
   activeKeyProfileId: string | null;
   onSelectKeyProfile: (profileId: string) => void;
@@ -117,7 +101,6 @@ function ThirdPartyUsageSummary({
   tokens,
   costUsd,
   providerUsage,
-  multiplier,
   keyProfiles,
   activeKeyProfileId,
   onSelectKeyProfile,
@@ -169,16 +152,7 @@ function ThirdPartyUsageSummary({
           </div>
           <div className="sidebar-usage-stat">
             <span>{t("sidebar.usageEstimatedCost")}</span>
-            <strong>
-              {costUsd === null ? "≈ " : "$"}
-              {formatEstimatedCost(
-                costUsd ?? (Math.max(0, tokens) / 1_000_000) * Math.max(0, multiplier),
-              )}
-            </strong>
-          </div>
-          <div className="sidebar-usage-stat">
-            <span>{t("sidebar.usageMultiplier")}</span>
-            <strong>x{formatMultiplier(multiplier)}</strong>
+            <strong>{formatUsdValue(costUsd)}</strong>
           </div>
         </>
       )}
@@ -197,7 +171,6 @@ export function SidebarBottomRail({
   thirdPartyUsageTokens,
   thirdPartyUsageCostUsd,
   thirdPartyProviderUsage,
-  thirdPartyUsageMultiplier,
   codexKeyProfiles,
   activeCodexKeyProfileId,
   onSelectCodexKeyProfile,
@@ -243,7 +216,6 @@ export function SidebarBottomRail({
               tokens={thirdPartyUsageTokens}
               costUsd={thirdPartyUsageCostUsd}
               providerUsage={thirdPartyProviderUsage}
-              multiplier={thirdPartyUsageMultiplier}
               keyProfiles={codexKeyProfiles}
               activeKeyProfileId={activeCodexKeyProfileId}
               onSelectKeyProfile={onSelectCodexKeyProfile}
