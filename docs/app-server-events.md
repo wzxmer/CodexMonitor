@@ -1,4 +1,4 @@
-# App-Server Events Reference (Codex `19702e190ebf16f789617ca5f16bfc373c238fe7`)
+# App-Server Events Reference (Codex `9e552e9d15ba52bed7077d5357f3e18e330f8f38`)
 
 This document helps agents quickly answer:
 - Which app-server events CodexMonitor supports right now.
@@ -173,6 +173,7 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
 
 Notes:
 - `turn/start` now forwards the optional `serviceTier` override (`"fast"` for `/fast`, `null` for default/off) alongside `model`, `effort`, and `collaborationMode`.
+- `turn/start` and `turn/steer` forward CM workflow rules, matched skills/agents, and bounded knowledge excerpts through experimental `additionalContext` entries. CM initializes app-server with `experimentalApi: true`; this context is separate from persisted user input.
 
 ## Missing Client Requests (Codex v2 ClientRequest Methods)
 
