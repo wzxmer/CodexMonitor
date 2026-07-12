@@ -11,6 +11,7 @@ import {
   previewManagedSessionCleanup,
   runManagedSessionCleanupScheduler,
   compactThread,
+  createContentReference,
   createGitHubRepo,
   fetchGit,
   fetchManagedSessionsPage,
@@ -51,6 +52,8 @@ import {
   setTrayLabels,
   setTrayRecentThreads,
   setTraySessionUsage,
+  startThread,
+  workflowPreflightPreview,
   startReview,
   setThreadName,
   updateSessionSource,
@@ -109,6 +112,70 @@ describe("tauri invoke wrappers", () => {
       }
       return undefined;
     });
+  });
+
+  it("forwards token efficiency mode when starting a thread", async () => {
+    const invokeMock = vi.mocked(invoke);
+
+    await startThread("ws-1", "balanced");
+
+    expect(invokeMock).toHaveBeenCalledWith("start_thread", {
+      workspaceId: "ws-1",
+      tokenEfficiencyMode: "balanced",
+    });
+  });
+
+  it("forwards workflow runtime mode to host preflight", async () => {
+    const invokeMock = vi.mocked(invoke);
+
+    await workflowPreflightPreview(
+      "ws-1",
+      "fix provider routing",
+      "opencode",
+      "minimax-m3",
+      "shadow",
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith("workflow_preflight_preview", {
+      workspaceId: "ws-1",
+      task: "fix provider routing",
+      providerKind: "opencode",
+      model: "minimax-m3",
+      mode: "shadow",
+    });
+  });
+
+  it("creates content references through the shared request contract", async () => {
+    const invokeMock = vi.mocked(invoke);
+    const request = {
+      workspaceId: "ws-1",
+      sourceKind: "diff" as const,
+      sourceName: "changes.diff",
+      content: "large diff",
+    };
+
+    await createContentReference(request);
+
+    expect(invokeMock).toHaveBeenCalledWith("create_content_reference", { request });
+  });
+
+  it("forwards workflow additional context to start and steer", async () => {
+    const invokeMock = vi.mocked(invoke);
+    const additionalContext = {
+      "cm.workflow": { kind: "application" as const, value: "workflow context" },
+    };
+
+    await sendUserMessage("ws-1", "thread-1", "hello", { additionalContext });
+    await steerTurn("ws-1", "thread-1", "turn-1", "follow up", [], [], additionalContext);
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      "send_user_message",
+      expect.objectContaining({ additionalContext }),
+    );
+    expect(invokeMock).toHaveBeenCalledWith(
+      "turn_steer",
+      expect.objectContaining({ additionalContext }),
+    );
   });
 
   it("uses path-only payload for addWorkspace", async () => {

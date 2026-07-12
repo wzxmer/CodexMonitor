@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from "react";
 import type { ApprovalRequest, WorkspaceInfo } from "../../../types";
 import { getApprovalCommandInfo } from "../../../utils/approvalRules";
+import { useI18n } from "../../i18n/I18nProvider";
+import type { I18nKey } from "../../i18n/strings";
 import {
   ToastActions,
   ToastBody,
@@ -24,6 +26,7 @@ export function ApprovalToasts({
   onDecision,
   onRemember,
 }: ApprovalToastsProps) {
+  const { t } = useI18n();
   const workspaceLabels = useMemo(
     () => new Map(workspaces.map((workspace) => [workspace.id, workspace.name])),
     [workspaces],
@@ -62,20 +65,46 @@ export function ApprovalToasts({
     return null;
   }
 
-  const formatLabel = (value: string) =>
-    value
+  const paramLabelKeys: Record<string, I18nKey> = {
+    command: "approval.field.command",
+    cwd: "approval.field.cwd",
+    reason: "approval.field.reason",
+    startedAtMs: "approval.field.startedAt",
+    started_at_ms: "approval.field.startedAt",
+    threadId: "approval.field.threadId",
+    thread_id: "approval.field.threadId",
+    turnId: "approval.field.turnId",
+    turn_id: "approval.field.turnId",
+  };
+
+  const formatLabel = (value: string) => {
+    const key = paramLabelKeys[value];
+    if (key) {
+      return t(key);
+    }
+    return value
       .replace(/([a-z])([A-Z])/g, "$1 $2")
       .replace(/_/g, " ")
       .trim();
+  };
 
   const methodLabel = (method: string) => {
     const trimmed = method.replace(/^codex\/requestApproval\/?/, "");
+    if (trimmed === "shell") {
+      return t("approval.method.shell");
+    }
+    if (method === "item/permissions/requestApproval") {
+      return t("approval.method.permissions");
+    }
+    if (method === "workspace/requestApproval") {
+      return t("approval.method.workspace");
+    }
     return trimmed || method;
   };
 
   const renderParamValue = (value: unknown) => {
     if (value === null || value === undefined) {
-      return { text: "None", isCode: false };
+      return { text: t("approval.none"), isCode: false };
     }
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
       return { text: String(value), isCode: false };
@@ -103,7 +132,7 @@ export function ApprovalToasts({
             role="alert"
           >
             <ToastHeader className="approval-toast-header">
-              <ToastTitle className="approval-toast-title">Approval needed</ToastTitle>
+              <ToastTitle className="approval-toast-title">{t("approval.title")}</ToastTitle>
               {workspaceName ? (
                 <div className="approval-toast-workspace">{workspaceName}</div>
               ) : null}
@@ -132,7 +161,7 @@ export function ApprovalToasts({
                 })
               ) : (
                 <div className="approval-toast-detail approval-toast-detail-empty">
-                  No extra details.
+                  {t("approval.noDetails")}
                 </div>
               )}
             </div>
@@ -141,22 +170,25 @@ export function ApprovalToasts({
                 className="secondary"
                 onClick={() => onDecision(request, "decline")}
               >
-                Decline
+                {t("approval.decline")}
               </button>
               {commandInfo && onRemember ? (
                 <button
                   className="ghost approval-toast-remember"
                   onClick={() => onRemember(request, commandInfo.tokens)}
-                  title={`Allow commands that start with ${commandInfo.preview}`}
+                  title={t("approval.alwaysAllowTitle").replace(
+                    "{command}",
+                    commandInfo.preview,
+                  )}
                 >
-                  Always allow
+                  {t("approval.alwaysAllow")}
                 </button>
               ) : null}
               <button
                 className="primary"
                 onClick={() => onDecision(request, "accept")}
               >
-                Approve (Enter)
+                {t("approval.approveEnter")}
               </button>
             </ToastActions>
           </ToastCard>

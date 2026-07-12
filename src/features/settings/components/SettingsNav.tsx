@@ -11,6 +11,7 @@ import ExternalLink from "lucide-react/dist/esm/icons/external-link";
 import Layers from "lucide-react/dist/esm/icons/layers";
 import ServerCog from "lucide-react/dist/esm/icons/server-cog";
 import Bot from "lucide-react/dist/esm/icons/bot";
+import Workflow from "lucide-react/dist/esm/icons/workflow";
 import KeyRound from "lucide-react/dist/esm/icons/key-round";
 import Info from "lucide-react/dist/esm/icons/info";
 import { PanelNavItem, PanelNavList } from "@/features/design-system/components/panel/PanelPrimitives";
@@ -131,6 +132,15 @@ export function SettingsNav({
           onClick={() => onSelectSection("agents")}
         >
           {t(SETTINGS_SECTION_LABEL_KEYS.agents)}
+        </PanelNavItem>
+        <PanelNavItem
+          className="settings-nav"
+          icon={<Workflow aria-hidden />}
+          active={activeSection === "workflow"}
+          showDisclosure={showDisclosure}
+          onClick={() => onSelectSection("workflow")}
+        >
+          {t(SETTINGS_SECTION_LABEL_KEYS.workflow)}
         </PanelNavItem>
         <PanelNavItem
           className="settings-nav"

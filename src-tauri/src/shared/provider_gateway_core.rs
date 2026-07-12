@@ -1,5 +1,5 @@
 use futures_util::StreamExt;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -21,6 +21,8 @@ pub(crate) struct ProviderGatewayConfig {
     pub(crate) upstream_base_url: String,
     pub(crate) upstream_api_key: String,
     pub(crate) max_output_tokens: Option<u64>,
+    pub(crate) supports_thinking: bool,
+    pub(crate) supports_reasoning_effort: bool,
 }
 
 pub(crate) struct ProviderGatewayRuntime {
@@ -77,6 +79,8 @@ pub(crate) async fn start_provider_gateway(
                     upstream_api_key,
                     gateway_access_token,
                     config.max_output_tokens,
+                    config.supports_thinking,
+                    config.supports_reasoning_effort,
                 )
                 .await;
             });
@@ -96,6 +100,8 @@ async fn handle_gateway_connection(
     upstream_api_key: String,
     gateway_access_token: String,
     max_output_tokens: Option<u64>,
+    supports_thinking: bool,
+    supports_reasoning_effort: bool,
 ) -> Result<(), String> {
     let request = read_http_request(&mut stream).await?;
     if !gateway_request_is_authorized(&request, &gateway_access_token) {
@@ -114,9 +120,12 @@ async fn handle_gateway_connection(
             upstream_api_key,
             request,
             max_output_tokens,
+            supports_thinking,
+            supports_reasoning_effort,
         )
         .await;
     }
+    let is_chat_stream = is_chat_completions_streaming(&request);
     let upstream_url = build_upstream_url(&upstream_base_url, &request.path)?;
     let mut headers = HeaderMap::new();
     for (name, value) in request.headers {
@@ -143,7 +152,12 @@ async fn handle_gateway_connection(
         .send()
         .await
         .map_err(|err| format!("Provider gateway upstream request failed: {err}"))?;
-    write_proxy_response(&mut stream, response).await
+    if should_rewrite_chat_completions_stream(is_chat_stream, response.status(), response.headers())
+    {
+        write_chat_completions_stream(&mut stream, response).await
+    } else {
+        write_proxy_response(&mut stream, response).await
+    }
 }
 
 fn gateway_request_is_authorized(request: &GatewayRequest, access_token: &str) -> bool {
@@ -161,11 +175,18 @@ async fn handle_responses_compat_request(
     upstream_api_key: String,
     request: GatewayRequest,
     max_output_tokens: Option<u64>,
+    supports_thinking: bool,
+    supports_reasoning_effort: bool,
 ) -> Result<(), String> {
     let body: Value = serde_json::from_slice(&request.body)
         .map_err(|_| "Gateway Responses request body is not valid JSON".to_string())?;
     let stream_response = body.get("stream").and_then(Value::as_bool).unwrap_or(false);
-    let chat_body = responses_request_to_chat_completions(&body, max_output_tokens)?;
+    let chat_body = responses_request_to_chat_completions_with_reasoning(
+        &body,
+        max_output_tokens,
+        supports_thinking,
+        supports_reasoning_effort,
+    )?;
     let upstream_url = build_upstream_url(&upstream_base_url, "/v1/chat/completions")?;
     let chat_body_bytes = serde_json::to_vec(&chat_body)
         .map_err(|_| "Failed to serialize chat completions request".to_string())?;
@@ -240,6 +261,7 @@ async fn read_http_request(stream: &mut TcpStream) -> Result<GatewayRequest, Str
         .to_string();
     let mut headers = Vec::new();
     let mut content_length = 0usize;
+    let mut expect_continue = false;
     for line in lines {
         if line.is_empty() {
             continue;
@@ -256,11 +278,20 @@ async fn read_http_request(stream: &mut TcpStream) -> Result<GatewayRequest, Str
                 return Err("Gateway request body is too large".to_string());
             }
         }
+        if name.eq_ignore_ascii_case("expect") && value.eq_ignore_ascii_case("100-continue") {
+            expect_continue = true;
+        }
         headers.push((name.trim().to_string(), value));
     }
 
     let body_start = header_end + 4;
     let mut body = buffer[body_start..].to_vec();
+    if expect_continue && body.len() < content_length {
+        stream
+            .write_all(b"HTTP/1.1 100 Continue\r\n\r\n")
+            .await
+            .map_err(|err| format!("Failed to acknowledge gateway request body: {err}"))?;
+    }
     while body.len() < content_length {
         let read = stream
             .read(&mut chunk)
@@ -325,9 +356,62 @@ fn is_responses_path(path: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn is_chat_completions_streaming(request: &GatewayRequest) -> bool {
+    if request.method != "POST" {
+        return false;
+    }
+    let path_ok = reqwest::Url::parse(&format!("http://gateway.local{}", request.path))
+        .ok()
+        .map(|url| url.path().trim_end_matches('/') == "/v1/chat/completions")
+        .unwrap_or(false);
+    if !path_ok {
+        return false;
+    }
+    let Ok(body) = serde_json::from_slice::<serde_json::Value>(&request.body) else {
+        return false;
+    };
+    body.get("stream").and_then(Value::as_bool).unwrap_or(false)
+}
+
+fn chat_stream_has_finish_reason(value: &serde_json::Value) -> bool {
+    value
+        .get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice.get("finish_reason"))
+        .and_then(|fr| fr.as_str())
+        .map(|fr| !fr.is_empty())
+        .unwrap_or(false)
+}
+
+fn should_rewrite_chat_completions_stream(
+    request_is_stream: bool,
+    status: reqwest::StatusCode,
+    headers: &HeaderMap,
+) -> bool {
+    request_is_stream
+        && status.is_success()
+        && headers
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(';').next())
+            .map(str::trim)
+            .map(|value| value.eq_ignore_ascii_case("text/event-stream"))
+            .unwrap_or(false)
+}
+
 pub(crate) fn responses_request_to_chat_completions(
     body: &Value,
     max_output_tokens: Option<u64>,
+) -> Result<Value, String> {
+    responses_request_to_chat_completions_with_reasoning(body, max_output_tokens, false, false)
+}
+
+fn responses_request_to_chat_completions_with_reasoning(
+    body: &Value,
+    max_output_tokens: Option<u64>,
+    supports_thinking: bool,
+    supports_reasoning_effort: bool,
 ) -> Result<Value, String> {
     let model = body
         .get("model")
@@ -356,8 +440,50 @@ pub(crate) fn responses_request_to_chat_completions(
     copy_generation_field(body, &mut out, "top_p", "top_p");
     copy_generation_field(body, &mut out, "max_output_tokens", "max_tokens");
     apply_max_output_tokens_cap(&mut out, max_output_tokens);
+    copy_reasoning_fields(body, &mut out, supports_thinking, supports_reasoning_effort);
     copy_function_tools(body, &mut out);
     Ok(out)
+}
+
+fn copy_reasoning_fields(
+    source: &Value,
+    target: &mut Value,
+    supports_thinking: bool,
+    supports_reasoning_effort: bool,
+) {
+    let Some(reasoning) = source.get("reasoning") else {
+        return;
+    };
+    let effort = reasoning
+        .get("effort")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let enabled = effort
+        .map(|value| {
+            !matches!(
+                value.to_ascii_lowercase().as_str(),
+                "none" | "off" | "disabled"
+            )
+        })
+        .unwrap_or(!reasoning.is_null());
+    let Some(map) = target.as_object_mut() else {
+        return;
+    };
+    if supports_thinking {
+        map.insert(
+            "thinking".to_string(),
+            json!({ "type": if enabled { "enabled" } else { "disabled" } }),
+        );
+    }
+    if supports_reasoning_effort && enabled {
+        if let Some(effort) = effort {
+            map.insert(
+                "reasoning_effort".to_string(),
+                Value::String(effort.to_string()),
+            );
+        }
+    }
 }
 
 fn apply_max_output_tokens_cap(target: &mut Value, max_output_tokens: Option<u64>) {
@@ -624,11 +750,12 @@ async fn write_responses_stream_from_chat_stream(
     let mut message_id: Option<String> = None;
     let mut tool_calls = BTreeMap::<usize, StreamingToolCall>::new();
     let mut pending = String::new();
+    let mut pending_utf8 = Vec::new();
     let mut body = response.bytes_stream();
-    while let Some(chunk) = body.next().await {
-        let chunk =
-            chunk.map_err(|err| format!("Failed to read chat completions stream: {err}"))?;
-        pending.push_str(&String::from_utf8_lossy(&chunk));
+    while let Some(chunk_result) = body.next().await {
+        let chunk = chunk_result
+            .map_err(|err| format!("Failed to read upstream chat completions stream: {err}"))?;
+        append_utf8_stream_chunk(&mut pending, &mut pending_utf8, &chunk)?;
         while let Some((raw_event, rest)) = split_next_sse_event(&pending) {
             pending = rest;
             for data in parse_sse_data_lines(&raw_event) {
@@ -664,6 +791,7 @@ async fn write_responses_stream_from_chat_stream(
             }
         }
     }
+    finish_utf8_stream(&pending_utf8)?;
 
     if let Some(message_id) = message_id.as_deref() {
         write_sse_event(
@@ -857,6 +985,143 @@ fn streaming_tool_call_item(tool_call: &StreamingToolCall, status: &str) -> Valu
     })
 }
 
+async fn write_chat_completions_stream(
+    stream: &mut TcpStream,
+    response: reqwest::Response,
+) -> Result<(), String> {
+    let status = response.status();
+    let reason = status.canonical_reason().unwrap_or("OK");
+    let mut head = format!("HTTP/1.1 {} {reason}\r\n", status.as_u16());
+    for (name, value) in response.headers() {
+        let lower = name.as_str().to_ascii_lowercase();
+        if matches!(
+            lower.as_str(),
+            "content-length" | "connection" | "transfer-encoding"
+        ) {
+            continue;
+        }
+        if let Ok(value) = value.to_str() {
+            head.push_str(name.as_str());
+            head.push_str(": ");
+            head.push_str(value);
+            head.push_str("\r\n");
+        }
+    }
+    head.push_str("Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n");
+    stream
+        .write_all(head.as_bytes())
+        .await
+        .map_err(|err| format!("Failed to write gateway response headers: {err}"))?;
+
+    let mut body = response.bytes_stream();
+    let mut pending = String::new();
+    let mut pending_utf8 = Vec::new();
+    let mut saw_finish_reason = false;
+    let mut saw_done = false;
+
+    loop {
+        let chunk = match body.next().await {
+            Some(Ok(chunk)) => chunk,
+            Some(Err(err)) => {
+                return Err(format!(
+                    "Failed to read upstream chat completions stream: {err}"
+                ));
+            }
+            None => break,
+        };
+        if chunk.is_empty() {
+            continue;
+        }
+        append_utf8_stream_chunk(&mut pending, &mut pending_utf8, &chunk)?;
+        while let Some((raw_event, rest)) = split_next_sse_event(&pending) {
+            pending = rest;
+            write_chat_stream_event(stream, &raw_event, &mut saw_finish_reason, &mut saw_done)
+                .await?;
+        }
+    }
+    finish_utf8_stream(&pending_utf8)?;
+
+    finish_chat_completions_stream(stream, &mut pending, &mut saw_finish_reason, &mut saw_done)
+        .await?;
+    Ok(())
+}
+
+async fn finish_chat_completions_stream(
+    stream: &mut TcpStream,
+    pending: &mut String,
+    saw_finish_reason: &mut bool,
+    saw_done: &mut bool,
+) -> Result<(), String> {
+    if !pending.is_empty() {
+        write_chat_stream_event(stream, pending, saw_finish_reason, saw_done).await?;
+        pending.clear();
+    }
+    if !*saw_finish_reason {
+        write_http_chunk(stream, synthetic_chat_finish_event()).await?;
+        *saw_finish_reason = true;
+    }
+    if !*saw_done {
+        write_http_chunk(stream, b"data: [DONE]\n\n").await?;
+        *saw_done = true;
+    }
+    stream
+        .write_all(b"0\r\n\r\n")
+        .await
+        .map_err(|err| format!("Failed to finish gateway response: {err}"))?;
+    Ok(())
+}
+
+async fn write_chat_stream_event(
+    stream: &mut TcpStream,
+    raw_event: &str,
+    saw_finish_reason: &mut bool,
+    saw_done: &mut bool,
+) -> Result<(), String> {
+    let (event_has_finish_reason, event_is_done) = chat_stream_event_flags(raw_event);
+    if event_is_done && !*saw_finish_reason {
+        write_http_chunk(stream, synthetic_chat_finish_event()).await?;
+        *saw_finish_reason = true;
+    }
+    let payload = format!("{raw_event}\n\n");
+    write_http_chunk(stream, payload.as_bytes()).await?;
+    *saw_finish_reason |= event_has_finish_reason;
+    *saw_done |= event_is_done;
+    Ok(())
+}
+
+fn chat_stream_event_flags(raw_event: &str) -> (bool, bool) {
+    let mut has_finish_reason = false;
+    let mut is_done = false;
+    for data in parse_sse_data_lines(raw_event) {
+        if data.trim() == "[DONE]" {
+            is_done = true;
+        } else if let Ok(value) = serde_json::from_str::<serde_json::Value>(&data) {
+            has_finish_reason |= chat_stream_has_finish_reason(&value);
+        }
+    }
+    (has_finish_reason, is_done)
+}
+
+fn synthetic_chat_finish_event() -> &'static [u8] {
+    b"data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}]}\n\n"
+}
+
+async fn write_http_chunk(stream: &mut TcpStream, chunk: &[u8]) -> Result<(), String> {
+    let prefix = format!("{:x}\r\n", chunk.len());
+    stream
+        .write_all(prefix.as_bytes())
+        .await
+        .map_err(|err| format!("Failed to write gateway response chunk: {err}"))?;
+    stream
+        .write_all(chunk)
+        .await
+        .map_err(|err| format!("Failed to write gateway response chunk: {err}"))?;
+    stream
+        .write_all(b"\r\n")
+        .await
+        .map_err(|err| format!("Failed to write gateway response chunk: {err}"))
+}
+
 fn split_next_sse_event(pending: &str) -> Option<(String, String)> {
     let lf = pending.find("\n\n");
     let crlf = pending.find("\r\n\r\n");
@@ -867,6 +1132,40 @@ fn split_next_sse_event(pending: &str) -> Option<(String, String)> {
         (Some(lf), _) => Some((pending[..lf].to_string(), pending[lf + 2..].to_string())),
         (None, Some(crlf)) => Some((pending[..crlf].to_string(), pending[crlf + 4..].to_string())),
         (None, None) => None,
+    }
+}
+
+fn append_utf8_stream_chunk(
+    output: &mut String,
+    pending_bytes: &mut Vec<u8>,
+    chunk: &[u8],
+) -> Result<(), String> {
+    pending_bytes.extend_from_slice(chunk);
+    loop {
+        match std::str::from_utf8(pending_bytes) {
+            Ok(text) => {
+                output.push_str(text);
+                pending_bytes.clear();
+                return Ok(());
+            }
+            Err(error) if error.valid_up_to() > 0 => {
+                let valid_up_to = error.valid_up_to();
+                let text = std::str::from_utf8(&pending_bytes[..valid_up_to])
+                    .map_err(|_| "Invalid UTF-8 in provider stream".to_string())?;
+                output.push_str(text);
+                pending_bytes.drain(..valid_up_to);
+            }
+            Err(error) if error.error_len().is_none() => return Ok(()),
+            Err(_) => return Err("Invalid UTF-8 in provider stream".to_string()),
+        }
+    }
+}
+
+fn finish_utf8_stream(pending_bytes: &[u8]) -> Result<(), String> {
+    if pending_bytes.is_empty() {
+        Ok(())
+    } else {
+        Err("Provider stream ended with incomplete UTF-8".to_string())
     }
 }
 
@@ -1019,13 +1318,105 @@ async fn write_proxy_response(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_upstream_url, chat_completion_to_response, gateway_request_is_authorized,
-        responses_request_to_chat_completions, split_next_sse_event, start_provider_gateway,
-        GatewayRequest, ProviderGatewayConfig,
+        append_utf8_stream_chunk, build_upstream_url, chat_completion_to_response,
+        chat_stream_event_flags, finish_utf8_stream, gateway_request_is_authorized,
+        is_chat_completions_streaming, read_http_request, responses_request_to_chat_completions,
+        responses_request_to_chat_completions_with_reasoning,
+        should_rewrite_chat_completions_stream, split_next_sse_event, start_provider_gateway,
+        write_chat_completions_stream, write_responses_stream_from_chat_stream, GatewayRequest,
+        ProviderGatewayConfig,
     };
+    use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+    use reqwest::StatusCode;
     use serde_json::json;
     use std::time::Duration;
-    use tokio::net::TcpStream;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::{TcpListener, TcpStream};
+
+    async fn truncated_event_stream_response() -> reqwest::Response {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0u8; 1024];
+            let _ = stream.read(&mut request).await;
+            let body = b"data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n";
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\n\r\n",
+                body.len() + 64,
+            );
+            stream.write_all(head.as_bytes()).await.unwrap();
+            stream.write_all(body).await.unwrap();
+        });
+        reqwest::get(format!("http://{addr}/stream")).await.unwrap()
+    }
+
+    async fn downstream_pair() -> (TcpStream, TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let client = TcpStream::connect(addr).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+        (server, client)
+    }
+
+    #[test]
+    fn truncated_responses_stream_does_not_report_completion() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let response = truncated_event_stream_response().await;
+            let (mut server, mut client) = downstream_pair().await;
+            let writer = tokio::spawn(async move {
+                write_responses_stream_from_chat_stream(&mut server, response).await
+            });
+            let mut output = Vec::new();
+            client.read_to_end(&mut output).await.unwrap();
+            assert!(writer.await.unwrap().is_err());
+            assert!(!String::from_utf8_lossy(&output).contains("response.completed"));
+        });
+    }
+
+    #[test]
+    fn truncated_chat_stream_does_not_report_done() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let response = truncated_event_stream_response().await;
+            let (mut server, mut client) = downstream_pair().await;
+            let writer =
+                tokio::spawn(
+                    async move { write_chat_completions_stream(&mut server, response).await },
+                );
+            let mut output = Vec::new();
+            client.read_to_end(&mut output).await.unwrap();
+            assert!(writer.await.unwrap().is_err());
+            assert!(!String::from_utf8_lossy(&output).contains("data: [DONE]"));
+        });
+    }
+
+    #[test]
+    fn gateway_acknowledges_expect_continue_before_reading_body() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                read_http_request(&mut stream).await.unwrap()
+            });
+            let mut client = TcpStream::connect(addr).await.unwrap();
+            client
+                .write_all(
+                    b"POST /v1/responses HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\nExpect: 100-continue\r\n\r\n",
+                )
+                .await
+                .unwrap();
+            let mut interim = [0u8; 25];
+            tokio::time::timeout(Duration::from_millis(250), client.read_exact(&mut interim))
+                .await
+                .expect("gateway should acknowledge Expect before waiting for the body")
+                .unwrap();
+            assert_eq!(&interim, b"HTTP/1.1 100 Continue\r\n\r\n");
+            client.write_all(b"{}").await.unwrap();
+            let request = server.await.unwrap();
+            assert_eq!(request.body, b"{}");
+        });
+    }
 
     #[test]
     fn gateway_upstream_url_preserves_provider_v1_path() {
@@ -1061,6 +1452,60 @@ mod tests {
         assert!(!gateway_request_is_authorized(&request, "secret"));
         request.headers[0].1 = "Bearer secret".to_string();
         assert!(gateway_request_is_authorized(&request, "secret"));
+    }
+
+    #[test]
+    fn detects_streaming_chat_completions_requests() {
+        let request = GatewayRequest {
+            method: "POST".to_string(),
+            path: "/v1/chat/completions/?trace=1".to_string(),
+            headers: Vec::new(),
+            body: br#"{"stream":true}"#.to_vec(),
+        };
+
+        assert!(is_chat_completions_streaming(&request));
+
+        let non_streaming = GatewayRequest {
+            body: br#"{"stream":false}"#.to_vec(),
+            ..request
+        };
+        assert!(!is_chat_completions_streaming(&non_streaming));
+    }
+
+    #[test]
+    fn detects_chat_stream_finish_and_done_events() {
+        assert_eq!(
+            chat_stream_event_flags(r#"data: {"choices":[{"delta":{},"finish_reason":"stop"}]}"#,),
+            (true, false),
+        );
+        assert_eq!(chat_stream_event_flags("data: [DONE]"), (false, true));
+    }
+
+    #[test]
+    fn rewrites_only_successful_event_stream_responses() {
+        let mut event_stream_headers = HeaderMap::new();
+        event_stream_headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("text/event-stream; charset=utf-8"),
+        );
+        assert!(should_rewrite_chat_completions_stream(
+            true,
+            StatusCode::OK,
+            &event_stream_headers,
+        ));
+
+        let mut json_headers = HeaderMap::new();
+        json_headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        assert!(!should_rewrite_chat_completions_stream(
+            true,
+            StatusCode::UNAUTHORIZED,
+            &json_headers,
+        ));
+        assert!(!should_rewrite_chat_completions_stream(
+            true,
+            StatusCode::OK,
+            &json_headers,
+        ));
     }
 
     #[test]
@@ -1139,6 +1584,24 @@ mod tests {
         assert_eq!(chat["messages"][1]["role"], "tool");
         assert_eq!(chat["messages"][1]["tool_call_id"], "call_123");
         assert_eq!(chat["messages"][1]["content"], "D:/Project/CodexMonitor");
+    }
+
+    #[test]
+    fn responses_request_maps_configured_chat_reasoning_fields() {
+        let chat = responses_request_to_chat_completions_with_reasoning(
+            &json!({
+                "model": "deepseek-reasoner",
+                "input": "hello",
+                "reasoning": { "effort": "high" }
+            }),
+            None,
+            true,
+            true,
+        )
+        .expect("chat body");
+
+        assert_eq!(chat["thinking"], json!({ "type": "enabled" }));
+        assert_eq!(chat["reasoning_effort"], "high");
     }
 
     #[test]
@@ -1235,6 +1698,22 @@ mod tests {
     }
 
     #[test]
+    fn preserves_utf8_characters_split_across_stream_chunks() {
+        let payload = "data: {\"delta\":\"中文\"}\n\n".as_bytes();
+        let mut output = String::new();
+        let mut pending = Vec::new();
+
+        for byte in payload {
+            append_utf8_stream_chunk(&mut output, &mut pending, &[*byte])
+                .expect("split UTF-8 remains valid");
+        }
+
+        finish_utf8_stream(&pending).expect("stream ends on a character boundary");
+        assert_eq!(output, "data: {\"delta\":\"中文\"}\n\n");
+        assert!(!output.contains('\u{fffd}'));
+    }
+
+    #[test]
     fn provider_gateway_shutdown_closes_listener() {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_io()
@@ -1246,6 +1725,8 @@ mod tests {
                 upstream_base_url: "https://api.example.com/v1".to_string(),
                 upstream_api_key: "sk-test".to_string(),
                 max_output_tokens: None,
+                supports_thinking: false,
+                supports_reasoning_effort: false,
             })
             .await
             .expect("gateway");

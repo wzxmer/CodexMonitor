@@ -19,6 +19,7 @@ import {
   getCodexStatus,
   getConfigModel,
   getExperimentalFeatureList,
+  getProviderModels,
   isMobileRuntime,
   getModelList,
   listWorkspaces,
@@ -47,6 +48,7 @@ vi.mock("@services/tauri", async () => {
     getModelList: vi.fn(),
     getConfigModel: vi.fn(),
     getExperimentalFeatureList: vi.fn(),
+    getProviderModels: vi.fn(),
     getAgentsSettings: vi.fn(),
     getCodexStatus: vi.fn(),
     isMobileRuntime: vi.fn(),
@@ -60,6 +62,7 @@ const getAppBuildTypeMock = vi.mocked(getAppBuildType);
 const getConfigModelMock = vi.mocked(getConfigModel);
 const getModelListMock = vi.mocked(getModelList);
 const getExperimentalFeatureListMock = vi.mocked(getExperimentalFeatureList);
+const getProviderModelsMock = vi.mocked(getProviderModels);
 const getAgentsSettingsMock = vi.mocked(getAgentsSettings);
 const getCodexStatusMock = vi.mocked(getCodexStatus);
 const isMobileRuntimeMock = vi.mocked(isMobileRuntime);
@@ -144,7 +147,6 @@ const baseSettings: AppSettings = {
   themeAccent: "codex",
   showCodexUsage: true,
   usageShowRemaining: false,
-  thirdPartyUsageMultiplier: 1,
   showMessageFilePath: true,
   messageToolGroupsCollapsedByDefault: false,
   messageReadingStyle: "bubble",
@@ -1754,15 +1756,17 @@ describe("SettingsView Codex defaults", () => {
   it("explains that provider profiles only affect CodexMonitor-launched sessions", () => {
     renderCodexSection({ initialSection: "providers" });
 
+    expect(screen.getByText("模型服务商配置")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /使用 Codex 默认配置/ }).getAttribute("aria-pressed"),
     ).toBe("true");
     expect(screen.getByText("沿用本机 Codex 配置")).toBeTruthy();
     expect(
       screen.getAllByText(
-        /只覆盖 CodexMonitor 新启动会话的 key、URL、模型和上下文，不修改 CODEX_HOME、sessions、MCP、agents 或全局 config\.toml/,
+        /只覆盖 CodexMonitor 新启动会话的 API 密钥、URL、模型和上下文，不修改 CODEX_HOME、sessions、MCP、agents 或全局 config\.toml/,
       ).length,
     ).toBeGreaterThan(0);
+    expect(screen.queryByPlaceholderText(/倍率/)).toBeNull();
   });
 
   it("renders provider profiles as compact URL buttons and switches the active profile", () => {
@@ -1787,7 +1791,6 @@ describe("SettingsView Codex defaults", () => {
             lastModelRefreshAtMs: null,
             cachedModels: [],
             groupName: "配置 A",
-            groupMultiplier: null,
           },
         ],
       },
@@ -1807,13 +1810,193 @@ describe("SettingsView Codex defaults", () => {
   it("fills the recommended base URL when selecting a known provider", () => {
     renderCodexSection({ initialSection: "providers" });
 
-    fireEvent.change(screen.getByLabelText("Provider 类型"), {
+    fireEvent.change(screen.getByLabelText("服务商类型"), {
       target: { value: "deepseek" },
     });
 
-    expect((screen.getByLabelText("Provider Base URL") as HTMLInputElement).value).toBe(
+    expect((screen.getByLabelText("服务商 Base URL") as HTMLInputElement).value).toBe(
       "https://api.deepseek.com/v1",
     );
+  });
+
+  it("enables the compatibility gateway for opencode", () => {
+    renderCodexSection({ initialSection: "providers" });
+
+    fireEvent.change(screen.getByLabelText("服务商类型"), {
+      target: { value: "opencode" },
+    });
+
+    expect((screen.getByLabelText("服务商 Base URL") as HTMLInputElement).value).toBe(
+      "https://opencode.ai/zen/go/v1",
+    );
+    const gateway = screen.getByRole("checkbox", { name: "使用本地兼容网关" });
+    expect((gateway as HTMLInputElement).checked).toBe(true);
+    expect((gateway as HTMLInputElement).disabled).toBe(true);
+    expect(
+      screen.getByText("OpenCode Zen 必须选择明确模型，不能沿用全局 Codex 模型。"),
+    ).toBeTruthy();
+    expect(screen.queryByPlaceholderText(/倍率/)).toBeNull();
+  });
+
+  it("keeps cached provider models when refresh returns a partial list", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    getProviderModelsMock.mockResolvedValueOnce([
+      { id: "model-a", name: "Model A refreshed", contextWindow: null },
+    ]);
+    renderCodexSection({
+      initialSection: "providers",
+      onUpdateAppSettings,
+      appSettings: {
+        codexKeyProfiles: [
+          {
+            id: "opencode",
+            name: "OpenCode",
+            providerKind: "opencode",
+            keyEnvVar: "OPENAI_API_KEY",
+            key: "secret",
+            baseUrlEnvVar: "OPENAI_BASE_URL",
+            baseUrl: "https://opencode.ai/zen/go/v1",
+            model: "model-a",
+            contextWindow: null,
+            maxOutputTokens: null,
+            useGateway: true,
+            lastModelRefreshAtMs: 1,
+            cachedModels: [
+              { id: "model-a", name: "Model A", contextWindow: 128000 },
+              { id: "model-b", name: "Model B", contextWindow: null },
+            ],
+            groupName: "OpenCode",
+          },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /编辑 OpenCode/ }));
+    fireEvent.click(screen.getByRole("button", { name: "获取模型" }));
+    await waitFor(() => expect(getProviderModelsMock).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+
+    await waitFor(() => {
+      const lastCall = onUpdateAppSettings.mock.calls[onUpdateAppSettings.mock.calls.length - 1];
+      const nextSettings = lastCall?.[0] as AppSettings;
+      expect(nextSettings.codexKeyProfiles[0]?.cachedModels).toEqual([
+        { id: "model-a", name: "Model A refreshed", contextWindow: 128000 },
+        { id: "model-b", name: "Model B", contextWindow: null },
+      ]);
+    });
+  });
+
+  it("saves provider thinking capability flags", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderCodexSection({
+      initialSection: "providers",
+      onUpdateAppSettings,
+      appSettings: {
+        codexKeyProfiles: [
+          {
+            id: "opencode",
+            name: "OpenCode",
+            providerKind: "opencode",
+            keyEnvVar: "OPENAI_API_KEY",
+            key: "secret",
+            baseUrlEnvVar: "OPENAI_BASE_URL",
+            baseUrl: "https://opencode.ai/zen/go/v1",
+            model: "model-a",
+            useGateway: true,
+            supportsThinking: false,
+            supportsReasoningEffort: false,
+            cachedModels: [
+              { id: "model-a", name: "Model A", contextWindow: null },
+            ],
+            groupName: "OpenCode",
+          },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /编辑 OpenCode/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "支持思考模式" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "支持思考等级" }));
+    fireEvent.click(screen.getByRole("button", { name: /保存/ }));
+
+    await waitFor(() => {
+      const lastCall = onUpdateAppSettings.mock.calls[onUpdateAppSettings.mock.calls.length - 1];
+      const nextSettings = lastCall?.[0] as AppSettings;
+      expect(nextSettings.codexKeyProfiles[0]).toMatchObject({
+        supportsThinking: true,
+        supportsReasoningEffort: true,
+      });
+    });
+  });
+
+  it("shows every fetched provider model without locking the draft to the first result", async () => {
+    const initialFetchCount = getProviderModelsMock.mock.calls.length;
+    getProviderModelsMock.mockResolvedValueOnce([
+      { id: "model-a", name: "Model A", contextWindow: null },
+      { id: "model-b", name: "Model B", contextWindow: null },
+      { id: "model-c", name: "Model C", contextWindow: null },
+    ]);
+    renderCodexSection({ initialSection: "providers" });
+
+    fireEvent.change(screen.getByLabelText("服务商类型"), {
+      target: { value: "deepseek" },
+    });
+    fireEvent.change(screen.getByLabelText("API 密钥"), {
+      target: { value: "secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "获取模型" }));
+
+    await waitFor(() =>
+      expect(getProviderModelsMock.mock.calls.length).toBe(initialFetchCount + 1),
+    );
+    const modelSelect = screen.getByLabelText("服务商模型") as HTMLSelectElement;
+    expect(modelSelect.value).toBe("");
+    expect(modelSelect.querySelectorAll("option")).toHaveLength(4);
+    expect(modelSelect.textContent).toContain("Model A");
+    expect(modelSelect.textContent).toContain("Model B");
+    expect(modelSelect.textContent).toContain("Model C");
+
+    fireEvent.change(screen.getByLabelText("服务商模型"), {
+      target: { value: "model-b" },
+    });
+    expect(modelSelect.value).toBe("model-b");
+  });
+
+  it("clears provider drafts when deleting the profile being edited", () => {
+    renderCodexSection({
+      initialSection: "providers",
+      appSettings: {
+        codexKeyProfiles: [
+          {
+            id: "profile-a",
+            name: "配置 A",
+            providerKind: "custom",
+            keyEnvVar: "OPENAI_API_KEY",
+            key: "secret",
+            baseUrlEnvVar: "OPENAI_BASE_URL",
+            baseUrl: "https://api.example.com/v1",
+            model: "model-a",
+            contextWindow: null,
+            maxOutputTokens: null,
+            useGateway: true,
+            lastModelRefreshAtMs: null,
+            cachedModels: [],
+            groupName: "配置 A",
+          },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /编辑 配置 A/ }));
+    expect((screen.getByLabelText("模型服务商配置名称") as HTMLInputElement).value).toBe(
+      "配置 A",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /删除 配置 A/ }));
+
+    expect((screen.getByLabelText("模型服务商配置名称") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("服务商模型") as HTMLInputElement).value).toBe("");
+    expect(screen.queryByRole("button", { name: "取消" })).toBeNull();
   });
 
   it("uses the latest model and medium effort by default (no Default option)", async () => {
@@ -1990,6 +2173,9 @@ describe("SettingsView Codex defaults", () => {
     const effortSelect = screen.getByLabelText(
       "推理强度",
     ) as HTMLSelectElement;
+    const tokenEfficiencySelect = screen.getByLabelText(
+      "Token 效率",
+    ) as HTMLSelectElement;
 
     await waitFor(() => {
       expect(modelSelect.disabled).toBe(false);
@@ -2014,6 +2200,15 @@ describe("SettingsView Codex defaults", () => {
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
         expect.objectContaining({ lastComposerReasoningEffort: "high" }),
+      );
+    });
+
+    onUpdateAppSettings.mockClear();
+    fireEvent.change(tokenEfficiencySelect, { target: { value: "balanced" } });
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ tokenEfficiencyMode: "balanced" }),
       );
     });
   });

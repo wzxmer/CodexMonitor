@@ -18,6 +18,7 @@ import { SETTINGS_SECTION_LABEL_KEYS } from "@/features/i18n/settingsSectionLabe
 import { SettingsNav } from "./SettingsNav";
 import type { CodexSection } from "./settingsTypes";
 import { SettingsSectionContainers } from "./sections/SettingsSectionContainers";
+import type { SettingsWorkflowSectionProps } from "./sections/SettingsWorkflowSection";
 
 export type SettingsViewProps = {
   workspaceGroups: WorkspaceGroup[];
@@ -65,6 +66,10 @@ export type SettingsViewProps = {
   onDownloadDictationModel?: () => void;
   onCancelDictationDownload?: () => void;
   onRemoveDictationModel?: () => void;
+  workflowSectionProps?: Omit<
+    SettingsWorkflowSectionProps,
+    "appSettings" | "onUpdateAppSettings"
+  >;
   initialSection?: CodexSection;
 };
 
@@ -98,9 +103,39 @@ export function SettingsView({
   onDownloadDictationModel,
   onCancelDictationDownload,
   onRemoveDictationModel,
+  workflowSectionProps,
   initialSection,
 }: SettingsViewProps) {
   const { t } = useI18n();
+  const resolvedWorkflowSectionProps = workflowSectionProps ?? {
+    workspaceName: null,
+    providerKind: "openai" as const,
+    model: null,
+    skills: [],
+    agents: [],
+    registryFingerprint: null,
+    registryErrors: [],
+    registryCacheHit: false,
+    registryRefreshing: false,
+    registryRefreshError: null,
+    registryLastRefreshAtMs: null,
+    diagnostics: {
+      lastUpdatedAtMs: null,
+      lastMode: null,
+      triggerSummary: null,
+      fallbackSummary: null,
+      contextSummary: null,
+      contextApplied: null,
+      contextSourceCount: 0,
+      completionPhase: null,
+      pendingValidationCount: 0,
+      changedDiffReviewStatus: null,
+      knowledgeCaptureStatus: null,
+      sourceErrors: [],
+      lastError: null,
+    },
+    onRefreshRegistry: async () => undefined,
+  };
   const {
     activeSection,
     showMobileDetail,
@@ -138,6 +173,7 @@ export function SettingsView({
     onDownloadDictationModel,
     onCancelDictationDownload,
     onRemoveDictationModel,
+    workflowSectionProps: resolvedWorkflowSectionProps,
   });
 
   useSettingsViewCloseShortcuts(onClose);

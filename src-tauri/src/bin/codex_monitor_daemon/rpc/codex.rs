@@ -95,7 +95,12 @@ pub(super) async fn try_handle(
                 Ok(value) => value,
                 Err(err) => return Some(Err(err)),
             };
-            Some(state.start_thread(workspace_id).await)
+            let token_efficiency_mode = parse_optional_string(params, "tokenEfficiencyMode");
+            Some(
+                state
+                    .start_thread(workspace_id, token_efficiency_mode)
+                    .await,
+            )
         }
         "resume_thread" => {
             let workspace_id = match parse_string(params, "workspaceId") {
@@ -254,6 +259,7 @@ pub(super) async fn try_handle(
             let app_mentions = parse_optional_value(params, "appMentions")
                 .and_then(|value| value.as_array().cloned());
             let collaboration_mode = parse_optional_value(params, "collaborationMode");
+            let additional_context = parse_optional_value(params, "additionalContext");
             Some(
                 state
                     .send_user_message(
@@ -267,6 +273,7 @@ pub(super) async fn try_handle(
                         images,
                         app_mentions,
                         collaboration_mode,
+                        additional_context,
                     )
                     .await,
             )
@@ -306,9 +313,18 @@ pub(super) async fn try_handle(
             let images = parse_optional_string_array(params, "images");
             let app_mentions = parse_optional_value(params, "appMentions")
                 .and_then(|value| value.as_array().cloned());
+            let additional_context = parse_optional_value(params, "additionalContext");
             Some(
                 state
-                    .turn_steer(workspace_id, thread_id, turn_id, text, images, app_mentions)
+                    .turn_steer(
+                        workspace_id,
+                        thread_id,
+                        turn_id,
+                        text,
+                        images,
+                        app_mentions,
+                        additional_context,
+                    )
                     .await,
             )
         }
@@ -496,6 +512,27 @@ pub(super) async fn try_handle(
                 Err(err) => return Some(Err(err)),
             };
             Some(state.skills_list(workspace_id).await)
+        }
+        "workflow_preflight_preview" => {
+            let workspace_id = match parse_string(params, "workspaceId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let task = match parse_string(params, "task") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let mode = parse_optional_string(params, "mode");
+            let provider_kind = match parse_string(params, "providerKind") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let model = parse_optional_string(params, "model");
+            Some(
+                state
+                    .workflow_preflight_preview(workspace_id, task, mode, provider_kind, model)
+                    .await,
+            )
         }
         "apps_list" => {
             let workspace_id = match parse_string(params, "workspaceId") {

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Manager, State};
 
-use super::files::{list_workspace_files_inner, read_workspace_file_inner, WorkspaceFileResponse};
+use super::files::{read_workspace_file_inner, WorkspaceFileResponse};
 use super::git::{
     git_branch_exists, git_find_remote_for_branch, git_remote_branch_exists, git_remote_exists,
     is_missing_worktree_error, run_git_command_owned, unique_branch_name,
@@ -633,10 +633,7 @@ pub(crate) async fn list_workspace_files(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    workspaces_core::list_workspace_files_core(&state.workspaces, &workspace_id, |root| {
-        list_workspace_files_inner(root, usize::MAX)
-    })
-    .await
+    workspaces_core::list_workspace_files_core(&state.workspaces, &workspace_id).await
 }
 
 #[tauri::command]

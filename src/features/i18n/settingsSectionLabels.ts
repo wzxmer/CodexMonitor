@@ -14,6 +14,7 @@ export const SETTINGS_SECTION_LABEL_KEYS: Record<CodexSection, I18nKey> = {
   git: "settings.section.git",
   server: "settings.section.server",
   agents: "settings.section.agents",
+  workflow: "settings.section.workflow",
   codex: "settings.section.codex",
   providers: "settings.section.providers",
   features: "settings.section.features",

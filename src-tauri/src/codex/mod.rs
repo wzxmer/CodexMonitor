@@ -16,6 +16,7 @@ use crate::remote_backend;
 use crate::shared::agents_config_core;
 use crate::shared::codex_core::{self, insert_optional_nullable_string};
 use crate::shared::provider_profiles_core::{self, active_codex_key_runtime};
+use crate::shared::workflow_preflight_core;
 use crate::state::AppState;
 use crate::types::WorkspaceEntry;
 
@@ -50,6 +51,7 @@ pub(crate) async fn spawn_workspace_session(
         entry,
         default_codex_bin,
         runtime_env.codex_args,
+        runtime_env.comparison_codex_args,
         runtime_env.env,
         runtime_env.provider_runtime_fingerprint,
         runtime_env.gateway_shutdown,
@@ -83,6 +85,7 @@ pub(crate) async fn codex_update(
 #[tauri::command]
 pub(crate) async fn start_thread(
     workspace_id: String,
+    token_efficiency_mode: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -91,12 +94,21 @@ pub(crate) async fn start_thread(
             &*state,
             app,
             "start_thread",
-            json!({ "workspaceId": workspace_id }),
+            json!({
+                "workspaceId": workspace_id,
+                "tokenEfficiencyMode": token_efficiency_mode,
+            }),
         )
         .await;
     }
 
-    codex_core::start_thread_core(&state.sessions, &state.workspaces, workspace_id).await
+    codex_core::start_thread_core(
+        &state.sessions,
+        &state.workspaces,
+        workspace_id,
+        token_efficiency_mode,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -513,6 +525,7 @@ pub(crate) async fn send_user_message(
     images: Option<Vec<String>>,
     app_mentions: Option<Vec<Value>>,
     collaboration_mode: Option<Value>,
+    additional_context: Option<Value>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -533,6 +546,7 @@ pub(crate) async fn send_user_message(
         payload.insert("accessMode".to_string(), json!(access_mode));
         payload.insert("images".to_string(), json!(images));
         payload.insert("appMentions".to_string(), json!(app_mentions));
+        payload.insert("additionalContext".to_string(), json!(additional_context));
         if let Some(mode) = collaboration_mode {
             if !mode.is_null() {
                 payload.insert("collaborationMode".to_string(), mode);
@@ -568,6 +582,7 @@ pub(crate) async fn send_user_message(
             images,
             app_mentions,
             collaboration_mode,
+            additional_context,
         )
         .await;
     }
@@ -584,6 +599,7 @@ pub(crate) async fn send_user_message(
         images,
         app_mentions,
         collaboration_mode,
+        additional_context,
     )
     .await
 }
@@ -596,6 +612,7 @@ pub(crate) async fn turn_steer(
     text: String,
     images: Option<Vec<String>>,
     app_mentions: Option<Vec<Value>>,
+    additional_context: Option<Value>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -617,6 +634,7 @@ pub(crate) async fn turn_steer(
                 "text": text,
                 "images": images,
                 "appMentions": app_mentions,
+                "additionalContext": additional_context,
             }),
         )
         .await;
@@ -638,6 +656,7 @@ pub(crate) async fn turn_steer(
             text,
             images,
             app_mentions,
+            additional_context,
         )
         .await;
     }
@@ -649,6 +668,7 @@ pub(crate) async fn turn_steer(
         text,
         images,
         app_mentions,
+        additional_context,
     )
     .await
 }
@@ -1049,6 +1069,43 @@ pub(crate) async fn skills_list(
     }
 
     codex_core::skills_list_core(&state.sessions, &state.workspaces, workspace_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn workflow_preflight_preview(
+    workspace_id: String,
+    task: String,
+    mode: Option<String>,
+    provider_kind: String,
+    model: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "workflow_preflight_preview",
+            json!({
+                "workspaceId": workspace_id,
+                "task": task,
+                "mode": mode,
+                "providerKind": provider_kind,
+                "model": model,
+            }),
+        )
+        .await;
+    }
+
+    workflow_preflight_core::workflow_preflight_preview_core(
+        &state.workspaces,
+        workspace_id,
+        task,
+        mode,
+        provider_kind,
+        model,
+    )
+    .await
 }
 
 #[tauri::command]

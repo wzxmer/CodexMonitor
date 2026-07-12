@@ -183,6 +183,38 @@ describe("useGitStatus", () => {
     unmount();
   });
 
+  it("does not overlap slow status polls for the same workspace", async () => {
+    const getGitStatusMock = vi.mocked(getGitStatus);
+    let resolveFirst: (value: ReturnType<typeof makeStatus>) => void;
+    getGitStatusMock
+      .mockReturnValueOnce(
+        new Promise<ReturnType<typeof makeStatus>>((resolve) => {
+          resolveFirst = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(makeStatus("main"));
+
+    const { unmount } = renderHook(() => useGitStatus(workspace));
+
+    await act(async () => {
+      vi.advanceTimersByTime(9000);
+      await Promise.resolve();
+    });
+    expect(getGitStatusMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFirst(makeStatus("main"));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+      await Promise.resolve();
+    });
+    expect(getGitStatusMock).toHaveBeenCalledTimes(2);
+
+    unmount();
+  });
+
   it("does not log missing repository errors as unexpected failures", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const getGitStatusMock = vi.mocked(getGitStatus);

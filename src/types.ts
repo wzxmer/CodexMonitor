@@ -504,7 +504,12 @@ export type OpenAppTarget = {
   args: string[];
 };
 
-export type CodexProviderKind = "openai" | "deepseek" | "openrouter" | "custom";
+export type CodexProviderKind =
+  | "openai"
+  | "deepseek"
+  | "openrouter"
+  | "opencode"
+  | "custom";
 
 export type CodexProviderModel = {
   id: string;
@@ -524,10 +529,11 @@ export type CodexKeyProfile = {
   contextWindow?: number | null;
   maxOutputTokens?: number | null;
   useGateway?: boolean;
+  supportsThinking?: boolean;
+  supportsReasoningEffort?: boolean;
   lastModelRefreshAtMs?: number | null;
   cachedModels?: CodexProviderModel[];
   groupName?: string | null;
-  groupMultiplier?: number | null;
 };
 
 export type CodexProviderStatus = {
@@ -540,6 +546,9 @@ export type CodexProviderStatus = {
   modelContextWindow: number | null;
   error: string | null;
 };
+
+export type TokenEfficiencyMode = "quality" | "balanced" | "economy";
+export type WorkflowRuntimeMode = "off" | "shadow" | "active";
 
 export type AppSettings = {
   codexBin: string | null;
@@ -577,13 +586,14 @@ export type AppSettings = {
   cycleWorkspacePrevShortcut: string | null;
   lastComposerModelId: string | null;
   lastComposerReasoningEffort: string | null;
+  tokenEfficiencyMode?: TokenEfficiencyMode;
+  workflowRuntimeMode?: WorkflowRuntimeMode;
   uiScale: number;
   appLanguage: AppLanguagePreference;
   theme: ThemePreference;
   themeAccent: ThemeAccentPreference;
   showCodexUsage: boolean;
   usageShowRemaining: boolean;
-  thirdPartyUsageMultiplier: number;
   showMessageFilePath: boolean;
   messageToolGroupsCollapsedByDefault: boolean;
   messageReadingStyle: MessageReadingStyle;
@@ -1021,6 +1031,207 @@ export type SkillOption = {
   name: string;
   path: string;
   description?: string;
+  scope?: WorkflowCapabilityScope;
+  providerKinds?: CodexProviderKind[];
+  modelPatterns?: string[];
+  triggerKeywords?: string[];
+  capabilityRequirements?: WorkflowCapabilityName[];
+  providerOverrides?: Partial<
+    Record<
+      CodexProviderKind,
+      {
+        capabilityRequirements?: WorkflowCapabilityName[];
+        fallback?: string;
+      }
+    >
+  >;
+  modelOverrides?: Record<
+    string,
+    {
+      capabilityRequirements?: WorkflowCapabilityName[];
+      fallback?: string;
+    }
+  >;
+  fallback?: string;
+  priority?: number;
+  trustLevel?: "trusted" | "prompt" | "untrusted";
+  source?: "global" | "user" | "project" | "native";
+  instructions?: string;
+};
+
+export type WorkflowCapabilityScope = "public" | "provider" | "model";
+
+export type WorkflowAgentOption = {
+  name: string;
+  path: string;
+  description?: string;
+  scope?: WorkflowCapabilityScope;
+  providerKinds?: CodexProviderKind[];
+  modelPatterns?: string[];
+  capabilityRequirements?: WorkflowCapabilityName[];
+  triggerKeywords?: string[];
+  fallback?: string;
+  priority?: number;
+  trustLevel?: "trusted" | "prompt" | "untrusted";
+  source?: "global" | "user" | "project" | "native";
+  developerInstructions?: string;
+};
+
+export type WorkflowCapabilityName =
+  | "tool_calling"
+  | "structured_output"
+  | "parallel_tools"
+  | "streaming"
+  | "vision"
+  | "long_context"
+  | "file_access"
+  | "shell_access";
+
+export type WorkflowCapabilitySupport = "supported" | "unsupported" | "unknown";
+
+export type WorkflowCapabilityProfile = Record<
+  WorkflowCapabilityName,
+  WorkflowCapabilitySupport
+>;
+
+export type WorkflowSkillTrigger = {
+  skillName: string;
+  scope: WorkflowCapabilityScope;
+  reason: "explicit" | "keyword" | "description";
+  matchedValue: string;
+  compatibility: "compatible" | "fallback" | "blocked";
+  missingCapabilities: WorkflowCapabilityName[];
+  fallback: string | null;
+  priority: number;
+};
+
+export type WorkflowPreflightPreview = {
+  mode: Exclude<WorkflowRuntimeMode, "off">;
+  providerKind: CodexProviderKind;
+  model: string | null;
+  taskLength: number;
+  capabilities: WorkflowCapabilityProfile;
+  triggeredSkills: WorkflowSkillTrigger[];
+  triggerSummary: string;
+  fallbackSummary: string;
+  validationSuggestions: string[];
+  validationSummary: string;
+};
+
+export type WorkflowRuleCandidate = {
+  path: string;
+  kind: string;
+  scope: "global" | "workspace" | "nested";
+};
+
+export type WorkflowKnowledgeCandidate = {
+  path: string;
+  title: string;
+  score: number;
+  matchedTerms: string[];
+};
+
+export type WorkflowImpactItem = {
+  area: string;
+  reason: string;
+  validation: string[];
+};
+
+export type WorkflowContextSource = {
+  phase: "stable" | "dynamic";
+  kind: string;
+  path: string;
+  fingerprint: string;
+  estimatedTokens: number;
+  selected: boolean;
+};
+
+export type WorkflowContextPlan = {
+  contextFingerprint: string;
+  stablePrefixFingerprint: string;
+  dynamicContextFingerprint: string;
+  budgetTokens: number;
+  mandatoryTokens: number;
+  selectedTokens: number;
+  truncated: boolean;
+  sources: WorkflowContextSource[];
+};
+
+export type WorkflowValidationGate = {
+  id: string;
+  kind: "command" | "manual";
+  instruction: string;
+  status: "pending" | "passed" | "failed" | "skipped";
+  sourceAreas: string[];
+};
+
+export type WorkflowCompletionPlan = {
+  required: boolean;
+  phase: "focused_validation" | "not_required";
+  validations: WorkflowValidationGate[];
+  changedDiffReview: {
+    required: boolean;
+    status: "pending" | "passed" | "failed" | "not_required";
+    scope: "task-owned-changed-diff";
+  };
+  knowledgeCapture: {
+    status: "evaluate" | "captured" | "not_required";
+    category: "bug" | "decision" | "checkpoint";
+    reason: string;
+    submissionMode: "candidate-only-concurrency-safe";
+  };
+};
+
+export type WorkflowHostPreflightPreview = {
+  mode: Exclude<WorkflowRuntimeMode, "off">;
+  providerKind: CodexProviderKind;
+  model: string | null;
+  taskLength: number;
+  rules: WorkflowRuleCandidate[];
+  knowledgeCandidates: WorkflowKnowledgeCandidate[];
+  impacts: WorkflowImpactItem[];
+  impactSummary: string;
+  validationSuggestions: string[];
+  sourceErrors: string[];
+  knowledgeCacheHit: boolean;
+  contextPlan?: WorkflowContextPlan;
+  completionPlan?: WorkflowCompletionPlan;
+  contextFragments: WorkflowAdditionalContextEntry[];
+};
+
+export type WorkflowAdditionalContextEntry = {
+  sourceId: string;
+  kind: "application" | "untrusted";
+  value: string;
+};
+
+export type WorkflowAdditionalContext = Record<
+  string,
+  { kind: "application" | "untrusted"; value: string }
+>;
+
+export type WorkflowContextCompilation = {
+  additionalContext: WorkflowAdditionalContext;
+  selectedAgents: string[];
+  includedSkills: string[];
+  blockedSkills: string[];
+  contextSummary: string;
+};
+
+export type WorkflowRuntimeDiagnostics = {
+  lastUpdatedAtMs: number | null;
+  lastMode: Exclude<WorkflowRuntimeMode, "off"> | null;
+  triggerSummary: string | null;
+  fallbackSummary: string | null;
+  contextSummary: string | null;
+  contextApplied: boolean | null;
+  contextSourceCount: number;
+  completionPhase: string | null;
+  pendingValidationCount: number;
+  changedDiffReviewStatus: string | null;
+  knowledgeCaptureStatus: string | null;
+  sourceErrors: string[];
+  lastError: string | null;
 };
 
 export type AppOption = {

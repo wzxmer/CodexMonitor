@@ -43,6 +43,9 @@ import type {
   TcpDaemonStatus,
   TailscaleDaemonCommandPreview,
   TailscaleStatus,
+  WorkflowAdditionalContext,
+  WorkflowHostPreflightPreview,
+  WorkflowRuntimeMode,
   TrayLabels,
   TrayRecentThreadEntry,
   TraySessionUsage,
@@ -296,6 +299,19 @@ export async function createMessageReference(
   request: CreateMessageReferenceRequest,
 ): Promise<MessageReferenceResponse> {
   return invoke<MessageReferenceResponse>("create_message_reference", { request });
+}
+
+export type CreateContentReferenceRequest = {
+  workspaceId: string;
+  sourceKind: "attachment" | "log" | "diff";
+  sourceName: string;
+  content: string;
+};
+
+export async function createContentReference(
+  request: CreateContentReferenceRequest,
+): Promise<MessageReferenceResponse> {
+  return invoke<MessageReferenceResponse>("create_content_reference", { request });
 }
 
 export async function readGlobalAgentsMd(): Promise<GlobalAgentsResponse> {
@@ -583,8 +599,27 @@ export async function setWorkspaceRuntimeCodexArgs(
   });
 }
 
-export async function startThread(workspaceId: string) {
-  return invoke<any>("start_thread", { workspaceId });
+export async function startThread(
+  workspaceId: string,
+  tokenEfficiencyMode: "quality" | "balanced" | "economy" = "quality",
+) {
+  return invoke<any>("start_thread", { workspaceId, tokenEfficiencyMode });
+}
+
+export async function workflowPreflightPreview(
+  workspaceId: string,
+  task: string,
+  providerKind: string,
+  model: string | null,
+  mode: Exclude<WorkflowRuntimeMode, "off">,
+): Promise<WorkflowHostPreflightPreview> {
+  return invoke<WorkflowHostPreflightPreview>("workflow_preflight_preview", {
+    workspaceId,
+    task,
+    providerKind,
+    model,
+    mode,
+  });
 }
 
 export async function forkThread(workspaceId: string, threadId: string) {
@@ -653,6 +688,7 @@ export async function sendUserMessage(
     images?: string[];
     collaborationMode?: Record<string, unknown> | null;
     appMentions?: AppMention[];
+    additionalContext?: WorkflowAdditionalContext;
   },
 ) {
   const images = await normalizeImagesForRpc(options?.images);
@@ -674,6 +710,9 @@ export async function sendUserMessage(
   if (options?.appMentions && options.appMentions.length > 0) {
     payload.appMentions = options.appMentions;
   }
+  if (options?.additionalContext && Object.keys(options.additionalContext).length > 0) {
+    payload.additionalContext = options.additionalContext;
+  }
   return invoke("send_user_message", payload);
 }
 
@@ -692,6 +731,7 @@ export async function steerTurn(
   text: string,
   images?: string[],
   appMentions?: AppMention[],
+  additionalContext?: WorkflowAdditionalContext,
 ) {
   const normalizedImages = await normalizeImagesForRpc(images);
   const payload: Record<string, unknown> = {
@@ -703,6 +743,9 @@ export async function steerTurn(
   };
   if (appMentions && appMentions.length > 0) {
     payload.appMentions = appMentions;
+  }
+  if (additionalContext && Object.keys(additionalContext).length > 0) {
+    payload.additionalContext = additionalContext;
   }
   return invoke("turn_steer", payload);
 }

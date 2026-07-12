@@ -10,6 +10,7 @@ type UseModelsOptions = {
   activeWorkspace: WorkspaceInfo | null;
   onDebug?: (entry: DebugEntry) => void;
   preferredModelId?: string | null;
+  providerModels?: ModelOption[];
   preferredEffort?: string | null;
   selectionKey?: string | null;
 };
@@ -48,6 +49,7 @@ export function useModels({
   activeWorkspace,
   onDebug,
   preferredModelId = null,
+  providerModels = [],
   preferredEffort = null,
   selectionKey = null,
 }: UseModelsOptions) {
@@ -57,15 +59,18 @@ export function useModels({
   const [selectedEffort, setSelectedEffortState] = useState<string | null>(null);
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const lastFetchedWorkspaceId = useRef<string | null>(null);
-  const inFlight = useRef(false);
+  const inFlightWorkspaceIds = useRef(new Set<string>());
   const hasUserSelectedModel = useRef(false);
   const hasUserSelectedEffort = useRef(false);
   const lastWorkspaceId = useRef<string | null>(null);
   const lastSelectionKey = useRef<string | null>(null);
   const wasConnected = useRef(false);
+  const hadProviderModels = useRef(false);
+  const activeWorkspaceIdRef = useRef<string | null>(null);
 
   const workspaceId = activeWorkspace?.id ?? null;
   const isConnected = Boolean(activeWorkspace?.connected);
+  activeWorkspaceIdRef.current = workspaceId;
 
   useEffect(() => {
     if (selectionKey === lastSelectionKey.current) {
@@ -158,10 +163,10 @@ export function useModels({
     if (!workspaceId || !isConnected) {
       return;
     }
-    if (inFlight.current) {
+    if (inFlightWorkspaceIds.current.has(workspaceId)) {
       return;
     }
-    inFlight.current = true;
+    inFlightWorkspaceIds.current.add(workspaceId);
     setIsRefreshingModels(true);
     onDebug?.({
       id: `${Date.now()}-client-model-list`,
@@ -175,6 +180,9 @@ export function useModels({
         getModelList(workspaceId),
         getConfigModel(workspaceId),
       ]);
+      if (activeWorkspaceIdRef.current !== workspaceId) {
+        return;
+      }
       const configModelFromConfig =
         configModelResult.status === "fulfilled"
           ? configModelResult.value
@@ -214,9 +222,14 @@ export function useModels({
         label: "model/list response",
         payload: response,
       });
-      setConfigModel(configModelFromConfig);
+      const effectiveConfigModel =
+        providerModels.length > 0 ? preferredModelId : configModelFromConfig;
+      setConfigModel(effectiveConfigModel);
       const dataFromServer: ModelOption[] = parseModelListResponse(response);
       const data = (() => {
+        if (providerModels.length > 0) {
+          return providerModels;
+        }
         if (!configModelFromConfig) {
           return dataFromServer;
         }
@@ -239,7 +252,7 @@ export function useModels({
       })();
       setModels(data);
       lastFetchedWorkspaceId.current = workspaceId;
-      const defaultModel = pickDefaultModel(data, configModelFromConfig);
+      const defaultModel = pickDefaultModel(data, effectiveConfigModel);
       const existingSelection = findModelByIdOrModel(data, selectedModelId);
       if (selectedModelId && !existingSelection) {
         hasUserSelectedModel.current = false;
@@ -265,18 +278,34 @@ export function useModels({
         }
       }
     } finally {
-      inFlight.current = false;
-      setIsRefreshingModels(false);
+      inFlightWorkspaceIds.current.delete(workspaceId);
+      setIsRefreshingModels(inFlightWorkspaceIds.current.size > 0);
     }
   }, [
     isConnected,
     onDebug,
     preferredModelId,
+    providerModels,
     selectedEffort,
     selectedModelId,
     resolveEffort,
     workspaceId,
   ]);
+
+  useEffect(() => {
+    if (providerModels.length > 0) {
+      hadProviderModels.current = true;
+      setModels(providerModels);
+      setConfigModel(preferredModelId);
+      return;
+    }
+    if (!hadProviderModels.current) {
+      return;
+    }
+    hadProviderModels.current = false;
+    lastFetchedWorkspaceId.current = null;
+    void refreshModels();
+  }, [preferredModelId, providerModels, refreshModels]);
 
   useEffect(() => {
     const reconnected = isConnected && !wasConnected.current;

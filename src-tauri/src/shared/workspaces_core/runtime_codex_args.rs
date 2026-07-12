@@ -95,6 +95,12 @@ where
         });
     }
 
+    if !current_session.active_turns.lock().await.is_empty() {
+        return Err(
+            "Cannot restart the Codex runtime while another thread is processing.".to_string(),
+        );
+    }
+
     let new_session =
         spawn_session(entry.clone(), default_bin, target_args.clone(), codex_home).await?;
     let workspace_ids = {
@@ -291,10 +297,11 @@ mod tests {
                 context_window: Some(128_000),
                 max_output_tokens: None,
                 use_gateway: false,
+                supports_thinking: false,
+                supports_reasoning_effort: false,
                 last_model_refresh_at_ms: None,
                 cached_models: Vec::new(),
                 group_name: None,
-                group_multiplier: None,
             }];
             settings.active_codex_key_profile_id = Some("profile".to_string());
             let effective_args =
@@ -356,10 +363,11 @@ mod tests {
                 context_window: Some(128_000),
                 max_output_tokens: None,
                 use_gateway: false,
+                supports_thinking: false,
+                supports_reasoning_effort: false,
                 last_model_refresh_at_ms: None,
                 cached_models: Vec::new(),
                 group_name: None,
-                group_multiplier: None,
             }];
             settings.active_codex_key_profile_id = Some("profile".to_string());
             let effective_args =
@@ -448,6 +456,44 @@ mod tests {
                 .codex_args
                 .clone();
             assert_eq!(next, Some("--new".to_string()));
+        });
+    }
+
+    #[test]
+    fn set_workspace_runtime_codex_args_does_not_respawn_during_active_turn() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let entry = make_workspace_entry("ws-1");
+            let workspaces = Mutex::new(HashMap::from([(entry.id.clone(), entry.clone())]));
+            let current_session = Arc::new(make_session(entry.clone(), Some("--old".to_string())));
+            current_session
+                .active_turns
+                .lock()
+                .await
+                .insert("thread-2".to_string(), "turn-2".to_string());
+            let sessions = Mutex::new(HashMap::from([(entry.id.clone(), current_session)]));
+            let app_settings = Mutex::new(AppSettings::default());
+            let spawn_calls = Arc::new(AtomicUsize::new(0));
+            let spawn_calls_ref = spawn_calls.clone();
+
+            let error = set_workspace_runtime_codex_args_core(
+                entry.id.clone(),
+                Some("--new".to_string()),
+                &workspaces,
+                &sessions,
+                &app_settings,
+                move |entry, _bin, args, _home| {
+                    let spawn_calls_ref = spawn_calls_ref.clone();
+                    async move {
+                        spawn_calls_ref.fetch_add(1, Ordering::SeqCst);
+                        Ok(Arc::new(make_session(entry, args)))
+                    }
+                },
+            )
+            .await
+            .expect_err("active turn blocks runtime restart");
+
+            assert!(error.contains("another thread is processing"));
+            assert_eq!(spawn_calls.load(Ordering::SeqCst), 0);
         });
     }
 }

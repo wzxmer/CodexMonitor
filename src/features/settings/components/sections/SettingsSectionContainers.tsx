@@ -11,6 +11,7 @@ import { SettingsServerSection } from "./SettingsServerSection";
 import { SettingsSessionSection } from "./SettingsSessionSection";
 import { SettingsShortcutsSection } from "./SettingsShortcutsSection";
 import { SettingsAgentsSection } from "./SettingsAgentsSection";
+import { SettingsWorkflowSection } from "./SettingsWorkflowSection";
 import { SettingsAboutSection } from "./SettingsAboutSection";
 import type { CodexSection } from "@settings/components/settingsTypes";
 import type { SettingsViewOrchestration } from "@settings/hooks/useSettingsViewOrchestration";
@@ -59,6 +60,9 @@ export function SettingsSectionContainers({
   }
   if (activeSection === "agents") {
     return <SettingsAgentsSection {...orchestration.agentsSectionProps} />;
+  }
+  if (activeSection === "workflow") {
+    return <SettingsWorkflowSection {...orchestration.workflowSectionProps} />;
   }
   if (activeSection === "codex") {
     return <SettingsCodexSection {...orchestration.codexSectionProps} />;

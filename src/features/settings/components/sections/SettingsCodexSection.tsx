@@ -21,7 +21,10 @@ import { FileEditorCard } from "@/features/shared/components/FileEditorCard";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { formatReasoningEffortLabel } from "@/features/models/utils/reasoningEffortLabels";
 import { getProviderModels } from "@/services/tauri";
-import { resolveCodexProviderBaseUrl } from "@/utils/providerProfiles";
+import {
+  mergeCodexProviderModels,
+  resolveCodexProviderBaseUrl,
+} from "@/utils/providerProfiles";
 
 type SettingsCodexSectionProps = {
   mode?: "codex" | "providers";
@@ -251,7 +254,6 @@ export function SettingsCodexSection({
   }, [reasoningOptions, reasoningSupported, savedEffort, selectedModel]);
   const [keyProfileNameDraft, setKeyProfileNameDraft] = useState("");
   const [keyProfileGroupNameDraft, setKeyProfileGroupNameDraft] = useState("");
-  const [keyProfileGroupMultiplierDraft, setKeyProfileGroupMultiplierDraft] = useState("");
   const [keyProfileKeyDraft, setKeyProfileKeyDraft] = useState("");
   const [keyProfileKeyVisible, setKeyProfileKeyVisible] = useState(false);
   const [keyProfileBaseUrlDraft, setKeyProfileBaseUrlDraft] = useState("");
@@ -261,6 +263,10 @@ export function SettingsCodexSection({
   const [keyProfileContextWindowDraft, setKeyProfileContextWindowDraft] = useState("");
   const [keyProfileMaxOutputTokensDraft, setKeyProfileMaxOutputTokensDraft] = useState("");
   const [keyProfileUseGatewayDraft, setKeyProfileUseGatewayDraft] = useState(false);
+  const [keyProfileSupportsThinkingDraft, setKeyProfileSupportsThinkingDraft] =
+    useState(false);
+  const [keyProfileSupportsReasoningEffortDraft, setKeyProfileSupportsReasoningEffortDraft] =
+    useState(false);
   const [keyProfileModelFetchState, setKeyProfileModelFetchState] = useState<{
     status: "idle" | "loading" | "done" | "error";
     error: string | null;
@@ -277,23 +283,32 @@ export function SettingsCodexSection({
   const editingKeyProfile = editingKeyProfileId
     ? keyProfiles.find((profile) => profile.id === editingKeyProfileId) ?? null
     : null;
-  const draftModelOptions = keyProfileFetchedModels.length
-    ? keyProfileFetchedModels
-    : editingKeyProfile?.cachedModels ?? [];
+  const fetchedDraftModelOptions = mergeCodexProviderModels(
+    editingKeyProfile?.cachedModels,
+    keyProfileFetchedModels,
+  );
+  const draftModelOptions = mergeCodexProviderModels(
+    fetchedDraftModelOptions,
+    keyProfileModelDraft.trim()
+      ? [{ id: keyProfileModelDraft.trim(), name: null, contextWindow: null }]
+      : [],
+  );
   const resolvedKeyProfileBaseUrl = resolveCodexProviderBaseUrl(
     keyProfileProviderKindDraft,
     keyProfileBaseUrlDraft,
   ) ?? "";
+  const keyProfileGatewayRequired = keyProfileProviderKindDraft === "opencode";
+  const keyProfileModelRequired = keyProfileProviderKindDraft === "opencode";
   const keyProfileDraftValid =
     keyProfileNameDraft.trim().length > 0 &&
     keyProfileKeyDraft.trim().length > 0 &&
+    (!keyProfileModelRequired || keyProfileModelDraft.trim().length > 0) &&
     (!keyProfileUseGatewayDraft || resolvedKeyProfileBaseUrl.length > 0);
 
   const resetKeyProfileDrafts = () => {
     setEditingKeyProfileId(null);
     setKeyProfileNameDraft("");
     setKeyProfileGroupNameDraft("");
-    setKeyProfileGroupMultiplierDraft("");
     setKeyProfileKeyDraft("");
     setKeyProfileKeyVisible(false);
     setKeyProfileBaseUrlDraft("");
@@ -302,6 +317,8 @@ export function SettingsCodexSection({
     setKeyProfileContextWindowDraft("");
     setKeyProfileMaxOutputTokensDraft("");
     setKeyProfileUseGatewayDraft(false);
+    setKeyProfileSupportsThinkingDraft(false);
+    setKeyProfileSupportsReasoningEffortDraft(false);
     setKeyProfileModelFetchState({ status: "idle", error: null });
     setKeyProfileFetchedModels([]);
     setKeyProfileFetchedAtMs(null);
@@ -344,7 +361,10 @@ export function SettingsCodexSection({
       model: keyProfileModelDraft.trim() || null,
       contextWindow: parsePositiveIntegerDraft(keyProfileContextWindowDraft),
       maxOutputTokens: parsePositiveIntegerDraft(keyProfileMaxOutputTokensDraft),
-      useGateway: keyProfileUseGatewayDraft,
+      useGateway: keyProfileGatewayRequired || keyProfileUseGatewayDraft,
+      supportsThinking:
+        keyProfileSupportsThinkingDraft || keyProfileSupportsReasoningEffortDraft,
+      supportsReasoningEffort: keyProfileSupportsReasoningEffortDraft,
       lastModelRefreshAtMs:
         keyProfileFetchedAtMs ??
         (editingKeyProfileId
@@ -359,11 +379,6 @@ export function SettingsCodexSection({
                 ?.cachedModels ?? []
             : [],
       groupName: keyProfileGroupNameDraft.trim() || keyProfileNameDraft.trim(),
-      groupMultiplier:
-        keyProfileGroupMultiplierDraft.trim().length > 0 &&
-        Number.isFinite(Number(keyProfileGroupMultiplierDraft))
-          ? Math.max(0, Number(keyProfileGroupMultiplierDraft))
-          : null,
     };
     if (editingKeyProfileId) {
       updateCodexKeySettings({
@@ -386,9 +401,6 @@ export function SettingsCodexSection({
     setEditingKeyProfileId(profile.id);
     setKeyProfileNameDraft(profile.name);
     setKeyProfileGroupNameDraft(profile.groupName ?? profile.name);
-    setKeyProfileGroupMultiplierDraft(
-      profile.groupMultiplier == null ? "" : String(profile.groupMultiplier),
-    );
     setKeyProfileKeyDraft(profile.key);
     setKeyProfileKeyVisible(false);
     setKeyProfileBaseUrlDraft(profile.baseUrl ?? "");
@@ -401,6 +413,10 @@ export function SettingsCodexSection({
       profile.maxOutputTokens == null ? "" : String(profile.maxOutputTokens),
     );
     setKeyProfileUseGatewayDraft(Boolean(profile.useGateway));
+    setKeyProfileSupportsThinkingDraft(
+      Boolean(profile.supportsThinking) || Boolean(profile.supportsReasoningEffort),
+    );
+    setKeyProfileSupportsReasoningEffortDraft(Boolean(profile.supportsReasoningEffort));
     setKeyProfileModelFetchState({ status: "idle", error: null });
     setKeyProfileFetchedModels(profile.cachedModels ?? []);
     setKeyProfileFetchedAtMs(profile.lastModelRefreshAtMs ?? null);
@@ -421,10 +437,9 @@ export function SettingsCodexSection({
         keyProfileKeyDraft.trim(),
       );
       const refreshedAt = Date.now();
-      if (models.length > 0 && !keyProfileModelDraft.trim()) {
-        setKeyProfileModelDraft(models[0].id);
-      }
-      setKeyProfileFetchedModels(models);
+      setKeyProfileFetchedModels((existing) =>
+        mergeCodexProviderModels(existing, editingKeyProfile?.cachedModels, models),
+      );
       setKeyProfileFetchedAtMs(refreshedAt);
       setKeyProfileModelFetchState({
         status: "done",
@@ -450,6 +465,9 @@ export function SettingsCodexSection({
           ? null
           : appSettings.activeCodexKeyProfileId,
     });
+    if (editingKeyProfileId === profileId) {
+      resetKeyProfileDrafts();
+    }
   };
 
   const didNormalizeDefaultsRef = useRef(false);
@@ -976,12 +994,16 @@ export function SettingsCodexSection({
                   resolveCodexProviderBaseUrl(providerKind, null) ?? "",
                 );
               }
+              if (providerKind === "opencode") {
+                setKeyProfileUseGatewayDraft(true);
+              }
             }}
           >
             <option value="custom">{t("settings.codex.providerKindCustom")}</option>
             <option value="openai">{t("settings.codex.providerKindOpenai")}</option>
             <option value="deepseek">{t("settings.codex.providerKindDeepseek")}</option>
             <option value="openrouter">{t("settings.codex.providerKindOpenrouter")}</option>
+            <option value="opencode">{t("settings.codex.providerKindOpencode")}</option>
           </select>
           <input
             className="settings-input"
@@ -994,10 +1016,10 @@ export function SettingsCodexSection({
             <input
               className="settings-input"
               type={keyProfileKeyVisible ? "text" : "password"}
-              placeholder="API key"
+              placeholder={t("settings.codex.apiKeyPlaceholder")}
               value={keyProfileKeyDraft}
               onChange={(event) => setKeyProfileKeyDraft(event.target.value)}
-              aria-label="API key"
+              aria-label={t("settings.codex.apiKeyAria")}
             />
             <button
               type="button"
@@ -1015,21 +1037,29 @@ export function SettingsCodexSection({
             aria-label={t("settings.codex.baseUrlAria")}
           />
           <div className="settings-field-row">
-            <input
-              className="settings-input"
-              list="codex-provider-models"
-              placeholder={t("settings.codex.providerModelPlaceholder")}
-              value={keyProfileModelDraft}
-              onChange={(event) => setKeyProfileModelDraft(event.target.value)}
-              aria-label={t("settings.codex.providerModelAria")}
-            />
-            <datalist id="codex-provider-models">
-              {draftModelOptions.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name ?? model.id}
-                </option>
-              ))}
-            </datalist>
+            {fetchedDraftModelOptions.length > 0 ? (
+              <select
+                className="settings-select"
+                value={keyProfileModelDraft}
+                onChange={(event) => setKeyProfileModelDraft(event.target.value)}
+                aria-label={t("settings.codex.providerModelAria")}
+              >
+                <option value="">{t("settings.codex.providerModelPlaceholder")}</option>
+                {draftModelOptions.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name ?? model.id}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="settings-input"
+                placeholder={t("settings.codex.providerModelPlaceholder")}
+                value={keyProfileModelDraft}
+                onChange={(event) => setKeyProfileModelDraft(event.target.value)}
+                aria-label={t("settings.codex.providerModelAria")}
+              />
+            )}
             <button
               type="button"
               className="ghost settings-button-compact"
@@ -1041,6 +1071,11 @@ export function SettingsCodexSection({
                 : t("settings.codex.fetchProviderModels")}
             </button>
           </div>
+          {keyProfileModelRequired && !keyProfileModelDraft.trim() ? (
+            <div className="settings-help settings-help-error">
+              {t("settings.codex.opencodeModelRequired")}
+            </div>
+          ) : null}
           {keyProfileModelFetchState.error ? (
             <div className="settings-help settings-help-error">
               {keyProfileModelFetchState.error}
@@ -1077,26 +1112,50 @@ export function SettingsCodexSection({
           <label className="settings-checkbox">
             <input
               type="checkbox"
-              checked={keyProfileUseGatewayDraft}
+              checked={keyProfileGatewayRequired || keyProfileUseGatewayDraft}
+              disabled={keyProfileGatewayRequired}
               onChange={(event) => setKeyProfileUseGatewayDraft(event.target.checked)}
             />
             <span>{t("settings.codex.useGateway")}</span>
           </label>
+          <label className="settings-checkbox">
+            <input
+              type="checkbox"
+              checked={keyProfileSupportsThinkingDraft}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                setKeyProfileSupportsThinkingDraft(checked);
+                if (!checked) {
+                  setKeyProfileSupportsReasoningEffortDraft(false);
+                }
+              }}
+            />
+            <span>{t("settings.codex.supportsThinking")}</span>
+          </label>
+          <label className="settings-checkbox">
+            <input
+              type="checkbox"
+              checked={keyProfileSupportsReasoningEffortDraft}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                setKeyProfileSupportsReasoningEffortDraft(checked);
+                if (checked) {
+                  setKeyProfileSupportsThinkingDraft(true);
+                }
+              }}
+            />
+            <span>{t("settings.codex.supportsReasoningEffort")}</span>
+          </label>
+          {keyProfileGatewayRequired ? (
+            <div className="settings-help">
+              {t("settings.codex.opencodeGatewayRequired")}
+            </div>
+          ) : null}
           {keyProfileUseGatewayDraft && !resolvedKeyProfileBaseUrl ? (
             <div className="settings-help settings-help-error">
               {t("settings.codex.gatewayBaseUrlRequired")}
             </div>
           ) : null}
-          <input
-            className="settings-input"
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder={t("settings.codex.keyProfileGroupMultiplierPlaceholder")}
-            value={keyProfileGroupMultiplierDraft}
-            onChange={(event) => setKeyProfileGroupMultiplierDraft(event.target.value)}
-            aria-label={t("settings.codex.keyProfileGroupMultiplierAria")}
-          />
           <button
             type="button"
             className="ghost settings-button-compact"
@@ -1170,6 +1229,33 @@ export function SettingsCodexSection({
             {refreshLabel}
           </button>
         </div>
+      </SettingsToggleRow>
+
+      <SettingsToggleRow
+        title={
+          <label htmlFor="token-efficiency-mode">
+            {t("settings.codex.tokenEfficiency")}
+          </label>
+        }
+        subtitle={t("settings.codex.tokenEfficiencyHelp")}
+      >
+        <select
+          id="token-efficiency-mode"
+          className="settings-select"
+          value={appSettings.tokenEfficiencyMode ?? "quality"}
+          onChange={(event) =>
+            void onUpdateAppSettings({
+              ...appSettings,
+              tokenEfficiencyMode: event.target
+                .value as AppSettings["tokenEfficiencyMode"],
+            })
+          }
+          aria-label={t("settings.codex.tokenEfficiency")}
+        >
+          <option value="quality">{t("settings.codex.tokenEfficiencyQuality")}</option>
+          <option value="balanced">{t("settings.codex.tokenEfficiencyBalanced")}</option>
+          <option value="economy">{t("settings.codex.tokenEfficiencyEconomy")}</option>
+        </select>
       </SettingsToggleRow>
 
       <SettingsToggleRow

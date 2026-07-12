@@ -105,6 +105,7 @@ describe("useAppSettings", () => {
     expect(result.current.settings.processFontSize).toBe(15);
     expect(result.current.settings.codeFontSize).toBe(15);
     expect(result.current.settings.showCodexUsage).toBe(false);
+    expect(result.current.settings.workflowRuntimeMode).toBe("shadow");
   });
 
   it("defaults new display settings for legacy persisted data", async () => {
@@ -116,6 +117,7 @@ describe("useAppSettings", () => {
 
     expect(result.current.settings.uiFontSize).toBe(14);
     expect(result.current.settings.messageFontSize).toBe(14);
+    expect(result.current.settings.workflowRuntimeMode).toBe("shadow");
     expect(result.current.settings.processFontSize).toBe(12);
     expect(result.current.settings.codeFontSize).toBe(13);
     expect(result.current.settings.showCodexUsage).toBe(true);
@@ -201,6 +203,8 @@ describe("useAppSettings", () => {
             contextWindow: 128000.8,
             maxOutputTokens: 8192.2,
             useGateway: true,
+            supportsThinking: true,
+            supportsReasoningEffort: true,
             lastModelRefreshAtMs: 1725000000000,
             cachedModels: [
               {
@@ -238,9 +242,10 @@ describe("useAppSettings", () => {
         contextWindow: 128000,
         maxOutputTokens: 8192,
         useGateway: true,
+        supportsThinking: true,
+        supportsReasoningEffort: true,
         lastModelRefreshAtMs: 1725000000000,
         groupName: "Discount",
-        groupMultiplier: 0.07,
         cachedModels: [
           {
             id: "deepseek-chat",
@@ -250,6 +255,35 @@ describe("useAppSettings", () => {
         ],
       }),
     ]);
+    expect(result.current.settings.codexKeyProfiles[0]).not.toHaveProperty("groupMultiplier");
+  });
+
+  it("keeps opencode profiles on the compatibility gateway", async () => {
+    getAppSettingsMock.mockResolvedValue(
+      ({
+        activeCodexKeyProfileId: "opencode",
+        codexKeyProfiles: [
+          {
+            id: "opencode",
+            name: "OpenCode Zen",
+            providerKind: "opencode",
+            key: "sk-test",
+            useGateway: false,
+          },
+        ],
+      } as unknown) as AppSettings,
+    );
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.codexKeyProfiles[0]).toEqual(
+      expect.objectContaining({
+        providerKind: "opencode",
+        useGateway: true,
+      }),
+    );
   });
 
   it("keeps defaults when getAppSettings fails", async () => {

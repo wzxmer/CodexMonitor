@@ -17,6 +17,8 @@ pub(crate) mod provider_gateway_core;
 pub(crate) mod provider_profiles_core;
 pub(crate) mod session_manager_core;
 pub(crate) mod settings_core;
+pub(crate) mod workflow_preflight_core;
+pub(crate) mod workflow_registry_core;
 pub(crate) mod workspace_rpc;
 pub(crate) mod workspaces_core;
 pub(crate) mod worktree_core;

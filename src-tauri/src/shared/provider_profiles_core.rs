@@ -1,5 +1,6 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::shared::provider_gateway_core::{
@@ -10,9 +11,13 @@ use crate::types::AppSettings;
 pub(crate) struct CodexKeyRuntime {
     pub(crate) env: Vec<(String, String)>,
     pub(crate) codex_args: Option<String>,
+    pub(crate) comparison_codex_args: Option<String>,
     pub(crate) provider_runtime_fingerprint: Option<String>,
     pub(crate) gateway_shutdown: Option<ProviderGatewayShutdown>,
 }
+
+const CODEX_MONITOR_PROVIDER_ID: &str = "codex_monitor";
+const CODEX_MONITOR_PROVIDER_KEY_ENV: &str = "CODEX_MONITOR_PROVIDER_KEY";
 
 fn normalize_http_url(
     raw_url: &str,
@@ -67,6 +72,45 @@ pub(crate) fn build_provider_models_url(base_url: &str) -> Result<reqwest::Url, 
     Ok(models_url)
 }
 
+fn merge_provider_model_payloads(payloads: Vec<Value>) -> Value {
+    let mut merged = Vec::<Value>::new();
+    let mut model_indexes = HashMap::<String, usize>::new();
+
+    for payload in payloads {
+        let Some(models) = payload.get("data").and_then(Value::as_array) else {
+            continue;
+        };
+        for model in models {
+            let Some(id) = model
+                .get("id")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+            else {
+                continue;
+            };
+            if let Some(index) = model_indexes.get(id).copied() {
+                let Some(existing) = merged[index].as_object_mut() else {
+                    continue;
+                };
+                let Some(update) = model.as_object() else {
+                    continue;
+                };
+                for (key, value) in update {
+                    if !value.is_null() {
+                        existing.insert(key.clone(), value.clone());
+                    }
+                }
+                continue;
+            }
+            model_indexes.insert(id.to_string(), merged.len());
+            merged.push(model.clone());
+        }
+    }
+
+    serde_json::json!({ "data": merged })
+}
+
 pub(crate) async fn provider_model_list_core(
     base_url: String,
     api_key: String,
@@ -79,26 +123,55 @@ pub(crate) async fn provider_model_list_core(
 
     let models_url = build_provider_models_url(base_url)?;
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(6))
         .build()
         .map_err(|_| "Failed to initialize provider model client".to_string())?;
-    let response = client
-        .get(models_url)
-        .bearer_auth(api_key)
-        .send()
-        .await
-        .map_err(|_| "Failed to fetch provider models".to_string())?;
-    if response.status() == reqwest::StatusCode::UNAUTHORIZED {
-        return Err("Provider API key was rejected".to_string());
+    let mut successful_payloads = Vec::new();
+    let mut last_error = None;
+    for attempt in 0..3 {
+        let response = client
+            .get(models_url.clone())
+            .header(reqwest::header::ACCEPT, "application/json")
+            .header(reqwest::header::CACHE_CONTROL, "no-cache")
+            .header(
+                reqwest::header::USER_AGENT,
+                concat!("CodexMonitor/", env!("CARGO_PKG_VERSION")),
+            )
+            .bearer_auth(api_key)
+            .send()
+            .await;
+
+        match response {
+            Ok(response) if response.status().is_success() => match response.text().await {
+                Ok(body) => match serde_json::from_str::<Value>(&body) {
+                    Ok(payload) => successful_payloads.push(payload),
+                    Err(_) => {
+                        last_error = Some("Failed to parse provider model response".to_string())
+                    }
+                },
+                Err(_) => last_error = Some("Failed to read provider model response".to_string()),
+            },
+            Ok(response) if response.status() == reqwest::StatusCode::UNAUTHORIZED => {
+                last_error = Some("Provider API key was rejected (HTTP 401)".to_string())
+            }
+            Ok(response) => {
+                last_error = Some(format!(
+                    "Provider model list request was rejected (HTTP {})",
+                    response.status().as_u16()
+                ))
+            }
+            Err(_) => last_error = Some("Failed to fetch provider models".to_string()),
+        }
+
+        if attempt < 2 {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
     }
-    if !response.status().is_success() {
-        return Err("Provider model list request was rejected".to_string());
+
+    if successful_payloads.is_empty() {
+        return Err(last_error.unwrap_or_else(|| "Failed to fetch provider models".to_string()));
     }
-    let body = response
-        .text()
-        .await
-        .map_err(|_| "Failed to read provider model response".to_string())?;
-    serde_json::from_str(&body).map_err(|_| "Failed to parse provider model response".to_string())
+    Ok(merge_provider_model_payloads(successful_payloads))
 }
 
 pub(crate) async fn third_party_key_usage_core(
@@ -159,6 +232,7 @@ pub(crate) async fn active_codex_key_runtime(
         return Ok(CodexKeyRuntime {
             env: Vec::new(),
             codex_args,
+            comparison_codex_args: None,
             provider_runtime_fingerprint: None,
             gateway_shutdown: None,
         });
@@ -171,6 +245,7 @@ pub(crate) async fn active_codex_key_runtime(
         return Ok(CodexKeyRuntime {
             env: Vec::new(),
             codex_args,
+            comparison_codex_args: None,
             provider_runtime_fingerprint: None,
             gateway_shutdown: None,
         });
@@ -180,41 +255,59 @@ pub(crate) async fn active_codex_key_runtime(
         return Ok(CodexKeyRuntime {
             env: Vec::new(),
             codex_args,
+            comparison_codex_args: None,
             provider_runtime_fingerprint: None,
             gateway_shutdown: None,
         });
     }
     let provider_runtime_fingerprint = Some(profile_runtime_fingerprint(profile));
-    let codex_args = merge_profile_codex_args(codex_args, profile)?;
     let base_url = resolve_profile_base_url(profile);
-    if profile.use_gateway && base_url.is_none() {
+    let comparison_codex_args =
+        merge_profile_codex_args(codex_args.clone(), profile, base_url.as_deref())?;
+    let use_gateway = profile_uses_gateway(profile);
+    if use_gateway && base_url.is_none() {
         return Err("Gateway profiles require a provider base URL".to_string());
     }
-    if profile.use_gateway {
+    if use_gateway {
         let base_url = base_url.as_deref().unwrap_or_default();
         let gateway = start_provider_gateway(ProviderGatewayConfig {
             upstream_base_url: base_url.to_string(),
             upstream_api_key: key.to_string(),
             max_output_tokens: profile.max_output_tokens,
+            supports_thinking: profile.supports_thinking || profile.supports_reasoning_effort,
+            supports_reasoning_effort: profile.supports_reasoning_effort,
         })
         .await?;
+        let codex_args =
+            merge_profile_codex_args(codex_args, profile, Some(gateway.base_url.as_str()))?;
         return Ok(CodexKeyRuntime {
-            env: vec![
-                ("OPENAI_API_KEY".to_string(), gateway.access_token),
-                ("OPENAI_BASE_URL".to_string(), gateway.base_url),
-            ],
+            env: vec![(
+                CODEX_MONITOR_PROVIDER_KEY_ENV.to_string(),
+                gateway.access_token,
+            )],
             codex_args,
+            comparison_codex_args: Some(comparison_codex_args.unwrap_or_default()),
             provider_runtime_fingerprint,
             gateway_shutdown: Some(gateway.shutdown),
         });
     }
-    let mut env = vec![(profile.key_env_var.trim().to_string(), key.to_string())];
+    let codex_args = merge_profile_codex_args(codex_args, profile, base_url.as_deref())?;
+    let mut env = vec![(CODEX_MONITOR_PROVIDER_KEY_ENV.to_string(), key.to_string())];
+    let legacy_key_env = profile.key_env_var.trim();
+    if !legacy_key_env.is_empty() && legacy_key_env != CODEX_MONITOR_PROVIDER_KEY_ENV {
+        env.push((legacy_key_env.to_string(), key.to_string()));
+    }
     if let Some(base_url) = base_url {
-        env.push((profile.base_url_env_var.trim().to_string(), base_url));
+        env.push(("OPENAI_BASE_URL".to_string(), base_url.clone()));
+        let legacy_base_url_env = profile.base_url_env_var.trim();
+        if !legacy_base_url_env.is_empty() && legacy_base_url_env != "OPENAI_BASE_URL" {
+            env.push((legacy_base_url_env.to_string(), base_url));
+        }
     }
     Ok(CodexKeyRuntime {
         env,
         codex_args,
+        comparison_codex_args: Some(comparison_codex_args.unwrap_or_default()),
         provider_runtime_fingerprint,
         gateway_shutdown: None,
     })
@@ -252,7 +345,11 @@ pub(crate) fn active_profile_codex_args(
     else {
         return Ok(codex_args);
     };
-    merge_profile_codex_args(codex_args, profile)
+    merge_profile_codex_args(
+        codex_args,
+        profile,
+        resolve_profile_base_url(profile).as_deref(),
+    )
 }
 
 pub(crate) fn resolve_profile_base_url(profile: &crate::types::CodexKeyProfile) -> Option<String> {
@@ -267,9 +364,18 @@ pub(crate) fn resolve_profile_base_url(profile: &crate::types::CodexKeyProfile) 
                 "openai" => Some("https://api.openai.com/v1".to_string()),
                 "deepseek" => Some("https://api.deepseek.com/v1".to_string()),
                 "openrouter" => Some("https://openrouter.ai/api/v1".to_string()),
+                "opencode" => Some("https://opencode.ai/zen/go/v1".to_string()),
                 _ => None,
             },
         )
+}
+
+fn profile_uses_gateway(profile: &crate::types::CodexKeyProfile) -> bool {
+    profile.use_gateway
+        || profile
+            .provider_kind
+            .trim()
+            .eq_ignore_ascii_case("opencode")
 }
 
 fn profile_runtime_fingerprint(profile: &crate::types::CodexKeyProfile) -> String {
@@ -302,21 +408,71 @@ fn profile_runtime_fingerprint(profile: &crate::types::CodexKeyProfile) -> Strin
         &mut hasher,
         &profile.max_output_tokens.unwrap_or_default().to_string(),
     );
-    update_field(&mut hasher, if profile.use_gateway { "1" } else { "0" });
+    update_field(
+        &mut hasher,
+        if profile_uses_gateway(profile) {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    update_field(
+        &mut hasher,
+        if profile.supports_thinking || profile.supports_reasoning_effort {
+            "1"
+        } else {
+            "0"
+        },
+    );
+    update_field(
+        &mut hasher,
+        if profile.supports_reasoning_effort {
+            "1"
+        } else {
+            "0"
+        },
+    );
     format!("{:x}", hasher.finalize())
 }
 
 fn merge_profile_codex_args(
     codex_args: Option<String>,
     profile: &crate::types::CodexKeyProfile,
+    runtime_base_url: Option<&str>,
 ) -> Result<Option<String>, String> {
     let mut args = crate::codex::args::parse_codex_args(codex_args.as_deref())?;
-    if let Some(model) = profile
+    let model = profile
         .model
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
+        .filter(|value| !value.is_empty());
+    if profile
+        .provider_kind
+        .trim()
+        .eq_ignore_ascii_case("opencode")
+        && model.is_none()
     {
+        return Err("OpenCode profiles require an explicit model".to_string());
+    }
+    let runtime_base_url = runtime_base_url
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "Provider profiles require a provider base URL".to_string())?;
+    for value in [
+        format!("model_provider={CODEX_MONITOR_PROVIDER_ID}"),
+        format!("model_providers.{CODEX_MONITOR_PROVIDER_ID}.name=CodexMonitor"),
+        format!("model_providers.{CODEX_MONITOR_PROVIDER_ID}.base_url={runtime_base_url}"),
+        format!(
+            "model_providers.{CODEX_MONITOR_PROVIDER_ID}.env_key={CODEX_MONITOR_PROVIDER_KEY_ENV}"
+        ),
+        format!("model_providers.{CODEX_MONITOR_PROVIDER_ID}.wire_api=responses"),
+        format!("model_providers.{CODEX_MONITOR_PROVIDER_ID}.requires_openai_auth=false"),
+        format!("model_providers.{CODEX_MONITOR_PROVIDER_ID}.supports_websockets=false"),
+    ] {
+        args.push("-c".to_string());
+        args.push(value);
+    }
+    if let Some(model) = model {
         args.push("-c".to_string());
         args.push(format!("model={model}"));
     }
@@ -333,7 +489,10 @@ fn merge_profile_codex_args(
 
 #[cfg(test)]
 mod tests {
-    use super::{active_codex_key_runtime, build_provider_models_url, build_provider_usage_url};
+    use super::{
+        active_codex_key_runtime, build_provider_models_url, build_provider_usage_url,
+        merge_provider_model_payloads,
+    };
     use crate::codex::args::parse_codex_args;
     use crate::types::{AppSettings, CodexKeyProfile};
 
@@ -353,6 +512,37 @@ mod tests {
             .to_string();
 
         assert_eq!(url, "https://api.deepseek.com/v1/models");
+    }
+
+    #[test]
+    fn provider_model_payloads_merge_partial_results_by_id() {
+        let merged = merge_provider_model_payloads(vec![
+            serde_json::json!({
+                "data": [
+                    { "id": "model-a", "name": "Model A", "context_window": 128000 }
+                ]
+            }),
+            serde_json::json!({
+                "data": [
+                    { "id": "model-a", "name": "Model A refreshed" },
+                    { "id": "model-b", "name": "Model B" }
+                ]
+            }),
+        ]);
+
+        assert_eq!(
+            merged,
+            serde_json::json!({
+                "data": [
+                    {
+                        "id": "model-a",
+                        "name": "Model A refreshed",
+                        "context_window": 128000
+                    },
+                    { "id": "model-b", "name": "Model B" }
+                ]
+            })
+        );
     }
 
     #[test]
@@ -379,10 +569,11 @@ mod tests {
             context_window: Some(128_000),
             max_output_tokens: None,
             use_gateway: true,
+            supports_thinking: true,
+            supports_reasoning_effort: true,
             last_model_refresh_at_ms: None,
             cached_models: Vec::new(),
             group_name: None,
-            group_multiplier: None,
         }];
         settings.active_codex_key_profile_id = Some("gateway".to_string());
 
@@ -401,28 +592,27 @@ mod tests {
 
         assert!(env.iter().all(|(name, _)| name != "CODEX_HOME"));
         assert!(runtime_env.gateway_shutdown.is_some());
-        assert_eq!(
-            parse_codex_args(runtime_env.codex_args.as_deref()).expect("merged args"),
-            vec![
-                "--profile",
-                "inherited",
-                "-c",
-                "model=deepseek-chat",
-                "-c",
-                "model_context_window=128000"
-            ]
-        );
+        let args = parse_codex_args(runtime_env.codex_args.as_deref()).expect("merged args");
+        assert!(args
+            .windows(2)
+            .any(|pair| { pair[0] == "-c" && pair[1] == "model_provider=codex_monitor" }));
+        assert!(args.windows(2).any(|pair| {
+            pair[0] == "-c"
+                && pair[1].starts_with("model_providers.codex_monitor.base_url=http://127.0.0.1:")
+                && pair[1].ends_with("/v1")
+        }));
+        assert!(args.windows(2).any(|pair| {
+            pair[0] == "-c" && pair[1] == "model_providers.codex_monitor.supports_websockets=false"
+        }));
+        assert!(args
+            .windows(2)
+            .any(|pair| { pair[0] == "-c" && pair[1] == "model=deepseek-chat" }));
         assert!(matches!(
             env.iter()
-                .find(|(name, _)| name == "OPENAI_API_KEY")
+                .find(|(name, _)| name == "CODEX_MONITOR_PROVIDER_KEY")
                 .map(|(_, value)| value.as_str()),
             Some(value) if value.starts_with("codex-monitor-") && value != "sk-provider"
         ));
-        assert!(env
-            .iter()
-            .find(|(name, _)| name == "OPENAI_BASE_URL")
-            .map(|(_, value)| value.starts_with("http://127.0.0.1:") && value.ends_with("/v1"))
-            .unwrap_or(false));
     }
 
     #[test]
@@ -440,10 +630,11 @@ mod tests {
             context_window: None,
             max_output_tokens: None,
             use_gateway: false,
+            supports_thinking: false,
+            supports_reasoning_effort: false,
             last_model_refresh_at_ms: None,
             cached_models: Vec::new(),
             group_name: None,
-            group_multiplier: None,
         }];
         settings.active_codex_key_profile_id = Some("deepseek".to_string());
 
@@ -460,5 +651,145 @@ mod tests {
             "OPENAI_BASE_URL".to_string(),
             "https://api.deepseek.com/v1".to_string()
         )));
+    }
+
+    #[test]
+    fn active_profile_keeps_legacy_env_aliases_with_custom_provider() {
+        let mut settings = AppSettings::default();
+        settings.codex_key_profiles = vec![CodexKeyProfile {
+            id: "legacy".to_string(),
+            name: "Legacy".to_string(),
+            provider_kind: "custom".to_string(),
+            key_env_var: "LEGACY_API_KEY".to_string(),
+            key: "sk-provider".to_string(),
+            base_url_env_var: "LEGACY_BASE_URL".to_string(),
+            base_url: Some("https://api.example.com/v1".to_string()),
+            model: Some("example-model".to_string()),
+            context_window: None,
+            max_output_tokens: None,
+            use_gateway: false,
+            supports_thinking: false,
+            supports_reasoning_effort: false,
+            last_model_refresh_at_ms: None,
+            cached_models: Vec::new(),
+            group_name: None,
+        }];
+        settings.active_codex_key_profile_id = Some("legacy".to_string());
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("runtime");
+        let runtime_env = runtime
+            .block_on(active_codex_key_runtime(&settings, None))
+            .expect("runtime env");
+
+        assert!(runtime_env.env.contains(&(
+            "CODEX_MONITOR_PROVIDER_KEY".to_string(),
+            "sk-provider".to_string()
+        )));
+        assert!(runtime_env
+            .env
+            .contains(&("LEGACY_API_KEY".to_string(), "sk-provider".to_string())));
+        assert!(runtime_env.env.contains(&(
+            "OPENAI_BASE_URL".to_string(),
+            "https://api.example.com/v1".to_string()
+        )));
+        assert!(runtime_env.env.contains(&(
+            "LEGACY_BASE_URL".to_string(),
+            "https://api.example.com/v1".to_string()
+        )));
+    }
+
+    #[test]
+    fn active_opencode_profile_forces_compatibility_gateway() {
+        let mut settings = AppSettings::default();
+        settings.codex_key_profiles = vec![CodexKeyProfile {
+            id: "opencode".to_string(),
+            name: "OpenCode Zen".to_string(),
+            provider_kind: "opencode".to_string(),
+            key_env_var: "OPENAI_API_KEY".to_string(),
+            key: "sk-provider".to_string(),
+            base_url_env_var: "OPENAI_BASE_URL".to_string(),
+            base_url: None,
+            model: Some("kimi-k2.7-code".to_string()),
+            context_window: None,
+            max_output_tokens: None,
+            use_gateway: false,
+            supports_thinking: false,
+            supports_reasoning_effort: false,
+            last_model_refresh_at_ms: None,
+            cached_models: Vec::new(),
+            group_name: None,
+        }];
+        settings.active_codex_key_profile_id = Some("opencode".to_string());
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("runtime");
+        let runtime_env = runtime
+            .block_on(active_codex_key_runtime(&settings, None))
+            .expect("runtime env");
+
+        assert!(runtime_env.gateway_shutdown.is_some());
+        let args = parse_codex_args(runtime_env.codex_args.as_deref()).expect("merged args");
+        assert!(args
+            .windows(2)
+            .any(|pair| { pair[0] == "-c" && pair[1] == "model_provider=codex_monitor" }));
+        assert!(args.windows(2).any(|pair| {
+            pair[0] == "-c"
+                && pair[1].starts_with("model_providers.codex_monitor.base_url=http://127.0.0.1:")
+                && pair[1].ends_with("/v1")
+        }));
+        assert!(args.windows(2).any(|pair| {
+            pair[0] == "-c" && pair[1] == "model_providers.codex_monitor.supports_websockets=false"
+        }));
+        assert!(args
+            .windows(2)
+            .any(|pair| { pair[0] == "-c" && pair[1] == "model=kimi-k2.7-code" }));
+        assert!(runtime_env.env.iter().any(|(name, value)| {
+            name == "CODEX_MONITOR_PROVIDER_KEY"
+                && value.starts_with("codex-monitor-")
+                && value != "sk-provider"
+        }));
+    }
+
+    #[test]
+    fn active_opencode_profile_requires_explicit_model() {
+        let mut settings = AppSettings::default();
+        settings.codex_key_profiles = vec![CodexKeyProfile {
+            id: "opencode".to_string(),
+            name: "OpenCode Zen".to_string(),
+            provider_kind: "opencode".to_string(),
+            key_env_var: "OPENAI_API_KEY".to_string(),
+            key: "sk-provider".to_string(),
+            base_url_env_var: "OPENAI_BASE_URL".to_string(),
+            base_url: None,
+            model: None,
+            context_window: None,
+            max_output_tokens: None,
+            use_gateway: true,
+            supports_thinking: false,
+            supports_reasoning_effort: false,
+            last_model_refresh_at_ms: None,
+            cached_models: Vec::new(),
+            group_name: None,
+        }];
+        settings.active_codex_key_profile_id = Some("opencode".to_string());
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("runtime");
+        let error = match runtime.block_on(active_codex_key_runtime(&settings, None)) {
+            Ok(_) => panic!("missing model should fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error, "OpenCode profiles require an explicit model");
     }
 }

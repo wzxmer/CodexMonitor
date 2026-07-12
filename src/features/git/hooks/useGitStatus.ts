@@ -32,6 +32,7 @@ export function useGitStatus(activeWorkspace: WorkspaceInfo | null) {
   const requestIdRef = useRef(0);
   const workspaceIdRef = useRef<string | null>(activeWorkspace?.id ?? null);
   const cachedStatusRef = useRef<Map<string, GitStatusState>>(new Map());
+  const inFlightWorkspaceIdsRef = useRef(new Set<string>());
   const workspaceId = activeWorkspace?.id ?? null;
 
   const resolveBranchName = useCallback(
@@ -53,6 +54,10 @@ export function useGitStatus(activeWorkspace: WorkspaceInfo | null) {
       setStatus(emptyStatus);
       return;
     }
+    if (inFlightWorkspaceIdsRef.current.has(workspaceId)) {
+      return;
+    }
+    inFlightWorkspaceIdsRef.current.add(workspaceId);
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     return getGitStatus(workspaceId)
@@ -89,6 +94,9 @@ export function useGitStatus(activeWorkspace: WorkspaceInfo | null) {
           ? { ...cached, error: message }
           : { ...emptyStatus, branchName: "unknown", error: message };
         setStatus(nextStatus);
+      })
+      .finally(() => {
+        inFlightWorkspaceIdsRef.current.delete(workspaceId);
       });
   }, [resolveBranchName, workspaceId]);
 

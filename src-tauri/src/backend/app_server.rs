@@ -952,6 +952,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
     entry: WorkspaceEntry,
     default_codex_bin: Option<String>,
     codex_args: Option<String>,
+    comparison_codex_args: Option<String>,
     codex_env: Vec<(String, String)>,
     provider_runtime_fingerprint: Option<String>,
     provider_gateway_shutdown: Option<ProviderGatewayShutdown>,
@@ -984,7 +985,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
     let stderr = child.stderr.take().ok_or("missing stderr")?;
 
     let session = Arc::new(WorkspaceSession {
-        codex_args,
+        codex_args: comparison_codex_args.or(codex_args),
         provider_runtime_fingerprint,
         child: Mutex::new(child),
         stdin: Mutex::new(stdin),

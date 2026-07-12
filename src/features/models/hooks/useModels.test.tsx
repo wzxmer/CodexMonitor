@@ -18,6 +18,13 @@ const workspace: WorkspaceInfo = {
   settings: { sidebarCollapsed: false },
 };
 
+const workspaceTwo: WorkspaceInfo = {
+  ...workspace,
+  id: "workspace-2",
+  name: "Other Workspace",
+  path: "/tmp/other",
+};
+
 describe("useModels", () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -198,5 +205,111 @@ describe("useModels", () => {
 
     expect(result.current.models).toHaveLength(1);
     expect(result.current.models[0].id).toBe("custom-model");
+  });
+
+  it("uses active provider models instead of the previous app-server list", async () => {
+    vi.mocked(getModelList).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "old-provider-model",
+            model: "gpt-5.6-sol",
+            displayName: "Old Provider",
+            supportedReasoningEfforts: [],
+            defaultReasoningEffort: null,
+            isDefault: true,
+          },
+        ],
+      },
+    });
+    vi.mocked(getConfigModel).mockResolvedValue("gpt-5.6-sol");
+    const providerModels = [
+      {
+        id: "kimi-k2.7-code",
+        model: "kimi-k2.7-code",
+        displayName: "Kimi K2.7 Code",
+        description: "OpenCode",
+        supportedReasoningEfforts: [],
+        defaultReasoningEffort: null,
+        isDefault: true,
+      },
+    ];
+
+    const { result } = renderHook(() =>
+      useModels({
+        activeWorkspace: workspace,
+        preferredModelId: "kimi-k2.7-code",
+        providerModels,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.models).toEqual(providerModels));
+    expect(result.current.selectedModelId).toBe("kimi-k2.7-code");
+
+    await act(async () => {
+      await result.current.refreshModels();
+    });
+    expect(result.current.models).toEqual(providerModels);
+  });
+
+  it("does not expose a stale model response after switching workspaces", async () => {
+    let resolveFirstModels: ((value: unknown) => void) | null = null;
+    let resolveSecondModels: ((value: unknown) => void) | null = null;
+    vi.mocked(getModelList)
+      .mockImplementationOnce(
+        () => new Promise((resolve) => {
+          resolveFirstModels = resolve;
+        }),
+      )
+      .mockImplementationOnce(
+        () => new Promise((resolve) => {
+          resolveSecondModels = resolve;
+        }),
+      );
+    vi.mocked(getConfigModel)
+      .mockResolvedValueOnce("workspace-one-model")
+      .mockResolvedValueOnce("workspace-two-model");
+
+    const { result, rerender } = renderHook(
+      ({ activeWorkspace }) => useModels({ activeWorkspace }),
+      { initialProps: { activeWorkspace: workspace } },
+    );
+    await waitFor(() => expect(getModelList).toHaveBeenCalledWith("workspace-1"));
+    rerender({ activeWorkspace: workspaceTwo });
+
+    await act(async () => {
+      resolveFirstModels?.({
+        result: {
+          data: [{
+            id: "workspace-one-model",
+            model: "workspace-one-model",
+            displayName: "Workspace One",
+            supportedReasoningEfforts: [],
+            defaultReasoningEffort: null,
+            isDefault: true,
+          }],
+        },
+      });
+    });
+
+    expect(result.current.models.map((model) => model.id)).not.toContain("workspace-one-model");
+    await waitFor(() => expect(getModelList).toHaveBeenCalledWith("workspace-2"));
+    await act(async () => {
+      resolveSecondModels?.({
+        result: {
+          data: [{
+            id: "workspace-two-model",
+            model: "workspace-two-model",
+            displayName: "Workspace Two",
+            supportedReasoningEfforts: [],
+            defaultReasoningEffort: null,
+            isDefault: true,
+          }],
+        },
+      });
+    });
+    await waitFor(() => {
+      expect(result.current.models.map((model) => model.id)).toEqual(["workspace-two-model"]);
+    });
   });
 });

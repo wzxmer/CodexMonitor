@@ -209,6 +209,7 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "thread_live_subscribe"
             | "thread_live_unsubscribe"
             | "skills_list"
+            | "workflow_preflight_preview"
             | "worktree_setup_status"
     )
 }

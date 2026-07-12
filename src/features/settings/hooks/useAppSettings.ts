@@ -50,13 +50,21 @@ const allowedComposerSendShortcut = new Set([
   "steer-priority",
 ]);
 const allowedComposerTriggerMode = new Set(["default", "swap-slash-at"]);
+const allowedTokenEfficiencyModes = new Set(["quality", "balanced", "economy"]);
+const allowedWorkflowRuntimeModes = new Set(["off", "shadow", "active"]);
 const DEFAULT_REMOTE_BACKEND_HOST = "127.0.0.1:4732";
 const DEFAULT_REMOTE_BACKEND_ID = "remote-default";
 const DEFAULT_REMOTE_BACKEND_NAME = "Primary remote";
 const DEFAULT_REMOTE_PROVIDER: AppSettings["remoteBackendProvider"] = "tcp";
 const DEFAULT_CODEX_KEY_ENV_VAR = "OPENAI_API_KEY";
 const DEFAULT_CODEX_BASE_URL_ENV_VAR = "OPENAI_BASE_URL";
-const allowedCodexProviderKinds = new Set(["openai", "deepseek", "openrouter", "custom"]);
+const allowedCodexProviderKinds = new Set([
+  "openai",
+  "deepseek",
+  "openrouter",
+  "opencode",
+  "custom",
+]);
 const DEFAULT_MESSAGE_USER_BUBBLE_COLOR = "#d9ebff";
 const DEFAULT_MESSAGE_USER_TEXT_COLOR = "#102033";
 const DEFAULT_MESSAGE_CANVAS_COLOR = "#eef1f6";
@@ -223,7 +231,10 @@ function normalizeCodexKeyProfiles(
         model: profile.model?.trim() || null,
         contextWindow: normalizePositiveInteger(profile.contextWindow),
         maxOutputTokens: normalizePositiveInteger(profile.maxOutputTokens),
-        useGateway: Boolean(profile.useGateway),
+        useGateway: providerKind === "opencode" || Boolean(profile.useGateway),
+        supportsThinking:
+          Boolean(profile.supportsThinking) || Boolean(profile.supportsReasoningEffort),
+        supportsReasoningEffort: Boolean(profile.supportsReasoningEffort),
         lastModelRefreshAtMs:
           typeof profile.lastModelRefreshAtMs === "number" &&
           Number.isFinite(profile.lastModelRefreshAtMs) &&
@@ -232,12 +243,6 @@ function normalizeCodexKeyProfiles(
             : null,
         cachedModels,
         groupName: profile.groupName?.trim() || profile.name?.trim() || `Key ${index + 1}`,
-        groupMultiplier:
-          typeof profile.groupMultiplier === "number" &&
-          Number.isFinite(profile.groupMultiplier) &&
-          profile.groupMultiplier >= 0
-            ? profile.groupMultiplier
-            : null,
       };
     })
     .filter((profile) => profile.key.length > 0);
@@ -290,13 +295,14 @@ function buildDefaultSettings(): AppSettings {
     cycleWorkspacePrevShortcut: isMac ? "cmd+shift+up" : "ctrl+alt+shift+up",
     lastComposerModelId: null,
     lastComposerReasoningEffort: null,
+    tokenEfficiencyMode: "quality",
+    workflowRuntimeMode: "shadow",
     uiScale: UI_SCALE_DEFAULT,
     appLanguage: "system",
     theme: "system",
     themeAccent: "codex",
     showCodexUsage: true,
     usageShowRemaining: false,
-    thirdPartyUsageMultiplier: 1,
     showMessageFilePath: true,
     messageToolGroupsCollapsedByDefault: false,
     messageReadingStyle: "bubble",
@@ -411,6 +417,16 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
         : [],
       codexKeyProfiles,
     activeCodexKeyProfileId,
+    tokenEfficiencyMode: allowedTokenEfficiencyModes.has(
+      settings.tokenEfficiencyMode ?? "",
+    )
+      ? settings.tokenEfficiencyMode
+      : "quality",
+    workflowRuntimeMode: allowedWorkflowRuntimeModes.has(
+      settings.workflowRuntimeMode ?? "",
+    )
+      ? settings.workflowRuntimeMode
+      : "shadow",
     uiScale: clampUiScale(settings.uiScale),
     appLanguage: allowedAppLanguages.has(settings.appLanguage)
       ? settings.appLanguage
@@ -421,12 +437,6 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
       : "codex",
     showCodexUsage:
       typeof settings.showCodexUsage === "boolean" ? settings.showCodexUsage : true,
-    thirdPartyUsageMultiplier:
-      typeof settings.thirdPartyUsageMultiplier === "number" &&
-      Number.isFinite(settings.thirdPartyUsageMultiplier) &&
-      settings.thirdPartyUsageMultiplier >= 0
-        ? settings.thirdPartyUsageMultiplier
-        : 1,
     composerLargePasteBehavior:
       settings.composerLargePasteBehavior === "keepText" ? "keepText" : "smart",
     messageToolGroupsCollapsedByDefault:

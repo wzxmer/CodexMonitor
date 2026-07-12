@@ -769,13 +769,15 @@ pub(crate) struct CodexKeyProfile {
     #[serde(default)]
     pub(crate) use_gateway: bool,
     #[serde(default)]
+    pub(crate) supports_thinking: bool,
+    #[serde(default)]
+    pub(crate) supports_reasoning_effort: bool,
+    #[serde(default)]
     pub(crate) last_model_refresh_at_ms: Option<i64>,
     #[serde(default)]
     pub(crate) cached_models: Vec<CodexProviderModel>,
     #[serde(default)]
     pub(crate) group_name: Option<String>,
-    #[serde(default)]
-    pub(crate) group_multiplier: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -906,6 +908,16 @@ pub(crate) struct AppSettings {
     pub(crate) last_composer_model_id: Option<String>,
     #[serde(default, rename = "lastComposerReasoningEffort")]
     pub(crate) last_composer_reasoning_effort: Option<String>,
+    #[serde(
+        default = "default_token_efficiency_mode",
+        rename = "tokenEfficiencyMode"
+    )]
+    pub(crate) token_efficiency_mode: String,
+    #[serde(
+        default = "default_workflow_runtime_mode",
+        rename = "workflowRuntimeMode"
+    )]
+    pub(crate) workflow_runtime_mode: String,
     #[serde(default = "default_ui_scale", rename = "uiScale")]
     pub(crate) ui_scale: f64,
     #[serde(default = "default_app_language", rename = "appLanguage")]
@@ -921,11 +933,6 @@ pub(crate) struct AppSettings {
         rename = "usageShowRemaining"
     )]
     pub(crate) usage_show_remaining: bool,
-    #[serde(
-        default = "default_third_party_usage_multiplier",
-        rename = "thirdPartyUsageMultiplier"
-    )]
-    pub(crate) third_party_usage_multiplier: f64,
     #[serde(
         default = "default_show_message_file_path",
         rename = "showMessageFilePath"
@@ -1251,10 +1258,6 @@ fn default_show_codex_usage() -> bool {
 
 fn default_usage_show_remaining() -> bool {
     false
-}
-
-fn default_third_party_usage_multiplier() -> f64 {
-    1.0
 }
 
 fn default_show_message_file_path() -> bool {
@@ -1774,6 +1777,14 @@ fn default_codex_provider_kind() -> String {
     "custom".to_string()
 }
 
+fn default_token_efficiency_mode() -> String {
+    "quality".to_string()
+}
+
+fn default_workflow_runtime_mode() -> String {
+    "shadow".to_string()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -1811,13 +1822,14 @@ impl Default for AppSettings {
             cycle_workspace_prev_shortcut: default_cycle_workspace_prev_shortcut(),
             last_composer_model_id: None,
             last_composer_reasoning_effort: None,
+            token_efficiency_mode: default_token_efficiency_mode(),
+            workflow_runtime_mode: default_workflow_runtime_mode(),
             ui_scale: 1.0,
             app_language: default_app_language(),
             theme: default_theme(),
             theme_accent: default_theme_accent(),
             show_codex_usage: default_show_codex_usage(),
             usage_show_remaining: default_usage_show_remaining(),
-            third_party_usage_multiplier: default_third_party_usage_multiplier(),
             show_message_file_path: default_show_message_file_path(),
             message_tool_groups_collapsed_by_default:
                 default_message_tool_groups_collapsed_by_default(),
@@ -2007,11 +2019,12 @@ mod tests {
         );
         assert!(settings.last_composer_model_id.is_none());
         assert!(settings.last_composer_reasoning_effort.is_none());
+        assert_eq!(settings.token_efficiency_mode, "quality");
+        assert_eq!(settings.workflow_runtime_mode, "shadow");
         assert!((settings.ui_scale - 1.0).abs() < f64::EPSILON);
         assert_eq!(settings.app_language, "system");
         assert_eq!(settings.theme, "system");
         assert!(!settings.usage_show_remaining);
-        assert!((settings.third_party_usage_multiplier - 1.0).abs() < f64::EPSILON);
         assert!(settings.show_message_file_path);
         assert_eq!(settings.chat_history_scrollback_items, Some(200));
         assert!(settings.thread_title_autogeneration_enabled);
@@ -2094,6 +2107,17 @@ mod tests {
             decoded.workspace_groups[0].copies_folder.as_deref(),
             Some("/tmp/group-copies")
         );
+    }
+
+    #[test]
+    fn app_settings_ignores_removed_usage_multiplier() {
+        let settings: AppSettings =
+            serde_json::from_str(r#"{"thirdPartyUsageMultiplier":2.5,"showCodexUsage":false}"#)
+                .expect("legacy settings deserialize");
+
+        assert!(!settings.show_codex_usage);
+        let json = serde_json::to_string(&settings).expect("serialize settings");
+        assert!(!json.contains("thirdPartyUsageMultiplier"));
     }
 
     #[test]

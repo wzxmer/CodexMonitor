@@ -70,7 +70,6 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use ignore::WalkBuilder;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, Mutex, Semaphore};
@@ -86,7 +85,8 @@ use shared::session_manager_core::runtime::{
 use shared::session_manager_core::service::SessionManagerRuntime;
 use shared::{
     agents_config_core, codex_aux_core, codex_core, files_core, git_core, git_ui_core,
-    local_usage_core, provider_profiles_core, settings_core, workspaces_core, worktree_core,
+    local_usage_core, provider_profiles_core, settings_core, workflow_preflight_core,
+    workspaces_core, worktree_core,
 };
 use storage::{read_settings, read_workspaces};
 use types::{
@@ -118,6 +118,7 @@ fn spawn_with_client(
             entry,
             default_bin,
             runtime_env.codex_args,
+            runtime_env.comparison_codex_args,
             runtime_env.env,
             runtime_env.provider_runtime_fingerprint,
             runtime_env.gateway_shutdown,
@@ -1135,10 +1136,7 @@ impl DaemonState {
     }
 
     async fn list_workspace_files(&self, workspace_id: String) -> Result<Vec<String>, String> {
-        workspaces_core::list_workspace_files_core(&self.workspaces, &workspace_id, |root| {
-            list_workspace_files_inner(root, 20000)
-        })
-        .await
+        workspaces_core::list_workspace_files_core(&self.workspaces, &workspace_id).await
     }
 
     async fn read_workspace_file(
@@ -1189,8 +1187,18 @@ impl DaemonState {
         .await
     }
 
-    async fn start_thread(&self, workspace_id: String) -> Result<Value, String> {
-        codex_core::start_thread_core(&self.sessions, &self.workspaces, workspace_id).await
+    async fn start_thread(
+        &self,
+        workspace_id: String,
+        token_efficiency_mode: Option<String>,
+    ) -> Result<Value, String> {
+        codex_core::start_thread_core(
+            &self.sessions,
+            &self.workspaces,
+            workspace_id,
+            token_efficiency_mode,
+        )
+        .await
     }
 
     async fn resume_thread(
@@ -1429,6 +1437,7 @@ impl DaemonState {
         images: Option<Vec<String>>,
         app_mentions: Option<Vec<Value>>,
         collaboration_mode: Option<Value>,
+        additional_context: Option<Value>,
     ) -> Result<Value, String> {
         if let Some(session) = self
             .source_runtime_for_bound_thread(&workspace_id, &thread_id)
@@ -1447,6 +1456,7 @@ impl DaemonState {
                 images,
                 app_mentions,
                 collaboration_mode,
+                additional_context,
             )
             .await;
         }
@@ -1463,6 +1473,7 @@ impl DaemonState {
             images,
             app_mentions,
             collaboration_mode,
+            additional_context,
         )
         .await
     }
@@ -1475,6 +1486,7 @@ impl DaemonState {
         text: String,
         images: Option<Vec<String>>,
         app_mentions: Option<Vec<Value>>,
+        additional_context: Option<Value>,
     ) -> Result<Value, String> {
         if let Some(session) = self
             .source_runtime_for_bound_thread(&workspace_id, &thread_id)
@@ -1488,6 +1500,7 @@ impl DaemonState {
                 text,
                 images,
                 app_mentions,
+                additional_context,
             )
             .await;
         }
@@ -1499,6 +1512,7 @@ impl DaemonState {
             text,
             images,
             app_mentions,
+            additional_context,
         )
         .await
     }
@@ -1584,6 +1598,25 @@ impl DaemonState {
 
     async fn skills_list(&self, workspace_id: String) -> Result<Value, String> {
         codex_core::skills_list_core(&self.sessions, &self.workspaces, workspace_id).await
+    }
+
+    async fn workflow_preflight_preview(
+        &self,
+        workspace_id: String,
+        task: String,
+        mode: Option<String>,
+        provider_kind: String,
+        model: Option<String>,
+    ) -> Result<Value, String> {
+        workflow_preflight_core::workflow_preflight_preview_core(
+            &self.workspaces,
+            workspace_id,
+            task,
+            mode,
+            provider_kind,
+            model,
+        )
+        .await
     }
 
     async fn apps_list(
@@ -2052,17 +2085,6 @@ impl DaemonState {
     }
 }
 
-fn should_skip_dir(name: &str) -> bool {
-    matches!(
-        name,
-        ".git" | "node_modules" | "dist" | "target" | "release-artifacts"
-    )
-}
-
-fn normalize_git_path(path: &str) -> String {
-    path.replace('\\', "/")
-}
-
 fn emit_background_thread_hide(event_sink: &DaemonEventSink, workspace_id: &str, thread_id: &str) {
     event_sink.emit_app_server_event(AppServerEvent {
         workspace_id: workspace_id.to_string(),
@@ -2103,47 +2125,6 @@ fn send_notification_fallback_inner(title: String, body: String) -> Result<(), S
         let _ = (title, body);
         Err("Notification fallback is only available on macOS debug builds.".to_string())
     }
-}
-
-fn list_workspace_files_inner(root: &PathBuf, max_files: usize) -> Vec<String> {
-    let mut results = Vec::new();
-    let walker = WalkBuilder::new(root)
-        .hidden(false)
-        .follow_links(false)
-        .require_git(false)
-        .filter_entry(|entry| {
-            if entry.depth() == 0 {
-                return true;
-            }
-            if entry.file_type().is_some_and(|ft| ft.is_dir()) {
-                let name = entry.file_name().to_string_lossy();
-                return !should_skip_dir(&name);
-            }
-            true
-        })
-        .build();
-
-    for entry in walker {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(_) => continue,
-        };
-        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
-            continue;
-        }
-        if let Ok(rel_path) = entry.path().strip_prefix(root) {
-            let normalized = normalize_git_path(&rel_path.to_string_lossy());
-            if !normalized.is_empty() {
-                results.push(normalized);
-            }
-        }
-        if results.len() >= max_files {
-            break;
-        }
-    }
-
-    results.sort();
-    results
 }
 
 const MAX_WORKSPACE_FILE_BYTES: u64 = 400_000;

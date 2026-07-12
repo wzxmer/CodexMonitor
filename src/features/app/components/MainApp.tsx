@@ -10,6 +10,7 @@ import { useModels } from "@/features/models/hooks/useModels";
 import { useCollaborationModes } from "@/features/collaboration/hooks/useCollaborationModes";
 import { useCollaborationModeSelection } from "@/features/collaboration/hooks/useCollaborationModeSelection";
 import { useSkills } from "@/features/skills/hooks/useSkills";
+import { buildWorkflowRuntimeDiagnostics } from "@/features/workflow/utils/workflowDiagnostics";
 import { useApps } from "@/features/apps/hooks/useApps";
 import { useCustomPrompts } from "@/features/prompts/hooks/useCustomPrompts";
 import { useBranchSwitcherShortcut } from "@/features/git/hooks/useBranchSwitcherShortcut";
@@ -53,6 +54,7 @@ import { useMainAppShellProps } from "@app/hooks/useMainAppShellProps";
 import { useMainAppSidebarMenuOrchestration } from "@app/hooks/useMainAppSidebarMenuOrchestration";
 import { useMainAppSettingsActions } from "@app/hooks/useMainAppSettingsActions";
 import { useMainAppThreadCodexState } from "@app/hooks/useMainAppThreadCodexState";
+import { useProviderProfileRuntimeSync } from "@app/hooks/useProviderProfileRuntimeSync";
 import { useMainAppWorktreeState } from "@app/hooks/useMainAppWorktreeState";
 import { useMainAppWorkspaceActions } from "@app/hooks/useMainAppWorkspaceActions";
 import { useMainAppWorkspaceLifecycle } from "@app/hooks/useMainAppWorkspaceLifecycle";
@@ -60,6 +62,7 @@ import { useMainAppMobileThreadRefresh } from "@app/hooks/useMainAppMobileThread
 import { useHomeAccount } from "@app/hooks/useHomeAccount";
 import type {
   ComposerEditorSettings,
+  ModelOption,
   ServiceTier,
   WorkspaceInfo,
 } from "@/types";
@@ -89,6 +92,13 @@ import {
 import { useAppShellOrchestration } from "@app/orchestration/useLayoutOrchestration";
 import { normalizeCodexArgsInput } from "@/utils/codexArgsInput";
 import {
+  applyRefreshedCodexProviderModels,
+  resolveCodexProviderModel,
+  resolveCodexProviderBaseUrl,
+  resolveCodexProviderModelOptions,
+} from "@/utils/providerProfiles";
+import {
+  getProviderModels,
   getManagedCodexPlatform,
   installManagedCodex,
   prepareManagedSessionDerivation,
@@ -409,7 +419,15 @@ export default function MainApp() {
       ) ?? null,
     [appSettings.activeCodexKeyProfileId, appSettings.codexKeyProfiles],
   );
-  const effectivePreferredModelId = preferredModelId ?? activeCodexKeyProfile?.model ?? null;
+  const effectivePreferredModelId = resolveCodexProviderModel(
+    activeCodexKeyProfile?.model,
+    preferredModelId,
+  );
+  const activeProviderModels = useMemo<ModelOption[]>(
+    () => resolveCodexProviderModelOptions(activeCodexKeyProfile),
+    [activeCodexKeyProfile],
+  );
+  const [isRefreshingProviderModels, setIsRefreshingProviderModels] = useState(false);
 
   const {
     models,
@@ -426,9 +444,66 @@ export default function MainApp() {
     activeWorkspace,
     onDebug: addDebugEntry,
     preferredModelId: effectivePreferredModelId,
+    providerModels: activeProviderModels,
     preferredEffort,
     selectionKey: threadCodexSelectionKey,
   });
+  const handleRefreshModels = useCallback(async () => {
+    if (!activeCodexKeyProfile) {
+      await refreshModels();
+      return;
+    }
+    const baseUrl = resolveCodexProviderBaseUrl(
+      activeCodexKeyProfile.providerKind,
+      activeCodexKeyProfile.baseUrl,
+    );
+    if (!baseUrl || !activeCodexKeyProfile.key.trim()) {
+      return;
+    }
+    setIsRefreshingProviderModels(true);
+    try {
+      const refreshedModels = await getProviderModels(
+        baseUrl,
+        activeCodexKeyProfile.key.trim(),
+      );
+      setAppSettings((current) => {
+        const next = applyRefreshedCodexProviderModels(
+          current,
+          activeCodexKeyProfile.id,
+          refreshedModels,
+          Date.now(),
+        );
+        if (next !== current) {
+          void queueSaveSettings(next).catch((error) => {
+            addDebugEntry({
+              id: `${Date.now()}-provider-model-cache-error`,
+              timestamp: Date.now(),
+              source: "error",
+              label: "provider model cache error",
+              payload: error instanceof Error ? error.message : String(error),
+            });
+          });
+        }
+        return next;
+      });
+    } catch (error) {
+      addDebugEntry({
+        id: `${Date.now()}-provider-model-list-error`,
+        timestamp: Date.now(),
+        source: "error",
+        label: "provider model/list error",
+        payload: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setIsRefreshingProviderModels(false);
+    }
+  }, [
+    activeCodexKeyProfile,
+    addDebugEntry,
+    queueSaveSettings,
+    refreshModels,
+    setAppSettings,
+  ]);
 
   const {
     collaborationModes,
@@ -528,7 +603,24 @@ export default function MainApp() {
     reasoningSupported,
     onFocusComposer: () => composerInputRef.current?.focus(),
   });
-  const { skills } = useSkills({ activeWorkspace: projectActiveWorkspace, onDebug: addDebugEntry });
+  const {
+    skills,
+    agents,
+    registryFingerprint,
+    registryErrors,
+    registryCacheHit,
+    registryRefreshing,
+    registryRefreshError,
+    registryLastRefreshAtMs,
+    refreshSkills,
+  } = useSkills({
+    activeWorkspace: projectActiveWorkspace,
+    onDebug: addDebugEntry,
+  });
+  const workflowDiagnostics = useMemo(
+    () => buildWorkflowRuntimeDiagnostics(debugEntries),
+    [debugEntries],
+  );
   const {
     prompts,
     createPrompt,
@@ -642,6 +734,11 @@ export default function MainApp() {
     onWorkspaceConnected: markWorkspaceConnected,
     onDebug: addDebugEntry,
     model: resolvedModel,
+    workflowProviderKind: activeCodexKeyProfile?.providerKind ?? "openai",
+    workflowRuntimeMode: appSettings.workflowRuntimeMode ?? "shadow",
+    workflowSkills: skills,
+    workflowAgents: agents,
+    tokenEfficiencyMode: appSettings.tokenEfficiencyMode ?? "quality",
     effort: resolvedEffort,
     serviceTier: selectedServiceTier,
     collaborationMode: collaborationModePayload,
@@ -665,6 +762,30 @@ export default function MainApp() {
   const activeThreadIsProcessing = Boolean(
     activeThreadId && threadStatusById[activeThreadId]?.isProcessing,
   );
+  const hasAnyProcessingThread = Object.values(threadStatusById).some(
+    (status) => status?.isProcessing,
+  );
+  const handleProviderRuntimeSyncError = useCallback(
+    (error: unknown) => {
+      addDebugEntry({
+        id: `${Date.now()}-provider-runtime-sync-error`,
+        timestamp: Date.now(),
+        source: "error",
+        label: "provider runtime sync error",
+        payload: error instanceof Error ? error.message : String(error),
+      });
+    },
+    [addDebugEntry],
+  );
+  useProviderProfileRuntimeSync({
+    activeProfile: activeCodexKeyProfile,
+    activeWorkspace,
+    activeThreadId,
+    settingsLoading: appSettingsLoading,
+    defer: hasAnyProcessingThread,
+    syncWorkspaceRuntime: ensureWorkspaceRuntimeCodexArgs,
+    onError: handleProviderRuntimeSyncError,
+  });
   const { connectionState: remoteThreadConnectionState, reconnectLive } =
     useRemoteThreadLiveConnection({
       backendMode: appSettings.backendMode,
@@ -1300,6 +1421,21 @@ export default function MainApp() {
       handleTestSystemNotification,
       handleMobileConnectSuccess,
       dictationModel,
+      workflowSectionProps: {
+        workspaceName: projectActiveWorkspace?.name ?? null,
+        providerKind: activeCodexKeyProfile?.providerKind ?? "openai",
+        model: resolvedModel,
+        skills,
+        agents,
+        registryFingerprint,
+        registryErrors,
+        registryCacheHit,
+        registryRefreshing,
+        registryRefreshError,
+        registryLastRefreshAtMs,
+        diagnostics: workflowDiagnostics,
+        onRefreshRegistry: refreshSkills,
+      },
     },
   });
 
@@ -2149,9 +2285,9 @@ export default function MainApp() {
     selectedModelId,
     onSelectModel: handleSelectModel,
     onRefreshModels: () => {
-      void refreshModels();
+      void handleRefreshModels();
     },
-    isRefreshingModels,
+    isRefreshingModels: isRefreshingModels || isRefreshingProviderModels,
     collaborationModes,
     selectedCollaborationModeId,
     onSelectCollaborationMode: handleSelectCollaborationMode,

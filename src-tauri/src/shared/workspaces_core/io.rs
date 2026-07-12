@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::path::{Path, PathBuf};
 
+use ignore::WalkBuilder;
 use tokio::sync::Mutex;
 
 use crate::shared::process_core::tokio_command;
@@ -540,16 +541,136 @@ where
     Ok(None)
 }
 
-pub(crate) async fn list_workspace_files_core<F>(
+const MAX_WORKSPACE_FILES: usize = 20_000;
+
+fn should_skip_workspace_dir(name: &str) -> bool {
+    let normalized = name.to_ascii_lowercase();
+    matches!(
+        normalized.as_str(),
+        ".git" | "node_modules" | "dist" | "target" | "release-artifacts"
+    ) || normalized.starts_with("target-")
+        || normalized.starts_with(".codex-target")
+}
+
+fn scan_workspace_files(root: &Path, max_files: usize) -> Vec<String> {
+    let mut results = Vec::new();
+    let walker = WalkBuilder::new(root)
+        .hidden(false)
+        .follow_links(false)
+        .require_git(false)
+        .filter_entry(|entry| {
+            entry.depth() == 0
+                || !entry
+                    .file_type()
+                    .is_some_and(|file_type| file_type.is_dir())
+                || !should_skip_workspace_dir(&entry.file_name().to_string_lossy())
+        })
+        .build();
+
+    for entry in walker.flatten() {
+        if !entry
+            .file_type()
+            .is_some_and(|file_type| file_type.is_file())
+        {
+            continue;
+        }
+        if let Ok(relative_path) = entry.path().strip_prefix(root) {
+            let normalized = relative_path.to_string_lossy().replace('\\', "/");
+            if !normalized.is_empty() {
+                results.push(normalized);
+            }
+        }
+        if results.len() >= max_files {
+            break;
+        }
+    }
+
+    results.sort();
+    results
+}
+
+#[cfg(test)]
+mod workspace_file_scan_tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use super::scan_workspace_files;
+
+    struct TestWorkspace(PathBuf);
+
+    impl TestWorkspace {
+        fn new() -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "codex-monitor-workspace-scan-{}",
+                uuid::Uuid::new_v4()
+            ));
+            fs::create_dir_all(&root).expect("create test workspace");
+            Self(root)
+        }
+
+        fn write(&self, relative_path: &str) {
+            let path = self.0.join(relative_path);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).expect("create test directory");
+            }
+            fs::write(path, "test").expect("write test file");
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestWorkspace {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn lists_regular_workspace_files() {
+        let workspace = TestWorkspace::new();
+        workspace.write("src/main.rs");
+        workspace.write("README.md");
+
+        assert_eq!(
+            scan_workspace_files(workspace.path(), 20_000),
+            vec!["README.md".to_string(), "src/main.rs".to_string()]
+        );
+    }
+
+    #[test]
+    fn skips_generated_target_directories() {
+        let workspace = TestWorkspace::new();
+        workspace.write("src/main.rs");
+        workspace.write("target-devtest/debug/app.d");
+        workspace.write(".codex-target-devtest-run/debug/app.d");
+
+        assert_eq!(
+            scan_workspace_files(workspace.path(), 20_000),
+            vec!["src/main.rs".to_string()]
+        );
+    }
+
+    #[test]
+    fn enforces_workspace_file_limit() {
+        let workspace = TestWorkspace::new();
+        for index in 0..5 {
+            workspace.write(&format!("src/file-{index}.rs"));
+        }
+
+        assert_eq!(scan_workspace_files(workspace.path(), 3).len(), 3);
+    }
+}
+
+pub(crate) async fn list_workspace_files_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     workspace_id: &str,
-    list_files: F,
-) -> Result<Vec<String>, String>
-where
-    F: Fn(&PathBuf) -> Vec<String>,
-{
+) -> Result<Vec<String>, String> {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
-    Ok(list_files(&root))
+    tokio::task::spawn_blocking(move || scan_workspace_files(&root, MAX_WORKSPACE_FILES))
+        .await
+        .map_err(|error| error.to_string())
 }
 
 pub(crate) async fn read_workspace_file_core<F, T>(

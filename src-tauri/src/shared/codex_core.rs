@@ -19,7 +19,7 @@ use crate::codex::home::{
 };
 use crate::rules;
 use crate::shared::account::{build_account_response, read_auth_account, read_auth_api_key};
-use crate::shared::{config_toml_core, provider_profiles_core};
+use crate::shared::{config_toml_core, provider_profiles_core, workflow_registry_core};
 use crate::types::{AppSettings, WorkspaceEntry};
 
 const LOGIN_START_TIMEOUT: Duration = Duration::from_secs(30);
@@ -395,17 +395,37 @@ fn build_thread_list_params(
     })
 }
 
+const BALANCED_TOKEN_EFFICIENCY_INSTRUCTIONS: &str = "Work token-efficiently without reducing correctness or required verification.\nPrefer targeted searches and bounded file reads over broad dumps.\nRefer to stable file paths for large logs, diffs, and documents; load only needed portions.\nKeep responses concise unless the user asks for detail. Use subagents only when parallel work is justified.";
+
+const ECONOMY_TOKEN_EFFICIENCY_INSTRUCTIONS: &str = "Minimize token use while preserving correctness, safety, and required verification.\nUse the smallest sufficient reasoning and tool scope; prefer targeted searches and bounded file reads.\nAvoid repeating unchanged context, large outputs, logs, diffs, or documents; reference stable paths and load only needed portions.\nSummarize intermediate results and keep final responses concise unless the user asks for detail.\nDo not skip tests, safety checks, exact error evidence, or user-requested detail to save tokens.";
+
+fn token_efficiency_developer_instructions(mode: Option<&str>) -> Option<&'static str> {
+    match mode {
+        Some("balanced") => Some(BALANCED_TOKEN_EFFICIENCY_INSTRUCTIONS),
+        Some("economy") => Some(ECONOMY_TOKEN_EFFICIENCY_INSTRUCTIONS),
+        _ => None,
+    }
+}
+
+fn build_start_thread_params(workspace_path: String, token_efficiency_mode: Option<&str>) -> Value {
+    let mut params = Map::new();
+    params.insert("cwd".to_string(), json!(workspace_path));
+    params.insert("approvalPolicy".to_string(), json!("on-request"));
+    if let Some(instructions) = token_efficiency_developer_instructions(token_efficiency_mode) {
+        params.insert("developerInstructions".to_string(), json!(instructions));
+    }
+    Value::Object(params)
+}
+
 pub(crate) async fn start_thread_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     workspace_id: String,
+    token_efficiency_mode: Option<String>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
     let workspace_path = resolve_workspace_path_core(workspaces, &workspace_id).await?;
-    let params = json!({
-        "cwd": workspace_path,
-        "approvalPolicy": "on-request"
-    });
+    let params = build_start_thread_params(workspace_path, token_efficiency_mode.as_deref());
     session
         .send_request_for_workspace(&workspace_id, "thread/start", params)
         .await
@@ -647,6 +667,16 @@ pub(crate) fn insert_optional_nullable_string(
     }
 }
 
+fn insert_optional_non_null_value(
+    params: &mut Map<String, Value>,
+    key: &str,
+    value: Option<Value>,
+) {
+    if let Some(value) = value.filter(|value| !value.is_null()) {
+        params.insert(key.to_string(), value);
+    }
+}
+
 pub(crate) async fn send_user_message_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
@@ -660,6 +690,7 @@ pub(crate) async fn send_user_message_core(
     images: Option<Vec<String>>,
     app_mentions: Option<Vec<Value>>,
     collaboration_mode: Option<Value>,
+    additional_context: Option<Value>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
     send_user_message_with_session_core(
@@ -675,6 +706,7 @@ pub(crate) async fn send_user_message_core(
         images,
         app_mentions,
         collaboration_mode,
+        additional_context,
     )
     .await
 }
@@ -692,6 +724,7 @@ pub(crate) async fn send_user_message_with_session_core(
     images: Option<Vec<String>>,
     app_mentions: Option<Vec<Value>>,
     collaboration_mode: Option<Value>,
+    additional_context: Option<Value>,
 ) -> Result<Value, String> {
     let workspace_path = resolve_workspace_path_core(workspaces, &workspace_id).await?;
     let access_mode = access_mode.unwrap_or_else(|| "current".to_string());
@@ -727,6 +760,7 @@ pub(crate) async fn send_user_message_with_session_core(
             params.insert("collaborationMode".to_string(), mode);
         }
     }
+    insert_optional_non_null_value(&mut params, "additionalContext", additional_context);
     session
         .send_request_for_workspace(&workspace_id, "turn/start", Value::Object(params))
         .await
@@ -740,6 +774,7 @@ pub(crate) async fn turn_steer_core(
     text: String,
     images: Option<Vec<String>>,
     app_mentions: Option<Vec<Value>>,
+    additional_context: Option<Value>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
     turn_steer_with_session_core(
@@ -750,6 +785,7 @@ pub(crate) async fn turn_steer_core(
         text,
         images,
         app_mentions,
+        additional_context,
     )
     .await
 }
@@ -762,16 +798,19 @@ pub(crate) async fn turn_steer_with_session_core(
     text: String,
     images: Option<Vec<String>>,
     app_mentions: Option<Vec<Value>>,
+    additional_context: Option<Value>,
 ) -> Result<Value, String> {
     if turn_id.trim().is_empty() {
         return Err("missing active turn id".to_string());
     }
     let input = build_turn_input_items(text, images, app_mentions)?;
-    let params = json!({
-        "threadId": thread_id,
-        "expectedTurnId": turn_id,
-        "input": input
-    });
+    let mut params = Map::from_iter([
+        ("threadId".to_string(), json!(thread_id)),
+        ("expectedTurnId".to_string(), json!(turn_id)),
+        ("input".to_string(), json!(input)),
+    ]);
+    insert_optional_non_null_value(&mut params, "additionalContext", additional_context);
+    let params = Value::Object(params);
     session
         .send_request_for_workspace(&workspace_id, "turn/steer", params)
         .await
@@ -1055,14 +1094,31 @@ pub(crate) async fn skills_list_core(
         json!({ "cwd": workspace_path, "skillsPaths": source_paths })
     };
 
-    let mut response = session
+    let (mut response, native_error) = match session
         .send_request_for_workspace(&workspace_id, "skills/list", params)
-        .await?;
+        .await
+    {
+        Ok(response) => (response, None),
+        Err(error) => (json!({ "skills": [] }), Some(error)),
+    };
+
+    let codex_home = resolve_codex_home_for_workspace_core(workspaces, &workspace_id).await?;
+    let native_paths = workflow_registry_core::native_skill_paths(&response);
+    let registry = workflow_registry_core::build_registry_snapshot(
+        &codex_home,
+        resolve_home_dir().as_deref(),
+        Path::new(&workspace_path),
+        &native_paths,
+    );
 
     // Attach diagnostics for the UI (non-breaking: keep original response fields).
     if let Value::Object(ref mut obj) = response {
         obj.insert("sourcePaths".to_string(), json!(source_paths));
-        obj.insert("sourceErrors".to_string(), json!([]));
+        obj.insert(
+            "sourceErrors".to_string(),
+            json!(native_error.into_iter().collect::<Vec<_>>()),
+        );
+        obj.insert("cmRegistry".to_string(), json!(registry));
     }
 
     Ok(response)
@@ -1275,10 +1331,11 @@ base_url = "{base_url}"
             context_window: None,
             max_output_tokens: None,
             use_gateway: false,
+            supports_thinking: false,
+            supports_reasoning_effort: false,
             last_model_refresh_at_ms: None,
             cached_models: Vec::new(),
             group_name: None,
-            group_multiplier: None,
         }];
         settings.active_codex_key_profile_id = Some("profile".to_string());
 
@@ -1472,6 +1529,28 @@ base_url = "{base_url}"
     }
 
     #[test]
+    fn insert_optional_non_null_value_forwards_additional_context() {
+        let mut params = Map::new();
+        insert_optional_non_null_value(
+            &mut params,
+            "additionalContext",
+            Some(json!({
+                "cm.workflow": {
+                    "kind": "application",
+                    "value": "workflow context"
+                }
+            })),
+        );
+
+        assert_eq!(
+            params["additionalContext"]["cm.workflow"]["kind"],
+            json!("application")
+        );
+        insert_optional_non_null_value(&mut params, "ignored", Some(Value::Null));
+        assert!(!params.contains_key("ignored"));
+    }
+
+    #[test]
     fn thread_list_source_kinds_exclude_generic_subagent_and_keep_explicit_variants() {
         assert!(!THREAD_LIST_SOURCE_KINDS.contains(&"subAgent"));
         assert!(THREAD_LIST_SOURCE_KINDS.contains(&"subAgentReview"));
@@ -1485,6 +1564,27 @@ base_url = "{base_url}"
 
         assert_eq!(params["threadId"], json!("thread-1"));
         assert_eq!(params["includeTurns"], json!(true));
+    }
+
+    #[test]
+    fn thread_start_token_efficiency_instructions_are_stable_and_opt_in() {
+        let quality = build_start_thread_params("D:/workspace".to_string(), Some("quality"));
+        let balanced = build_start_thread_params("D:/workspace".to_string(), Some("balanced"));
+        let economy = build_start_thread_params("D:/workspace".to_string(), Some("economy"));
+
+        assert!(quality.get("developerInstructions").is_none());
+        assert_eq!(
+            balanced["developerInstructions"],
+            json!(BALANCED_TOKEN_EFFICIENCY_INSTRUCTIONS)
+        );
+        assert_eq!(
+            economy["developerInstructions"],
+            json!(ECONOMY_TOKEN_EFFICIENCY_INSTRUCTIONS)
+        );
+        assert_eq!(
+            balanced,
+            build_start_thread_params("D:/workspace".to_string(), Some("balanced"))
+        );
     }
 
     #[test]
