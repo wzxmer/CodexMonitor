@@ -11,6 +11,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+__pycache__/
+*.py[cod]
 *.local
 src-tauri/tauri.ios.local.conf.json
 .testflight.local.env
@@ -26,6 +28,8 @@ src-tauri/tauri.ios.local.conf.json
 *.sln
 *.sw?
 /release-artifacts
+/.codex-target*/
+/src-tauri/target*/
 CodexMonitor.zip
 .codex-worktrees/
 .codex-monitor/

@@ -57,6 +57,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -146,15 +149,41 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
       - name: Download installers
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
           merge-multiple: true
 
+      - name: Build recommended download links
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          LAST_TAG=$(git tag --sort=-version:refname \
+            | grep -v "^${GITHUB_REF_NAME}$" \
+            | head -n 1 || true)
+          if [ -n "$LAST_TAG" ]; then
+            git log "${LAST_TAG}..${GITHUB_SHA}" --pretty=format:"%s" > release-commits.txt
+          else
+            git log "${GITHUB_SHA}" --pretty=format:"%s" > release-commits.txt
+          fi
+          python3 scripts/build_release_notes.py \
+            --artifacts-dir release-artifacts \
+            --repository "$GITHUB_REPOSITORY" \
+            --version "$VERSION" \
+            --commits-file release-commits.txt \
+            --output release-notes.md
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           files: release-artifacts/**/*
-          generate_release_notes: true
+          body_path: release-notes.md
           overwrite_files: true

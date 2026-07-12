@@ -82,7 +82,8 @@
           <RegistrySearch Id="PrevInstallDirWithName" Root="HKCU" Key="Software\\{{manufacturer}}\\{{product_name}}" Name="InstallDir" Type="raw" />
         </Property>
 
-        <!-- Migrate a current-user NSIS installation before MSI copies new files. -->
+        <!-- Never uninstall NSIS from inside the MSI transaction. External uninstallers
+             cannot be restored if the MSI later rolls back. -->
         <Property Id="NSISUNINSTALLER" Secure="yes">
           <RegistrySearch
               Id="PreviousNsisUninstaller"
@@ -91,18 +92,9 @@
               Name="UninstallString"
               Type="raw" />
         </Property>
-        <CustomAction
-            Id="UninstallPreviousNsis"
-            Property="NSISUNINSTALLER"
-            ExeCommand="/S"
-            Execute="deferred"
-            Impersonate="yes"
-            Return="check" />
-        <InstallExecuteSequence>
-          <Custom Action="UninstallPreviousNsis" Before="InstallFiles">
-            NSISUNINSTALLER AND NOT Installed AND NOT REMOVE
-          </Custom>
-        </InstallExecuteSequence>
+        <Condition Message="An NSIS installation of Codex Monitor already exists. Update with the .exe installer, or uninstall it before installing the MSI package.">
+          Installed OR NOT NSISUNINSTALLER
+        </Condition>
 
         <!-- launch app checkbox -->
         <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="!(loc.LaunchApp)" />

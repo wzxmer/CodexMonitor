@@ -680,42 +680,12 @@ jobs:
             git log "${RANGE_END}" --pretty=format:"%s" > release-artifacts/release-commits.txt
           fi
 
-          python3 - <<'PY'
-          import re
-          from pathlib import Path
-
-          lines = Path("release-artifacts/release-commits.txt").read_text().splitlines()
-          pattern = re.compile(r"^(feat|fix|perf)(?:\([^)]*\))?:\s*(.+)$", re.IGNORECASE)
-          groups = {"feat": [], "fix": [], "perf": []}
-          for line in lines:
-              match = pattern.match(line.strip())
-              if not match:
-                  continue
-              kind = match.group(1).lower()
-              message = match.group(2).strip()
-              if message:
-                  groups[kind].append(message)
-
-          sections = [
-              ("## New Features", "feat"),
-              ("## Fixes", "fix"),
-              ("## Performance Improvements", "perf"),
-          ]
-          output = []
-          for title, key in sections:
-              items = groups[key]
-              if not items:
-                  continue
-              output.append(title)
-              output.extend([f"- {item}" for item in items])
-              output.append("")
-
-          notes = "\n".join(output).strip()
-          if not notes:
-              notes = "- No user-facing changes."
-
-          Path("release-artifacts/release-notes.md").write_text(notes + "\n")
-          PY
+          python3 scripts/build_release_notes.py \
+            --artifacts-dir release-artifacts \
+            --repository "$GITHUB_REPOSITORY" \
+            --version "$VERSION" \
+            --commits-file release-artifacts/release-commits.txt \
+            --output release-artifacts/release-notes.md
 
       - name: Build update mirror payloads
         env:
