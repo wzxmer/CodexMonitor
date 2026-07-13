@@ -1,0 +1,105 @@
+.coordination-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 8px;
+  border-top: 1px solid var(--border-subtle, rgba(128, 128, 128, 0.15));
+  margin-top: 8px;
+}
+
+.coordination-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coordination-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-emphasis);
+  letter-spacing: 0.04em;
+}
+
+.coordination-subtitle {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.coordination-empty {
+  font-size: 12px;
+  color: var(--text-faint);
+  padding: 8px 0;
+}
+
+.coordination-loading {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.coordination-error {
+  font-size: 11px;
+  color: var(--text-danger, #e5484d);
+}
+
+.coordination-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.coordination-label {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle);
+}
+
+.coordination-create-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  align-self: flex-start;
+}
+
+.coordination-group-select,
+.coordination-select,
+.coordination-input {
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--border-subtle, rgba(128, 128, 128, 0.2));
+  border-radius: 4px;
+  background: var(--surface-input, transparent);
+  color: var(--text-emphasis);
+  min-width: 0;
+}
+
+.coordination-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.coordination-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.coordination-row .coordination-select {
+  flex: 0 0 auto;
+}
+
+.coordination-claim-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+  flex: 0 0 auto;
+}
+
+.coordination-conflict {
+  font-size: 11px;
+  color: var(--text-danger, #e5484d);
+  padding: 2px 0;
+}
+
+.coordination-claim-granted {
+  font-size: 11px;
+  color: var(--text-success, #47d488);
+  padding: 2px 0;
+}

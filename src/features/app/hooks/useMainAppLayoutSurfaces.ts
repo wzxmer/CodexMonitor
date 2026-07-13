@@ -1059,11 +1059,17 @@ function buildSecondarySurface({
   onResizeTerminal,
   isPhone,
   setActiveTab,
+  activeWorkspace,
+  activeWorkspaceId,
+  activeThreadId,
 }: MainAppLayoutSurfacesContext): LayoutNodesOptions["secondary"] {
   return {
     planPanelProps: {
       plan: activePlan,
       isProcessing: composerWorkspaceState.isProcessing,
+      activeWorkspaceId,
+      activeThreadId,
+      workspacePath: activeWorkspace?.path ?? null,
     },
     terminalDockProps: {
       isOpen: terminalOpen,

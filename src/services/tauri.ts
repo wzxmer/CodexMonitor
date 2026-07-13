@@ -52,6 +52,7 @@ import type {
   WorkspaceInfo,
   AppMention,
   WorkspaceSettings,
+  CandidateMatch,
 } from "../types";
 import {
   buildThirdPartyUsageUrl,
@@ -1031,6 +1032,63 @@ export async function getAppsList(
   threadId?: string | null,
 ) {
   return invoke<any>("apps_list", { workspaceId, cursor, limit, threadId });
+}
+
+export async function taskCoordinationListGroups() {
+  return invoke<any>("task_coordination_list_groups");
+}
+
+export async function taskCoordinationCreateGroup(group: unknown) {
+  return invoke<any>("task_coordination_create_group", { group });
+}
+
+export async function taskCoordinationAcquireClaim(
+  groupId: string,
+  owner: unknown,
+  kind: "file" | "directory" | "logical",
+  resourceKey: string,
+  access: "read" | "write" | "exclusive",
+) {
+  return invoke<any>("task_coordination_acquire_claim", {
+    groupId,
+    owner,
+    kind,
+    resourceKey,
+    access,
+  });
+}
+
+export async function taskCoordinationReleaseClaim(groupId: string, claimId: string) {
+  return invoke<void>("task_coordination_release_claim", { groupId, claimId });
+}
+
+export async function taskCoordinationHeartbeat(groupId: string, threadKey: unknown) {
+  return invoke<void>("task_coordination_heartbeat", { groupId, threadKey });
+}
+
+export async function taskCoordinationDetectCandidates(
+  target: unknown,
+  targetRepositoryId: string,
+  targetTitle: string,
+  knownThreads: unknown,
+  seenPairs: unknown,
+) {
+  return invoke<CandidateMatch[]>("task_coordination_detect_candidates", {
+    target,
+    targetRepositoryId,
+    targetTitle,
+    knownThreads,
+    seenPairs,
+  });
+}
+
+export async function detectPython() {
+  return invoke<{
+    available: boolean;
+    interpreterPath: string | null;
+    version: string | null;
+    source: string | null;
+  }>("detect_python");
 }
 
 export async function getPromptsList(workspaceId: string) {

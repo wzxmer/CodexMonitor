@@ -1,8 +1,12 @@
 import type { TurnPlan } from "../../../types";
+import { CoordinationPanel } from "@/features/threads/components/CoordinationPanel";
 
 type PlanPanelProps = {
   plan: TurnPlan | null;
   isProcessing: boolean;
+  activeWorkspaceId?: string | null;
+  activeThreadId?: string | null;
+  workspacePath?: string | null;
 };
 
 function formatProgress(plan: TurnPlan) {
@@ -24,7 +28,13 @@ function statusLabel(status: TurnPlan["steps"][number]["status"]) {
   return "[ ]";
 }
 
-export function PlanPanel({ plan, isProcessing }: PlanPanelProps) {
+export function PlanPanel({
+  plan,
+  isProcessing,
+  activeWorkspaceId = null,
+  activeThreadId = null,
+  workspacePath = null,
+}: PlanPanelProps) {
   const progress = plan ? formatProgress(plan) : "";
   const steps = plan?.steps ?? [];
   const showEmpty = !steps.length && !plan?.explanation;
@@ -52,6 +62,13 @@ export function PlanPanel({ plan, isProcessing }: PlanPanelProps) {
             </li>
           ))}
         </ol>
+      )}
+      {showEmpty && (
+        <CoordinationPanel
+          activeWorkspaceId={activeWorkspaceId}
+          activeThreadId={activeThreadId}
+          workspacePath={workspacePath}
+        />
       )}
     </aside>
   );

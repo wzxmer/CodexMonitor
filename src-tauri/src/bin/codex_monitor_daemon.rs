@@ -177,6 +177,9 @@ struct DaemonState {
     session_source_runtimes: SessionSourceRuntimePool,
     source_thread_runtimes: SourceThreadRuntimeBindings,
     daemon_binary_path: Option<String>,
+    task_coordination_ledger: tokio::sync::Mutex<
+        Option<crate::shared::task_coordination_core::ledger::CoordinationLedger>,
+    >,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -317,6 +320,7 @@ impl DaemonState {
             session_source_runtimes: SessionSourceRuntimePool::for_workspace_sessions(),
             source_thread_runtimes: SourceThreadRuntimeBindings::default(),
             daemon_binary_path,
+            task_coordination_ledger: tokio::sync::Mutex::new(Some(Default::default())),
         }
     }
 
@@ -2299,6 +2303,7 @@ mod tests {
             session_source_runtimes: SessionSourceRuntimePool::for_workspace_sessions(),
             source_thread_runtimes: SourceThreadRuntimeBindings::default(),
             daemon_binary_path: Some("/tmp/codex-monitor-daemon".to_string()),
+            task_coordination_ledger: tokio::sync::Mutex::new(Some(Default::default())),
         }
     }
 

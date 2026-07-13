@@ -534,6 +534,92 @@ pub(super) async fn try_handle(
                     .await,
             )
         }
+        "task_coordination_release_claim" => {
+            let group_id = match parse_string(params, "groupId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let claim_id = match parse_string(params, "claimId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                async move {
+                    task_coordination_daemon_release_claim(state, group_id, claim_id)
+                        .await
+                        .map(|()| serde_json::Value::Null)
+                }
+                .await,
+            )
+        }
+        "task_coordination_heartbeat" => {
+            let group_id = match parse_string(params, "groupId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let thread_key = match params.get("threadKey") {
+                Some(v) => v.clone(),
+                None => return Some(Err("missing threadKey".to_string())),
+            };
+            Some(
+                async move {
+                    task_coordination_daemon_heartbeat(state, group_id, thread_key)
+                        .await
+                        .map(|()| serde_json::Value::Null)
+                }
+                .await,
+            )
+        }
+        "detect_python" => Some(
+            async move {
+                let settings = state.app_settings.lock().await;
+                let user_path = settings.python_interpreter_path.as_deref();
+                let (path, version) = crate::types::detect_python(user_path);
+                Ok(serde_json::json!({
+                    "available": path.is_some(),
+                    "interpreterPath": path,
+                    "version": version,
+                    "source": "system",
+                }))
+            }
+            .await,
+        ),
+        "task_coordination_detect_candidates" => {
+            let target = match params.get("target") {
+                Some(v) => v.clone(),
+                None => return Some(Err("missing target".to_string())),
+            };
+            let target_repository_id = match parse_string(params, "targetRepositoryId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let target_title = match parse_string(params, "targetTitle") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let known_threads = match params.get("knownThreads") {
+                Some(v) => v.clone(),
+                None => return Some(Err("missing knownThreads".to_string())),
+            };
+            let seen_pairs = match params.get("seenPairs") {
+                Some(v) => v.clone(),
+                None => return Some(Err("missing seenPairs".to_string())),
+            };
+            Some(
+                async move {
+                    task_coordination_daemon_detect_candidates(
+                        state,
+                        target,
+                        target_repository_id,
+                        target_title,
+                        known_threads,
+                        seen_pairs,
+                    )
+                    .await
+                }
+                .await,
+            )
+        }
         "apps_list" => {
             let workspace_id = match parse_string(params, "workspaceId") {
                 Ok(value) => value,
@@ -546,6 +632,56 @@ pub(super) async fn try_handle(
                 state
                     .apps_list(workspace_id, cursor, limit, thread_id)
                     .await,
+            )
+        }
+        "task_coordination_list_groups" => Some(
+            async move {
+                let groups = task_coordination_daemon_list_groups(state).await;
+                serde_json::to_value(groups).map_err(|e| e.to_string())
+            }
+            .await,
+        ),
+        "task_coordination_create_group" => {
+            let group = match params.get("group") {
+                Some(v) => v.clone(),
+                None => return Some(Err("missing group".to_string())),
+            };
+            Some(async move { task_coordination_daemon_create_group(state, group).await }.await)
+        }
+        "task_coordination_acquire_claim" => {
+            let group_id = match parse_string(params, "groupId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let owner = match params.get("owner") {
+                Some(v) => v.clone(),
+                None => return Some(Err("missing owner".to_string())),
+            };
+            let kind = match parse_string(params, "kind") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let resource_key = match parse_string(params, "resourceKey") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let access = match parse_string(params, "access") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                async move {
+                    task_coordination_daemon_acquire_claim(
+                        state,
+                        group_id,
+                        owner,
+                        kind,
+                        resource_key,
+                        access,
+                    )
+                    .await
+                }
+                .await,
             )
         }
         "respond_to_server_request" => {
@@ -621,4 +757,156 @@ pub(super) async fn try_handle(
         }
         _ => None,
     }
+}
+
+async fn task_coordination_daemon_list_groups(state: &DaemonState) -> Vec<serde_json::Value> {
+    let lock = state.task_coordination_ledger.lock().await;
+    let ledger = lock.as_ref();
+    match ledger {
+        Some(l) => l
+            .groups
+            .values()
+            .cloned()
+            .map(|g| serde_json::to_value(&g).unwrap_or(serde_json::Value::Null))
+            .collect(),
+        None => vec![],
+    }
+}
+
+async fn task_coordination_daemon_create_group(
+    state: &DaemonState,
+    group: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let mut lock = state.task_coordination_ledger.lock().await;
+    let ledger = lock.as_mut().ok_or("Task coordination not initialized")?;
+    let parsed: crate::shared::task_coordination_core::TaskCoordinationGroup =
+        serde_json::from_value(group).map_err(|e| e.to_string())?;
+    ledger.groups.insert(parsed.id.clone(), parsed.clone());
+    serde_json::to_value(&parsed).map_err(|e| e.to_string())
+}
+
+async fn task_coordination_daemon_acquire_claim(
+    state: &DaemonState,
+    group_id: String,
+    owner: serde_json::Value,
+    kind: String,
+    resource_key: String,
+    access: String,
+) -> Result<serde_json::Value, String> {
+    let mut lock = state.task_coordination_ledger.lock().await;
+    let ledger = lock.as_mut().ok_or("Task coordination not initialized")?;
+    let owner_key: crate::shared::task_coordination_core::ThreadKey =
+        serde_json::from_value(owner).map_err(|e| e.to_string())?;
+    let kind_enum = match kind.as_str() {
+        "file" => crate::shared::task_coordination_core::ResourceKind::File,
+        "directory" => crate::shared::task_coordination_core::ResourceKind::Directory,
+        "logical" => crate::shared::task_coordination_core::ResourceKind::Logical,
+        _ => return Err(format!("Invalid resource kind: {kind}")),
+    };
+    let access_enum = match access.as_str() {
+        "read" => crate::shared::task_coordination_core::AccessLevel::Read,
+        "write" => crate::shared::task_coordination_core::AccessLevel::Write,
+        "exclusive" => crate::shared::task_coordination_core::AccessLevel::Exclusive,
+        _ => return Err(format!("Invalid access level: {access}")),
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let existing = ledger.claims.get(&group_id).cloned().unwrap_or_default();
+    let result = crate::shared::task_coordination_core::service::acquire_claim(
+        &group_id,
+        &owner_key,
+        kind_enum,
+        &resource_key,
+        access_enum,
+        &existing,
+        now,
+    );
+    match result {
+        crate::shared::task_coordination_core::service::AcquireResult::Granted(claim) => {
+            let claims = ledger.claims.entry(group_id).or_default();
+            claims.retain(|c| {
+                !(c.owner_thread_key == owner_key
+                    && c.state != crate::shared::task_coordination_core::ClaimState::Released)
+            });
+            claims.push(claim.clone());
+            serde_json::to_value(&claim).map_err(|e| e.to_string())
+        }
+        crate::shared::task_coordination_core::service::AcquireResult::Conflict(conflict) => {
+            Err(serde_json::to_string(&conflict)
+                .unwrap_or_else(|_| "Resource conflict".to_string()))
+        }
+    }
+}
+
+async fn task_coordination_daemon_release_claim(
+    state: &DaemonState,
+    group_id: String,
+    claim_id: String,
+) -> Result<(), String> {
+    let mut lock = state.task_coordination_ledger.lock().await;
+    let ledger = lock.as_mut().ok_or("Task coordination not initialized")?;
+    if let Some(claims) = ledger.claims.get_mut(&group_id) {
+        if let Some(claim) = claims.iter_mut().find(|c| c.id == claim_id) {
+            claim.state = crate::shared::task_coordination_core::ClaimState::Released;
+            claim.updated_at = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+        }
+    }
+    Ok(())
+}
+
+async fn task_coordination_daemon_heartbeat(
+    state: &DaemonState,
+    group_id: String,
+    thread_key: serde_json::Value,
+) -> Result<(), String> {
+    let mut lock = state.task_coordination_ledger.lock().await;
+    let ledger = lock.as_mut().ok_or("Task coordination not initialized")?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    if let Some(participants) = ledger.participants.get_mut(&group_id) {
+        let key: crate::shared::task_coordination_core::ThreadKey =
+            serde_json::from_value(thread_key).map_err(|e| e.to_string())?;
+        if let Some(p) = participants.iter_mut().find(|p| p.thread_key == key) {
+            crate::shared::task_coordination_core::leases::renew_lease(p, now, 30_000);
+        }
+    }
+    Ok(())
+}
+
+async fn task_coordination_daemon_detect_candidates(
+    state: &DaemonState,
+    target: serde_json::Value,
+    target_repository_id: String,
+    target_title: String,
+    known_threads: serde_json::Value,
+    seen_pairs: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let target_key: crate::shared::task_coordination_core::ThreadKey =
+        serde_json::from_value(target).map_err(|e| e.to_string())?;
+    let known: Vec<(
+        crate::shared::task_coordination_core::ThreadKey,
+        String,
+        String,
+    )> = serde_json::from_value(known_threads).map_err(|e| e.to_string())?;
+    let seen: std::collections::HashSet<String> =
+        serde_json::from_value(seen_pairs).map_err(|e| e.to_string())?;
+    let results = crate::shared::task_coordination_core::service::detect_candidates(
+        &target_key,
+        &target_repository_id,
+        &target_title,
+        &known,
+        &seen,
+    );
+    let serialized: Vec<serde_json::Value> = results
+        .iter()
+        .map(|m| serde_json::to_value(m).unwrap_or(serde_json::Value::Null))
+        .collect();
+    Ok(serde_json::Value::Array(serialized))
 }

@@ -550,6 +550,31 @@ export type CodexProviderStatus = {
 export type TokenEfficiencyMode = "quality" | "balanced" | "economy";
 export type WorkflowRuntimeMode = "off" | "shadow" | "active";
 
+export type CommandExecutionPolicy = "auto" | "prefer-python" | "prefer-powershell" | "native-only";
+
+export type CommandIntent =
+  | "python-automation"
+  | "powershell-windows"
+  | "native-cli"
+  | "existing-script"
+  | "unknown";
+
+export type CommandRoute = {
+  runner: "python" | "powershell" | "native";
+  executable: string;
+  args: string[];
+  reason: string;
+  requiresConfirmation: boolean;
+};
+
+export type PythonDetectionResult = {
+  available: boolean;
+  interpreterPath: string | null;
+  version: string | null;
+  utf8SmokeTestPassed: boolean | null;
+  source: string | null;
+};
+
 export type AppSettings = {
   codexBin: string | null;
   codexArgs: string | null;
@@ -587,7 +612,10 @@ export type AppSettings = {
   lastComposerModelId: string | null;
   lastComposerReasoningEffort: string | null;
   tokenEfficiencyMode?: TokenEfficiencyMode;
+  toolOutputTokenLimit?: number | null;
   workflowRuntimeMode?: WorkflowRuntimeMode;
+  commandExecutionPolicy?: CommandExecutionPolicy;
+  pythonInterpreterPath?: string | null;
   uiScale: number;
   appLanguage: AppLanguagePreference;
   theme: ThemePreference;
@@ -1088,6 +1116,62 @@ export type WorkflowCapabilityName =
   | "shell_access";
 
 export type WorkflowCapabilitySupport = "supported" | "unsupported" | "unknown";
+
+export type CoordinationMode = "advisory" | "guarded";
+export type GroupStatus = "active" | "completed" | "archived";
+export type ParticipantRole = "worker" | "coordinator" | "reviewer" | "observer";
+export type ParticipantState = "planned" | "active" | "waiting" | "blocked" | "completed" | "detached";
+export type LeaseState = "released" | "active" | "uncertain";
+export type ResourceKind = "file" | "directory" | "logical";
+export type AccessLevel = "read" | "write" | "exclusive";
+export type ClaimState = "proposed" | "granted" | "conflicted" | "released";
+
+export type TaskCoordinationThreadKey = {
+  source: string;
+  workspace_id: string;
+  thread_id: string;
+};
+
+export type TaskCoordinationGroup = {
+  id: string;
+  name: string;
+  repository_id: string;
+  repository_root: string;
+  base_revision: string | null;
+  coordinator_thread_key: TaskCoordinationThreadKey | null;
+  mode: CoordinationMode;
+  status: GroupStatus;
+  created_at: number;
+  updated_at: number;
+};
+
+export type TaskResourceClaim = {
+  id: string;
+  group_id: string;
+  owner_thread_key: TaskCoordinationThreadKey;
+  kind: ResourceKind;
+  resource_key: string;
+  access: AccessLevel;
+  state: ClaimState;
+  reason: string | null;
+  created_at: number;
+  updated_at: number;
+};
+
+export type ConflictResult = {
+  conflicting_claim_id: string;
+  existing_access: AccessLevel;
+  new_access: AccessLevel;
+  reason: string;
+};
+
+export type CandidateStrength = "strong" | "medium" | "weak";
+
+export type CandidateMatch = {
+  thread_key: TaskCoordinationThreadKey;
+  reason: string;
+  strength: CandidateStrength;
+};
 
 export type WorkflowCapabilityProfile = Record<
   WorkflowCapabilityName,

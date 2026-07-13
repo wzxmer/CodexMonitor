@@ -1136,6 +1136,261 @@ pub(crate) async fn apps_list(
 }
 
 #[tauri::command]
+pub(crate) async fn task_coordination_list_groups(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "task_coordination_list_groups",
+            json!({}),
+        )
+        .await;
+    }
+    let lock = state.task_coordination_ledger.lock().await;
+    let ledger = lock.as_ref().ok_or("Task coordination not initialized")?;
+    let groups: Vec<Value> = ledger
+        .groups
+        .values()
+        .cloned()
+        .map(|g| serde_json::to_value(&g).unwrap_or(Value::Null))
+        .collect();
+    Ok(Value::Array(groups))
+}
+
+#[tauri::command]
+pub(crate) async fn task_coordination_create_group(
+    group: Value,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "task_coordination_create_group",
+            json!({ "group": group }),
+        )
+        .await;
+    }
+    let mut lock = state.task_coordination_ledger.lock().await;
+    let ledger = lock.as_mut().ok_or("Task coordination not initialized")?;
+    let parsed: crate::shared::task_coordination_core::TaskCoordinationGroup =
+        serde_json::from_value(group).map_err(|e| e.to_string())?;
+    ledger.groups.insert(parsed.id.clone(), parsed.clone());
+    Ok(serde_json::to_value(&parsed).map_err(|e| e.to_string())?)
+}
+
+#[tauri::command]
+pub(crate) async fn task_coordination_acquire_claim(
+    group_id: String,
+    owner: Value,
+    kind: String,
+    resource_key: String,
+    access: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "task_coordination_acquire_claim",
+            json!({
+                "groupId": group_id,
+                "owner": owner,
+                "kind": kind,
+                "resourceKey": resource_key,
+                "access": access,
+            }),
+        )
+        .await;
+    }
+    let mut lock = state.task_coordination_ledger.lock().await;
+    let ledger = lock.as_mut().ok_or("Task coordination not initialized")?;
+    let owner_key: crate::shared::task_coordination_core::ThreadKey =
+        serde_json::from_value(owner).map_err(|e| e.to_string())?;
+    let kind_enum = match kind.as_str() {
+        "file" => crate::shared::task_coordination_core::ResourceKind::File,
+        "directory" => crate::shared::task_coordination_core::ResourceKind::Directory,
+        "logical" => crate::shared::task_coordination_core::ResourceKind::Logical,
+        _ => return Err(format!("Invalid resource kind: {kind}")),
+    };
+    let access_enum = match access.as_str() {
+        "read" => crate::shared::task_coordination_core::AccessLevel::Read,
+        "write" => crate::shared::task_coordination_core::AccessLevel::Write,
+        "exclusive" => crate::shared::task_coordination_core::AccessLevel::Exclusive,
+        _ => return Err(format!("Invalid access level: {access}")),
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let existing = ledger.claims.get(&group_id).cloned().unwrap_or_default();
+    let result = crate::shared::task_coordination_core::service::acquire_claim(
+        &group_id,
+        &owner_key,
+        kind_enum,
+        &resource_key,
+        access_enum,
+        &existing,
+        now,
+    );
+    match result {
+        crate::shared::task_coordination_core::service::AcquireResult::Granted(claim) => {
+            let claims = ledger.claims.entry(group_id).or_default();
+            claims.retain(|c| {
+                !(c.owner_thread_key == owner_key
+                    && c.state != crate::shared::task_coordination_core::ClaimState::Released)
+            });
+            claims.push(claim.clone());
+            Ok(serde_json::to_value(&claim).map_err(|e| e.to_string())?)
+        }
+        crate::shared::task_coordination_core::service::AcquireResult::Conflict(conflict) => {
+            Err(serde_json::to_string(&conflict)
+                .unwrap_or_else(|_| "Resource conflict".to_string()))
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn task_coordination_release_claim(
+    group_id: String,
+    claim_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        remote_backend::call_remote(
+            &*state,
+            app,
+            "task_coordination_release_claim",
+            json!({ "groupId": group_id, "claimId": claim_id }),
+        )
+        .await?;
+        return Ok(());
+    }
+    let mut lock = state.task_coordination_ledger.lock().await;
+    let ledger = lock.as_mut().ok_or("Task coordination not initialized")?;
+    if let Some(claims) = ledger.claims.get_mut(&group_id) {
+        if let Some(claim) = claims.iter_mut().find(|c| c.id == claim_id) {
+            claim.state = crate::shared::task_coordination_core::ClaimState::Released;
+            claim.updated_at = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn task_coordination_heartbeat(
+    group_id: String,
+    thread_key: Value,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        remote_backend::call_remote(
+            &*state,
+            app,
+            "task_coordination_heartbeat",
+            json!({ "groupId": group_id, "threadKey": thread_key }),
+        )
+        .await?;
+        return Ok(());
+    }
+    let mut lock = state.task_coordination_ledger.lock().await;
+    let ledger = lock.as_mut().ok_or("Task coordination not initialized")?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    if let Some(participants) = ledger.participants.get_mut(&group_id) {
+        let key: crate::shared::task_coordination_core::ThreadKey =
+            serde_json::from_value(thread_key).map_err(|e| e.to_string())?;
+        if let Some(p) = participants.iter_mut().find(|p| p.thread_key == key) {
+            crate::shared::task_coordination_core::leases::renew_lease(p, now, 30_000);
+        }
+    }
+    Ok(())
+}
+
+
+#[tauri::command]
+pub(crate) async fn task_coordination_detect_candidates(
+    target: Value,
+    target_repository_id: String,
+    target_title: String,
+    known_threads: Value,
+    seen_pairs: Value,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "task_coordination_detect_candidates",
+            json!({
+                "target": target,
+                "targetRepositoryId": target_repository_id,
+                "targetTitle": target_title,
+                "knownThreads": known_threads,
+                "seenPairs": seen_pairs,
+            }),
+        )
+        .await;
+    }
+    let target_key: crate::shared::task_coordination_core::ThreadKey =
+        serde_json::from_value(target).map_err(|e| e.to_string())?;
+    let known: Vec<(
+        crate::shared::task_coordination_core::ThreadKey,
+        String,
+        String,
+    )> = serde_json::from_value(known_threads).map_err(|e| e.to_string())?;
+    let seen: std::collections::HashSet<String> =
+        serde_json::from_value(seen_pairs).map_err(|e| e.to_string())?;
+    let results = crate::shared::task_coordination_core::service::detect_candidates(
+        &target_key,
+        &target_repository_id,
+        &target_title,
+        &known,
+        &seen,
+    );
+    let serialized: Vec<Value> = results
+        .iter()
+        .map(|m| {
+            serde_json::to_value(m).unwrap_or(Value::Null)
+        })
+        .collect();
+    Ok(Value::Array(serialized))
+}
+
+#[tauri::command]
+pub(crate) async fn detect_python(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(&*state, app, "detect_python", json!({})).await;
+    }
+
+    let settings = state.app_settings.lock().await;
+    let user_path = settings.python_interpreter_path.as_deref();
+    let (path, version) = crate::types::detect_python(user_path);
+    Ok(json!({
+        "available": path.is_some(),
+        "interpreterPath": path,
+        "version": version,
+        "source": "system",
+    }))
+}
+
+#[tauri::command]
 pub(crate) async fn respond_to_server_request(
     workspace_id: String,
     request_id: Value,

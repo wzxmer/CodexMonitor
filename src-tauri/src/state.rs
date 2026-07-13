@@ -49,6 +49,9 @@ pub(crate) struct AppState {
     pub(crate) session_source_runtimes: SessionSourceRuntimePool,
     pub(crate) source_thread_runtimes: SourceThreadRuntimeBindings,
     pub(crate) tcp_daemon: Mutex<TcpDaemonRuntime>,
+    pub(crate) task_coordination_ledger: tokio::sync::Mutex<
+        Option<crate::shared::task_coordination_core::ledger::CoordinationLedger>,
+    >,
 }
 
 impl AppState {
@@ -82,6 +85,7 @@ impl AppState {
             session_source_runtimes: SessionSourceRuntimePool::for_workspace_sessions(),
             source_thread_runtimes: SourceThreadRuntimeBindings::default(),
             tcp_daemon: Mutex::new(TcpDaemonRuntime::default()),
+            task_coordination_ledger: tokio::sync::Mutex::new(Some(Default::default())),
         }
     }
 }
