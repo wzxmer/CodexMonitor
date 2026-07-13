@@ -2,6 +2,8 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-wzxmer%2FCodexMonitor-24292f?logo=github)](https://github.com/wzxmer/CodexMonitor)
 
+[中文](#codexmonitor-中文增强版) | [English](#codexmonitor-chinese-enhanced-edition)
+
 ![CodexMonitor](screenshot.png)
 
 CodexMonitor 是一个基于 Tauri 的 Codex 桌面客户端，用来管理本地项目、Codex Agent 会话、Git 变更、提示词和远程后端。这个分支面向中文桌面用户做了界面汉化、视觉优化、会话管理和打包发布增强，支持 Windows、macOS 和 Linux。
@@ -33,6 +35,7 @@ macOS 版本当前采用完整 ad-hoc 签名，但尚未使用 Apple Developer I
 - 消息体验：编辑失败消息后重发会覆盖原消息，避免重复堆积；“自动重连”默认关闭，手动开启后仅对当前会话有效，在任务非主动中止时持续尝试恢复连接并继续，且不占用 Codex 当前任务的尝试次数；图片粘贴、拖放和预览支持悬浮复制、应用内大图查看，内部生成图片使用紧凑显示名；达到 4,000 字符或 80 行的大量文本粘贴会自动转为可预览、可恢复的 TXT 附件。
 - Git 工作流：查看改动、Diff、日志、分支、提交、推送/拉取，并支持 GitHub Issues/PR 列表与 PR 上下文提问。
 - 远程后端：支持桌面 daemon、TCP/Tailscale 连接和 iOS 远程模式。
+- 多会话任务协调：创建协调组绑定相关会话，声明文件/目录/逻辑资源 Ownership，阻止同一目录双写和已确认资源双写；候选检测用确定性关键词匹配并 shadow 记录已探测对，断线时保守保留写租约，不自动释放；计划面板空闲时显示协调面板。
 
 ## 功能概览
 
@@ -54,7 +57,7 @@ macOS 版本当前采用完整 ad-hoc 签名，但尚未使用 Apple Developer I
 - 支持 `$` 技能、`/prompts:` 提示词、`/review`、`@` 文件路径补全。
 - 可配置默认跟进行为：排队发送或在运行中 steer。
 - 模型、推理强度、访问模式、协作模式和上下文用量在输入区集中控制。
-- `设置 > Codex > 默认参数` 提供质量、均衡、节省三档 Token 效率策略；仅影响新会话，可随时回到质量模式。
+- `设置 > Codex > 默认参数` 提供质量、均衡、节省三档 Token 效率策略，并可设置单次工具输出写入会话历史的 Token 预算；策略仅影响新会话，输出预算在重连工作区后生效。
 - 支持语音输入和按住说话快捷键。
 
 ### Git、GitHub 与文件
@@ -243,3 +246,45 @@ src-tauri/
 - Daemon RPC：`src-tauri/src/bin/codex_monitor_daemon/rpc.rs`
 - 共享后端核心：`src-tauri/src/shared/`
 - 代码导航：`docs/codebase-map.md`
+
+
+---
+
+# CodexMonitor Chinese Enhanced Edition
+
+[![GitHub](https://img.shields.io/badge/GitHub-wzxmer%2FCodexMonitor-24292f?logo=github)](https://github.com/wzxmer/CodexMonitor)
+
+[中文](#codexmonitor-中文增强版) | [English](#codexmonitor-chinese-enhanced-edition)
+
+CodexMonitor is a Tauri-based desktop client for Codex agents. It manages local projects, agent sessions, Git changes, prompts, and remote backends. This fork targets Chinese desktop users with a localized UI, visual refinements, session management, and packaging enhancements. It supports Windows, macOS, and Linux.
+
+## Download
+
+Grab the installer for your platform from [Releases](https://github.com/wzxmer/CodexMonitor/releases/latest). Each release page provides recommended direct links for Windows, macOS Apple Silicon / Intel, and Linux x64 / ARM64:
+
+- Windows: `.exe` / `.msi`
+- macOS: `.dmg`
+- Linux: `.AppImage` / `.rpm`
+
+If you previously installed via `.exe`, keep using `.exe` for updates. MSI does not automatically uninstall an existing NSIS version during install — uninstall the old version first before switching to MSI.
+
+The macOS build is fully ad-hoc signed but not notarized with Apple Developer ID. If Gatekeeper blocks first launch, right-click Codex Monitor in Applications and select "Open", or go to "System Settings > Privacy & Security > Open Anyway". Running `xattr` is normally unnecessary.
+
+## Chinese-First Enhancements
+
+- **Localized UI**: sidebar, settings, messages, prompts, buttons, and common status text in Chinese.
+- **Visual consistency**: settings, sidebar, message area, and overlay controls share a unified desktop software style.
+- **Chat themes**: native light, pure white, native dark, CLI dark, and more. Follows system dark mode with a black-orange appearance.
+- **Typography**: defaults to `PingFang SC` / bundled `Noto Sans SC Variable` / `Microsoft YaHei UI` font chain for fuller Chinese rendering. Four independent font sizes for UI, chat, process status, and code.
+- **Provider management**: switch between multiple Codex configurations via card buttons with active status and URL display.
+- **Model-agnostic workflow**: CodexMonitor matches public skills, agents, project rules, and knowledge candidates. Shadow mode (no model context injection) is the default; toggle via Settings > Workflow.
+- **Usage display**: toggle Codex usage in the bottom-left, switch between used/remaining quota. Home page distinguishes cached reads from uncached input.
+- **Local session management**: total local session count, unified entry from session manager, cross-project return or context reference to create new sessions.
+- **Message experience**: failed message re-send overwrites the original, auto-reconnect per session, large paste auto-converts to a previewable and restorable TXT attachment at 4,000 chars or 80 lines, image paste/drag/drop with hover copy and in-app large view.
+- **Git workflow**: view changes, diffs, logs, branches, commit, push/pull, plus GitHub Issues/PR lists and PR context questions.
+- **Remote backend**: desktop daemon, TCP/Tailscale connection, and iOS remote mode.
+- **Task coordination**: create coordination groups, declare resource ownership, block double-write conflicts; deterministic candidate detection with shadow recording; coordination panel in plan area when idle; leases kept on disconnect.
+
+## More Details
+
+For build instructions, project structure, data configuration, and remote backend setup, see the [Chinese section](#codexmonitor-中文增强版) above — the technical details apply regardless of language.
