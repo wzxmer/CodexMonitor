@@ -285,6 +285,10 @@ export function useSettingsViewOrchestration({
       onUpdateAppSettings,
       ...workflowSectionProps,
     },
+    commandExecutionSectionProps: {
+      appSettings,
+      onUpdateAppSettings,
+    },
     codexSectionProps,
     featuresSectionProps,
   };

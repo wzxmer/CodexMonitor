@@ -14,6 +14,7 @@ export const SETTINGS_SECTION_IDS = [
   "server",
   "agents",
   "workflow",
+  "command-execution",
 ] as const;
 
 export const SETTINGS_EXTRA_SECTION_IDS = ["codex", "providers", "features"] as const;

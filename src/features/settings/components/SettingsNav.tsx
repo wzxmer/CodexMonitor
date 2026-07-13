@@ -145,6 +145,15 @@ export function SettingsNav({
         <PanelNavItem
           className="settings-nav"
           icon={<TerminalSquare aria-hidden />}
+          active={activeSection === "command-execution"}
+          showDisclosure={showDisclosure}
+          onClick={() => onSelectSection("command-execution")}
+        >
+          {t(SETTINGS_SECTION_LABEL_KEYS["command-execution"])}
+        </PanelNavItem>
+        <PanelNavItem
+          className="settings-nav"
+          icon={<TerminalSquare aria-hidden />}
           active={activeSection === "codex"}
           showDisclosure={showDisclosure}
           onClick={() => onSelectSection("codex")}

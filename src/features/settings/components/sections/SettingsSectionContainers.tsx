@@ -13,6 +13,7 @@ import { SettingsShortcutsSection } from "./SettingsShortcutsSection";
 import { SettingsAgentsSection } from "./SettingsAgentsSection";
 import { SettingsWorkflowSection } from "./SettingsWorkflowSection";
 import { SettingsAboutSection } from "./SettingsAboutSection";
+import { SettingsCommandExecutionSection } from "./SettingsCommandExecutionSection";
 import type { CodexSection } from "@settings/components/settingsTypes";
 import type { SettingsViewOrchestration } from "@settings/hooks/useSettingsViewOrchestration";
 
@@ -63,6 +64,9 @@ export function SettingsSectionContainers({
   }
   if (activeSection === "workflow") {
     return <SettingsWorkflowSection {...orchestration.workflowSectionProps} />;
+  }
+  if (activeSection === "command-execution") {
+    return <SettingsCommandExecutionSection {...orchestration.commandExecutionSectionProps} />;
   }
   if (activeSection === "codex") {
     return <SettingsCodexSection {...orchestration.codexSectionProps} />;
