@@ -560,10 +560,7 @@ fn append_response_input_messages(input: Option<&Value>, messages: &mut Vec<Valu
                     .or_else(|| item.get("id"))
                     .and_then(Value::as_str)
                     .unwrap_or("call_gateway");
-                let arguments = item
-                    .get("arguments")
-                    .and_then(Value::as_str)
-                    .unwrap_or("{}");
+                let arguments = normalize_historical_function_arguments(item.get("arguments"));
                 messages.push(json!({
                     "role": "assistant",
                     "content": Value::Null,
@@ -596,6 +593,19 @@ fn append_response_input_messages(input: Option<&Value>, messages: &mut Vec<Valu
             let content = response_content_to_chat_content(item.get("content"));
             messages.push(json!({ "role": normalize_chat_role(role), "content": content }));
         }
+    }
+}
+
+fn normalize_historical_function_arguments(arguments: Option<&Value>) -> String {
+    match arguments {
+        Some(Value::Object(object)) => {
+            serde_json::to_string(object).unwrap_or_else(|_| "{}".into())
+        }
+        Some(Value::String(raw)) => match serde_json::from_str::<Value>(raw) {
+            Ok(Value::Object(_)) => raw.clone(),
+            _ => "{}".to_string(),
+        },
+        _ => "{}".to_string(),
     }
 }
 
@@ -1581,9 +1591,42 @@ mod tests {
             chat["messages"][0]["tool_calls"][0]["function"]["name"],
             "shell_command"
         );
+        assert_eq!(
+            chat["messages"][0]["tool_calls"][0]["function"]["arguments"],
+            "{\"command\":\"pwd\"}"
+        );
         assert_eq!(chat["messages"][1]["role"], "tool");
         assert_eq!(chat["messages"][1]["tool_call_id"], "call_123");
         assert_eq!(chat["messages"][1]["content"], "D:/Project/CodexMonitor");
+    }
+
+    #[test]
+    fn responses_request_sanitizes_invalid_historical_function_arguments() {
+        let chat = responses_request_to_chat_completions(
+            &json!({
+                "model": "deepseek-chat",
+                "input": [{
+                    "type": "function_call",
+                    "call_id": "call_invalid",
+                    "name": "shell_command",
+                    "arguments": "{\"command\":\"unterminated"
+                }, {
+                    "type": "function_call_output",
+                    "call_id": "call_invalid",
+                    "output": "failed to parse function arguments"
+                }]
+            }),
+            None,
+        )
+        .expect("chat body");
+
+        let arguments = chat["messages"][0]["tool_calls"][0]["function"]["arguments"]
+            .as_str()
+            .expect("arguments string");
+        assert!(matches!(
+            serde_json::from_str::<serde_json::Value>(arguments),
+            Ok(serde_json::Value::Object(_))
+        ));
     }
 
     #[test]
