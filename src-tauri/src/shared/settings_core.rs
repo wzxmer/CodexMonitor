@@ -78,6 +78,9 @@ pub(crate) async fn get_app_settings_core(
             .unwrap_or("friendly")
             .to_string();
     }
+    if let Ok(tool_output_token_limit) = codex_config::read_tool_output_token_limit(&settings) {
+        settings.tool_output_token_limit = tool_output_token_limit;
+    }
     if sources_changed {
         if let Err(error) = write_settings(settings_path, &settings) {
             eprintln!("get_app_settings_core: failed to persist session sources: {error}");
@@ -96,6 +99,7 @@ pub(crate) async fn update_app_settings_core(
     settings.global_worktrees_folder = settings
         .global_worktrees_folder
         .map(|path| normalize_windows_namespace_path(&path));
+    settings.tool_output_token_limit = settings.tool_output_token_limit.filter(|value| *value > 0);
     reconcile_settings_session_sources(&mut settings);
     let _ = codex_config::write_collaboration_modes_enabled(
         &settings,
@@ -105,6 +109,7 @@ pub(crate) async fn update_app_settings_core(
     let _ = codex_config::write_unified_exec_enabled(&settings, settings.unified_exec_enabled);
     let _ = codex_config::write_apps_enabled(&settings, settings.experimental_apps_enabled);
     let _ = codex_config::write_personality(&settings, settings.personality.as_str());
+    codex_config::write_tool_output_token_limit(&settings, settings.tool_output_token_limit)?;
     write_settings(settings_path, &settings)?;
     let mut current = app_settings.lock().await;
     *current = settings.clone();

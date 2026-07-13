@@ -262,6 +262,9 @@ export function SettingsCodexSection({
   const [keyProfileModelDraft, setKeyProfileModelDraft] = useState("");
   const [keyProfileContextWindowDraft, setKeyProfileContextWindowDraft] = useState("");
   const [keyProfileMaxOutputTokensDraft, setKeyProfileMaxOutputTokensDraft] = useState("");
+  const [toolOutputTokenLimitDraft, setToolOutputTokenLimitDraft] = useState(
+    appSettings.toolOutputTokenLimit == null ? "" : String(appSettings.toolOutputTokenLimit),
+  );
   const [keyProfileUseGatewayDraft, setKeyProfileUseGatewayDraft] = useState(false);
   const [keyProfileSupportsThinkingDraft, setKeyProfileSupportsThinkingDraft] =
     useState(false);
@@ -331,6 +334,26 @@ export function SettingsCodexSection({
     }
     const parsed = Number(trimmed);
     return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+  };
+
+  const commitToolOutputTokenLimit = () => {
+    const trimmed = toolOutputTokenLimitDraft.trim();
+    const nextValue = parsePositiveIntegerDraft(toolOutputTokenLimitDraft);
+    if (trimmed && nextValue === null) {
+      setToolOutputTokenLimitDraft(
+        appSettings.toolOutputTokenLimit == null
+          ? ""
+          : String(appSettings.toolOutputTokenLimit),
+      );
+      return;
+    }
+    if (nextValue === (appSettings.toolOutputTokenLimit ?? null)) {
+      return;
+    }
+    void onUpdateAppSettings({
+      ...appSettings,
+      toolOutputTokenLimit: nextValue,
+    });
   };
 
   const updateCodexKeySettings = (patch: Partial<AppSettings>) => {
@@ -471,6 +494,12 @@ export function SettingsCodexSection({
   };
 
   const didNormalizeDefaultsRef = useRef(false);
+  useEffect(() => {
+    setToolOutputTokenLimitDraft(
+      appSettings.toolOutputTokenLimit == null ? "" : String(appSettings.toolOutputTokenLimit),
+    );
+  }, [appSettings.toolOutputTokenLimit]);
+
   useEffect(() => {
     if (didNormalizeDefaultsRef.current) {
       return;
@@ -1256,6 +1285,33 @@ export function SettingsCodexSection({
           <option value="balanced">{t("settings.codex.tokenEfficiencyBalanced")}</option>
           <option value="economy">{t("settings.codex.tokenEfficiencyEconomy")}</option>
         </select>
+      </SettingsToggleRow>
+
+      <SettingsToggleRow
+        title={
+          <label htmlFor="tool-output-token-limit">
+            {t("settings.codex.toolOutputTokenLimit")}
+          </label>
+        }
+        subtitle={t("settings.codex.toolOutputTokenLimitHelp")}
+      >
+        <input
+          id="tool-output-token-limit"
+          className="settings-input"
+          type="number"
+          min="1"
+          step="1"
+          placeholder={t("settings.codex.toolOutputTokenLimitDefault")}
+          value={toolOutputTokenLimitDraft}
+          onChange={(event) => setToolOutputTokenLimitDraft(event.target.value)}
+          onBlur={commitToolOutputTokenLimit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            }
+          }}
+          aria-label={t("settings.codex.toolOutputTokenLimit")}
+        />
       </SettingsToggleRow>
 
       <SettingsToggleRow

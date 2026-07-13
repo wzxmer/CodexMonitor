@@ -913,11 +913,20 @@ pub(crate) struct AppSettings {
         rename = "tokenEfficiencyMode"
     )]
     pub(crate) token_efficiency_mode: String,
+    #[serde(default, rename = "toolOutputTokenLimit")]
+    pub(crate) tool_output_token_limit: Option<u64>,
     #[serde(
         default = "default_workflow_runtime_mode",
         rename = "workflowRuntimeMode"
     )]
     pub(crate) workflow_runtime_mode: String,
+    #[serde(
+        default = "default_command_execution_policy",
+        rename = "commandExecutionPolicy"
+    )]
+    pub(crate) command_execution_policy: String,
+    #[serde(default, rename = "pythonInterpreterPath")]
+    pub(crate) python_interpreter_path: Option<String>,
     #[serde(default = "default_ui_scale", rename = "uiScale")]
     pub(crate) ui_scale: f64,
     #[serde(default = "default_app_language", rename = "appLanguage")]
@@ -1781,6 +1790,10 @@ fn default_token_efficiency_mode() -> String {
     "quality".to_string()
 }
 
+fn default_command_execution_policy() -> String {
+    "auto".to_string()
+}
+
 fn default_workflow_runtime_mode() -> String {
     "shadow".to_string()
 }
@@ -1823,7 +1836,10 @@ impl Default for AppSettings {
             last_composer_model_id: None,
             last_composer_reasoning_effort: None,
             token_efficiency_mode: default_token_efficiency_mode(),
+            tool_output_token_limit: None,
             workflow_runtime_mode: default_workflow_runtime_mode(),
+            command_execution_policy: default_command_execution_policy(),
+            python_interpreter_path: None,
             ui_scale: 1.0,
             app_language: default_app_language(),
             theme: default_theme(),
@@ -2020,6 +2036,7 @@ mod tests {
         assert!(settings.last_composer_model_id.is_none());
         assert!(settings.last_composer_reasoning_effort.is_none());
         assert_eq!(settings.token_efficiency_mode, "quality");
+        assert!(settings.tool_output_token_limit.is_none());
         assert_eq!(settings.workflow_runtime_mode, "shadow");
         assert!((settings.ui_scale - 1.0).abs() < f64::EPSILON);
         assert_eq!(settings.app_language, "system");
@@ -2140,4 +2157,48 @@ mod tests {
         assert!(settings.group_id.is_none());
         assert!(settings.git_root.is_none());
     }
+}
+
+/// Detects available Python interpreter.
+/// Checks: user-configured path, py -3, python, common install dirs.
+pub(crate) fn detect_python(user_path: Option<&str>) -> (Option<String>, Option<String>) {
+    let candidates: Vec<String> = if let Some(path) = user_path {
+        vec![path.to_string()]
+    } else {
+        vec![
+            "python".to_string(),
+            "python3".to_string(),
+            "py".to_string(),
+        ]
+    };
+
+    for candidate in &candidates {
+        let output = std::process::Command::new(candidate)
+            .arg("--version")
+            .output();
+
+        if let Ok(output) = output {
+            if output.status.success() {
+                let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                let version = if version.is_empty() {
+                    String::from_utf8_lossy(&output.stderr).trim().to_string()
+                } else {
+                    version
+                };
+                let resolved = std::process::Command::new(candidate)
+                    .arg("-c")
+                    .arg("import sys; print(sys.executable)")
+                    .output();
+                let path = match resolved {
+                    Ok(o) if o.status.success() => {
+                        String::from_utf8_lossy(&o.stdout).trim().to_string()
+                    }
+                    _ => candidate.clone(),
+                };
+                return (Some(path), Some(version));
+            }
+        }
+    }
+
+    (None, None)
 }

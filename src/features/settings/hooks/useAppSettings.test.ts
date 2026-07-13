@@ -40,6 +40,7 @@ describe("useAppSettings", () => {
         uiFontFamily: "",
         codeFontFamily: "  ",
         codeFontSize: 25,
+        toolOutputTokenLimit: 8000.9,
       } as unknown) as AppSettings,
     );
 
@@ -56,6 +57,7 @@ describe("useAppSettings", () => {
     expect(result.current.settings.backendMode).toBe("remote");
     expect(result.current.settings.remoteBackendHost).toBe("example:1234");
     expect(result.current.settings.sessionSources).toEqual([]);
+    expect(result.current.settings.toolOutputTokenLimit).toBe(8000);
   });
 
   it("preserves persisted session sources", async () => {
@@ -118,6 +120,7 @@ describe("useAppSettings", () => {
     expect(result.current.settings.uiFontSize).toBe(14);
     expect(result.current.settings.messageFontSize).toBe(14);
     expect(result.current.settings.workflowRuntimeMode).toBe("shadow");
+    expect(result.current.settings.toolOutputTokenLimit).toBeNull();
     expect(result.current.settings.processFontSize).toBe(12);
     expect(result.current.settings.codeFontSize).toBe(13);
     expect(result.current.settings.showCodexUsage).toBe(true);

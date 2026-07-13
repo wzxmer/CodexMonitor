@@ -2176,6 +2176,9 @@ describe("SettingsView Codex defaults", () => {
     const tokenEfficiencySelect = screen.getByLabelText(
       "Token 效率",
     ) as HTMLSelectElement;
+    const toolOutputTokenLimitInput = screen.getByLabelText(
+      "单次工具输出预算",
+    ) as HTMLInputElement;
 
     await waitFor(() => {
       expect(modelSelect.disabled).toBe(false);
@@ -2209,6 +2212,16 @@ describe("SettingsView Codex defaults", () => {
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
         expect.objectContaining({ tokenEfficiencyMode: "balanced" }),
+      );
+    });
+
+    onUpdateAppSettings.mockClear();
+    fireEvent.change(toolOutputTokenLimitInput, { target: { value: "8000" } });
+    fireEvent.blur(toolOutputTokenLimitInput);
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ toolOutputTokenLimit: 8000 }),
       );
     });
   });

@@ -296,6 +296,7 @@ function buildDefaultSettings(): AppSettings {
     lastComposerModelId: null,
     lastComposerReasoningEffort: null,
     tokenEfficiencyMode: "quality",
+    toolOutputTokenLimit: null,
     workflowRuntimeMode: "shadow",
     uiScale: UI_SCALE_DEFAULT,
     appLanguage: "system",
@@ -422,6 +423,12 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
     )
       ? settings.tokenEfficiencyMode
       : "quality",
+    toolOutputTokenLimit:
+      typeof settings.toolOutputTokenLimit === "number" &&
+      Number.isFinite(settings.toolOutputTokenLimit) &&
+      settings.toolOutputTokenLimit > 0
+        ? Math.floor(settings.toolOutputTokenLimit)
+        : null,
     workflowRuntimeMode: allowedWorkflowRuntimeModes.has(
       settings.workflowRuntimeMode ?? "",
     )

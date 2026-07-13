@@ -44,6 +44,17 @@ pub(crate) fn read_personality(settings: &AppSettings) -> Result<Option<String>,
     Ok(read_personality_from_document(&document))
 }
 
+pub(crate) fn read_tool_output_token_limit(settings: &AppSettings) -> Result<Option<u64>, String> {
+    let Some(root) = resolve_settings_codex_home(settings) else {
+        return Ok(None);
+    };
+    let (_, document) = config_toml_core::load_global_config_document(&root)?;
+    Ok(config_toml_core::read_top_level_positive_integer(
+        &document,
+        "tool_output_token_limit",
+    ))
+}
+
 pub(crate) fn write_steer_enabled(settings: &AppSettings, enabled: bool) -> Result<(), String> {
     write_feature_flag(settings, "steer", enabled)
 }
@@ -88,6 +99,22 @@ pub(crate) fn write_personality(settings: &AppSettings, personality: &str) -> Re
     let (_, mut document) = config_toml_core::load_global_config_document(&root)?;
     let normalized = normalize_personality_value(personality);
     config_toml_core::set_top_level_string(&mut document, "personality", normalized);
+    config_toml_core::persist_global_config_document(&root, &document)
+}
+
+pub(crate) fn write_tool_output_token_limit(
+    settings: &AppSettings,
+    limit: Option<u64>,
+) -> Result<(), String> {
+    let Some(root) = resolve_settings_codex_home(settings) else {
+        return Ok(());
+    };
+    let (_, mut document) = config_toml_core::load_global_config_document(&root)?;
+    config_toml_core::set_top_level_positive_integer(
+        &mut document,
+        "tool_output_token_limit",
+        limit,
+    )?;
     config_toml_core::persist_global_config_document(&root, &document)
 }
 
@@ -267,9 +294,22 @@ mod tests {
     use super::{
         build_provider_status, is_official_openai_url, normalize_personality_value,
         read_auto_compact_token_limit_from_document, read_model_context_window_from_document,
-        read_personality_from_document, read_provider_status,
+        read_personality_from_document, read_provider_status, read_tool_output_token_limit,
+        write_tool_output_token_limit,
     };
     use crate::shared::config_toml_core;
+    use crate::types::AppSettings;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_codex_home(prefix: &str) -> std::path::PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("codex-monitor-{prefix}-{nonce}"));
+        std::fs::create_dir_all(&root).expect("create temp CODEX_HOME");
+        root
+    }
 
     #[test]
     fn parse_personality_reads_supported_values() {
@@ -377,5 +417,26 @@ mod tests {
 
         assert_eq!(read_auto_compact_token_limit_from_document(&document), None);
         assert_eq!(read_model_context_window_from_document(&document), None);
+    }
+
+    #[test]
+    fn tool_output_token_limit_writes_reads_and_clears_active_codex_home() {
+        let root = temp_codex_home("tool-output-limit");
+        let mut settings = AppSettings::default();
+        settings.codex_home = Some(root.to_string_lossy().to_string());
+
+        write_tool_output_token_limit(&settings, Some(8_000)).expect("write limit");
+        assert_eq!(
+            read_tool_output_token_limit(&settings).expect("read limit"),
+            Some(8_000)
+        );
+
+        write_tool_output_token_limit(&settings, None).expect("clear limit");
+        assert_eq!(
+            read_tool_output_token_limit(&settings).expect("read cleared limit"),
+            None
+        );
+
+        let _ = std::fs::remove_dir_all(root);
     }
 }

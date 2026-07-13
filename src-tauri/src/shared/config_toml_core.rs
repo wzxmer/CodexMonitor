@@ -88,6 +88,21 @@ pub(crate) fn read_top_level_positive_integer(document: &Document, key: &str) ->
     u64::try_from(value).ok().filter(|value| *value > 0)
 }
 
+pub(crate) fn set_top_level_positive_integer(
+    document: &mut Document,
+    key: &str,
+    value_raw: Option<u64>,
+) -> Result<(), String> {
+    let Some(value_raw) = value_raw.filter(|value| *value > 0) else {
+        let _ = document.remove(key);
+        return Ok(());
+    };
+    let value_raw = i64::try_from(value_raw)
+        .map_err(|_| format!("`{key}` exceeds the supported config.toml integer range"))?;
+    document[key] = value(value_raw);
+    Ok(())
+}
+
 pub(crate) fn read_nested_string(document: &Document, path: &[&str]) -> Option<String> {
     let (last, parents) = path.split_last()?;
     let mut item = document.get(parents.first()?)?;
@@ -165,5 +180,32 @@ config_file = "agents/researcher.toml"
         assert!(config.contains("[agents.researcher]"));
 
         let _ = std::fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn top_level_positive_integer_round_trips_and_clears() {
+        let mut document = parse_document("model = \"gpt-5\"\n").expect("parse");
+
+        set_top_level_positive_integer(&mut document, "tool_output_token_limit", Some(8_000))
+            .expect("set limit");
+        assert_eq!(
+            read_top_level_positive_integer(&document, "tool_output_token_limit"),
+            Some(8_000)
+        );
+        assert_eq!(
+            read_top_level_string(&document, "model"),
+            Some("gpt-5".to_string())
+        );
+
+        set_top_level_positive_integer(&mut document, "tool_output_token_limit", None)
+            .expect("clear limit");
+        assert_eq!(
+            read_top_level_positive_integer(&document, "tool_output_token_limit"),
+            None
+        );
+        assert_eq!(
+            read_top_level_string(&document, "model"),
+            Some("gpt-5".to_string())
+        );
     }
 }
