@@ -50,14 +50,17 @@
           <a href="#cta">Get started</a>
         </nav>
         <div class="nav-actions">
-          <a class="btn ghost" href="https://github.com/Dimillian/CodexMonitor" target="_blank" rel="noreferrer">GitHub</a>
-          <a class="btn primary" href="https://github.com/Dimillian/CodexMonitor/releases" target="_blank" rel="noreferrer">Download</a>
+          <button class="btn ghost lang-toggle" type="button" data-lang-toggle aria-label="Switch language">
+            <span data-lang-label>中文</span>
+          </button>
+          <a class="btn ghost" href="https://github.com/wzxmer/CodexMonitor" target="_blank" rel="noreferrer">GitHub</a>
+          <a class="btn primary" href="https://github.com/wzxmer/CodexMonitor/releases" target="_blank" rel="noreferrer" data-en-text="Download" data-zh-text="下载">Download</a>
         </div>
       </div>
     </header>
 
     <main>
-      <section class="hero">
+      <section class="hero" data-lang="en">
         <div class="container hero-grid">
           <div class="hero-copy">
             <div class="eyebrow">Desktop command center for Codex</div>
@@ -88,7 +91,36 @@
         </div>
       </section>
 
-      <section id="features" class="section">
+      <section class="hero" data-lang="zh" hidden>
+        <div class="container hero-grid">
+          <div class="hero-copy">
+            <div class="eyebrow">Codex 桌面工作中心</div>
+            <h1>管理你的 Codex 工作流。</h1>
+            <p>
+              在一个精美的桌面客户端中编排任意数量的 Codex Agent 和项目，统一管理会话、代码审查和 git worktree。
+            </p>
+            <div class="hero-actions">
+              <a class="btn primary" href="https://github.com/wzxmer/CodexMonitor/releases" target="_blank" rel="noreferrer">获取应用</a>
+              <a class="btn ghost" href="#features">探索功能</a>
+            </div>
+            <div class="hero-meta">
+              <div>
+                <span class="meta-label">基于</span>
+                <span class="meta-value">Tauri + React</span>
+              </div>
+              <div>
+                <span class="meta-label">平台</span>
+                <span class="meta-value">macOS + Windows + Linux</span>
+              </div>
+            </div>
+          </div>
+          <div class="hero-shot">
+            <img src="assets/main.png" alt="Codex Monitor 仪表盘和会话视图" />
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section" data-lang="en">
         <div class="container">
           <div class="section-title">
             <h2>Everything you need to run Codex like a studio.</h2>
@@ -131,6 +163,41 @@
               <h3>Updater + polish</h3>
               <p>Toast-driven updates, resizable panels, and platform-specific window chrome.</p>
             </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section" data-lang="zh" hidden>
+        <div class="container">
+          <div class="section-title">
+            <h2>运行 Codex 所需的一切，尽在一个桌面客户端。</h2>
+            <p>跨多个仓库构建、审查和发布，CodexMonitor 让整个工作流保持在一个界面内。</p>
+          </div>
+          <div class="feature-grid">
+            <div class="glass feature-card">
+              <h3>多项目多会话</h3>
+              <p>添加工作区、启动 Codex Agent 会话、查看运行状态、审批和用户输入。本地历史会话统一管理、搜索和恢复。</p>
+            </div>
+            <div class="glass feature-card">
+              <h3>中文界面</h3>
+              <p>侧边栏、设置、消息、提示和按钮全面汉化，配合中文字体链和独立字号调整。</p>
+            </div>
+            <div class="glass feature-card">
+              <h3>Git 工作流</h3>
+              <p>查看改动、Diff、提交、分支、推送/拉取，支持 GitHub Issues/PR 列表与 PR 上下文提问。</p>
+            </div>
+            <div class="glass feature-card">
+              <h3>配置与用量</h3>
+              <p>卡片式 Provider 管理、独立模型和上下文参数，Token 用量与额度随时可见。</p>
+            </div>
+            <div class="glass feature-card">
+              <h3>远程后端</h3>
+              <p>支持桌面 daemon、TCP/Tailscale 连接和 iOS 远程模式，在其他设备继续工作。</p>
+            </div>
+            <div class="glass feature-card">
+              <h3>体验增强</h3>
+              <p>大量文本粘贴自动附件化、图片悬浮复制与应用内大图、编辑重发不重复堆积、多种会话主题。</p>
+            </div>
           </div>
         </div>
       </section>
@@ -433,5 +500,31 @@
         </p>
       </div>
     </footer>
+    <script>
+    (function () {
+      var STORAGE_KEY = "codex-monitor-docs-lang";
+      function applyLang(lang) {
+        var els = document.querySelectorAll("[data-lang]");
+        for (var i = 0; i < els.length; i++) {
+          if (els[i].hasAttribute("data-lang-toggle")) continue;
+          els[i].hidden = els[i].getAttribute("data-lang") !== lang;
+        }
+        var label = document.querySelector("[data-lang-label]");
+        if (label) label.textContent = lang === "zh" ? "English" : "中文";
+        try { localStorage.setItem(STORAGE_KEY, lang); } catch (e) {}
+      }
+      function toggleLang() {
+        var current = "en";
+        try { current = localStorage.getItem(STORAGE_KEY) || "en"; } catch (e) {}
+        applyLang(current === "zh" ? "en" : "zh");
+      }
+      var saved = null;
+      try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) {}
+      var lang = saved || (typeof navigator !== "undefined" && navigator.language && navigator.language.indexOf("zh") === 0 ? "zh" : "en");
+      applyLang(lang);
+      var btn = document.querySelector("[data-lang-toggle]");
+      if (btn) btn.addEventListener("click", toggleLang);
+    })();
+    </script>
   </body>
 </html>
