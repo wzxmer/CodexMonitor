@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 
 describe("global font styles", () => {
   it("uses the runtime UI font variable at the document root", () => {
-    const themeCss = readFileSync(new URL("./themes.dark.css", import.meta.url), "utf8");
+    const themeCss = readFileSync(
+      new URL("./themes.dark.css", import.meta.url),
+      "utf8",
+    ).replace(/\r\n/g, "\n");
     expect(themeCss).toContain(":root {\n  font-family: var(--ui-font-family);");
   });
 
