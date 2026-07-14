@@ -567,6 +567,33 @@ describe("Markdown file-like href behavior", () => {
     expect(screen.getByText("Ready")).toBeTruthy();
   });
 
+  it("preserves table scroll position across markdown rerenders", () => {
+    const value = ["| Name | Value |", "| --- | --- |", "| Status | Ready |"].join("\n");
+    const { container, rerender } = render(<Markdown value={value} className="markdown" />);
+    const tableWrap = container.querySelector<HTMLElement>(".markdown-table-wrap");
+
+    expect(tableWrap).not.toBeNull();
+    if (!tableWrap) {
+      throw new Error("Expected markdown table wrapper");
+    }
+    tableWrap.scrollLeft = 240;
+
+    rerender(<Markdown value={value} className="markdown" />);
+
+    const rerenderedTableWrap = container.querySelector<HTMLElement>(".markdown-table-wrap");
+    expect(rerenderedTableWrap).toBe(tableWrap);
+    expect(rerenderedTableWrap?.scrollLeft).toBe(240);
+
+    rerender(<Markdown value={value} className="markdown updated" />);
+    expect(container.querySelector(".markdown-table-wrap")).toBe(tableWrap);
+    expect(tableWrap.scrollLeft).toBe(240);
+
+    rerender(<Markdown value={value.replace("Ready", "Updated")} className="markdown updated" />);
+    expect(container.querySelector(".markdown-table-wrap")).toBe(tableWrap);
+    expect(tableWrap.scrollLeft).toBe(240);
+    expect(screen.getByText("Updated")).toBeTruthy();
+  });
+
   it("copies code block content without markdown fences by default", async () => {
     const writeText = vi.fn();
     Object.defineProperty(navigator, "clipboard", {

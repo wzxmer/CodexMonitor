@@ -50,6 +50,12 @@ type LinkBlockProps = {
   urls: string[];
 };
 
+const MarkdownTable: NonNullable<Components["table"]> = ({ children }) => (
+  <div className="markdown-table-wrap">
+    <table className="markdown-table">{children}</table>
+  </div>
+);
+
 function extractLanguageTag(className?: string) {
   if (!className) {
     return null;
@@ -477,11 +483,7 @@ export function Markdown({
     return resolvedPath;
   };
   const components: Components = {
-    table: ({ children }) => (
-      <div className="markdown-table-wrap">
-        <table className="markdown-table">{children}</table>
-      </div>
-    ),
+    table: MarkdownTable,
     a: ({ href, children }) => {
       const url = (href ?? "").trim();
       const threadId = url.startsWith("thread://")
