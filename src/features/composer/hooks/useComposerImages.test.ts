@@ -192,7 +192,7 @@ describe("useComposerImages", () => {
       token = hook.result.transferActiveImages(["/tmp/submitted.md"]);
     });
 
-    expect(token).toEqual({ draftKey: "draft-ws-1", generation: 1 });
+    expect(token).toEqual({ draftKey: "draft-ws-1", generation: 0 });
     expect(hook.result.activeImages).toEqual(["/tmp/remaining.md"]);
 
     hook.unmount();
@@ -228,6 +228,36 @@ describe("useComposerImages", () => {
       "/tmp/new.md",
       "/tmp/original.md",
     ]);
+
+    hook.unmount();
+  });
+
+  it("restores an earlier failed transfer after a later transfer succeeds", () => {
+    const hook = renderComposerImages({
+      activeThreadId: null,
+      activeWorkspaceId: "ws-1",
+    });
+
+    act(() => {
+      hook.result.attachImages(["/tmp/first.md"]);
+    });
+    let firstToken: { draftKey: string; generation: number } | null = null;
+    act(() => {
+      firstToken = hook.result.transferActiveImages(["/tmp/first.md"]);
+      hook.result.attachImages(["/tmp/second.md"]);
+    });
+    let secondToken: { draftKey: string; generation: number } | null = null;
+    act(() => {
+      secondToken = hook.result.transferActiveImages(["/tmp/second.md"]);
+    });
+
+    expect(firstToken).toEqual({ draftKey: "draft-ws-1", generation: 0 });
+    expect(secondToken).toEqual({ draftKey: "draft-ws-1", generation: 0 });
+    act(() => {
+      hook.result.restoreImagesForDraft(firstToken!, ["/tmp/first.md"]);
+    });
+
+    expect(hook.result.activeImages).toEqual(["/tmp/first.md"]);
 
     hook.unmount();
   });

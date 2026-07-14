@@ -124,7 +124,7 @@ export function useComposerImages({
       }
       const token = {
         draftKey,
-        generation: advanceDraftGeneration(draftKey),
+        generation: generationByDraft.current[draftKey] ?? 0,
       };
       setImagesByThread((prev) => {
         if (!(draftKey in prev)) {
@@ -142,7 +142,7 @@ export function useComposerImages({
       });
       return token;
     },
-    [advanceDraftGeneration, draftKey],
+    [draftKey],
   );
 
   const restoreImagesForDraft = useCallback(
@@ -151,7 +151,7 @@ export function useComposerImages({
         return;
       }
       setImagesByThread((prev) => {
-        if (generationByDraft.current[token.draftKey] !== token.generation) {
+        if ((generationByDraft.current[token.draftKey] ?? 0) !== token.generation) {
           return prev;
         }
         const existing = prev[token.draftKey] ?? [];
