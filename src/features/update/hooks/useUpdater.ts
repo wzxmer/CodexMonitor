@@ -34,6 +34,7 @@ export type UpdateState = {
   version?: string;
   progress?: UpdateProgress;
   error?: string;
+  errorCode?: "mixedInstaller";
 };
 
 type PostUpdateNotice =
@@ -86,6 +87,22 @@ export function useUpdater({
     try {
       setState({ stage: "checking" });
       const installerKind = await windowsInstallerKind();
+      if (installerKind === "mixed") {
+        updateRef.current = null;
+        const nextState: UpdateState = {
+          stage: "error",
+          errorCode: "mixedInstaller",
+        };
+        onDebug?.({
+          id: `${Date.now()}-client-updater-mixed-installer`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "updater/mixed-installer",
+          payload: "Automatic update blocked because MSI and NSIS registrations coexist.",
+        });
+        setState(nextState);
+        return nextState;
+      }
       const update = await fetchLatestReleaseUpdate(
         __APP_VERSION__,
         undefined,

@@ -37,7 +37,7 @@ describe("fetchLatestReleaseUpdate", () => {
     const update = await fetchLatestReleaseUpdate("1.0.0", "windows", [
       "https://cos.example.com/latest.json",
       "https://oss.example.com/latest.json",
-    ]);
+    ], "msi");
 
     expect(update?.asset.urls).toEqual([
       "https://cos.example.com/v9.9.9/CodexMonitor_9.9.9_x64.msi",
@@ -69,7 +69,7 @@ describe("fetchLatestReleaseUpdate", () => {
 
     const update = await fetchLatestReleaseUpdate("1.0.0", "windows", [
       "https://cos.example.com/latest.json",
-    ]);
+    ], "msi");
 
     expect(update?.asset.urls).toEqual([githubUrl, mirrorUrl]);
     expect(update?.asset.sha256).toBe(checksum);
@@ -94,5 +94,15 @@ describe("selectReleaseAsset", () => {
 
   it("keeps MSI installations on MSI updates", () => {
     expect(selectReleaseAsset(assets, "windows", "msi")?.name).toContain(".msi");
+  });
+
+  it("does not select an installer for mixed or unknown Windows ownership", () => {
+    expect(selectReleaseAsset(assets, "windows", "mixed")).toBeNull();
+    expect(selectReleaseAsset(assets, "windows", "unknown")).toBeNull();
+  });
+
+  it("does not cross installer families when the owned package is absent", () => {
+    expect(selectReleaseAsset(assets.slice(1), "windows", "msi")).toBeNull();
+    expect(selectReleaseAsset(assets.slice(0, 1), "windows", "nsis")).toBeNull();
   });
 });

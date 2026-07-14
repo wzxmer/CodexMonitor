@@ -1221,8 +1221,10 @@ export async function cleanupDownloadedReleaseAssets(): Promise<void> {
   return invoke("cleanup_downloaded_release_assets");
 }
 
-export async function windowsInstallerKind(): Promise<"msi" | "nsis" | "unknown"> {
-  return invoke<"msi" | "nsis" | "unknown">("windows_installer_kind");
+export async function windowsInstallerKind(): Promise<
+  "msi" | "nsis" | "mixed" | "unknown"
+> {
+  return invoke<"msi" | "nsis" | "mixed" | "unknown">("windows_installer_kind");
 }
 
 export async function downloadAndOpenReleaseAsset(

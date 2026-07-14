@@ -88,11 +88,11 @@
           <RegistrySearch
               Id="PreviousNsisUninstaller"
               Root="HKCU"
-              Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\{{product_name}}"
+              Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\\{{product_name}}"
               Name="UninstallString"
               Type="raw" />
         </Property>
-        <Condition Message="An NSIS installation of Codex Monitor already exists. Update with the .exe installer, or uninstall it before installing the MSI package.">
+        <Condition Message="An NSIS installer registration exists. MSI installation is blocked to protect existing files. Do not run an old uninstaller against a shared install directory; resolve installer ownership before continuing.">
           Installed OR NOT NSISUNINSTALLER
         </Condition>
 

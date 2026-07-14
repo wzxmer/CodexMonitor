@@ -197,8 +197,12 @@ export function UpdateToast({
         {state.stage === "error" && (
           <>
             <ToastBody className="update-toast-body">{t("update.failed")}</ToastBody>
-            {state.error ? (
-              <ToastError className="update-toast-error">{state.error}</ToastError>
+            {state.error || state.errorCode ? (
+              <ToastError className="update-toast-error">
+                {state.errorCode === "mixedInstaller"
+                  ? t("update.mixedInstallerBlocked")
+                  : state.error}
+              </ToastError>
             ) : null}
             <ToastActions className="update-toast-actions">
               <button className="secondary" onClick={onDismiss}>

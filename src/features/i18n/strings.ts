@@ -42,6 +42,8 @@ export const I18N_STRINGS = {
     "update.installerOpened": "安装器已打开。请完成安装以结束更新。",
     "update.restarting": "正在重启...",
     "update.failed": "更新失败。",
+    "update.mixedInstallerBlocked":
+      "检测到 MSI 与 EXE 安装记录并存。为避免损坏当前安装，已阻止自动更新；请先修复安装器归属。",
     "update.dismiss": "关闭",
     "update.retry": "重试",
     "update.postUpdatedLoading": "更新成功。正在加载发布说明...",
@@ -1381,6 +1383,8 @@ export const I18N_STRINGS = {
     "update.installerOpened": "Installer opened. Complete setup to finish the update.",
     "update.restarting": "Restarting...",
     "update.failed": "Update failed.",
+    "update.mixedInstallerBlocked":
+      "Both MSI and EXE installer records were detected. Automatic updates are blocked to protect the current installation; repair installer ownership first.",
     "update.dismiss": "Dismiss",
     "update.retry": "Retry",
     "update.postUpdatedLoading": "Updated successfully. Loading release notes...",

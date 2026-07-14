@@ -40,7 +40,7 @@ export type PostUpdateReleaseInfo = {
 };
 
 export type ReleasePlatform = "windows" | "macos" | "linux" | "unknown";
-export type WindowsInstallerKind = "msi" | "nsis" | "unknown";
+export type WindowsInstallerKind = "msi" | "nsis" | "mixed" | "unknown";
 
 export type ReleaseAsset = {
   name: string;
@@ -145,8 +145,10 @@ export function selectReleaseAsset(
   const preferredExtensions =
     platform === "windows"
       ? windowsInstallerKind === "nsis"
-        ? [".exe", ".msi"]
-        : [".msi", ".exe"]
+        ? [".exe"]
+        : windowsInstallerKind === "msi"
+          ? [".msi"]
+          : []
       : platform === "macos"
         ? [".dmg"]
         : platform === "linux"
@@ -172,8 +174,10 @@ function selectMirrorReleaseAsset(
   const preferredExtensions =
     platform === "windows"
       ? windowsInstallerKind === "nsis"
-        ? [".exe", ".msi"]
-        : [".msi", ".exe"]
+        ? [".exe"]
+        : windowsInstallerKind === "msi"
+          ? [".msi"]
+          : []
       : platform === "macos"
         ? [".dmg"]
         : platform === "linux"

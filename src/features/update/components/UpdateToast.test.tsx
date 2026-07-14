@@ -91,6 +91,25 @@ describe("UpdateToast", () => {
     expect(onUpdate).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the localized mixed-installer safety block", () => {
+    const state: UpdateState = {
+      stage: "error",
+      errorCode: "mixedInstaller",
+    };
+
+    renderUpdateToast(
+      <UpdateToast
+        state={state}
+        onUpdate={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(/Both MSI and EXE installer records were detected/),
+    ).toBeTruthy();
+  });
+
   it("renders post-update loading notice and dismisses", () => {
     const onDismissPostUpdateNotice = vi.fn();
     const state: UpdateState = { stage: "idle" };

@@ -160,6 +160,21 @@ describe("useUpdater", () => {
     );
   });
 
+  it("blocks automatic installer selection for mixed MSI and NSIS ownership", async () => {
+    windowsInstallerKindMock.mockResolvedValue("mixed");
+    const { result } = renderHook(() => useUpdater({}));
+
+    await act(async () => {
+      await result.current.checkForUpdates();
+    });
+
+    expect(result.current.state).toEqual({
+      stage: "error",
+      errorCode: "mixedInstaller",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("downloads and opens the installer when update is available", async () => {
     fetchMock.mockResolvedValue(latestReleaseResponse("9.9.9"));
 

@@ -50,27 +50,28 @@ pub fn windows_installer_kind() -> String {
 #[cfg(target_os = "windows")]
 fn windows_installer_kind_impl() -> &'static str {
     let current_version = env!("CARGO_PKG_VERSION");
-    let msi_versions = read_uninstall_versions(
-        RegKey::predef(HKEY_LOCAL_MACHINE),
-        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-        true,
-    )
-    .into_iter()
-    .chain(read_uninstall_versions(
-        RegKey::predef(HKEY_LOCAL_MACHINE),
-        "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-        true,
-    ))
-    .chain(read_uninstall_versions(
-        RegKey::predef(HKEY_CURRENT_USER),
-        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-        true,
-    ));
-    let nsis_versions = read_uninstall_versions(
-        RegKey::predef(HKEY_CURRENT_USER),
-        "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-        false,
-    );
+    let mut msi_versions = Vec::new();
+    let mut nsis_versions = Vec::new();
+    for (root, path) in [
+        (
+            RegKey::predef(HKEY_LOCAL_MACHINE),
+            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        ),
+        (
+            RegKey::predef(HKEY_LOCAL_MACHINE),
+            "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        ),
+        (
+            RegKey::predef(HKEY_CURRENT_USER),
+            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        ),
+    ] {
+        let Ok((found_msi, found_nsis)) = read_uninstall_versions(root, path) else {
+            return "unknown";
+        };
+        msi_versions.extend(found_msi);
+        nsis_versions.extend(found_nsis);
+    }
     select_windows_installer_kind(current_version, msi_versions, nsis_versions)
 }
 
@@ -83,48 +84,71 @@ fn windows_installer_kind_impl() -> &'static str {
 fn read_uninstall_versions(
     root: RegKey,
     path: &str,
-    require_windows_installer: bool,
-) -> Vec<String> {
-    let Ok(uninstall_key) = root.open_subkey(path) else {
-        return Vec::new();
+) -> Result<(Vec<Option<String>>, Vec<Option<String>>), ()> {
+    let uninstall_key = match root.open_subkey(path) {
+        Ok(key) => key,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        Err(_) => return Err(()),
     };
-    uninstall_key
-        .enum_keys()
-        .filter_map(Result::ok)
-        .filter_map(|name| uninstall_key.open_subkey(name).ok())
-        .filter(|key| {
-            key.get_value::<String, _>("DisplayName").ok().as_deref() == Some("Codex Monitor")
-        })
-        .filter(|key| {
-            let is_windows_installer = key.get_value::<u32, _>("WindowsInstaller").ok() == Some(1);
-            if require_windows_installer {
-                is_windows_installer
-            } else {
-                !is_windows_installer
-                    && key
-                        .get_value::<String, _>("UninstallString")
-                        .ok()
-                        .is_some_and(|value| value.to_ascii_lowercase().contains("uninstall.exe"))
-            }
-        })
-        .filter_map(|key| key.get_value::<String, _>("DisplayVersion").ok())
-        .collect()
+    let mut msi_versions = Vec::new();
+    let mut nsis_versions = Vec::new();
+    for name in uninstall_key.enum_keys() {
+        let name = name.map_err(|_| ())?;
+        let key = uninstall_key.open_subkey(name).map_err(|_| ())?;
+        if key.get_value::<String, _>("DisplayName").ok().as_deref() != Some("Codex Monitor") {
+            continue;
+        }
+        let windows_installer = key.get_value::<u32, _>("WindowsInstaller").ok();
+        let uninstall_string = key.get_value::<String, _>("UninstallString").ok();
+        let installer_kind =
+            classify_windows_installer_registration(windows_installer, uninstall_string.as_deref())
+                .ok_or(())?;
+        let version = match key.get_value::<String, _>("DisplayVersion") {
+            Ok(version) => Some(version),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(_) => return Err(()),
+        };
+        if installer_kind == "msi" {
+            msi_versions.push(version);
+        } else {
+            nsis_versions.push(version);
+        }
+    }
+    Ok((msi_versions, nsis_versions))
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn classify_windows_installer_registration(
+    windows_installer: Option<u32>,
+    uninstall_string: Option<&str>,
+) -> Option<&'static str> {
+    if windows_installer == Some(1) {
+        return Some("msi");
+    }
+    uninstall_string
+        .is_some_and(|value| value.to_ascii_lowercase().contains("uninstall.exe"))
+        .then_some("nsis")
 }
 
 fn select_windows_installer_kind(
     current_version: &str,
-    msi_versions: impl IntoIterator<Item = String>,
-    nsis_versions: impl IntoIterator<Item = String>,
+    msi_versions: impl IntoIterator<Item = Option<String>>,
+    nsis_versions: impl IntoIterator<Item = Option<String>>,
 ) -> &'static str {
+    let msi_versions = msi_versions.into_iter().collect::<Vec<_>>();
+    let nsis_versions = nsis_versions.into_iter().collect::<Vec<_>>();
     let has_current_msi = msi_versions
-        .into_iter()
-        .any(|version| version == current_version);
+        .iter()
+        .any(|version| version.as_deref() == Some(current_version));
     let has_current_nsis = nsis_versions
-        .into_iter()
-        .any(|version| version == current_version);
-    match (has_current_msi, has_current_nsis) {
-        (true, false) => "msi",
-        (false, true) => "nsis",
+        .iter()
+        .any(|version| version.as_deref() == Some(current_version));
+    match (msi_versions.is_empty(), nsis_versions.is_empty()) {
+        (false, false) => "mixed",
+        (false, true) if has_current_msi => "msi",
+        (true, false) if has_current_nsis => "nsis",
         _ => "unknown",
     }
 }
@@ -586,8 +610,9 @@ fn open_installer(path: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        extract_managed_codex_archive, sanitize_release_asset_file_name,
-        select_windows_installer_kind, validate_release_asset_url,
+        classify_windows_installer_registration, extract_managed_codex_archive,
+        sanitize_release_asset_file_name, select_windows_installer_kind,
+        validate_release_asset_url,
     };
     use std::io::Write;
 
@@ -608,17 +633,66 @@ mod tests {
     #[test]
     fn detects_installer_kind_from_current_registered_version() {
         assert_eq!(
-            select_windows_installer_kind("1.2.3", ["1.2.3".into()], ["1.2.2".into()]),
+            select_windows_installer_kind("1.2.3", [Some("1.2.3".into())], [Some("1.2.2".into())],),
+            "mixed"
+        );
+        assert_eq!(
+            select_windows_installer_kind("1.2.3", [Some("1.2.2".into())], [Some("1.2.3".into())],),
+            "mixed"
+        );
+        assert_eq!(
+            select_windows_installer_kind("1.2.3", [Some("1.2.3".into())], [Some("1.2.3".into())],),
+            "mixed"
+        );
+        assert_eq!(
+            select_windows_installer_kind(
+                "1.2.3",
+                [Some("1.2.3".into())],
+                Vec::<Option<String>>::new(),
+            ),
             "msi"
         );
         assert_eq!(
-            select_windows_installer_kind("1.2.3", ["1.2.2".into()], ["1.2.3".into()]),
+            select_windows_installer_kind(
+                "1.2.3",
+                Vec::<Option<String>>::new(),
+                [Some("1.2.3".into())],
+            ),
             "nsis"
         );
         assert_eq!(
-            select_windows_installer_kind("1.2.3", ["1.2.3".into()], ["1.2.3".into()]),
+            select_windows_installer_kind(
+                "1.2.3",
+                [Some("1.2.2".into())],
+                Vec::<Option<String>>::new(),
+            ),
             "unknown"
         );
+        assert_eq!(
+            select_windows_installer_kind("1.2.3", [Some("1.2.3".into())], [None],),
+            "mixed"
+        );
+        assert_eq!(
+            select_windows_installer_kind("1.2.3", [None], Vec::<Option<String>>::new(),),
+            "unknown"
+        );
+    }
+
+    #[test]
+    fn classifies_only_explicit_windows_installer_families() {
+        assert_eq!(
+            classify_windows_installer_registration(Some(1), Some("MsiExec.exe /I")),
+            Some("msi")
+        );
+        assert_eq!(
+            classify_windows_installer_registration(None, Some("C:\\App\\uninstall.exe")),
+            Some("nsis")
+        );
+        assert_eq!(
+            classify_windows_installer_registration(None, Some("MsiExec.exe /I")),
+            None
+        );
+        assert_eq!(classify_windows_installer_registration(None, None), None);
     }
 
     #[test]
