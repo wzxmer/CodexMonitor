@@ -642,10 +642,12 @@ function buildPrimarySurface({
             : undefined,
           draftText: composerWorkspaceState.activeDraft,
           onDraftChange: composerWorkspaceState.handleDraftChange,
+          pasteUndoKey: composerWorkspaceState.activeImageDraftKey,
           attachedImages: composerWorkspaceState.activeImages,
           onPickImages: composerWorkspaceState.pickImages,
           onAttachImages: composerWorkspaceState.attachImages,
           onRemoveImage: composerWorkspaceState.removeImage,
+          onReplaceImages: composerWorkspaceState.replaceActiveImages,
           prefillDraft: composerWorkspaceState.prefillDraft,
           onPrefillHandled: (id) => {
             if (composerWorkspaceState.prefillDraft?.id === id) {

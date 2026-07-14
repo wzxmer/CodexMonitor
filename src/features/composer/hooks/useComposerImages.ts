@@ -117,6 +117,23 @@ export function useComposerImages({
     });
   }, [advanceDraftGeneration, draftKey]);
 
+  const replaceActiveImages = useCallback(
+    (images: string[]) => {
+      advanceDraftGeneration(draftKey);
+      setImagesByThread((prev) => {
+        if (images.length === 0) {
+          if (!(draftKey in prev)) {
+            return prev;
+          }
+          const { [draftKey]: _, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, [draftKey]: [...images] };
+      });
+    },
+    [advanceDraftGeneration, draftKey],
+  );
+
   const transferActiveImages = useCallback(
     (images: readonly string[]): ComposerImageTransferToken | null => {
       if (images.length === 0) {
@@ -185,11 +202,13 @@ export function useComposerImages({
   }, [advanceDraftGeneration]);
 
   return {
+    activeImageDraftKey: draftKey,
     activeImages,
     attachImages,
     pickImages,
     removeImage,
     clearActiveImages,
+    replaceActiveImages,
     transferActiveImages,
     restoreImagesForDraft,
     setImagesForThread,

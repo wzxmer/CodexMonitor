@@ -82,11 +82,13 @@ export function useComposerController({
   );
   const draftKey = activeThreadId ?? activeWorkspaceId;
   const {
+    activeImageDraftKey,
     activeImages,
     attachImages,
     pickImages,
     removeImage,
     clearActiveImages,
+    replaceActiveImages,
     transferActiveImages,
     restoreImagesForDraft,
     setImagesForThread,
@@ -190,11 +192,13 @@ export function useComposerController({
   }, []);
 
   return {
+    activeImageDraftKey,
     activeImages,
     attachImages,
     pickImages,
     removeImage,
     clearActiveImages,
+    replaceActiveImages,
     setImagesForThread,
     removeImagesForThread,
     activeQueue,

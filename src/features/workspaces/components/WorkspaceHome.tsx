@@ -18,6 +18,7 @@ import type {
 } from "../../../types";
 import { ComposerInput } from "../../composer/components/ComposerInput";
 import { useComposerImages } from "../../composer/hooks/useComposerImages";
+import { useComposerPasteUndo } from "../../composer/hooks/useComposerPasteUndo";
 import { useComposerAutocompleteState } from "../../composer/hooks/useComposerAutocompleteState";
 import { usePromptHistory } from "../../composer/hooks/usePromptHistory";
 import type {
@@ -172,6 +173,8 @@ export function WorkspaceHome({
     pickImages,
     removeImage,
     clearActiveImages,
+    replaceActiveImages,
+    activeImageDraftKey,
   } = useComposerImages({
     activeThreadId: null,
     activeWorkspaceId: workspace.id,
@@ -200,6 +203,22 @@ export function WorkspaceHome({
     textareaRef,
     setText: onPromptChange,
     setSelectionStart,
+  });
+
+  const {
+    beginPasteAttachments,
+    clearPasteUndoHistory,
+    handlePasteUndoKeyDown,
+    markNativeHistoryChange,
+    pasteAttachments,
+  } = useComposerPasteUndo({
+    text: prompt,
+    attachments: activeImages,
+    draftKey: activeImageDraftKey,
+    textareaRef,
+    onAttachImages: attachImages,
+    onReplaceImages: replaceActiveImages,
+    onSelectionChange: handleSelectionChange,
   });
 
   const suggestionsStyle = useWorkspaceHomeSuggestionsStyle({
@@ -231,8 +250,23 @@ export function WorkspaceHome({
   });
 
   const handleTextChangeWithHistory = (next: string, cursor: number | null) => {
+    markNativeHistoryChange();
     handleHistoryTextChange(next);
     handleTextChange(next, cursor);
+  };
+
+  const handleAttachImages = (paths: string[]) => {
+    clearPasteUndoHistory();
+    attachImages(paths);
+  };
+
+  const handlePasteAttachments = (paths: string[]) => {
+    pasteAttachments(paths);
+  };
+
+  const handleRemoveImage = (path: string) => {
+    clearPasteUndoHistory();
+    removeImage(path);
   };
 
   const isDictationBusy = dictationState !== "idle";
@@ -261,6 +295,7 @@ export function WorkspaceHome({
       end,
     );
 
+    clearPasteUndoHistory();
     onPromptChange(nextText);
     resetHistoryNavigation();
 
@@ -276,6 +311,7 @@ export function WorkspaceHome({
     onDictationTranscriptHandled(dictationTranscript.id);
   }, [
     dictationTranscript,
+    clearPasteUndoHistory,
     onDictationTranscriptHandled,
     onPromptChange,
     prompt,
@@ -299,12 +335,17 @@ export function WorkspaceHome({
         recordHistory(trimmed);
       }
       resetHistoryNavigation();
+      clearPasteUndoHistory();
       clearActiveImages();
     }
   };
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (isComposingEvent(event)) {
+      return;
+    }
+
+    if (handlePasteUndoKeyDown(event)) {
       return;
     }
 
@@ -396,10 +437,13 @@ export function WorkspaceHome({
             onDismissDictationHint={onDismissDictationHint}
             attachments={activeImages}
             onAddAttachment={() => {
+              clearPasteUndoHistory();
               void pickImages();
             }}
-            onAttachImages={attachImages}
-            onRemoveAttachment={removeImage}
+            onAttachImages={handleAttachImages}
+            onPasteAttachments={handlePasteAttachments}
+            onBeginPasteAttachments={beginPasteAttachments}
+            onRemoveAttachment={handleRemoveImage}
             onTextChange={handleTextChangeWithHistory}
             onSelectionChange={handleSelectionChange}
             onKeyDown={handleComposerKeyDown}

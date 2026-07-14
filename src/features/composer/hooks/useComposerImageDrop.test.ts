@@ -28,7 +28,12 @@ type RenderedHook = {
   unmount: () => void;
 };
 
-function renderImageDropHook(options: { disabled: boolean; onAttachImages?: (paths: string[]) => void }): RenderedHook {
+function renderImageDropHook(options: {
+  disabled: boolean;
+  onAttachImages?: (paths: string[]) => void;
+  onPasteImages?: (paths: string[]) => void;
+  onPasteStart?: () => ((paths: string[]) => void) | null;
+}): RenderedHook {
   let result: HookResult | undefined;
 
   function Test() {
@@ -230,6 +235,47 @@ describe("useComposerImageDrop", () => {
 
     expect(preventDefault).toHaveBeenCalled();
     expect(onAttachImages).toHaveBeenCalledWith(["D:\\Pictures\\paste.png"]);
+
+    hook.unmount();
+    restoreFileReader();
+  });
+
+  it("reports path and inline clipboard files as one paste transaction", async () => {
+    const restoreFileReader = setMockFileReader();
+    const onAttachImages = vi.fn();
+    const onPasteImages = vi.fn();
+    const hook = renderImageDropHook({
+      disabled: false,
+      onAttachImages,
+      onPasteImages,
+    });
+    const pathFile = new File(["path"], "path.png", { type: "image/png" });
+    Object.defineProperty(pathFile, "path", {
+      value: "D:\\Pictures\\path.png",
+      configurable: true,
+    });
+    const inlineFile = new File(["inline"], "inline.txt", {
+      type: "text/plain",
+    });
+
+    await act(async () => {
+      await hook.result.handlePaste({
+        clipboardData: {
+          items: [
+            { kind: "file", type: "image/png", getAsFile: () => pathFile },
+            { kind: "file", type: "text/plain", getAsFile: () => inlineFile },
+          ],
+        },
+        preventDefault: vi.fn(),
+      } as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
+    });
+
+    expect(onPasteImages).toHaveBeenCalledTimes(1);
+    expect(onPasteImages).toHaveBeenCalledWith([
+      "D:\\Pictures\\path.png",
+      'data:text/plain;name="inline.txt";base64,MOCK',
+    ]);
+    expect(onAttachImages).not.toHaveBeenCalled();
 
     hook.unmount();
     restoreFileReader();

@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
   type ClipboardEvent,
+  type KeyboardEvent,
 } from "react";
 import type {
   AppMention,
@@ -41,6 +42,7 @@ import {
 import { useComposerAutocompleteState } from "../hooks/useComposerAutocompleteState";
 import { useComposerDraftEffects } from "../hooks/useComposerDraftEffects";
 import { useComposerKeyDown } from "../hooks/useComposerKeyDown";
+import { useComposerPasteUndo } from "../hooks/useComposerPasteUndo";
 import { useComposerSuggestionStyle } from "../hooks/useComposerSuggestionStyle";
 import { usePromptHistory } from "../hooks/usePromptHistory";
 import { ComposerInput } from "./ComposerInput";
@@ -48,6 +50,7 @@ import { ComposerMetaBar } from "./ComposerMetaBar";
 import { ComposerQueue } from "./ComposerQueue";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { isMacPlatform } from "../../../utils/platformPaths";
+import { isComposingEvent } from "../../../utils/keys";
 import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
 import { getCompactionCyclePercent } from "@/features/threads/utils/contextUsage";
 import {
@@ -118,10 +121,12 @@ type ComposerProps = {
   draftText?: string;
   onDraftChange?: (text: string) => void;
   historyKey?: string | null;
+  pasteUndoKey?: string | null;
   attachedImages?: string[];
   onPickImages?: () => void;
   onAttachImages?: (paths: string[]) => void;
   onRemoveImage?: (path: string) => void;
+  onReplaceImages?: (paths: string[]) => void;
   prefillDraft?: QueuedMessage | null;
   onPrefillHandled?: (id: string) => void;
   insertText?: QueuedMessage | null;
@@ -242,10 +247,12 @@ export const Composer = memo(function Composer({
   draftText = "",
   onDraftChange,
   historyKey = null,
+  pasteUndoKey = null,
   attachedImages = [],
   onPickImages,
   onAttachImages,
   onRemoveImage,
+  onReplaceImages,
   prefillDraft = null,
   onPrefillHandled,
   insertText = null,
@@ -429,12 +436,29 @@ export const Composer = memo(function Composer({
     setSelectionStart,
   });
 
+  const {
+    beginPasteAttachments,
+    clearPasteUndoHistory,
+    handlePasteUndoKeyDown,
+    markNativeHistoryChange,
+    pasteAttachments,
+  } = useComposerPasteUndo({
+    text,
+    attachments: attachedImages,
+    draftKey: pasteUndoKey,
+    textareaRef,
+    onAttachImages,
+    onReplaceImages,
+    onSelectionChange: handleSelectionChange,
+  });
+
   const handleTextChangeWithHistory = useCallback(
     (next: string, cursor: number | null) => {
+      markNativeHistoryChange();
       handleHistoryTextChange(next);
       handleTextChange(next, cursor);
     },
-    [handleHistoryTextChange, handleTextChange],
+    [handleHistoryTextChange, handleTextChange, markNativeHistoryChange],
   );
 
   const skillSuggestion = useMemo(
@@ -459,12 +483,14 @@ export const Composer = memo(function Composer({
     } else {
       onSend(trimmed, attachedImages, undefined, submitIntent);
     }
+    clearPasteUndoHistory();
     resetHistoryNavigation();
     setComposerText("");
     setAppMentionBindings([]);
   }, [
     appMentionBindings,
     attachedImages,
+    clearPasteUndoHistory,
     disabled,
     onSend,
     recordHistory,
@@ -491,10 +517,12 @@ export const Composer = memo(function Composer({
     bindingsFromMentions,
     resetHistoryNavigation,
     handleSelectionChange,
+    onProgrammaticDraftChange: clearPasteUndoHistory,
   });
 
   const applyTextInsertion = useCallback(
     (nextText: string, nextCursor: number) => {
+      clearPasteUndoHistory();
       setComposerText(nextText);
       requestAnimationFrame(() => {
         const textarea = textareaRef.current;
@@ -506,7 +534,73 @@ export const Composer = memo(function Composer({
         handleSelectionChange(nextCursor);
       });
     },
-    [handleSelectionChange, setComposerText, textareaRef],
+    [clearPasteUndoHistory, handleSelectionChange, setComposerText, textareaRef],
+  );
+
+  const handleSelectSuggestion = useCallback(
+    (item: Parameters<typeof applyAutocomplete>[0]) => {
+      clearPasteUndoHistory();
+      applyAutocomplete(item);
+    },
+    [applyAutocomplete, clearPasteUndoHistory],
+  );
+
+  const handleAttachImages = useCallback(
+    (paths: string[]) => {
+      clearPasteUndoHistory();
+      onAttachImages?.(paths);
+    },
+    [clearPasteUndoHistory, onAttachImages],
+  );
+
+  const handlePasteAttachments = useCallback(
+    (paths: string[]) => {
+      pasteAttachments(paths);
+    },
+    [pasteAttachments],
+  );
+
+  const handlePickImages = useCallback(() => {
+    clearPasteUndoHistory();
+    onPickImages?.();
+  }, [clearPasteUndoHistory, onPickImages]);
+
+  const handleRemoveImage = useCallback(
+    (path: string) => {
+      clearPasteUndoHistory();
+      onRemoveImage?.(path);
+    },
+    [clearPasteUndoHistory, onRemoveImage],
+  );
+
+  const applyNativePasteInsertion = useCallback(
+    (insertedText: string, start: number, end: number) => {
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        return false;
+      }
+      textarea.focus();
+      textarea.setSelectionRange(start, end);
+      const insertedNatively =
+        typeof document.execCommand === "function" &&
+        document.execCommand("insertText", false, insertedText);
+      const nextCursor = start + insertedText.length;
+      if (!insertedNatively) {
+        const nextText = `${text.slice(0, start)}${insertedText}${text.slice(end)}`;
+        applyTextInsertion(nextText, nextCursor);
+        return false;
+      }
+      requestAnimationFrame(() => {
+        const currentTextarea = textareaRef.current;
+        if (!currentTextarea) {
+          return;
+        }
+        currentTextarea.setSelectionRange(nextCursor, nextCursor);
+        handleSelectionChange(nextCursor);
+      });
+      return true;
+    },
+    [applyTextInsertion, handleSelectionChange, text, textareaRef],
   );
 
   const handleInsertSkillSuggestion = useCallback(() => {
@@ -543,7 +637,7 @@ export const Composer = memo(function Composer({
         onAttachImages
       ) {
         event.preventDefault();
-        onAttachImages([createPastedTextAttachment(normalized)]);
+        handlePasteAttachments([createPastedTextAttachment(normalized)]);
         return;
       }
       if (!autoWrapPasteMultiline && !autoWrapPasteCodeLike) {
@@ -580,18 +674,15 @@ export const Composer = memo(function Composer({
             .map((line) => `${indent}${line}`)
             .join("\n")
         : normalizedForFence;
-      const before = text.slice(0, start);
-      const after = text.slice(end);
       const block = `${indent}\`\`\`\n${content}\n${indent}\`\`\``;
-      const nextText = `${before}${block}${after}`;
-      const nextCursor = before.length + block.length;
-      applyTextInsertion(nextText, nextCursor);
+      applyNativePasteInsertion(block, start, end);
     },
     [
-      applyTextInsertion,
+      applyNativePasteInsertion,
       autoWrapPasteCodeLike,
       autoWrapPasteMultiline,
       largePasteBehavior,
+      handlePasteAttachments,
       onAttachImages,
       disabled,
       text,
@@ -605,10 +696,17 @@ export const Composer = memo(function Composer({
       const start = textarea?.selectionStart ?? text.length;
       const end = textarea?.selectionEnd ?? start;
       const nextText = `${text.slice(0, start)}${restoredText}${text.slice(end)}`;
+      clearPasteUndoHistory();
       applyTextInsertion(nextText, start + restoredText.length);
       onRemoveImage?.(path);
     },
-    [applyTextInsertion, onRemoveImage, text, textareaRef],
+    [
+      applyTextInsertion,
+      clearPasteUndoHistory,
+      onRemoveImage,
+      text,
+      textareaRef,
+    ],
   );
   const tryExpandFence = useCallback(
     (start: number, end: number) => {
@@ -646,7 +744,7 @@ export const Composer = memo(function Composer({
     },
     [applyTextInsertion, fenceLanguageTags, fenceWrapSelection, text],
   );
-  const handleKeyDown = useComposerKeyDown({
+  const baseHandleKeyDown = useComposerKeyDown({
     applyTextInsertion,
     canSend,
     composerSendShortcut,
@@ -668,6 +766,18 @@ export const Composer = memo(function Composer({
     textareaRef,
     tryExpandFence,
   });
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (isComposingEvent(event)) {
+        return;
+      }
+      if (handlePasteUndoKeyDown(event)) {
+        return;
+      }
+      baseHandleKeyDown(event);
+    },
+    [baseHandleKeyDown, handlePasteUndoKeyDown],
+  );
 
 
   return (
@@ -743,9 +853,11 @@ export const Composer = memo(function Composer({
         dictationHint={dictationHint}
         onDismissDictationHint={onDismissDictationHint}
         attachments={attachedImages}
-        onAddAttachment={onPickImages}
-        onAttachImages={onAttachImages}
-        onRemoveAttachment={onRemoveImage}
+        onAddAttachment={handlePickImages}
+        onAttachImages={handleAttachImages}
+        onPasteAttachments={handlePasteAttachments}
+        onBeginPasteAttachments={beginPasteAttachments}
+        onRemoveAttachment={handleRemoveImage}
         onRestoreTextAttachment={handleRestoreTextAttachment}
         onTextChange={handleTextChangeWithHistory}
         onSelectionChange={handleSelectionChange}
@@ -758,7 +870,7 @@ export const Composer = memo(function Composer({
         suggestions={suggestions}
         highlightIndex={highlightIndex}
         onHighlightIndex={setHighlightIndex}
-        onSelectSuggestion={applyAutocomplete}
+        onSelectSuggestion={handleSelectSuggestion}
         suggestionsStyle={suggestionsStyle}
         reviewPrompt={reviewPrompt}
         onReviewPromptClose={onReviewPromptClose}

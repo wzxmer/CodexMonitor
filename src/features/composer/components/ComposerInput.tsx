@@ -47,6 +47,8 @@ type ComposerInputProps = {
   attachments?: string[];
   onAddAttachment?: () => void;
   onAttachImages?: (paths: string[]) => void;
+  onPasteAttachments?: (paths: string[]) => void;
+  onBeginPasteAttachments?: () => ((paths: string[]) => void) | null;
   onRemoveAttachment?: (path: string) => void;
   onRestoreTextAttachment?: (path: string, text: string) => void;
   onTextChange: (next: string, selectionStart: number | null) => void;
@@ -108,6 +110,8 @@ export function ComposerInput({
   attachments = [],
   onAddAttachment,
   onAttachImages,
+  onPasteAttachments,
+  onBeginPasteAttachments,
   onRemoveAttachment,
   onRestoreTextAttachment,
   onTextChange,
@@ -166,6 +170,8 @@ export function ComposerInput({
   } = useComposerImageDrop({
     disabled,
     onAttachImages,
+    onPasteImages: onPasteAttachments,
+    onPasteStart: onBeginPasteAttachments,
   });
   const setInputAreaRef = useCallback(
     (node: HTMLDivElement | null) => {

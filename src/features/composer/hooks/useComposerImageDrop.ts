@@ -59,11 +59,15 @@ function normalizeDragPosition(
 type UseComposerImageDropArgs = {
   disabled: boolean;
   onAttachImages?: (paths: string[]) => void;
+  onPasteImages?: (paths: string[]) => void;
+  onPasteStart?: () => ((paths: string[]) => void) | null;
 };
 
 export function useComposerImageDrop({
   disabled,
   onAttachImages,
+  onPasteImages,
+  onPasteStart,
 }: UseComposerImageDropArgs) {
   const [isDragOver, setIsDragOver] = useState(false);
   const dropTargetRef = useRef<HTMLDivElement | null>(null);
@@ -189,9 +193,8 @@ export function useComposerImageDrop({
       return;
     }
     event.preventDefault();
-    if (filePaths.length > 0) {
-      onAttachImages?.(filePaths);
-    }
+    const completePaste =
+      onPasteStart?.() ?? onPasteImages ?? onAttachImages;
     const dataUrls = await Promise.all(
       inlineFiles.map(
         (file) =>
@@ -209,8 +212,9 @@ export function useComposerImageDrop({
       ),
     );
     const valid = dataUrls.filter(Boolean);
-    if (valid.length > 0) {
-      onAttachImages?.(valid);
+    const pastedAttachments = [...filePaths, ...valid];
+    if (pastedAttachments.length > 0) {
+      completePaste?.(pastedAttachments);
     }
   };
 

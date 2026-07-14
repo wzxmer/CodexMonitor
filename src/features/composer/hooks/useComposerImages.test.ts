@@ -283,6 +283,28 @@ describe("useComposerImages", () => {
     hook.unmount();
   });
 
+  it("treats attachment replacement as an explicit draft ownership change", () => {
+    const hook = renderComposerImages({
+      activeThreadId: null,
+      activeWorkspaceId: "ws-1",
+    });
+
+    act(() => {
+      hook.result.attachImages(["/tmp/original.md"]);
+    });
+    let token: { draftKey: string; generation: number } | null = null;
+    act(() => {
+      token = hook.result.transferActiveImages(["/tmp/original.md"]);
+      hook.result.replaceActiveImages(["/tmp/replacement.md"]);
+      hook.result.restoreImagesForDraft(token!, ["/tmp/original.md"]);
+    });
+
+    expect(hook.result.activeImageDraftKey).toBe("draft-ws-1");
+    expect(hook.result.activeImages).toEqual(["/tmp/replacement.md"]);
+
+    hook.unmount();
+  });
+
   it("does not restore an image removed before attachment saving finishes", async () => {
     let resolveSave: (paths: string[]) => void = () => {};
     vi.mocked(saveComposerImages).mockReturnValueOnce(

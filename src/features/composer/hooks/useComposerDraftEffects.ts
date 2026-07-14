@@ -21,6 +21,7 @@ type UseComposerDraftEffectsArgs = {
   bindingsFromMentions: (mentions?: AppMention[]) => AppMentionBinding[];
   resetHistoryNavigation: () => void;
   handleSelectionChange: (cursor: number | null) => void;
+  onProgrammaticDraftChange?: () => void;
 };
 
 function applyQueuedMessage({
@@ -62,10 +63,14 @@ export function useComposerDraftEffects({
   bindingsFromMentions,
   resetHistoryNavigation,
   handleSelectionChange,
+  onProgrammaticDraftChange,
 }: UseComposerDraftEffectsArgs) {
   useEffect(() => {
+    if (draftText !== text) {
+      onProgrammaticDraftChange?.();
+    }
     syncDraftText(draftText);
-  }, [draftText, syncDraftText]);
+  }, [draftText, onProgrammaticDraftChange, syncDraftText, text]);
 
   useEffect(() => {
     setAppMentionBindings([]);
@@ -75,6 +80,7 @@ export function useComposerDraftEffects({
     if (!prefillDraft) {
       return;
     }
+    onProgrammaticDraftChange?.();
     applyQueuedMessage({
       message: prefillDraft,
       handled: onPrefillHandled,
@@ -86,6 +92,7 @@ export function useComposerDraftEffects({
   }, [
     bindingsFromMentions,
     onPrefillHandled,
+    onProgrammaticDraftChange,
     prefillDraft,
     resetHistoryNavigation,
     setAppMentionBindings,
@@ -96,6 +103,7 @@ export function useComposerDraftEffects({
     if (!insertText) {
       return;
     }
+    onProgrammaticDraftChange?.();
     applyQueuedMessage({
       message: insertText,
       handled: onInsertHandled,
@@ -108,6 +116,7 @@ export function useComposerDraftEffects({
     bindingsFromMentions,
     insertText,
     onInsertHandled,
+    onProgrammaticDraftChange,
     resetHistoryNavigation,
     setAppMentionBindings,
     setComposerText,
@@ -122,6 +131,7 @@ export function useComposerDraftEffects({
       onDictationTranscriptHandled?.(dictationTranscript.id);
       return;
     }
+    onProgrammaticDraftChange?.();
     const textarea = textareaRef.current;
     const start = textarea?.selectionStart ?? selectionStart ?? text.length;
     const end = textarea?.selectionEnd ?? start;
@@ -146,6 +156,7 @@ export function useComposerDraftEffects({
     dictationTranscript,
     handleSelectionChange,
     onDictationTranscriptHandled,
+    onProgrammaticDraftChange,
     resetHistoryNavigation,
     selectionStart,
     setComposerText,
