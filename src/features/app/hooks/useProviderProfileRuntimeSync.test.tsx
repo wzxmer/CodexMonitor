@@ -55,6 +55,8 @@ describe("useProviderProfileRuntimeSync", () => {
     rerender({ activeProfile: profile("profile-b") });
 
     await waitFor(() => expect(syncWorkspaceRuntime).toHaveBeenCalledTimes(2));
+    expect(syncWorkspaceRuntime).toHaveBeenNthCalledWith(1, "ws-1", "thread-1");
+    expect(syncWorkspaceRuntime).toHaveBeenNthCalledWith(2, "ws-1", "thread-1");
   });
 
   it("does not resync only because the selected thread changes", async () => {

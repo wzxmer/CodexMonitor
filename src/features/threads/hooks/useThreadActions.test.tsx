@@ -1031,6 +1031,10 @@ describe("useThreadActions", () => {
     });
   });
 
+  it.todo("preserves verified threads when a refresh returns an abnormal empty page");
+
+  it.todo("retains uncovered verified threads when the fetched page is incomplete");
+
   it("uses fresh fetched data for active anchors outside top thread target", async () => {
     const data = Array.from({ length: 21 }, (_, index) => ({
       id: `thread-${index + 1}`,

@@ -53,6 +53,37 @@ fn scans_multiple_sources_with_duplicate_thread_ids() {
 }
 
 #[test]
+fn source_scan_distinguishes_an_existing_session_from_a_true_deletion() {
+    let fixture = SessionFixture::new();
+    let source_root = fixture.root.join("home");
+    create_session(
+        &source_root,
+        false,
+        "thread-visible",
+        None,
+        json!("vscode"),
+        Some("user"),
+    );
+
+    let before_delete = scan_session_source(&source("source-a", &source_root));
+
+    assert_eq!(before_delete.sessions.len(), 1);
+    assert_eq!(before_delete.sessions[0].key, "source-a:thread-visible");
+
+    let session_path = source_root
+        .join("sessions")
+        .join("2026")
+        .join("07")
+        .join("10")
+        .join("rollout-2026-07-10T08-00-00-thread-visible.jsonl");
+    fs::remove_file(session_path).unwrap();
+
+    let after_delete = scan_session_source(&source("source-a", &source_root));
+
+    assert!(after_delete.sessions.is_empty());
+}
+
+#[test]
 fn scans_archived_missing_project_and_subagent_metadata() {
     let fixture = SessionFixture::new();
     let source_root = fixture.root.join("home");
