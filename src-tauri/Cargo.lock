@@ -684,6 +684,7 @@ dependencies = [
  "toml_edit 0.20.2",
  "uuid",
  "whisper-rs",
+ "windows-sys 0.59.0",
  "winreg 0.52.0",
  "zip",
 ]

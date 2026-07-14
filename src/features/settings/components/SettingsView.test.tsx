@@ -123,6 +123,8 @@ const baseSettings: AppSettings = {
   sessionSources: [],
   codexKeyProfiles: [],
   activeCodexKeyProfileId: null,
+  preserveSessionLibraryOnProviderSwitch: true,
+  syncProviderProfileToLocalConfig: false,
   backendMode: "local",
   remoteBackendProvider: "tcp",
   remoteBackendHost: "127.0.0.1:4732",

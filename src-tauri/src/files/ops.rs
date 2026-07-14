@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use crate::files::io::{read_text_file_within, write_text_file_within, TextFileResponse};
+use crate::files::io::{
+    read_text_file_within, write_text_file_within, write_text_file_within_atomic_if_unchanged,
+    TextFileResponse,
+};
 use crate::files::policy::FilePolicy;
 
 pub(crate) fn read_with_policy(
@@ -26,6 +29,25 @@ pub(crate) fn write_with_policy(
         root,
         policy.filename,
         content,
+        policy.create_root,
+        policy.root_context,
+        policy.filename,
+        policy.allow_external_symlink_target,
+    )
+}
+
+#[allow(dead_code)]
+pub(crate) fn write_with_policy_atomic_if_unchanged(
+    root: &PathBuf,
+    policy: FilePolicy,
+    content: &str,
+    expected: &TextFileResponse,
+) -> Result<(), String> {
+    write_text_file_within_atomic_if_unchanged(
+        root,
+        policy.filename,
+        content,
+        expected,
         policy.create_root,
         policy.root_context,
         policy.filename,

@@ -266,6 +266,8 @@ function buildDefaultSettings(): AppSettings {
     sessionSources: [],
     codexKeyProfiles: [],
     activeCodexKeyProfileId: null,
+    preserveSessionLibraryOnProviderSwitch: true,
+    syncProviderProfileToLocalConfig: false,
     backendMode: isMobile ? "remote" : "local",
     remoteBackendProvider: defaultRemote.provider,
     remoteBackendHost: defaultRemote.host,
@@ -418,6 +420,14 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
         : [],
       codexKeyProfiles,
     activeCodexKeyProfileId,
+    preserveSessionLibraryOnProviderSwitch:
+      typeof settings.preserveSessionLibraryOnProviderSwitch === "boolean"
+        ? settings.preserveSessionLibraryOnProviderSwitch
+        : true,
+    syncProviderProfileToLocalConfig:
+      typeof settings.syncProviderProfileToLocalConfig === "boolean"
+        ? settings.syncProviderProfileToLocalConfig
+        : false,
     tokenEfficiencyMode: allowedTokenEfficiencyModes.has(
       settings.tokenEfficiencyMode ?? "",
     )

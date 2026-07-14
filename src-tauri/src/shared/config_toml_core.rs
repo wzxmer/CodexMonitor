@@ -2,12 +2,23 @@ use std::path::Path;
 
 use toml_edit::{value, Document, Item, Table};
 
-use crate::files::ops::{read_with_policy, write_with_policy};
+use crate::files::io::TextFileResponse;
+use crate::files::ops::{
+    read_with_policy, write_with_policy, write_with_policy_atomic_if_unchanged,
+};
 use crate::files::policy::{policy_for, FileKind, FileScope};
 
 const LEGACY_NATIVE_MARKDOWN_IMPORT_FLAG: &str = "native_markdown_imported";
 
-pub(crate) fn load_global_config_document(codex_home: &Path) -> Result<(bool, Document), String> {
+#[derive(Clone)]
+pub(crate) struct GlobalConfigSnapshot {
+    pub(crate) document: Document,
+    original: TextFileResponse,
+}
+
+pub(crate) fn load_global_config_snapshot(
+    codex_home: &Path,
+) -> Result<GlobalConfigSnapshot, String> {
     let policy = policy_for(FileScope::Global, FileKind::Config)?;
     let root = codex_home.to_path_buf();
     let response = read_with_policy(&root, policy)?;
@@ -16,7 +27,27 @@ pub(crate) fn load_global_config_document(codex_home: &Path) -> Result<(bool, Do
     } else {
         Document::new()
     };
-    Ok((response.exists, document))
+    Ok(GlobalConfigSnapshot {
+        document,
+        original: response,
+    })
+}
+
+pub(crate) fn load_global_config_document(codex_home: &Path) -> Result<(bool, Document), String> {
+    let snapshot = load_global_config_snapshot(codex_home)?;
+    Ok((snapshot.original.exists, snapshot.document))
+}
+
+fn render_global_config_document(document: &Document, remove_legacy_marker: bool) -> String {
+    let mut document = document.clone();
+    if remove_legacy_marker {
+        remove_legacy_agents_import_marker(&mut document);
+    }
+    let mut rendered = document.to_string();
+    if !rendered.ends_with('\n') {
+        rendered.push('\n');
+    }
+    rendered
 }
 
 pub(crate) fn persist_global_config_document(
@@ -25,13 +56,20 @@ pub(crate) fn persist_global_config_document(
 ) -> Result<(), String> {
     let policy = policy_for(FileScope::Global, FileKind::Config)?;
     let root = codex_home.to_path_buf();
-    let mut document = document.clone();
-    remove_legacy_agents_import_marker(&mut document);
-    let mut rendered = document.to_string();
-    if !rendered.ends_with('\n') {
-        rendered.push('\n');
-    }
+    let rendered = render_global_config_document(document, true);
     write_with_policy(&root, policy, rendered.as_str())
+}
+
+#[allow(dead_code)]
+pub(crate) fn persist_global_config_document_if_unchanged(
+    codex_home: &Path,
+    snapshot: &GlobalConfigSnapshot,
+    document: &Document,
+) -> Result<(), String> {
+    let policy = policy_for(FileScope::Global, FileKind::Config)?;
+    let root = codex_home.to_path_buf();
+    let rendered = render_global_config_document(document, false);
+    write_with_policy_atomic_if_unchanged(&root, policy, rendered.as_str(), &snapshot.original)
 }
 
 pub(crate) fn parse_document(contents: &str) -> Result<Document, String> {

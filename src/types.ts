@@ -623,6 +623,8 @@ export type AppSettings = {
   sessionSources: SessionSource[];
   codexKeyProfiles: CodexKeyProfile[];
   activeCodexKeyProfileId: string | null;
+  preserveSessionLibraryOnProviderSwitch: boolean;
+  syncProviderProfileToLocalConfig: boolean;
   backendMode: BackendMode;
   remoteBackendProvider: RemoteBackendProvider;
   remoteBackendHost: string;

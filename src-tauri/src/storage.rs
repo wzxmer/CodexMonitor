@@ -521,6 +521,67 @@ mod tests {
     }
 
     #[test]
+    fn read_settings_defaults_provider_continuity_without_changing_existing_identity() {
+        let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let path = temp_dir.join("settings.json");
+
+        std::fs::write(
+            &path,
+            r#"{
+  "codexHome": "D:\\Profiles\\Primary",
+  "activeCodexKeyProfileId": "provider-a",
+  "codexKeyProfiles": [{
+    "id": "provider-a",
+    "name": "Provider A",
+    "key": "test-key"
+  }],
+  "sessionSources": [{
+    "id": "source-a",
+    "name": "Primary",
+    "codexHomePath": "D:\\Profiles\\Primary",
+    "enabled": true,
+    "isCurrent": true,
+    "isDefault": false,
+    "discoveredAt": 10,
+    "status": "ready"
+  }],
+  "theme": "dark"
+}"#,
+        )
+        .expect("write settings");
+
+        let settings = read_settings(&path).expect("read settings");
+
+        assert!(settings.preserve_session_library_on_provider_switch);
+        assert!(!settings.sync_provider_profile_to_local_config);
+        assert_eq!(settings.codex_home.as_deref(), Some(r"D:\Profiles\Primary"));
+        assert_eq!(
+            settings.active_codex_key_profile_id.as_deref(),
+            Some("provider-a")
+        );
+        assert_eq!(settings.codex_key_profiles.len(), 1);
+        assert_eq!(settings.session_sources.len(), 1);
+        assert_eq!(settings.theme, "dark");
+    }
+
+    #[test]
+    fn write_read_settings_preserves_provider_continuity_preferences() {
+        let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let path = temp_dir.join("settings.json");
+        let mut settings = AppSettings::default();
+        settings.preserve_session_library_on_provider_switch = false;
+        settings.sync_provider_profile_to_local_config = true;
+
+        write_settings(&path, &settings).expect("write settings");
+        let read = read_settings(&path).expect("read settings");
+
+        assert!(!read.preserve_session_library_on_provider_switch);
+        assert!(read.sync_provider_profile_to_local_config);
+    }
+
+    #[test]
     fn write_read_settings_preserves_session_sources() {
         let temp_dir = std::env::temp_dir().join(format!("codex-monitor-test-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).expect("create temp dir");

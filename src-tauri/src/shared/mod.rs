@@ -19,6 +19,7 @@ pub(crate) mod local_usage_core;
 pub(crate) mod message_reference_core;
 pub(crate) mod process_core;
 pub(crate) mod prompts_core;
+pub(crate) mod provider_config_sync_core;
 pub(crate) mod provider_gateway_core;
 pub(crate) mod provider_profiles_core;
 pub(crate) mod session_manager_core;

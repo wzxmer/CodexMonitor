@@ -131,6 +131,24 @@ describe("useAppSettings", () => {
     expect(result.current.settings.uiFontWeight).toBe(450);
     expect(result.current.settings.autoDeleteArchivedThreadsEnabled).toBe(false);
     expect(result.current.settings.autoDeleteArchivedThreadsDays).toBe(30);
+    expect(result.current.settings.preserveSessionLibraryOnProviderSwitch).toBe(true);
+    expect(result.current.settings.syncProviderProfileToLocalConfig).toBe(false);
+  });
+
+  it("preserves explicit provider continuity preferences", async () => {
+    getAppSettingsMock.mockResolvedValue(
+      ({
+        preserveSessionLibraryOnProviderSwitch: false,
+        syncProviderProfileToLocalConfig: true,
+      } as unknown) as AppSettings,
+    );
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.preserveSessionLibraryOnProviderSwitch).toBe(false);
+    expect(result.current.settings.syncProviderProfileToLocalConfig).toBe(true);
   });
 
   it("migrates the legacy PingFang shorthand to the bundled fallback chain", async () => {

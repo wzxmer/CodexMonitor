@@ -370,7 +370,7 @@ pub(crate) fn resolve_profile_base_url(profile: &crate::types::CodexKeyProfile) 
         )
 }
 
-fn profile_uses_gateway(profile: &crate::types::CodexKeyProfile) -> bool {
+pub(crate) fn profile_uses_gateway(profile: &crate::types::CodexKeyProfile) -> bool {
     profile.use_gateway
         || profile
             .provider_kind

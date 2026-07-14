@@ -846,6 +846,13 @@ pub(crate) struct AppSettings {
     pub(crate) codex_key_profiles: Vec<CodexKeyProfile>,
     #[serde(default, rename = "activeCodexKeyProfileId")]
     pub(crate) active_codex_key_profile_id: Option<String>,
+    #[serde(
+        default = "default_preserve_session_library_on_provider_switch",
+        rename = "preserveSessionLibraryOnProviderSwitch"
+    )]
+    pub(crate) preserve_session_library_on_provider_switch: bool,
+    #[serde(default, rename = "syncProviderProfileToLocalConfig")]
+    pub(crate) sync_provider_profile_to_local_config: bool,
     #[serde(default, rename = "backendMode")]
     pub(crate) backend_mode: BackendMode,
     #[serde(default, rename = "remoteBackendProvider")]
@@ -1277,6 +1284,10 @@ fn default_backend_mode() -> BackendMode {
     } else {
         BackendMode::Local
     }
+}
+
+fn default_preserve_session_library_on_provider_switch() -> bool {
+    true
 }
 
 fn default_remote_backend_host() -> String {
@@ -1849,6 +1860,9 @@ impl Default for AppSettings {
             session_sources: Vec::new(),
             codex_key_profiles: Vec::new(),
             active_codex_key_profile_id: None,
+            preserve_session_library_on_provider_switch:
+                default_preserve_session_library_on_provider_switch(),
+            sync_provider_profile_to_local_config: false,
             backend_mode: default_backend_mode(),
             remote_backend_provider: RemoteBackendProvider::Tcp,
             remote_backend_host: default_remote_backend_host(),
@@ -1990,6 +2004,8 @@ mod tests {
         assert!(settings.remote_backends.is_empty());
         assert!(settings.active_remote_backend_id.is_none());
         assert!(!settings.keep_daemon_running_after_app_close);
+        assert!(settings.preserve_session_library_on_provider_switch);
+        assert!(!settings.sync_provider_profile_to_local_config);
         assert_eq!(settings.default_access_mode, "current");
         assert_eq!(settings.review_delivery_mode, "inline");
         let expected_primary = if cfg!(target_os = "macos") {
