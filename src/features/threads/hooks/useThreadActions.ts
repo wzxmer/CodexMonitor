@@ -534,16 +534,25 @@ export function useThreadActions({
         const includeLocalCodexSessions = targetWorkspaceIds.has(LOCAL_CODEX_WORKSPACE_ID);
         const includeUnmatchedLocalCodexSessions = !includeLocalCodexSessions;
         let knownWorkspaces: WorkspaceInfo[] = [];
+        let workspaceLookupComplete = false;
         try {
           knownWorkspaces = await listWorkspacesService();
+          workspaceLookupComplete = true;
           if (knownWorkspaces.length > 0) {
             workspacePathLookup = buildWorkspacePathLookup([
               ...targets,
               ...knownWorkspaces,
             ]);
           }
-        } catch {
+        } catch (error) {
           workspacePathLookup = buildWorkspacePathLookup(targets);
+          onDebug?.({
+            id: `${Date.now()}-client-thread-list-workspace-lookup-error`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "thread/list workspace lookup error",
+            payload: { error: String(error) },
+          });
         }
         const uniqueThreadIdsByWorkspace: Record<string, Set<string>> = {};
         const resumeCursorByWorkspace: Record<string, string | null> = {};
@@ -576,17 +585,14 @@ export function useThreadActions({
             const workspaceId = resolveWorkspaceIdForThreadPath(
               String(thread?.cwd ?? ""),
               workspacePathLookup,
-              targetWorkspaceIds,
             );
             const targetWorkspaceIdsForThread = localCodexOnly
               ? [LOCAL_CODEX_WORKSPACE_ID]
-              : [
-                  ...(workspaceId ? [workspaceId] : []),
-                  ...(includeLocalCodexSessions ? [LOCAL_CODEX_WORKSPACE_ID] : []),
-                  ...(!workspaceId && includeUnmatchedLocalCodexSessions
-                    ? [LOCAL_CODEX_WORKSPACE_ID]
-                    : []),
-                ];
+              : workspaceId && targetWorkspaceIds.has(workspaceId)
+                ? [workspaceId]
+                : !workspaceId && workspaceLookupComplete
+                  ? [LOCAL_CODEX_WORKSPACE_ID]
+                  : [];
             if (!workspaceId) {
               unmatchedThreadCount += 1;
               if (unmatchedThreadSamples.length < 5) {
@@ -832,7 +838,6 @@ export function useThreadActions({
       const nextCursor =
         cursorValue === THREAD_LIST_CURSOR_PAGE_START ? null : cursorValue;
       let workspacePathLookup = buildWorkspacePathLookup([workspace]);
-      const allowedWorkspaceIds = new Set([workspace.id]);
       const existing = threadsByWorkspace[workspace.id] ?? [];
       dispatch({
         type: "setThreadListPaging",
@@ -848,8 +853,10 @@ export function useThreadActions({
       });
       try {
         let requestWorkspaceId = workspace.id;
+        let workspaceLookupComplete = false;
         try {
           const knownWorkspaces = await listWorkspacesService();
+          workspaceLookupComplete = true;
           if (knownWorkspaces.length > 0) {
             workspacePathLookup = buildWorkspacePathLookup([
               workspace,
@@ -862,8 +869,26 @@ export function useThreadActions({
                 )?.id ?? requestWorkspaceId;
             }
           }
-        } catch {
+        } catch (error) {
           workspacePathLookup = buildWorkspacePathLookup([workspace]);
+          onDebug?.({
+            id: `${Date.now()}-client-thread-list-older-workspace-lookup-error`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "thread/list older workspace lookup error",
+            payload: { error: String(error), workspaceId: workspace.id },
+          });
+        }
+        if (
+          workspace.id === LOCAL_CODEX_WORKSPACE_ID &&
+          !workspaceLookupComplete
+        ) {
+          dispatch({
+            type: "setThreadListCursor",
+            workspaceId: workspace.id,
+            cursor: cursorValue,
+          });
+          return;
         }
         const matchingThreads: Record<string, unknown>[] = [];
         const maxPagesWithoutMatch = THREAD_LIST_MAX_PAGES_OLDER;
@@ -893,23 +918,19 @@ export function useThreadActions({
           matchingThreads.push(
             ...data.filter(
               (thread) => {
+                const owningWorkspaceId = resolveWorkspaceIdForThreadPath(
+                  String(thread?.cwd ?? ""),
+                  workspacePathLookup,
+                );
                 if (workspace.id === LOCAL_CODEX_WORKSPACE_ID) {
                   const threadId = String(thread?.id ?? "");
                   if (threadId && shouldHideSubagentThreadFromSidebar(thread.source)) {
                     dispatch({ type: "hideThread", workspaceId: workspace.id, threadId });
                     return false;
                   }
-                  return true;
+                  return workspaceLookupComplete && !owningWorkspaceId;
                 }
-                const workspaceId = resolveWorkspaceIdForThreadPath(
-                  String(thread?.cwd ?? ""),
-                  workspacePathLookup,
-                  allowedWorkspaceIds,
-                );
-                if (
-                  workspaceId !== workspace.id &&
-                  !(workspace.id === LOCAL_CODEX_WORKSPACE_ID && !workspaceId)
-                ) {
+                if (owningWorkspaceId !== workspace.id) {
                   return false;
                 }
                 const threadId = String(thread?.id ?? "");

@@ -1193,15 +1193,46 @@ describe("useThreadActions", () => {
     });
   });
 
-  it("mirrors every local Codex thread into the local sessions workspace", async () => {
-    vi.mocked(listThreads).mockResolvedValue({
-      result: {
-        data: [
+  it("keeps matched project threads out of the local sessions workspace", async () => {
+    vi.mocked(listThreads)
+      .mockResolvedValueOnce({
+        result: {
+          data: [
           {
-            id: "thread-matched",
+            id: "thread-parent",
             cwd: "/tmp/codex",
-            preview: "Matched workspace thread",
+            preview: "Project parent",
             updated_at: 5000,
+          },
+          {
+            id: "thread-child-a",
+            cwd: "/tmp/codex",
+            preview: "Project child prompt",
+            updated_at: 4750,
+            source: {
+              subAgent: {
+                thread_spawn: {
+                  parent_thread_id: "thread-parent",
+                  depth: 1,
+                  agent_path: "/root/routing_audit",
+                },
+              },
+            },
+          },
+          {
+            id: "thread-child-b",
+            cwd: "/tmp/codex",
+            preview: "Second project child prompt",
+            updated_at: 4700,
+            source: {
+              subAgent: {
+                thread_spawn: {
+                  parent_thread_id: "thread-parent",
+                  depth: 1,
+                  agent_path: "/root/release-review",
+                },
+              },
+            },
           },
           {
             id: "thread-unmatched",
@@ -1209,10 +1240,11 @@ describe("useThreadActions", () => {
             preview: "Unmatched local thread",
             updated_at: 4500,
           },
-        ],
-        nextCursor: null,
-      },
-    });
+          ],
+          nextCursor: null,
+        },
+      })
+      .mockResolvedValueOnce({ result: { data: [], nextCursor: null } });
     vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
       const value = (thread as Record<string, unknown>).updated_at as number;
       return value ?? 0;
@@ -1231,10 +1263,24 @@ describe("useThreadActions", () => {
       preserveAnchors: true,
       threads: [
         {
-          id: "thread-matched",
-          name: "Matched workspace thread",
+          id: "thread-parent",
+          name: "Project parent",
           updatedAt: 5000,
           createdAt: 0,
+        },
+        {
+          id: "thread-child-a",
+          name: "routing audit",
+          updatedAt: 4750,
+          createdAt: 0,
+          isSubagent: true,
+        },
+        {
+          id: "thread-child-b",
+          name: "release review",
+          updatedAt: 4700,
+          createdAt: 0,
+          isSubagent: true,
         },
       ],
     });
@@ -1245,12 +1291,56 @@ describe("useThreadActions", () => {
       preserveAnchors: true,
       threads: [
         {
-          id: "thread-matched",
-          name: "Matched workspace thread",
-          updatedAt: 5000,
+          id: "thread-unmatched",
+          name: "Unmatched local thread",
+          updatedAt: 4500,
           createdAt: 0,
-          cwd: "/tmp/codex",
+          cwd: "/tmp/outside",
         },
+      ],
+    });
+  });
+
+  it("keeps known project threads out when only the local sessions workspace is refreshed", async () => {
+    vi.mocked(listWorkspaces).mockResolvedValue([workspace]);
+    vi.mocked(listThreads)
+      .mockResolvedValueOnce({
+        result: {
+          data: [
+            {
+              id: "thread-project",
+              cwd: "/tmp/codex",
+              preview: "Known project thread",
+              updated_at: 5000,
+            },
+            {
+              id: "thread-unmatched",
+              cwd: "/tmp/outside",
+              preview: "Unmatched local thread",
+              updated_at: 4500,
+            },
+          ],
+          nextCursor: null,
+        },
+      })
+      .mockResolvedValueOnce({ result: { data: [], nextCursor: null } });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspaces([localCodexWorkspace]);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: LOCAL_CODEX_WORKSPACE_ID,
+      sortKey: "updated_at",
+      preserveAnchors: true,
+      threads: [
         {
           id: "thread-unmatched",
           name: "Unmatched local thread",
@@ -1260,6 +1350,42 @@ describe("useThreadActions", () => {
         },
       ],
     });
+  });
+
+  it("does not mirror live threads into local sessions when workspace lookup fails", async () => {
+    vi.mocked(listWorkspaces).mockRejectedValue(new Error("workspace lookup failed"));
+    vi.mocked(listThreads)
+      .mockResolvedValueOnce({
+        result: {
+          data: [
+            {
+              id: "thread-unknown-owner",
+              cwd: "/tmp/codex",
+              preview: "Unknown owner",
+              updated_at: 5000,
+            },
+          ],
+          nextCursor: null,
+        },
+      })
+      .mockResolvedValueOnce({ result: { data: [], nextCursor: null } });
+    const onDebug = vi.fn();
+    const { result, dispatch } = renderActions({ onDebug });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspaces([localCodexWorkspace]);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: LOCAL_CODEX_WORKSPACE_ID,
+      sortKey: "updated_at",
+      preserveAnchors: true,
+      threads: [],
+    });
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "thread/list workspace lookup error" }),
+    );
   });
 
   it("includes archived Codex threads in the local sessions workspace", async () => {
@@ -1399,13 +1525,6 @@ describe("useThreadActions", () => {
       sortKey: "updated_at",
       preserveAnchors: true,
       threads: [
-        {
-          id: "thread-live",
-          name: "Live thread",
-          updatedAt: 5000,
-          createdAt: 0,
-          cwd: "/tmp/codex",
-        },
         {
           id: "thread-archived",
           name: "Archived thread",
@@ -2139,6 +2258,94 @@ describe("useThreadActions", () => {
         },
       ],
     });
+  });
+
+  it("excludes older known project threads from the local sessions workspace", async () => {
+    vi.mocked(listWorkspaces).mockResolvedValue([workspace]);
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-project-older",
+            cwd: "/tmp/codex",
+            preview: "Older project thread",
+            updated_at: 4500,
+          },
+          {
+            id: "thread-unmatched-older",
+            cwd: "/tmp/outside",
+            preview: "Older unmatched thread",
+            updated_at: 4000,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        [LOCAL_CODEX_WORKSPACE_ID]: [
+          { id: "thread-current", name: "Current", updatedAt: 6000 },
+        ],
+      },
+      threadListCursorByWorkspace: {
+        [LOCAL_CODEX_WORKSPACE_ID]: "cursor-1",
+      },
+    });
+
+    await act(async () => {
+      await result.current.loadOlderThreadsForWorkspace(localCodexWorkspace);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: LOCAL_CODEX_WORKSPACE_ID,
+      sortKey: "updated_at",
+      threads: [
+        { id: "thread-current", name: "Current", updatedAt: 6000 },
+        {
+          id: "thread-unmatched-older",
+          name: "Older unmatched thread",
+          updatedAt: 4000,
+          createdAt: 0,
+          cwd: "/tmp/outside",
+        },
+      ],
+    });
+  });
+
+  it("preserves the local paging cursor when workspace lookup fails", async () => {
+    vi.mocked(listWorkspaces).mockRejectedValue(new Error("workspace lookup failed"));
+    const onDebug = vi.fn();
+    const { result, dispatch } = renderActions({
+      threadListCursorByWorkspace: {
+        [LOCAL_CODEX_WORKSPACE_ID]: "cursor-1",
+      },
+      onDebug,
+    });
+
+    await act(async () => {
+      await result.current.loadOlderThreadsForWorkspace(localCodexWorkspace);
+    });
+
+    expect(listThreads).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadListCursor",
+      workspaceId: LOCAL_CODEX_WORKSPACE_ID,
+      cursor: "cursor-1",
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadListPaging",
+      workspaceId: LOCAL_CODEX_WORKSPACE_ID,
+      isLoading: false,
+    });
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "thread/list older workspace lookup error" }),
+    );
   });
 
   it("treats page-start cursor marker as null when loading older threads", async () => {

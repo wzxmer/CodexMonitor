@@ -205,6 +205,37 @@ export function getSubagentMetadataFromThread(
   };
 }
 
+export function getSubagentTaskTitleFromThread(
+  thread: Record<string, unknown>,
+): string | null {
+  const sourceRecord = asRecord(thread.source);
+  const subAgent = asRecord(
+    sourceRecord?.subAgent ?? sourceRecord?.sub_agent ?? sourceRecord?.subagent,
+  );
+  if (!subAgent && !getParentThreadIdFromThread(thread)) {
+    return null;
+  }
+  const threadSpawn = asRecord(subAgent?.threadSpawn ?? subAgent?.thread_spawn);
+  const agentPath = firstNonEmptyString(
+    thread.agentPath,
+    thread.agent_path,
+    subAgent?.agentPath,
+    subAgent?.agent_path,
+    threadSpawn?.agentPath,
+    threadSpawn?.agent_path,
+  );
+  if (!agentPath) {
+    return null;
+  }
+  const taskPathSegments = agentPath
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean);
+  const taskName = taskPathSegments[taskPathSegments.length - 1];
+  const title = taskName?.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  return title || null;
+}
+
 export type ResumedTurnState = {
   activeTurnId: string | null;
   activeTurnStartedAtMs: number | null;
