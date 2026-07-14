@@ -1,8 +1,13 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { pickAttachmentFiles, saveComposerImages } from "../../../services/tauri";
 import { isImageAttachment } from "../../../utils/attachments";
 
 const MAX_COMPOSER_ATTACHMENTS = 10;
+
+type ComposerImageTransferToken = Readonly<{
+  draftKey: string;
+  generation: number;
+}>;
 
 type UseComposerImagesArgs = {
   activeThreadId: string | null;
@@ -14,6 +19,7 @@ export function useComposerImages({
   activeWorkspaceId,
 }: UseComposerImagesArgs) {
   const [imagesByThread, setImagesByThread] = useState<Record<string, string[]>>({});
+  const generationByDraft = useRef<Record<string, number>>({});
 
   const draftKey = useMemo(
     () => activeThreadId ?? `draft-${activeWorkspaceId ?? "none"}`,
@@ -21,6 +27,12 @@ export function useComposerImages({
   );
 
   const activeImages = imagesByThread[draftKey] ?? [];
+
+  const advanceDraftGeneration = useCallback((targetDraftKey: string) => {
+    const generation = (generationByDraft.current[targetDraftKey] ?? 0) + 1;
+    generationByDraft.current[targetDraftKey] = generation;
+    return generation;
+  }, []);
 
   const attachImages = useCallback(
     (paths: string[]) => {
@@ -80,6 +92,7 @@ export function useComposerImages({
 
   const removeImage = useCallback(
     (path: string) => {
+      advanceDraftGeneration(draftKey);
       setImagesByThread((prev) => {
         const existing = prev[draftKey] ?? [];
         const next = existing.filter((entry) => entry !== path);
@@ -90,10 +103,11 @@ export function useComposerImages({
         return { ...prev, [draftKey]: next };
       });
     },
-    [draftKey],
+    [advanceDraftGeneration, draftKey],
   );
 
   const clearActiveImages = useCallback(() => {
+    advanceDraftGeneration(draftKey);
     setImagesByThread((prev) => {
       if (!(draftKey in prev)) {
         return prev;
@@ -101,13 +115,66 @@ export function useComposerImages({
       const { [draftKey]: _, ...rest } = prev;
       return rest;
     });
-  }, [draftKey]);
+  }, [advanceDraftGeneration, draftKey]);
 
-  const setImagesForThread = useCallback((threadId: string, images: string[]) => {
-    setImagesByThread((prev) => ({ ...prev, [threadId]: images }));
-  }, []);
+  const transferActiveImages = useCallback(
+    (images: readonly string[]): ComposerImageTransferToken | null => {
+      if (images.length === 0) {
+        return null;
+      }
+      const token = {
+        draftKey,
+        generation: advanceDraftGeneration(draftKey),
+      };
+      setImagesByThread((prev) => {
+        if (!(draftKey in prev)) {
+          return prev;
+        }
+        const submittedImages = new Set(images);
+        const remaining = (prev[draftKey] ?? []).filter(
+          (image) => !submittedImages.has(image),
+        );
+        if (remaining.length > 0) {
+          return { ...prev, [draftKey]: remaining };
+        }
+        const { [draftKey]: _, ...rest } = prev;
+        return rest;
+      });
+      return token;
+    },
+    [advanceDraftGeneration, draftKey],
+  );
+
+  const restoreImagesForDraft = useCallback(
+    (token: ComposerImageTransferToken, images: readonly string[]) => {
+      if (images.length === 0) {
+        return;
+      }
+      setImagesByThread((prev) => {
+        if (generationByDraft.current[token.draftKey] !== token.generation) {
+          return prev;
+        }
+        const existing = prev[token.draftKey] ?? [];
+        const merged = Array.from(new Set([...existing, ...images])).slice(
+          0,
+          MAX_COMPOSER_ATTACHMENTS,
+        );
+        return { ...prev, [token.draftKey]: merged };
+      });
+    },
+    [],
+  );
+
+  const setImagesForThread = useCallback(
+    (threadId: string, images: string[]) => {
+      advanceDraftGeneration(threadId);
+      setImagesByThread((prev) => ({ ...prev, [threadId]: images }));
+    },
+    [advanceDraftGeneration],
+  );
 
   const removeImagesForThread = useCallback((threadId: string) => {
+    advanceDraftGeneration(threadId);
     setImagesByThread((prev) => {
       if (!(threadId in prev)) {
         return prev;
@@ -115,7 +182,7 @@ export function useComposerImages({
       const { [threadId]: _, ...rest } = prev;
       return rest;
     });
-  }, []);
+  }, [advanceDraftGeneration]);
 
   return {
     activeImages,
@@ -123,6 +190,8 @@ export function useComposerImages({
     pickImages,
     removeImage,
     clearActiveImages,
+    transferActiveImages,
+    restoreImagesForDraft,
     setImagesForThread,
     removeImagesForThread,
   };

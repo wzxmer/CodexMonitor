@@ -36,6 +36,11 @@ const makeOptions = (
   startFast: vi.fn().mockResolvedValue(undefined),
   startStatus: vi.fn().mockResolvedValue(undefined),
   clearActiveImages: vi.fn(),
+  transferActiveImages: vi.fn((_images: readonly string[]) => ({
+    draftKey: "thread-1",
+    generation: 1,
+  })),
+  restoreImagesForDraft: vi.fn(),
   ...overrides,
 });
 
@@ -201,6 +206,7 @@ describe("useQueuedSend", () => {
     );
     expect(result.current.activeQueue).toHaveLength(1);
     expect(result.current.activeQueue[0]?.text).toBe("Fallback to queue");
+    expect(options.restoreImagesForDraft).not.toHaveBeenCalled();
 
     await act(async () => {
       await Promise.resolve();
@@ -462,6 +468,137 @@ describe("useQueuedSend", () => {
       undefined,
       { sendIntent: "default" },
     );
+  });
+
+  it("transfers direct-send images before the send promise resolves", async () => {
+    let resolveSend: ((result: { status: "sent" }) => void) | null = null;
+    let capturedImages: string[] | undefined;
+    const sendUserMessage = vi.fn(
+      (_text: string, images?: string[]) => {
+        capturedImages = images;
+        return new Promise<{ status: "sent" }>((resolve) => {
+          resolveSend = resolve;
+        });
+      },
+    );
+    const transferActiveImages = vi.fn(
+      (_images: readonly string[]) => ({
+        draftKey: "thread-1",
+        generation: 1,
+      }),
+    );
+    const options = makeOptions({ sendUserMessage, transferActiveImages });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+    const images = ["img-1"];
+
+    let sendPromise: Promise<void> | undefined;
+    act(() => {
+      sendPromise = result.current.handleSend("With image", images);
+    });
+
+    expect(sendUserMessage).toHaveBeenCalledTimes(1);
+    expect(transferActiveImages).toHaveBeenCalledWith(["img-1"]);
+    expect(transferActiveImages.mock.invocationCallOrder[0]).toBeLessThan(
+      sendUserMessage.mock.invocationCallOrder[0],
+    );
+    expect(capturedImages).toEqual(["img-1"]);
+    expect(capturedImages).not.toBe(images);
+
+    await act(async () => {
+      resolveSend?.({ status: "sent" });
+      await sendPromise;
+    });
+  });
+
+  it("restores transferred images to the original draft when connection fails", async () => {
+    let rejectConnection: ((error: Error) => void) | null = null;
+    const connectWorkspace = vi.fn(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectConnection = reject;
+        }),
+    );
+    const restoreImagesForDraft = vi.fn();
+    const options = makeOptions({
+      activeThreadId: null,
+      activeWorkspace: { ...workspace, connected: false },
+      connectWorkspace,
+      transferActiveImages: vi.fn(
+        (_images: readonly string[]) => ({
+          draftKey: "draft-workspace-1",
+          generation: 1,
+        }),
+      ),
+      restoreImagesForDraft,
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    let sendPromise: Promise<void> | undefined;
+    act(() => {
+      sendPromise = result.current.handleSend("Reconnect", ["img-1"]);
+    });
+
+    expect(options.transferActiveImages).toHaveBeenCalledWith(["img-1"]);
+    expect(connectWorkspace).toHaveBeenCalledTimes(1);
+    expect(options.sendUserMessage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      rejectConnection?.(new Error("offline"));
+      await expect(sendPromise).rejects.toThrow("offline");
+    });
+
+    expect(restoreImagesForDraft).toHaveBeenCalledWith(
+      { draftKey: "draft-workspace-1", generation: 1 },
+      ["img-1"],
+    );
+  });
+
+  it("restores images when the direct send promise rejects", async () => {
+    const restoreImagesForDraft = vi.fn();
+    const options = makeOptions({
+      activeThreadId: null,
+      sendUserMessage: vi.fn().mockRejectedValue(new Error("send failed")),
+      transferActiveImages: vi.fn(() => ({
+        draftKey: "draft-workspace-1",
+        generation: 1,
+      })),
+      restoreImagesForDraft,
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.handleSend("Accepted", ["img-1"]),
+      ).rejects.toThrow("send failed");
+    });
+
+    expect(restoreImagesForDraft).toHaveBeenCalledWith(
+      { draftKey: "draft-workspace-1", generation: 1 },
+      ["img-1"],
+    );
+  });
+
+  it("keeps transferred image ownership when direct send returns blocked", async () => {
+    const restoreImagesForDraft = vi.fn();
+    const options = makeOptions({
+      sendUserMessage: vi.fn().mockResolvedValue({ status: "blocked" }),
+      restoreImagesForDraft,
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("Blocked", ["img-1"]);
+    });
+
+    expect(restoreImagesForDraft).not.toHaveBeenCalled();
   });
 
   it("ignores images for queued review messages and blocks while reviewing", async () => {

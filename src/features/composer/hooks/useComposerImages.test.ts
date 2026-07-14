@@ -177,6 +177,82 @@ describe("useComposerImages", () => {
     hook.unmount();
   });
 
+  it("clears only submitted images and returns their original draft key", async () => {
+    const hook = renderComposerImages({
+      activeThreadId: null,
+      activeWorkspaceId: "ws-1",
+    });
+
+    act(() => {
+      hook.result.attachImages(["/tmp/submitted.md", "/tmp/remaining.md"]);
+    });
+
+    let token: { draftKey: string; generation: number } | null = null;
+    act(() => {
+      token = hook.result.transferActiveImages(["/tmp/submitted.md"]);
+    });
+
+    expect(token).toEqual({ draftKey: "draft-ws-1", generation: 1 });
+    expect(hook.result.activeImages).toEqual(["/tmp/remaining.md"]);
+
+    hook.unmount();
+  });
+
+  it("restores images by original draft key and merges newer attachments", async () => {
+    const hook = renderComposerImages({
+      activeThreadId: null,
+      activeWorkspaceId: "ws-1",
+    });
+
+    act(() => {
+      hook.result.attachImages(["/tmp/original.md"]);
+    });
+    let token: { draftKey: string; generation: number } | null = null;
+    act(() => {
+      token = hook.result.transferActiveImages(["/tmp/original.md"]);
+      hook.result.attachImages(["/tmp/new.md"]);
+    });
+
+    hook.rerender({ activeThreadId: null, activeWorkspaceId: "ws-2" });
+    act(() => {
+      hook.result.attachImages(["/tmp/other-workspace.md"]);
+      hook.result.restoreImagesForDraft(token!, [
+        "/tmp/original.md",
+        "/tmp/new.md",
+      ]);
+    });
+
+    expect(hook.result.activeImages).toEqual(["/tmp/other-workspace.md"]);
+    hook.rerender({ activeThreadId: null, activeWorkspaceId: "ws-1" });
+    expect(hook.result.activeImages).toEqual([
+      "/tmp/new.md",
+      "/tmp/original.md",
+    ]);
+
+    hook.unmount();
+  });
+
+  it("does not restore a transfer after its draft is explicitly cleared", () => {
+    const hook = renderComposerImages({
+      activeThreadId: null,
+      activeWorkspaceId: "ws-1",
+    });
+
+    act(() => {
+      hook.result.attachImages(["/tmp/original.md"]);
+    });
+    let token: { draftKey: string; generation: number } | null = null;
+    act(() => {
+      token = hook.result.transferActiveImages(["/tmp/original.md"]);
+      hook.result.clearActiveImages();
+      hook.result.restoreImagesForDraft(token!, ["/tmp/original.md"]);
+    });
+
+    expect(hook.result.activeImages).toEqual([]);
+
+    hook.unmount();
+  });
+
   it("does not restore an image removed before attachment saving finishes", async () => {
     let resolveSave: (paths: string[]) => void = () => {};
     vi.mocked(saveComposerImages).mockReturnValueOnce(

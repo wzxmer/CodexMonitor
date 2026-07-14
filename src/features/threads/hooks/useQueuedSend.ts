@@ -46,6 +46,13 @@ type UseQueuedSendOptions = {
   startFast: (text: string) => Promise<void>;
   startStatus: (text: string) => Promise<void>;
   clearActiveImages: () => void;
+  transferActiveImages?: (
+    images: readonly string[],
+  ) => { draftKey: string; generation: number } | null;
+  restoreImagesForDraft?: (
+    token: { draftKey: string; generation: number },
+    images: readonly string[],
+  ) => void;
 };
 
 type UseQueuedSendResult = {
@@ -153,6 +160,8 @@ export function useQueuedSend({
   startFast,
   startStatus,
   clearActiveImages,
+  transferActiveImages,
+  restoreImagesForDraft,
 }: UseQueuedSendOptions): UseQueuedSendResult {
   const [queuedByThread, setQueuedByThread] = useState<
     Record<string, QueuedMessage[]>
@@ -368,32 +377,55 @@ export function useQueuedSend({
         clearActiveImages();
         return;
       }
-      if (activeWorkspace && !activeWorkspace.connected) {
-        await connectWorkspace(activeWorkspace);
-      }
       if (command) {
+        if (activeWorkspace && !activeWorkspace.connected) {
+          await connectWorkspace(activeWorkspace);
+        }
         await runSlashCommand(command, trimmed);
         clearActiveImages();
         return;
       }
-      const sendResult =
-        nextMentions.length > 0
-          ? await sendUserMessage(trimmed, nextImages, nextMentions, {
-              sendIntent: effectiveIntent,
-              replaceMessageId: options?.replaceMessageId,
-            })
-          : await sendUserMessage(trimmed, nextImages, undefined, {
-              sendIntent: effectiveIntent,
-              replaceMessageId: options?.replaceMessageId,
-            });
+      const submittedImages = [...nextImages];
+      const submittedMentions = [...nextMentions];
+      const imageTransferToken = transferActiveImages
+        ? transferActiveImages(submittedImages)
+        : (clearActiveImages(), null);
+      let sendResult: SendMessageResult;
+      try {
+        if (activeWorkspace && !activeWorkspace.connected) {
+          await connectWorkspace(activeWorkspace);
+        }
+        sendResult =
+          submittedMentions.length > 0
+            ? await sendUserMessage(
+                trimmed,
+                submittedImages,
+                submittedMentions,
+                {
+                  sendIntent: effectiveIntent,
+                  replaceMessageId: options?.replaceMessageId,
+                },
+              )
+            : await sendUserMessage(trimmed, submittedImages, undefined, {
+                sendIntent: effectiveIntent,
+                replaceMessageId: options?.replaceMessageId,
+              });
+      } catch (error) {
+        if (imageTransferToken) {
+          restoreImagesForDraft?.(imageTransferToken, submittedImages);
+        }
+        throw error;
+      }
       if (
         sendResult.status === "steer_failed" &&
         activeThreadId &&
         isProcessing
       ) {
-        enqueueMessage(activeThreadId, createQueuedItem(trimmed, nextImages, nextMentions));
+        enqueueMessage(
+          activeThreadId,
+          createQueuedItem(trimmed, submittedImages, submittedMentions),
+        );
       }
-      clearActiveImages();
     },
     [
       activeThreadId,
@@ -408,7 +440,9 @@ export function useQueuedSend({
       followUpMessageBehavior,
       isProcessing,
       isReviewing,
+      restoreImagesForDraft,
       steerEnabled,
+      transferActiveImages,
       runSlashCommand,
       sendUserMessage,
     ],

@@ -87,6 +87,8 @@ export function useComposerController({
     pickImages,
     removeImage,
     clearActiveImages,
+    transferActiveImages,
+    restoreImagesForDraft,
     setImagesForThread,
     removeImagesForThread,
   } = useComposerImages({ activeThreadId, activeWorkspaceId });
@@ -122,6 +124,8 @@ export function useComposerController({
     startFast,
     startStatus,
     clearActiveImages,
+    transferActiveImages,
+    restoreImagesForDraft,
   });
 
   const activeDraft = useMemo(
