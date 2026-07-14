@@ -45,4 +45,19 @@ describe("threadSummary", () => {
       }),
     ).toBe("Raw user prompt");
   });
+
+  it("uses the assigned subagent task name before the prompt preview", () => {
+    expect(
+      getThreadDisplayTitle({
+        preview: "Inspect every routing branch and report evidence",
+        source: {
+          subagent: {
+            thread_spawn: {
+              agent_path: "/root/thread_routing-audit",
+            },
+          },
+        },
+      }),
+    ).toBe("thread routing audit");
+  });
 });

@@ -8,6 +8,7 @@ import { asString } from "@threads/utils/threadNormalize";
 import {
   getParentThreadIdFromThread,
   getSubagentMetadataFromThread,
+  getSubagentTaskTitleFromThread,
   isSubagentThreadSource,
   shouldHideSubagentThreadFromSidebar,
 } from "@threads/utils/threadRpc";
@@ -23,6 +24,7 @@ type BuildThreadSummaryFromThreadOptions = {
 
 export function getThreadDisplayTitle(thread: Record<string, unknown>) {
   const rawTitle =
+    getSubagentTaskTitleFromThread(thread) ||
     asString(thread.threadName ?? "").trim() ||
     asString(thread.thread_name ?? "").trim() ||
     asString(thread.name ?? "").trim() ||
