@@ -371,6 +371,7 @@ export function useThreads({
       dispatch,
       threadParentById: state.threadParentById,
       onSubagentThreadDetected,
+      onSubagentThreadMetadata: onSubagentTitleCandidate,
     });
 
   const handleWorkspaceConnected = useCallback(

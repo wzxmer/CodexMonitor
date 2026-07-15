@@ -1548,6 +1548,51 @@ describe("useThreads UX integration", () => {
     expect(result.current.isSubagentThread("ws-1", "thread-child-live-collab")).toBe(true);
   });
 
+  it("generates a language-matched title from live subagent activity metadata", async () => {
+    vi.mocked(generateRunMetadata).mockResolvedValue({
+      title: "检查包名称",
+      worktreeName: "chore/check-package-name",
+    });
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "thread-parent-live-title",
+        name: "只读子会话验收",
+      });
+    });
+    act(() => {
+      handlers?.onItemCompleted?.("ws-1", "thread-parent-live-title", {
+        type: "subAgentActivity",
+        id: "item-subagent-activity",
+        kind: "started",
+        agentThreadId: "thread-child-live-title",
+        agentPath: "/root/check_package_name",
+      });
+    });
+
+    await waitFor(() => {
+      expect(setThreadName).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-child-live-title",
+        "检查包名称",
+      );
+    });
+    expect(result.current.threadParentById["thread-child-live-title"]).toBe(
+      "thread-parent-live-title",
+    );
+    expect(
+      result.current.threadsByWorkspace["ws-1"]?.find(
+        (thread) => thread.id === "thread-child-live-title",
+      )?.name,
+    ).toBe("检查包名称");
+  });
+
   it("classifies live spawned threads from spawn tool payloads with link hints", () => {
     const { result } = renderHook(() =>
       useThreads({

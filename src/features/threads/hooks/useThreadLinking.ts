@@ -7,6 +7,10 @@ type UseThreadLinkingOptions = {
   dispatch: Dispatch<ThreadAction>;
   threadParentById: Record<string, string>;
   onSubagentThreadDetected?: (workspaceId: string, threadId: string) => void;
+  onSubagentThreadMetadata?: (
+    workspaceId: string,
+    thread: Record<string, unknown>,
+  ) => void | Promise<void>;
 };
 
 function normalizeThreadId(value: unknown) {
@@ -84,6 +88,8 @@ function hasCollabLinkHints(item: Record<string, unknown>) {
       item.receiver_thread_ids ??
       item.newThreadId ??
       item.new_thread_id ??
+      item.agentThreadId ??
+      item.agent_thread_id ??
       item.receiverAgents ??
       item.receiver_agents ??
       item.receiverAgent ??
@@ -101,6 +107,7 @@ export function useThreadLinking({
   dispatch,
   threadParentById,
   onSubagentThreadDetected,
+  onSubagentThreadMetadata,
 }: UseThreadLinkingOptions) {
   const wouldCreateThreadCycle = useCallback(
     (parentId: string, childId: string) => {
@@ -162,6 +169,7 @@ export function useThreadLinking({
       }
       const receivers = Array.from(
         new Set([
+          ...normalizeStringList(item.agentThreadId ?? item.agent_thread_id),
           ...normalizeStringList(item.receiverThreadId ?? item.receiver_thread_id),
           ...normalizeStringList(item.receiverThreadIds ?? item.receiver_thread_ids),
           ...normalizeStringList(item.newThreadId ?? item.new_thread_id),
@@ -180,6 +188,17 @@ export function useThreadLinking({
           ),
         ]),
       );
+      const activityThreadId =
+        itemType === "subAgentActivity"
+          ? normalizeThreadId(item.agentThreadId ?? item.agent_thread_id)
+          : "";
+      const activityAgentPath =
+        itemType === "subAgentActivity"
+          ? asString(item.agentPath ?? item.agent_path).trim()
+          : "";
+      if (activityThreadId) {
+        dispatch({ type: "ensureThread", workspaceId, threadId: activityThreadId });
+      }
       updateThreadParent(parentId, receivers);
       receivers.forEach((receiver) => {
         if (!receiver) {
@@ -187,8 +206,15 @@ export function useThreadLinking({
         }
         onSubagentThreadDetected?.(workspaceId, receiver);
       });
+      if (activityThreadId && activityAgentPath) {
+        void onSubagentThreadMetadata?.(workspaceId, {
+          id: activityThreadId,
+          parentThreadId: parentId,
+          agentPath: activityAgentPath,
+        });
+      }
     },
-    [onSubagentThreadDetected, updateThreadParent],
+    [dispatch, onSubagentThreadDetected, onSubagentThreadMetadata, updateThreadParent],
   );
 
   const applyCollabThreadLinksFromThread = useCallback(
