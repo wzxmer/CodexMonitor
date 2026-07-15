@@ -7,12 +7,6 @@ use tauri::Emitter;
 use tauri::Manager;
 use tokio::io::AsyncWriteExt;
 
-#[cfg(target_os = "windows")]
-use winreg::{
-    enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE},
-    RegKey,
-};
-
 const RELEASE_HOST: &str = "github.com";
 const RELEASE_PATH_PREFIX: &str = "/wzxmer/CodexMonitor/releases/download/";
 const INSTALLER_DIR_NAME: &str = "release-installers";
@@ -44,113 +38,7 @@ pub fn managed_codex_platform() -> String {
 
 #[tauri::command]
 pub fn windows_installer_kind() -> String {
-    windows_installer_kind_impl().to_string()
-}
-
-#[cfg(target_os = "windows")]
-fn windows_installer_kind_impl() -> &'static str {
-    let current_version = env!("CARGO_PKG_VERSION");
-    let mut msi_versions = Vec::new();
-    let mut nsis_versions = Vec::new();
-    for (root, path) in [
-        (
-            RegKey::predef(HKEY_LOCAL_MACHINE),
-            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-        ),
-        (
-            RegKey::predef(HKEY_LOCAL_MACHINE),
-            "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-        ),
-        (
-            RegKey::predef(HKEY_CURRENT_USER),
-            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-        ),
-    ] {
-        let Ok((found_msi, found_nsis)) = read_uninstall_versions(root, path) else {
-            return "unknown";
-        };
-        msi_versions.extend(found_msi);
-        nsis_versions.extend(found_nsis);
-    }
-    select_windows_installer_kind(current_version, msi_versions, nsis_versions)
-}
-
-#[cfg(not(target_os = "windows"))]
-fn windows_installer_kind_impl() -> &'static str {
-    "unknown"
-}
-
-#[cfg(target_os = "windows")]
-fn read_uninstall_versions(
-    root: RegKey,
-    path: &str,
-) -> Result<(Vec<Option<String>>, Vec<Option<String>>), ()> {
-    let uninstall_key = match root.open_subkey(path) {
-        Ok(key) => key,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok((Vec::new(), Vec::new()));
-        }
-        Err(_) => return Err(()),
-    };
-    let mut msi_versions = Vec::new();
-    let mut nsis_versions = Vec::new();
-    for name in uninstall_key.enum_keys() {
-        let name = name.map_err(|_| ())?;
-        let key = uninstall_key.open_subkey(name).map_err(|_| ())?;
-        if key.get_value::<String, _>("DisplayName").ok().as_deref() != Some("Codex Monitor") {
-            continue;
-        }
-        let windows_installer = key.get_value::<u32, _>("WindowsInstaller").ok();
-        let uninstall_string = key.get_value::<String, _>("UninstallString").ok();
-        let installer_kind =
-            classify_windows_installer_registration(windows_installer, uninstall_string.as_deref())
-                .ok_or(())?;
-        let version = match key.get_value::<String, _>("DisplayVersion") {
-            Ok(version) => Some(version),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-            Err(_) => return Err(()),
-        };
-        if installer_kind == "msi" {
-            msi_versions.push(version);
-        } else {
-            nsis_versions.push(version);
-        }
-    }
-    Ok((msi_versions, nsis_versions))
-}
-
-#[cfg(any(target_os = "windows", test))]
-fn classify_windows_installer_registration(
-    windows_installer: Option<u32>,
-    uninstall_string: Option<&str>,
-) -> Option<&'static str> {
-    if windows_installer == Some(1) {
-        return Some("msi");
-    }
-    uninstall_string
-        .is_some_and(|value| value.to_ascii_lowercase().contains("uninstall.exe"))
-        .then_some("nsis")
-}
-
-fn select_windows_installer_kind(
-    current_version: &str,
-    msi_versions: impl IntoIterator<Item = Option<String>>,
-    nsis_versions: impl IntoIterator<Item = Option<String>>,
-) -> &'static str {
-    let msi_versions = msi_versions.into_iter().collect::<Vec<_>>();
-    let nsis_versions = nsis_versions.into_iter().collect::<Vec<_>>();
-    let has_current_msi = msi_versions
-        .iter()
-        .any(|version| version.as_deref() == Some(current_version));
-    let has_current_nsis = nsis_versions
-        .iter()
-        .any(|version| version.as_deref() == Some(current_version));
-    match (msi_versions.is_empty(), nsis_versions.is_empty()) {
-        (false, false) => "mixed",
-        (false, true) if has_current_msi => "msi",
-        (true, false) if has_current_nsis => "nsis",
-        _ => "unknown",
-    }
+    crate::windows_installer::detect_installer_kind()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -610,9 +498,10 @@ fn open_installer(path: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify_windows_installer_registration, extract_managed_codex_archive,
-        sanitize_release_asset_file_name, select_windows_installer_kind,
-        validate_release_asset_url,
+        extract_managed_codex_archive, sanitize_release_asset_file_name, validate_release_asset_url,
+    };
+    use crate::windows_installer::{
+        classify_windows_installer_registration, select_windows_installer_kind,
     };
     use std::io::Write;
 

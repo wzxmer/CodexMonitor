@@ -42,6 +42,7 @@ mod types;
 mod updater;
 mod utils;
 mod window;
+mod windows_installer;
 mod workspaces;
 
 #[cfg(desktop)]
@@ -373,6 +374,9 @@ pub fn run() {
             updater::install_managed_codex,
             updater::managed_codex_platform,
             updater::windows_installer_kind,
+            windows_installer::preview_windows_installer_repair,
+            windows_installer::apply_windows_installer_repair,
+            windows_installer::rollback_windows_installer_repair,
             notifications::is_macos_debug_build,
             notifications::app_build_type,
             notifications::send_notification_fallback,

@@ -52,6 +52,7 @@ pub(crate) struct AppState {
     pub(crate) task_coordination_ledger: tokio::sync::Mutex<
         Option<crate::shared::task_coordination_core::ledger::CoordinationLedger>,
     >,
+    pub(crate) windows_installer_repair: Mutex<()>,
 }
 
 impl AppState {
@@ -86,6 +87,7 @@ impl AppState {
             source_thread_runtimes: SourceThreadRuntimeBindings::default(),
             tcp_daemon: Mutex::new(TcpDaemonRuntime::default()),
             task_coordination_ledger: tokio::sync::Mutex::new(Some(Default::default())),
+            windows_installer_repair: Mutex::new(()),
         }
     }
 }
