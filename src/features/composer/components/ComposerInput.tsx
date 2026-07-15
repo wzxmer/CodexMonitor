@@ -255,7 +255,10 @@ export function ComposerInput({
       label: `${t("composer.contextCyclePrefix")} ${boundedContextCyclePercent}%`,
     };
   }, [boundedContextCyclePercent, t]);
-  const contextCompactionLabel = `${t("composer.contextCompactionsPrefix")} ${contextCompactionCount}`;
+  const contextCompactionLabel = t("composer.contextCompactionsPrefix").replace(
+    "{count}",
+    String(contextCompactionCount),
+  );
   const progressStrokeInset = 1;
   const progressWidth = Math.max(progressBounds.width, 1);
   const progressHeight = Math.max(progressBounds.height, 1);

@@ -180,11 +180,11 @@ describe("Composer attachments integration", () => {
 
     expect(harness.container.querySelector(".is-context-unknown")).toBeTruthy();
     expect(getContextProgress(harness.container)).toBeTruthy();
-    expect(
-      harness.container
-        .querySelector(".composer-context-count")
-        ?.getAttribute("aria-label"),
-    ).toContain("压缩周期 --");
+    const contextCountLabel = harness.container
+      .querySelector(".composer-context-count")
+      ?.getAttribute("aria-label");
+    expect(contextCountLabel).toContain("压缩周期 --");
+    expect(contextCountLabel).toContain("上下文已压缩 0 次");
 
     harness.unmount();
   });

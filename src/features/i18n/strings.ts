@@ -1263,7 +1263,7 @@ export const I18N_STRINGS = {
     "composer.contextRemainingPrefix": "上下文剩余",
     "composer.contextCycleEmpty": "压缩周期 --",
     "composer.contextCyclePrefix": "压缩周期",
-    "composer.contextCompactionsPrefix": "上下文压缩次数",
+    "composer.contextCompactionsPrefix": "上下文已压缩 {count} 次",
     "composer.queueTitle": "队列中",
     "composer.autoReconnect": "自动重连",
     "composer.autoReconnectHelp":
@@ -2644,7 +2644,7 @@ export const I18N_STRINGS = {
     "composer.contextRemainingPrefix": "Context remaining",
     "composer.contextCycleEmpty": "Compaction cycle --",
     "composer.contextCyclePrefix": "Compaction cycle",
-    "composer.contextCompactionsPrefix": "Context compactions",
+    "composer.contextCompactionsPrefix": "Context compacted {count} times",
     "composer.queueTitle": "Queued",
     "composer.autoReconnect": "Auto reconnect",
     "composer.autoReconnectHelp":
