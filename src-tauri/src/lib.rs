@@ -375,6 +375,7 @@ pub fn run() {
             updater::managed_codex_platform,
             updater::windows_installer_kind,
             windows_installer::preview_windows_installer_repair,
+            windows_installer::recover_windows_installer_repair,
             windows_installer::apply_windows_installer_repair,
             windows_installer::rollback_windows_installer_repair,
             notifications::is_macos_debug_build,
