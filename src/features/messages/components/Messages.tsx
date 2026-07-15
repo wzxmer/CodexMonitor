@@ -1047,6 +1047,7 @@ export const Messages = memo(function Messages({
                   <button
                     type="button"
                     className="tool-group-toggle"
+                    data-button-elevation="none"
                     onClick={() => toggleToolGroup(group.id)}
                     aria-expanded={!isCollapsed}
                     aria-controls={groupBodyId}
@@ -1125,6 +1126,7 @@ export const Messages = memo(function Messages({
                   <button
                     type="button"
                     className="tool-group-toggle"
+                    data-button-elevation="none"
                     onClick={() => toggleToolGroup(group.id)}
                     aria-expanded={!isCollapsed}
                     aria-controls={groupBodyId}
