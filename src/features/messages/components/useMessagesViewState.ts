@@ -409,8 +409,8 @@ export function useMessagesViewState({
     baseGroupedItems.forEach((entry) => {
       if (
         entry.kind === "item" &&
-        entry.item.kind === "message" &&
-        entry.item.role === "user"
+        ((entry.item.kind === "message" && entry.item.role === "user") ||
+          entry.item.kind === "subagentCheckpoint")
       ) {
         flushTurn();
         result.push(entry);

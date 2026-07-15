@@ -1,4 +1,7 @@
 import type { SubagentCheckpointSyncMode } from "@/types";
+import { SUBAGENT_CHECKPOINT_MAX_TEXT_LENGTH } from "@utils/subagentCheckpointEnvelope";
+
+export { SUBAGENT_CHECKPOINT_MAX_TEXT_LENGTH } from "@utils/subagentCheckpointEnvelope";
 
 export type SubagentCheckpointKind = "progress" | "final";
 export type SubagentCheckpointDeliveryState =
@@ -25,7 +28,6 @@ export type SubagentCheckpoint = {
   lastError: string | null;
 };
 
-export const SUBAGENT_CHECKPOINT_MAX_TEXT_LENGTH = 2_000;
 export const SUBAGENT_CHECKPOINT_PROGRESS_LIMIT = 8;
 
 export function checkpointThrottleMs(mode: SubagentCheckpointSyncMode) {
@@ -86,6 +88,7 @@ export function buildCheckpointInjection(
     `child_thread_id="${escapeXmlAttribute(checkpoint.childThreadId)}"`,
     `priority="${checkpoint.kind === "final" ? "final" : "normal"}"`,
     `sequence="${checkpoint.sequence}"`,
+    `text_length="${checkpoint.text.length}"`,
   ];
   const normalizedName = childName?.trim();
   if (normalizedName) {

@@ -1,4 +1,5 @@
 import type { ConversationItem } from "../types";
+import { parseSubagentCheckpointEnvelopes } from "./subagentCheckpointEnvelope";
 import { extractAttachedFilesFromText, isImageAttachment } from "./attachments";
 import { parseCollabToolCallItem } from "./threadItems.collab";
 import { asNumber, asString } from "./threadItems.shared";
@@ -192,6 +193,41 @@ function parseUserInputs(inputs: Array<Record<string, unknown>>) {
   return { text: textParts.join(" ").trim(), images, attachments };
 }
 
+function buildUserConversationItem(
+  item: Record<string, unknown>,
+  id: string,
+): ConversationItem {
+  const content = Array.isArray(item.content) ? item.content : [];
+  const { text, images, attachments } = parseUserInputs(
+    content as Array<Record<string, unknown>>,
+  );
+  const onlyInput = content.length === 1 ? content[0] : null;
+  const checkpointText =
+    onlyInput && asString((onlyInput as Record<string, unknown>).type) === "text"
+      ? asString((onlyInput as Record<string, unknown>).text)
+      : "";
+  const checkpoints = checkpointText
+    ? parseSubagentCheckpointEnvelopes(checkpointText)
+    : null;
+  if (checkpoints) {
+    return {
+      id,
+      kind: "subagentCheckpoint",
+      createdAt: extractCreatedAt(item),
+      checkpoints,
+    };
+  }
+  return {
+    id,
+    kind: "message",
+    role: "user",
+    text,
+    createdAt: extractCreatedAt(item),
+    images: images.length > 0 ? images : undefined,
+    attachments: attachments.length > 0 ? attachments : undefined,
+  };
+}
+
 export function buildConversationItem(
   item: Record<string, unknown>,
 ): ConversationItem | null {
@@ -208,17 +244,7 @@ export function buildConversationItem(
     return buildProcessItem(item, processType);
   }
   if (type === "userMessage") {
-    const content = Array.isArray(item.content) ? item.content : [];
-    const { text, images, attachments } = parseUserInputs(content as Array<Record<string, unknown>>);
-    return {
-      id,
-      kind: "message",
-      role: "user",
-      text,
-      createdAt: extractCreatedAt(item),
-      images: images.length > 0 ? images : undefined,
-      attachments: attachments.length > 0 ? attachments : undefined,
-    };
+    return buildUserConversationItem(item, id);
   }
   if (type === "reasoning") {
     const summary = asString(item.summary ?? "");
@@ -372,17 +398,7 @@ export function buildConversationItemFromThreadItem(
     return null;
   }
   if (type === "userMessage") {
-    const content = Array.isArray(item.content) ? item.content : [];
-    const { text, images, attachments } = parseUserInputs(content as Array<Record<string, unknown>>);
-    return {
-      id,
-      kind: "message",
-      role: "user",
-      text,
-      createdAt: extractCreatedAt(item),
-      images: images.length > 0 ? images : undefined,
-      attachments: attachments.length > 0 ? attachments : undefined,
-    };
+    return buildUserConversationItem(item, id);
   }
   if (type === "agentMessage") {
     return {

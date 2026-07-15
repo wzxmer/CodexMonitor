@@ -5,6 +5,18 @@ function formatMessage(item: Extract<ConversationItem, { kind: "message" }>) {
   return `${roleLabel}: ${item.text}`;
 }
 
+function formatSubagentCheckpoint(
+  item: Extract<ConversationItem, { kind: "subagentCheckpoint" }>,
+) {
+  return item.checkpoints
+    .map((checkpoint) => {
+      const child = checkpoint.childName ?? checkpoint.childThreadId;
+      const label = checkpoint.priority === "final" ? "final result" : "checkpoint";
+      return `Subagent ${label} (${child}, #${checkpoint.sequence}):\n${checkpoint.text}`;
+    })
+    .join("\n\n");
+}
+
 function formatReasoning(item: Extract<ConversationItem, { kind: "reasoning" }>) {
   const parts = ["Reasoning:"];
   if (item.summary) {
@@ -73,6 +85,8 @@ export function buildThreadTranscript(items: ConversationItem[]) {
       switch (item.kind) {
         case "message":
           return formatMessage(item);
+        case "subagentCheckpoint":
+          return formatSubagentCheckpoint(item);
         case "userInput":
           return formatUserInput(item);
         case "reasoning":

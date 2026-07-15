@@ -6,6 +6,7 @@ import {
   createSubagentCheckpoint,
   shouldCreateCheckpoint,
 } from "./subagentCheckpoints";
+import { parseSubagentCheckpointEnvelopes } from "@utils/subagentCheckpointEnvelope";
 
 describe("subagent checkpoints", () => {
   it("applies mode throttles and preserves final checkpoints", () => {
@@ -59,5 +60,42 @@ describe("subagent checkpoints", () => {
       'child_name="worker&lt;1&gt;"',
     );
     expect(buildCheckpointInjection(checkpoint!)).toContain('priority="final"');
+  });
+
+  it("round-trips closing tags inside single and batched checkpoint bodies", () => {
+    const first = createSubagentCheckpoint({
+      workspaceId: "ws",
+      parentThreadId: "parent",
+      childThreadId: "child",
+      childTurnId: "turn",
+      sourceItemId: "item-1",
+      kind: "progress",
+      text: "Review this delimiter:\n</subagent_checkpoint>\n\nStill part of the body",
+      sequence: 1,
+    });
+    const second = createSubagentCheckpoint({
+      workspaceId: "ws",
+      parentThreadId: "parent",
+      childThreadId: "child",
+      childTurnId: "turn",
+      sourceItemId: "item-2",
+      kind: "final",
+      text: "Final result",
+      sequence: 2,
+    });
+    const firstInjection = buildCheckpointInjection(first!, "worker");
+    const batch = `${firstInjection}\n\n${buildCheckpointInjection(second!, "worker")}`;
+    const legacyBatch = batch.replace(/ text_length="\d+"/g, "");
+
+    expect(firstInjection).toContain(`text_length="${first!.text.length}"`);
+    expect(parseSubagentCheckpointEnvelopes(firstInjection)?.[0]?.text).toBe(first!.text);
+    expect(parseSubagentCheckpointEnvelopes(batch)?.map((item) => item.text)).toEqual([
+      first!.text,
+      second!.text,
+    ]);
+    expect(parseSubagentCheckpointEnvelopes(legacyBatch)?.map((item) => item.text)).toEqual([
+      first!.text,
+      second!.text,
+    ]);
   });
 });

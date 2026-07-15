@@ -4,6 +4,7 @@ import {
   buildToolSummary,
   countDiffLineChanges,
   getConversationItemSearchText,
+  scrollKeyForItems,
   statusToneFromText,
   stripAnsiControlCodes,
 } from "./messageRenderUtils";
@@ -111,5 +112,26 @@ describe("messageRenderUtils", () => {
     expect(text).toContain("Tool: apply_patch");
     expect(text).toContain("src/App.tsx");
     expect(text).toContain("Added search keyword");
+  });
+
+  it("includes checkpoint content in search and scroll identity", () => {
+    const item: ConversationItem = {
+      id: "checkpoint-1",
+      kind: "subagentCheckpoint",
+      checkpoints: [
+        {
+          checkpointId: "child:item:final",
+          childThreadId: "child-thread",
+          childName: "worker",
+          priority: "final",
+          sequence: 2,
+          text: "Final checkpoint result",
+        },
+      ],
+    };
+
+    expect(getConversationItemSearchText(item)).toContain("Final checkpoint result");
+    expect(getConversationItemSearchText(item)).toContain("worker");
+    expect(scrollKeyForItems([item])).toBe("checkpoint-1-1-2-23");
   });
 });

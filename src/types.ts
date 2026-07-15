@@ -119,6 +119,19 @@ export type ConversationItem =
     }
   | {
       id: string;
+      kind: "subagentCheckpoint";
+      createdAt?: number;
+      checkpoints: {
+        checkpointId: string;
+        childThreadId: string;
+        childName?: string;
+        priority: "normal" | "final";
+        sequence: number;
+        text: string;
+      }[];
+    }
+  | {
+      id: string;
       kind: "userInput";
       status: "answered";
       questions: {

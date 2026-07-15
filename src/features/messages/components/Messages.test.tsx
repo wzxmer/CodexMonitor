@@ -54,6 +54,49 @@ describe("Messages", () => {
     exportMarkdownFileMock.mockReset();
   });
 
+  it("renders checkpoint injections as visible system rows without user actions", () => {
+    const items: ConversationItem[] = [
+      { id: "user-1", kind: "message", role: "user", text: "Start" },
+      {
+        id: "checkpoint-1",
+        kind: "subagentCheckpoint",
+        checkpoints: [
+          {
+            checkpointId: "child:item:progress",
+            childThreadId: "child-thread",
+            childName: "worker",
+            priority: "normal",
+            sequence: 1,
+            text: "Checkpoint body",
+          },
+        ],
+      },
+      { id: "assistant-1", kind: "message", role: "assistant", text: "Done" },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-checkpoint"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        onQuoteMessage={vi.fn()}
+        onResendUserMessage={vi.fn()}
+      />,
+    );
+
+    const checkpoint = screen.getByRole("note", {
+      name: "子会话检查点: worker",
+    });
+    expect(screen.getByText("Checkpoint body")).toBeTruthy();
+    expect(checkpoint.closest(".process-group")).toBeNull();
+    expect(checkpoint.querySelector(".message-quote-button")).toBeNull();
+    expect(checkpoint.querySelector(".message-edit-button")).toBeNull();
+    expect(checkpoint.querySelector(".message-copy-button")).toBeNull();
+  });
+
   it("renders only the latest configured history batch initially", () => {
     const items: ConversationItem[] = Array.from({ length: 3 }, (_, index) => ({
       id: `msg-${index}`,

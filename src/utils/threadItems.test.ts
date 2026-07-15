@@ -3,6 +3,7 @@ import type { ConversationItem } from "../types";
 import {
   buildConversationItem,
   buildConversationItemFromThreadItem,
+  buildItemsFromThread,
   getThreadCreatedTimestamp,
   getThreadTimestamp,
   mergeThreadItems,
@@ -912,6 +913,127 @@ describe("threadItems", () => {
       expect(item.role).toBe("user");
       expect(item.text).toBe("Please $Review");
       expect(item.images).toEqual(["https://example.com/image.png"]);
+    }
+  });
+
+  it("normalizes live subagent checkpoint injections as system items", () => {
+    const item = buildConversationItem({
+      type: "userMessage",
+      id: "checkpoint-live-1",
+      createdAt: 1_700_000_000,
+      content: [
+        {
+          type: "text",
+          text:
+            '<subagent_checkpoint checkpoint_id="child:item:progress" child_thread_id="child" child_name="worker&lt;1&gt;" priority="normal" sequence="1">\nProgress update\n</subagent_checkpoint>',
+        },
+      ],
+    });
+
+    expect(item).toEqual({
+      id: "checkpoint-live-1",
+      kind: "subagentCheckpoint",
+      createdAt: 1_700_000_000_000,
+      checkpoints: [
+        {
+          checkpointId: "child:item:progress",
+          childThreadId: "child",
+          childName: "worker<1>",
+          priority: "normal",
+          sequence: 1,
+          text: "Progress update",
+        },
+      ],
+    });
+  });
+
+  it("normalizes batched checkpoint history without user-message identity", () => {
+    const items = buildItemsFromThread({
+      turns: [
+        {
+          items: [
+            {
+              type: "userMessage",
+              id: "checkpoint-history-1",
+              content: [
+                {
+                  type: "text",
+                  text:
+                    '<subagent_checkpoint checkpoint_id="child:item-1:progress" child_thread_id="child" priority="normal" sequence="1">\nFirst update\n</subagent_checkpoint>\n\n' +
+                    '<subagent_checkpoint checkpoint_id="child:item-2:final" child_thread_id="child" priority="final" sequence="2">\nFinal result\n</subagent_checkpoint>',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const item = items[0];
+
+    expect(item).toMatchObject({
+      id: "checkpoint-history-1",
+      kind: "subagentCheckpoint",
+      checkpoints: [
+        { priority: "normal", sequence: 1, text: "First update" },
+        { priority: "final", sequence: 2, text: "Final result" },
+      ],
+    });
+  });
+
+  it("keeps incomplete checkpoint-like user text as a user message", () => {
+    const text =
+      '<subagent_checkpoint child_thread_id="child" priority="normal">\nUser-authored example\n</subagent_checkpoint>';
+    const item = buildConversationItemFromThreadItem({
+      type: "userMessage",
+      id: "checkpoint-like-user-text",
+      content: [{ type: "text", text }],
+    });
+
+    expect(item).toMatchObject({
+      id: "checkpoint-like-user-text",
+      kind: "message",
+      role: "user",
+      text,
+    });
+  });
+
+  it("keeps checkpoint-like mixed inputs as a user message", () => {
+    const envelope =
+      '<subagent_checkpoint checkpoint_id="child:item:progress" child_thread_id="child" priority="normal" sequence="1">\nProgress\n</subagent_checkpoint>';
+    const item = buildConversationItemFromThreadItem({
+      type: "userMessage",
+      id: "checkpoint-mixed-user-text",
+      content: [
+        { type: "text", text: envelope },
+        { type: "skill", name: "review" },
+      ],
+    });
+
+    expect(item).toMatchObject({
+      kind: "message",
+      role: "user",
+      text: `${envelope} $review`,
+    });
+  });
+
+  it("keeps envelopes outside producer invariants as user messages", () => {
+    const mismatchedId =
+      '<subagent_checkpoint checkpoint_id="other:item:progress" child_thread_id="child" priority="normal" sequence="1">\nProgress\n</subagent_checkpoint>';
+    const oversized = `<subagent_checkpoint checkpoint_id="child:item:progress" child_thread_id="child" priority="normal" sequence="1">\n${"x".repeat(
+      2_001,
+    )}\n</subagent_checkpoint>`;
+
+    for (const [id, text] of [
+      ["checkpoint-mismatched-id", mismatchedId],
+      ["checkpoint-oversized", oversized],
+    ]) {
+      expect(
+        buildConversationItemFromThreadItem({
+          type: "userMessage",
+          id,
+          content: [{ type: "text", text }],
+        }),
+      ).toMatchObject({ kind: "message", role: "user", text });
     }
   });
 

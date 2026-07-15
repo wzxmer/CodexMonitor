@@ -48,6 +48,7 @@ import {
   ProcessRow,
   ReasoningRow,
   ReviewRow,
+  SubagentCheckpointRow,
   ToolRow,
   UserInputRow,
   WorkingIndicator,
@@ -635,6 +636,19 @@ export const Messages = memo(function Messages({
               : null
           }
           suppressCliTimestamp={options?.suppressCliTimestamp}
+          workspacePath={workspacePath}
+          onOpenFileLink={openFileLink}
+          onOpenFileLinkMenu={showFileLinkMenu}
+          onOpenThreadLink={handleOpenThreadLink}
+        />
+      );
+    }
+    if (item.kind === "subagentCheckpoint") {
+      return (
+        <SubagentCheckpointRow
+          key={item.id}
+          item={item}
+          showMessageFilePath={showMessageFilePath}
           workspacePath={workspacePath}
           onOpenFileLink={openFileLink}
           onOpenFileLinkMenu={showFileLinkMenu}

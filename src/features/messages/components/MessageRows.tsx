@@ -83,6 +83,10 @@ type MessageRowProps = MarkdownFileLinkProps & {
   suppressCliTimestamp?: boolean;
 };
 
+type SubagentCheckpointRowProps = MarkdownFileLinkProps & {
+  item: Extract<ConversationItem, { kind: "subagentCheckpoint" }>;
+};
+
 type ReasoningRowProps = MarkdownFileLinkProps & {
   item: Extract<ConversationItem, { kind: "reasoning" }>;
   parsed: ParsedReasoning;
@@ -952,6 +956,59 @@ export const ProcessRow = memo(function ProcessRow({ item }: ProcessRowProps) {
         {item.detail && <div className="tool-inline-detail">{item.detail}</div>}
       </div>
     </div>
+  );
+});
+
+export const SubagentCheckpointRow = memo(function SubagentCheckpointRow({
+  item,
+  showMessageFilePath,
+  workspacePath,
+  onOpenFileLink,
+  onOpenFileLinkMenu,
+  onOpenThreadLink,
+}: SubagentCheckpointRowProps) {
+  const { t } = useI18n();
+
+  return (
+    <>
+      {item.checkpoints.map((checkpoint) => {
+        const label =
+          checkpoint.priority === "final"
+            ? t("messages.subagentCheckpointFinal")
+            : t("messages.subagentCheckpointProgress");
+        const childLabel =
+          checkpoint.childName || checkpoint.childThreadId.slice(0, 8);
+        return (
+          <div
+            key={`${item.id}-${checkpoint.checkpointId}`}
+            className="tool-inline process-inline subagent-checkpoint-inline"
+            role="note"
+            aria-label={`${label}: ${childLabel}`}
+          >
+            <div className="tool-inline-bar-toggle" aria-hidden />
+            <div className="tool-inline-content">
+              <div className="process-inline-summary">
+                <Users className="tool-inline-icon completed" size={14} aria-hidden />
+                <span className="tool-inline-label">{label}:</span>
+                <span className="tool-inline-value" title={checkpoint.childThreadId}>
+                  {childLabel}
+                </span>
+                <span className="tool-inline-status">#{checkpoint.sequence}</span>
+              </div>
+              <Markdown
+                value={checkpoint.text}
+                className="tool-inline-detail markdown"
+                showFilePath={showMessageFilePath}
+                workspacePath={workspacePath}
+                onOpenFileLink={onOpenFileLink}
+                onOpenFileLinkMenu={onOpenFileLinkMenu}
+                onOpenThreadLink={onOpenThreadLink}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </>
   );
 });
 

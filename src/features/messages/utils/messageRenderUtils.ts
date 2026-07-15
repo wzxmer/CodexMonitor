@@ -570,6 +570,12 @@ export function scrollKeyForItems(items: ConversationItem[]) {
   switch (last.kind) {
     case "message":
       return `${last.id}-${last.text.length}`;
+    case "subagentCheckpoint": {
+      const checkpoint = last.checkpoints[last.checkpoints.length - 1];
+      return `${last.id}-${last.checkpoints.length}-${checkpoint?.sequence ?? 0}-${
+        checkpoint?.text.length ?? 0
+      }`;
+    }
     case "userInput":
       return `${last.id}-${last.status}-${last.questions.length}`;
     case "reasoning":
@@ -614,6 +620,12 @@ export function getConversationItemSearchText(item: ConversationItem): string {
   switch (item.kind) {
     case "message":
       return item.text;
+    case "subagentCheckpoint":
+      return item.checkpoints
+        .map((checkpoint) =>
+          [checkpoint.childName ?? "", checkpoint.childThreadId, checkpoint.text].join("\n"),
+        )
+        .join("\n");
     case "userInput":
       return item.questions
         .map((question) =>
