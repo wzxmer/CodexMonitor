@@ -1241,6 +1241,7 @@ export type WindowsInstallerRecordSummary = {
 
 export type WindowsInstallerRepairPreview = {
   status: "repairable" | "blocked" | "unsupported";
+  recoveryRequired?: boolean;
   fingerprint?: string | null;
   currentVersion: string;
   records: WindowsInstallerRecordSummary[];
@@ -1277,6 +1278,10 @@ export async function rollbackWindowsInstallerRepair(
     transactionId,
     postFingerprint,
   });
+}
+
+export async function recoverWindowsInstallerRepair(): Promise<WindowsInstallerRepairResult> {
+  return invoke<WindowsInstallerRepairResult>("recover_windows_installer_repair");
 }
 
 export async function downloadAndOpenReleaseAsset(

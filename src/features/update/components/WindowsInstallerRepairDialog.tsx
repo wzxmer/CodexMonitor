@@ -32,6 +32,7 @@ export function WindowsInstallerRepairDialog({
     preview,
     apply,
     rollback,
+    recover,
     reset,
     busy,
     canApply,
@@ -53,6 +54,8 @@ export function WindowsInstallerRepairDialog({
   }
 
   const previewState = state.preview;
+  const recoveryRequired =
+    previewState?.status === "blocked" && previewState.recoveryRequired === true;
   const shortcutBlocked = previewState?.blockers.some((blocker) =>
     /shortcut|\.lnk/i.test(blocker),
   );
@@ -86,7 +89,13 @@ export function WindowsInstallerRepairDialog({
           <div className="settings-help">{t("installerRepair.loading")}</div>
         ) : null}
 
-        {state.phase === "ready" && previewState ? (
+        {state.phase === "ready" && previewState && recoveryRequired ? (
+          <div className="settings-help ds-text-danger">
+            {t("installerRepair.recoveryRequired")}
+          </div>
+        ) : null}
+
+        {state.phase === "ready" && previewState && !recoveryRequired ? (
           <>
             <div className="settings-help">
               {t("installerRepair.currentVersion")}{" "}
@@ -153,6 +162,12 @@ export function WindowsInstallerRepairDialog({
             {t("installerRepair.rollingBack")}
           </div>
         ) : null}
+        {state.phase === "recovering" ? (
+          <div className="settings-help">{t("installerRepair.recovering")}</div>
+        ) : null}
+        {state.phase === "recovered" ? (
+          <div className="settings-help">{t("installerRepair.recovered")}</div>
+        ) : null}
         {state.phase === "completed" ? (
           <>
             <div className="settings-help">{t("installerRepair.success")}</div>
@@ -189,7 +204,19 @@ export function WindowsInstallerRepairDialog({
               {t("installerRepair.retryPreview")}
             </button>
           ) : null}
-          {state.phase === "ready" && previewState?.status === "repairable" ? (
+          {state.phase === "ready" && recoveryRequired ? (
+            <button
+              type="button"
+              className="primary ds-modal-button"
+              onClick={() => void recover()}
+              disabled={busy}
+            >
+              {t("installerRepair.recover")}
+            </button>
+          ) : null}
+          {state.phase === "ready" &&
+          previewState?.status === "repairable" &&
+          !recoveryRequired ? (
             <button
               type="button"
               className="primary ds-modal-button"
@@ -197,6 +224,16 @@ export function WindowsInstallerRepairDialog({
               disabled={!canApply || !acknowledged}
             >
               {t("installerRepair.apply")}
+            </button>
+          ) : null}
+          {state.phase === "recovered" ? (
+            <button
+              type="button"
+              className="primary ds-modal-button"
+              onClick={() => void preview()}
+              disabled={busy}
+            >
+              {t("installerRepair.repreview")}
             </button>
           ) : null}
           {state.phase === "completed" ? (

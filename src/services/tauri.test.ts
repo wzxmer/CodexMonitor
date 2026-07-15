@@ -76,6 +76,7 @@ import {
   previewWindowsInstallerRepair,
   applyWindowsInstallerRepair,
   rollbackWindowsInstallerRepair,
+  recoverWindowsInstallerRepair,
   saveComposerImages,
   promoteComposerImages,
   generateAgentDescription,
@@ -216,6 +217,14 @@ describe("tauri invoke wrappers", () => {
       transactionId: "transaction-token",
       postFingerprint: "post-token",
     });
+  });
+
+  it("recovers incomplete Windows installer repair transactions without arguments", async () => {
+    const invokeMock = vi.mocked(invoke);
+
+    await recoverWindowsInstallerRepair();
+
+    expect(invokeMock).toHaveBeenCalledWith("recover_windows_installer_repair");
   });
 
   it("returns an empty list when workspace picker is cancelled", async () => {

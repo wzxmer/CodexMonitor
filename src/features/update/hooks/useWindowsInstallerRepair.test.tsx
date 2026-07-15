@@ -4,12 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyWindowsInstallerRepair,
   previewWindowsInstallerRepair,
+  recoverWindowsInstallerRepair,
   rollbackWindowsInstallerRepair,
 } from "@services/tauri";
 import { useWindowsInstallerRepair } from "./useWindowsInstallerRepair";
 
 vi.mock("@services/tauri", () => ({
   previewWindowsInstallerRepair: vi.fn(),
+  recoverWindowsInstallerRepair: vi.fn(),
   applyWindowsInstallerRepair: vi.fn(),
   rollbackWindowsInstallerRepair: vi.fn(),
 }));
@@ -17,6 +19,7 @@ vi.mock("@services/tauri", () => ({
 const previewMock = vi.mocked(previewWindowsInstallerRepair);
 const applyMock = vi.mocked(applyWindowsInstallerRepair);
 const rollbackMock = vi.mocked(rollbackWindowsInstallerRepair);
+const recoverMock = vi.mocked(recoverWindowsInstallerRepair);
 
 const repairablePreview = {
   status: "repairable" as const,
@@ -112,5 +115,29 @@ describe("useWindowsInstallerRepair", () => {
       "opaque-post",
     );
     expect(result.current.state.phase).toBe("rolledBack");
+  });
+
+  it("recovers incomplete transactions once and requires a fresh preview", async () => {
+    previewMock.mockResolvedValue({
+      ...repairablePreview,
+      status: "blocked",
+      recoveryRequired: true,
+      fingerprint: null,
+      blockers: ["An incomplete repair journal exists."],
+    });
+    recoverMock.mockResolvedValue({ status: "rolledBack" });
+    const { result } = renderHook(() => useWindowsInstallerRepair());
+
+    await act(async () => {
+      await result.current.preview();
+    });
+    await act(async () => {
+      await Promise.all([result.current.recover(), result.current.recover()]);
+    });
+
+    expect(recoverMock).toHaveBeenCalledTimes(1);
+    expect(result.current.state.phase).toBe("recovered");
+    expect(result.current.state.preview).toBeNull();
+    expect(result.current.canApply).toBe(false);
   });
 });

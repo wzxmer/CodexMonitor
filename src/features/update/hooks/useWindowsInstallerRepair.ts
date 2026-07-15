@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import {
   applyWindowsInstallerRepair,
+  recoverWindowsInstallerRepair,
   previewWindowsInstallerRepair,
   rollbackWindowsInstallerRepair,
   type WindowsInstallerRepairPreview,
@@ -15,6 +16,8 @@ export type WindowsInstallerRepairPhase =
   | "completed"
   | "rollingBack"
   | "rolledBack"
+  | "recovering"
+  | "recovered"
   | "error";
 
 export type WindowsInstallerRepairState = {
@@ -164,6 +167,38 @@ export function useWindowsInstallerRepair() {
     }
   }, [state.phase, state.result]);
 
+  const recover = useCallback(async () => {
+    if (busyRef.current) {
+      return null;
+    }
+    busyRef.current = true;
+    setState({ phase: "recovering", preview: null, result: null, error: null });
+    try {
+      const result = await recoverWindowsInstallerRepair();
+      if (result.status === "unsupported") {
+        setState({
+          phase: "error",
+          preview: null,
+          result: null,
+          error: result.message ?? "Windows installer recovery is unsupported.",
+        });
+        return result;
+      }
+      setState({ phase: "recovered", preview: null, result: null, error: null });
+      return result;
+    } catch (error) {
+      setState({
+        phase: "error",
+        preview: null,
+        result: null,
+        error: errorMessage(error),
+      });
+      return null;
+    } finally {
+      busyRef.current = false;
+    }
+  }, []);
+
   const reset = useCallback(() => {
     if (!busyRef.current) {
       setState((current) =>
@@ -182,11 +217,13 @@ export function useWindowsInstallerRepair() {
     preview,
     apply,
     rollback,
+    recover,
     reset,
     busy:
       state.phase === "previewing" ||
       state.phase === "applying" ||
-      state.phase === "rollingBack",
+      state.phase === "rollingBack" ||
+      state.phase === "recovering",
     canApply:
       state.phase === "ready" &&
       state.preview?.status === "repairable" &&
