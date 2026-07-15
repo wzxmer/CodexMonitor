@@ -57,6 +57,18 @@ describe("message tool group interaction styles", () => {
     expect(drawerRule?.[1]).not.toContain("100vw");
     expect(drawerRule?.[1]).toContain("--composer-overlay-height");
   });
+
+  it("uses conversation canvas colors for the unframed child result heading", () => {
+    const headerRule = messagesCss.match(
+      /\.subagent-results-header\s*\{([\s\S]*?)\n\}/,
+    );
+    const headingRule = messagesCss.match(
+      /\.subagent-results-heading\s*\{([\s\S]*?)\n\}/,
+    );
+
+    expect(headerRule?.[1]).toContain("color: var(--conversation-assistant-text)");
+    expect(headingRule?.[1]).toContain("color: inherit");
+  });
 });
 
 describe("markdown table layout styles", () => {

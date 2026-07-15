@@ -159,6 +159,69 @@ describe("useThreads UX integration", () => {
     }
   });
 
+  it("hydrates subagent titles discovered while resuming parent history", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-parent-resume",
+          preview: "Parent thread",
+          turns: [
+            {
+              items: [
+                {
+                  id: "activity-child-resume",
+                  type: "subAgentActivity",
+                  kind: "started",
+                  agentThreadId: "thread-child-resume",
+                  agentPath: "/root/check_package_info",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    vi.mocked(readThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-child-resume",
+          threadName: "检查包信息",
+          source: {
+            subAgent: {
+              thread_spawn: {
+                parent_thread_id: "thread-parent-resume",
+                agent_path: "/root/check_package_info",
+              },
+            },
+          },
+          turns: [],
+        },
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-parent-resume");
+    });
+
+    await waitFor(() => {
+      expect(readThread).toHaveBeenCalledWith("ws-1", "thread-child-resume");
+    });
+    await waitFor(() => {
+      expect(
+        result.current.threadsByWorkspace["ws-1"]?.find(
+          (thread) => thread.id === "thread-child-resume",
+        )?.name,
+      ).toBe("检查包信息");
+    });
+  });
+
   it("applies runtime codex args before start and selection resume", async () => {
     const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => undefined);
     vi.mocked(startThread).mockResolvedValue({

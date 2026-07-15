@@ -80,7 +80,8 @@ describe("useThreadActions", () => {
     const threadActivityRef = {
       current: {} as Record<string, Record<string, number>>,
     };
-    const applyCollabThreadLinksFromThread = vi.fn();
+    const applyCollabThreadLinksFromThread = vi.fn(() => []);
+    const hydrateSubagentThreads = vi.fn(async () => undefined);
     const updateThreadParent = vi.fn();
     const onSubagentThreadDetected = vi.fn();
     const onSubagentTitleCandidate = vi.fn();
@@ -101,6 +102,7 @@ describe("useThreadActions", () => {
       loadedThreadsRef,
       replaceOnResumeRef,
       applyCollabThreadLinksFromThread,
+      hydrateSubagentThreads,
       updateThreadParent,
       onSubagentThreadDetected,
       onSubagentTitleCandidate,
@@ -445,6 +447,38 @@ describe("useThreadActions", () => {
       text: "Hello!",
       timestamp: 999,
     });
+  });
+
+  it("does not block parent resume on subagent title hydration", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-parent",
+          turns: [],
+        },
+      },
+    });
+    const hydrateSubagentThreads = vi.fn(
+      () => new Promise<void>(() => undefined),
+    );
+
+    const { result } = renderActions({
+      applyCollabThreadLinksFromThread: vi.fn(() => ["thread-child"]),
+      hydrateSubagentThreads,
+    });
+
+    let resumedThreadId: string | null = null;
+    await act(async () => {
+      resumedThreadId = await result.current.resumeThreadForWorkspace(
+        "ws-1",
+        "thread-parent",
+      );
+    });
+
+    expect(resumedThreadId).toBe("thread-parent");
+    expect(hydrateSubagentThreads).toHaveBeenCalledWith("ws-1", [
+      { threadId: "thread-child" },
+    ]);
   });
 
   it("hydrates token usage from a resumed thread before rendering progress", async () => {

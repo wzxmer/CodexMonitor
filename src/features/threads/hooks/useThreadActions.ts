@@ -69,7 +69,11 @@ type UseThreadActionsOptions = {
     workspaceId: string,
     threadId: string,
     thread: Record<string, unknown>,
-  ) => void;
+  ) => string[];
+  hydrateSubagentThreads: (
+    workspaceId: string,
+    receivers: Array<{ threadId: string }>,
+  ) => Promise<void>;
   updateThreadParent: (parentId: string, childIds: string[]) => void;
   onSubagentThreadDetected: (workspaceId: string, threadId: string) => void;
   onSubagentTitleCandidate?: (
@@ -100,6 +104,7 @@ export function useThreadActions({
   loadedThreadsRef,
   replaceOnResumeRef,
   applyCollabThreadLinksFromThread,
+  hydrateSubagentThreads,
   updateThreadParent,
   onSubagentThreadDetected,
   onSubagentTitleCandidate,
@@ -270,7 +275,15 @@ export function useThreadActions({
           applyThreadMetadata(workspaceId, threadId, thread, {
             notifySubagent: true,
           });
-          applyCollabThreadLinksFromThread(workspaceId, threadId, thread);
+          const childThreadIds = applyCollabThreadLinksFromThread(
+            workspaceId,
+            threadId,
+            thread,
+          );
+          void hydrateSubagentThreads(
+            workspaceId,
+            childThreadIds.map((childThreadId) => ({ threadId: childThreadId })),
+          );
           const localItems = itemsByThread[threadId] ?? [];
           const shouldReplace =
             replaceLocal || replaceOnResumeRef.current[threadId] === true;
@@ -373,6 +386,7 @@ export function useThreadActions({
       dispatchPreviewMessage,
       dispatch,
       getCustomName,
+      hydrateSubagentThreads,
       itemsByThread,
       loadedThreadsRef,
       onDebug,

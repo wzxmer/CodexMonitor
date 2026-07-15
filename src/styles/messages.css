@@ -151,7 +151,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 0 4px;
-  color: var(--text-muted);
+  color: var(--conversation-assistant-text);
   font-size: 11px;
 }
 
@@ -164,16 +164,16 @@
 }
 
 .subagent-results-heading {
-  color: var(--text-stronger);
+  color: inherit;
   font-weight: 700;
 }
 
 .subagent-results-count {
   min-width: 20px;
   padding: 1px 6px;
-  border: 1px solid var(--cm-border-default);
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
   border-radius: 999px;
-  color: var(--text-muted);
+  color: inherit;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }

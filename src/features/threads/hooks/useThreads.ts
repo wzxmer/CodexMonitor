@@ -808,6 +808,7 @@ export function useThreads({
     loadedThreadsRef,
     replaceOnResumeRef,
     applyCollabThreadLinksFromThread,
+    hydrateSubagentThreads,
     updateThreadParent,
     onSubagentThreadDetected,
     onSubagentTitleCandidate,

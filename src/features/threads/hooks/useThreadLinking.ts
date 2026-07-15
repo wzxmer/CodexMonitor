@@ -160,12 +160,12 @@ export function useThreadLinking({
       const isCollabType =
         itemType === "collabToolCall" || itemType === "collabAgentToolCall";
       if (!isCollabType && !hasCollabLinkHints(item)) {
-        return;
+        return [];
       }
       const sender = asString(item.senderThreadId ?? item.sender_thread_id ?? "");
       const parentId = sender || fallbackThreadId;
       if (!parentId) {
-        return;
+        return [];
       }
       const receivers = Array.from(
         new Set([
@@ -213,6 +213,7 @@ export function useThreadLinking({
           agentPath: activityAgentPath,
         });
       }
+      return receivers.filter((receiver) => receiver !== parentId);
     },
     [dispatch, onSubagentThreadDetected, onSubagentThreadMetadata, updateThreadParent],
   );
@@ -224,15 +225,19 @@ export function useThreadLinking({
       thread: Record<string, unknown>,
     ) => {
       const turns = Array.isArray(thread.turns) ? thread.turns : [];
+      const receiverThreadIds = new Set<string>();
       turns.forEach((turn) => {
         const turnRecord = turn as Record<string, unknown>;
         const turnItems = Array.isArray(turnRecord.items)
           ? (turnRecord.items as Record<string, unknown>[])
           : [];
         turnItems.forEach((item) => {
-          applyCollabThreadLinks(workspaceId, fallbackThreadId, item);
+          applyCollabThreadLinks(workspaceId, fallbackThreadId, item).forEach(
+            (threadId) => receiverThreadIds.add(threadId),
+          );
         });
       });
+      return Array.from(receiverThreadIds);
     },
     [applyCollabThreadLinks],
   );
