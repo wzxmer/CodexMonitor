@@ -106,7 +106,16 @@ jobs:
 
       - name: Install Windows dependencies
         if: runner.os == 'Windows'
-        run: choco install cmake llvm -y --no-progress
+        shell: pwsh
+        run: |
+          $cmake = Get-Command cmake.exe -ErrorAction SilentlyContinue
+          $clang = Get-Command clang.exe -ErrorAction SilentlyContinue
+          $clangPath = 'C:\Program Files\LLVM\bin\clang.exe'
+          if ($cmake -and ($clang -or (Test-Path -LiteralPath $clangPath))) {
+            Write-Host 'CMake and LLVM are already available on the hosted runner.'
+            exit 0
+          }
+          choco install cmake llvm -y --no-progress
 
       - name: Configure LLVM on Windows
         if: runner.os == 'Windows'
