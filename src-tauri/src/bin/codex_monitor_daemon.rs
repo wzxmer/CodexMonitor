@@ -1210,14 +1210,31 @@ impl DaemonState {
         workspace_id: String,
         thread_id: String,
     ) -> Result<Value, String> {
-        if let Some(session) = self
+        let mut response = if let Some(session) = self
             .source_runtime_for_bound_thread(&workspace_id, &thread_id)
             .await?
         {
-            return codex_core::resume_thread_with_session_core(&session, workspace_id, thread_id)
-                .await;
+            codex_core::resume_thread_with_session_core(
+                &session,
+                workspace_id.clone(),
+                thread_id.clone(),
+            )
+            .await?
+        } else {
+            codex_core::resume_thread_core(&self.sessions, workspace_id.clone(), thread_id.clone())
+                .await?
+        };
+        if let Some(token_usage) =
+            local_usage_core::thread_token_usage_core(&self.workspaces, workspace_id, thread_id)
+                .await
+        {
+            if let Some(thread) = response.pointer_mut("/result/thread") {
+                if let Some(thread) = thread.as_object_mut() {
+                    thread.insert("tokenUsage".to_string(), token_usage);
+                }
+            }
         }
-        codex_core::resume_thread_core(&self.sessions, workspace_id, thread_id).await
+        Ok(response)
     }
 
     async fn read_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
@@ -2264,6 +2281,27 @@ mod tests {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
 
+    static CODEX_HOME_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    struct CodexHomeEnvGuard(Option<std::ffi::OsString>);
+
+    impl CodexHomeEnvGuard {
+        fn set(path: &std::path::Path) -> Self {
+            let previous = std::env::var_os("CODEX_HOME");
+            std::env::set_var("CODEX_HOME", path);
+            Self(previous)
+        }
+    }
+
+    impl Drop for CodexHomeEnvGuard {
+        fn drop(&mut self) {
+            match self.0.take() {
+                Some(value) => std::env::set_var("CODEX_HOME", value),
+                None => std::env::remove_var("CODEX_HOME"),
+            }
+        }
+    }
+
     fn run_async_test<F>(future: F)
     where
         F: Future<Output = ()>,
@@ -2447,6 +2485,109 @@ mod tests {
             assert!(result.get("totals").is_some());
             let _ = std::fs::remove_dir_all(&tmp);
         });
+    }
+
+    #[test]
+    fn resume_thread_restores_local_token_usage() {
+        let _env_lock = CODEX_HOME_ENV_LOCK.lock().expect("lock CODEX_HOME");
+        let tmp = make_temp_dir("resume-thread-token-usage");
+        let codex_home = tmp.join("codex-home");
+        let _codex_home_guard = CodexHomeEnvGuard::set(&codex_home);
+
+        run_async_test(async {
+            let workspace_id = "ws-resume-usage";
+            let thread_id = "thread-resume-usage";
+            let workspace_dir = tmp.join("workspace");
+            std::fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+
+            let session_dir = codex_home.join("sessions/2026/07/15");
+            std::fs::create_dir_all(&session_dir).expect("create session dir");
+            let jsonl = [
+                json!({
+                    "type": "session_meta",
+                    "payload": {
+                        "id": thread_id,
+                        "cwd": workspace_dir.to_string_lossy()
+                    }
+                })
+                .to_string(),
+                json!({
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "last_token_usage": {
+                                "input_tokens": 12,
+                                "output_tokens": 3
+                            },
+                            "total_token_usage": {
+                                "input_tokens": 120,
+                                "output_tokens": 30
+                            },
+                            "model_context_window": 200000
+                        }
+                    }
+                })
+                .to_string(),
+            ]
+            .join("\n");
+            std::fs::write(session_dir.join("session.jsonl"), format!("{jsonl}\n"))
+                .expect("write session jsonl");
+
+            let state = test_state(&tmp);
+            insert_workspace(&state, workspace_id, &workspace_dir.to_string_lossy()).await;
+            let session = make_session(make_workspace_entry(
+                workspace_id,
+                &workspace_dir.to_string_lossy(),
+            ));
+            state
+                .sessions
+                .lock()
+                .await
+                .insert(workspace_id.to_string(), session.clone());
+
+            let resume = state.resume_thread(workspace_id.to_string(), thread_id.to_string());
+            let reply = async {
+                tokio::time::timeout(Duration::from_secs(2), async {
+                    loop {
+                        if let Some(sender) = session.pending.lock().await.remove(&0) {
+                            sender
+                                .send(json!({
+                                    "id": 0,
+                                    "result": { "thread": { "id": thread_id } }
+                                }))
+                                .expect("send resume response");
+                            break;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                })
+                .await
+                .expect("resume request should be pending");
+            };
+            let (response, ()) = futures_util::future::join(resume, reply).await;
+            let response = response.expect("resume thread");
+
+            assert_eq!(
+                response["result"]["thread"]["tokenUsage"]["last"]["input_tokens"],
+                12
+            );
+            assert_eq!(
+                response["result"]["thread"]["tokenUsage"]["total"]["output_tokens"],
+                30
+            );
+            assert_eq!(
+                response["result"]["thread"]["tokenUsage"]["model_context_window"],
+                200000
+            );
+
+            if let Some(session) = state.sessions.lock().await.remove(workspace_id) {
+                let mut child = session.child.lock().await;
+                kill_child_process_tree(&mut child).await;
+            };
+        });
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
