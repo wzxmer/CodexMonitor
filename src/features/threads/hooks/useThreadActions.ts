@@ -68,6 +68,10 @@ type UseThreadActionsOptions = {
   ) => void;
   updateThreadParent: (parentId: string, childIds: string[]) => void;
   onSubagentThreadDetected: (workspaceId: string, threadId: string) => void;
+  onSubagentTitleCandidate?: (
+    workspaceId: string,
+    thread: Record<string, unknown>,
+  ) => void;
   onThreadCodexMetadataDetected?: (
     workspaceId: string,
     threadId: string,
@@ -94,6 +98,7 @@ export function useThreadActions({
   applyCollabThreadLinksFromThread,
   updateThreadParent,
   onSubagentThreadDetected,
+  onSubagentTitleCandidate,
   onThreadCodexMetadataDetected,
 }: UseThreadActionsOptions) {
   const localArchivedCursorByWorkspaceRef = useRef<Record<string, string | null>>({});
@@ -117,6 +122,7 @@ export function useThreadActions({
       const sourceParentId = getParentThreadIdFromThread(thread);
       if (sourceParentId) {
         updateThreadParent(sourceParentId, [threadId]);
+        onSubagentTitleCandidate?.(workspaceId, thread);
         if (options?.notifySubagent) {
           onSubagentThreadDetected(workspaceId, threadId);
         }
@@ -124,6 +130,7 @@ export function useThreadActions({
     },
     [
       onSubagentThreadDetected,
+      onSubagentTitleCandidate,
       onThreadCodexMetadataDetected,
       updateThreadParent,
     ],

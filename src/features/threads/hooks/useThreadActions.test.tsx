@@ -83,6 +83,7 @@ describe("useThreadActions", () => {
     const applyCollabThreadLinksFromThread = vi.fn();
     const updateThreadParent = vi.fn();
     const onSubagentThreadDetected = vi.fn();
+    const onSubagentTitleCandidate = vi.fn();
 
     const args: Parameters<typeof useThreadActions>[0] = {
       dispatch,
@@ -102,6 +103,7 @@ describe("useThreadActions", () => {
       applyCollabThreadLinksFromThread,
       updateThreadParent,
       onSubagentThreadDetected,
+      onSubagentTitleCandidate,
       ...overrides,
     };
 
@@ -116,6 +118,7 @@ describe("useThreadActions", () => {
       applyCollabThreadLinksFromThread: args.applyCollabThreadLinksFromThread,
       updateThreadParent: args.updateThreadParent,
       onSubagentThreadDetected: args.onSubagentThreadDetected,
+      onSubagentTitleCandidate: args.onSubagentTitleCandidate,
       ...utils,
     };
   }
@@ -551,7 +554,12 @@ describe("useThreadActions", () => {
     vi.mocked(buildItemsFromThread).mockReturnValue([]);
     vi.mocked(isReviewingFromThread).mockReturnValue(false);
 
-    const { result, updateThreadParent, onSubagentThreadDetected } = renderActions();
+    const {
+      result,
+      updateThreadParent,
+      onSubagentThreadDetected,
+      onSubagentTitleCandidate,
+    } = renderActions();
 
     await act(async () => {
       await result.current.resumeThreadForWorkspace("ws-1", "child-thread", true);
@@ -559,6 +567,10 @@ describe("useThreadActions", () => {
 
     expect(updateThreadParent).toHaveBeenCalledWith("parent-thread", ["child-thread"]);
     expect(onSubagentThreadDetected).toHaveBeenCalledWith("ws-1", "child-thread");
+    expect(onSubagentTitleCandidate).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({ id: "child-thread" }),
+    );
   });
 
   it("preserves local items but hydrates status from resume", async () => {

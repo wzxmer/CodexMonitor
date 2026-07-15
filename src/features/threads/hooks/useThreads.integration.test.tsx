@@ -6,6 +6,7 @@ import type { useAppServerEvents } from "@app/hooks/useAppServerEvents";
 import { useThreadRows } from "@app/hooks/useThreadRows";
 import {
   archiveThread,
+  generateRunMetadata,
   interruptTurn,
   listThreads,
   listWorkspaces,
@@ -59,6 +60,7 @@ vi.mock("@services/tauri", () => ({
   resumeThread: vi.fn(),
   readThread: vi.fn(),
   archiveThread: vi.fn(),
+  generateRunMetadata: vi.fn(),
   setThreadName: vi.fn(),
   getAccountRateLimits: vi.fn(),
   getAccountInfo: vi.fn(),
@@ -1400,6 +1402,66 @@ describe("useThreads UX integration", () => {
 
     expect(result.current.threadParentById["thread-child-live"]).toBe("thread-parent-live");
     expect(result.current.isSubagentThread("ws-1", "thread-child-live")).toBe(true);
+  });
+
+  it("generates a language-matched title when a listed subagent only has a task slug", async () => {
+    vi.mocked(generateRunMetadata).mockResolvedValue({
+      title: "分支清理审查",
+      worktreeName: "chore/branch-cleanup-audit",
+    });
+    vi.mocked(listWorkspaces).mockResolvedValue([workspace]);
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-parent-title",
+            cwd: "/tmp/codex",
+            name: "完善 Context 与 Provider 跨层反馈链",
+            preview: "父会话预览",
+            updated_at: 5000,
+          },
+          {
+            id: "thread-child-title",
+            cwd: "/tmp/codex",
+            name: null,
+            preview: "继承的父会话旧消息",
+            updated_at: 4900,
+            source: {
+              subAgent: {
+                thread_spawn: {
+                  parent_thread_id: "thread-parent-title",
+                  agent_path: "/root/branch_cleanup_audit",
+                },
+              },
+            },
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    await waitFor(() => {
+      expect(setThreadName).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-child-title",
+        "分支清理审查",
+      );
+    });
+    expect(
+      result.current.threadsByWorkspace["ws-1"]?.find(
+        (thread) => thread.id === "thread-child-title",
+      )?.name,
+    ).toBe("分支清理审查");
   });
 
   it("keeps live subagent nickname and role in sidebar summaries from thread started", () => {

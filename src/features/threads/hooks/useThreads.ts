@@ -312,6 +312,24 @@ export function useThreads({
     [customNamesRef, dispatch, onDebug],
   );
 
+  const persistGeneratedThreadTitle = useCallback(
+    (workspaceId: string, threadId: string, title: string) => {
+      dispatch({ type: "setThreadName", workspaceId, threadId, name: title });
+      void Promise.resolve(setThreadNameService(workspaceId, threadId, title)).catch(
+        (error) => {
+          onDebug?.({
+            id: `${Date.now()}-client-generated-thread-title-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "thread/generated title set error",
+            payload: error instanceof Error ? error.message : String(error),
+          });
+        },
+      );
+    },
+    [dispatch, onDebug],
+  );
+
   const onSubagentThreadDetected = useCallback(
     (workspaceId: string, threadId: string) => {
       if (!workspaceId || !threadId) {
@@ -333,6 +351,20 @@ export function useThreads({
       ),
     [],
   );
+
+  const {
+    onUserMessageCreated,
+    onSubagentThreadDetected: onSubagentTitleCandidate,
+  } = useThreadTitleAutogeneration({
+    enabled: threadTitleAutogenerationEnabled,
+    itemsByThreadRef,
+    threadsByWorkspace: state.threadsByWorkspace,
+    threadsByWorkspaceRef,
+    getCustomName,
+    renameThread,
+    persistGeneratedTitle: persistGeneratedThreadTitle,
+    onDebug,
+  });
 
   const { applyCollabThreadLinks, applyCollabThreadLinksFromThread, updateThreadParent } =
     useThreadLinking({
@@ -463,6 +495,7 @@ export function useThreads({
             const parentThreadId = getParentThreadIdFromThread(thread);
             if (parentThreadId) {
               updateThreadParent(parentThreadId, [summary.id]);
+              void onSubagentTitleCandidate(workspaceId, thread);
             }
             if (summary.isSubagent) {
               onSubagentThreadDetected(workspaceId, summary.id);
@@ -485,17 +518,15 @@ export function useThreads({
         }),
       );
     },
-    [dispatch, getCustomName, onDebug, onSubagentThreadDetected, updateThreadParent],
+    [
+      dispatch,
+      getCustomName,
+      onDebug,
+      onSubagentThreadDetected,
+      onSubagentTitleCandidate,
+      updateThreadParent,
+    ],
   );
-
-  const { onUserMessageCreated } = useThreadTitleAutogeneration({
-    enabled: threadTitleAutogenerationEnabled,
-    itemsByThreadRef,
-    threadsByWorkspaceRef,
-    getCustomName,
-    renameThread,
-    onDebug,
-  });
 
   const subagentCheckpointSync = useSubagentCheckpointSync({
     mode: subagentCheckpointSyncMode,
@@ -572,8 +603,14 @@ export function useThreads({
       }
       updateThreadParent(parentThreadId, [threadId]);
       onSubagentThreadDetected(workspaceId, threadId);
+      void onSubagentTitleCandidate(workspaceId, thread);
     },
-    [onSubagentThreadDetected, threadHandlers, updateThreadParent],
+    [
+      onSubagentThreadDetected,
+      onSubagentTitleCandidate,
+      threadHandlers,
+      updateThreadParent,
+    ],
   );
 
   const handleThreadArchived = useCallback(
@@ -772,6 +809,7 @@ export function useThreads({
     applyCollabThreadLinksFromThread,
     updateThreadParent,
     onSubagentThreadDetected,
+    onSubagentTitleCandidate,
     onThreadCodexMetadataDetected,
   });
 

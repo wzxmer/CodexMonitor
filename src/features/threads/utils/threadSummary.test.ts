@@ -60,4 +60,35 @@ describe("threadSummary", () => {
       }),
     ).toBe("thread routing audit");
   });
+
+  it("uses an official subagent title before the internal task slug", () => {
+    expect(
+      getThreadDisplayTitle({
+        name: "线程路由审查",
+        preview: "Inspect every routing branch and report evidence",
+        source: {
+          subagent: {
+            thread_spawn: {
+              agent_path: "/root/thread_routing-audit",
+            },
+          },
+        },
+      }),
+    ).toBe("线程路由审查");
+  });
+
+  it("uses the task slug before a subagent placeholder name", () => {
+    expect(
+      getThreadDisplayTitle({
+        name: "New Agent",
+        source: {
+          subagent: {
+            thread_spawn: {
+              agent_path: "/root/thread_routing-audit",
+            },
+          },
+        },
+      }),
+    ).toBe("thread routing audit");
+  });
 });
