@@ -20,8 +20,8 @@ function buildThreadKey(workspaceId: string, threadId: string) {
   return `${workspaceId}:${threadId}`;
 }
 
-function buildTurnKey(workspaceId: string, turnId: string) {
-  return `${workspaceId}:${turnId}`;
+function buildTurnKey(workspaceId: string, threadId: string, turnId: string) {
+  return `${workspaceId}:${threadId}:${turnId}`;
 }
 
 function truncateText(text: string, maxLength: number): string {
@@ -35,7 +35,7 @@ export function useAgentSystemNotifications({
   enabled,
   isWindowFocused,
   minDurationMs = DEFAULT_MIN_DURATION_MS,
-  subagentNotificationsEnabled = true,
+  subagentNotificationsEnabled = false,
   isSubagentThread,
   getWorkspaceName,
   onDebug,
@@ -43,7 +43,7 @@ export function useAgentSystemNotifications({
   const turnStartById = useRef(new Map<string, number>());
   const turnStartByThread = useRef(new Map<string, number>());
   const lastNotifiedAtByThread = useRef(new Map<string, number>());
-  const lastMessageByThread = useRef(new Map<string, string>());
+  const finalMessageByTurn = useRef(new Map<string, string>());
 
   const notify = useCallback(
     async (
@@ -83,7 +83,7 @@ export function useAgentSystemNotifications({
       let startedAt: number | undefined;
 
       if (turnId) {
-        const turnKey = buildTurnKey(workspaceId, turnId);
+        const turnKey = buildTurnKey(workspaceId, threadId, turnId);
         startedAt = turnStartById.current.get(turnKey);
         turnStartById.current.delete(turnKey);
       }
@@ -154,12 +154,13 @@ export function useAgentSystemNotifications({
   );
 
   const getNotificationContent = useCallback(
-    (workspaceId: string, threadId: string, fallbackBody: string) => {
+    (workspaceId: string, threadId: string, turnId: string, fallbackBody: string) => {
       const title = getWorkspaceName?.(workspaceId) ?? "Agent Complete";
-      const threadKey = buildThreadKey(workspaceId, threadId);
-      const lastMessage = lastMessageByThread.current.get(threadKey);
-      const body = lastMessage
-        ? truncateText(lastMessage, MAX_BODY_LENGTH)
+      const finalMessage = finalMessageByTurn.current.get(
+        buildTurnKey(workspaceId, threadId, turnId),
+      );
+      const body = finalMessage
+        ? truncateText(finalMessage, MAX_BODY_LENGTH)
         : fallbackBody;
       return { title, body };
     },
@@ -171,9 +172,15 @@ export function useAgentSystemNotifications({
       const startedAt = Date.now();
       const threadKey = buildThreadKey(workspaceId, threadId);
       turnStartByThread.current.set(threadKey, startedAt);
-      lastMessageByThread.current.delete(threadKey);
+      const threadTurnPrefix = `${threadKey}:`;
+      for (const key of finalMessageByTurn.current.keys()) {
+        if (key.startsWith(threadTurnPrefix)) {
+          finalMessageByTurn.current.delete(key);
+        }
+      }
       if (turnId) {
-        turnStartById.current.set(buildTurnKey(workspaceId, turnId), startedAt);
+        const turnKey = buildTurnKey(workspaceId, threadId, turnId);
+        turnStartById.current.set(turnKey, startedAt);
       }
     },
     [],
@@ -183,12 +190,17 @@ export function useAgentSystemNotifications({
     (workspaceId: string, threadId: string, turnId: string) => {
       const durationMs = consumeDuration(workspaceId, threadId, turnId);
       const threadKey = buildThreadKey(workspaceId, threadId);
+      const turnKey = turnId ? buildTurnKey(workspaceId, threadId, turnId) : null;
       if (!shouldNotify(workspaceId, threadId, durationMs, threadKey)) {
+        if (turnKey) {
+          finalMessageByTurn.current.delete(turnKey);
+        }
         return;
       }
       const { title, body } = getNotificationContent(
         workspaceId,
         threadId,
+        turnId,
         "Your agent has finished its task.",
       );
       void notify(title, body, "success", {
@@ -196,7 +208,9 @@ export function useAgentSystemNotifications({
         workspaceId,
         threadId,
       });
-      lastMessageByThread.current.delete(threadKey);
+      if (turnKey) {
+        finalMessageByTurn.current.delete(turnKey);
+      }
     },
     [consumeDuration, getNotificationContent, notify, shouldNotify],
   );
@@ -213,7 +227,11 @@ export function useAgentSystemNotifications({
       }
       const durationMs = consumeDuration(workspaceId, threadId, turnId);
       const threadKey = buildThreadKey(workspaceId, threadId);
+      const turnKey = turnId ? buildTurnKey(workspaceId, threadId, turnId) : null;
       if (!shouldNotify(workspaceId, threadId, durationMs, threadKey)) {
+        if (turnKey) {
+          finalMessageByTurn.current.delete(turnKey);
+        }
         return;
       }
       const title = getWorkspaceName?.(workspaceId) ?? "Agent Error";
@@ -223,7 +241,9 @@ export function useAgentSystemNotifications({
         workspaceId,
         threadId,
       });
-      lastMessageByThread.current.delete(threadKey);
+      if (turnKey) {
+        finalMessageByTurn.current.delete(turnKey);
+      }
     },
     [consumeDuration, getWorkspaceName, notify, shouldNotify],
   );
@@ -243,11 +263,18 @@ export function useAgentSystemNotifications({
   );
 
   const handleAgentMessageCompleted = useCallback(
-    (event: { workspaceId: string; threadId: string; text: string }) => {
-      const threadKey = buildThreadKey(event.workspaceId, event.threadId);
-      // Store the message text for use in turn completion notification
-      if (event.text) {
-        lastMessageByThread.current.set(threadKey, event.text);
+    (event: {
+      workspaceId: string;
+      threadId: string;
+      turnId?: string;
+      phase?: string | null;
+      text: string;
+    }) => {
+      if (event.turnId && event.phase === "final_answer" && event.text) {
+        finalMessageByTurn.current.set(
+          buildTurnKey(event.workspaceId, event.threadId, event.turnId),
+          event.text,
+        );
       }
     },
     [],

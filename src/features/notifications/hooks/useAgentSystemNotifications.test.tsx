@@ -86,7 +86,37 @@ describe("useAgentSystemNotifications", () => {
     });
   });
 
-  it("waits for turn completion after an agent message completes", async () => {
+  it("allows explicit opt-in for subagent completion notifications", async () => {
+    renderHook(() =>
+      useAgentSystemNotifications({
+        enabled: true,
+        isWindowFocused: false,
+        minDurationMs: 0,
+        subagentNotificationsEnabled: true,
+        isSubagentThread: () => true,
+      }),
+    );
+
+    const handlers = useAppServerEventsMock.mock.calls[
+      useAppServerEventsMock.mock.calls.length - 1
+    ]?.[0] as {
+      onTurnStarted?: (workspaceId: string, threadId: string, turnId: string) => void;
+      onTurnCompleted?: (workspaceId: string, threadId: string, turnId: string) => void;
+    };
+
+    act(() => {
+      handlers.onTurnStarted?.("ws-1", "child-thread", "turn-1");
+      handlers.onTurnCompleted?.("ws-1", "child-thread", "turn-1");
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses neutral completion text when no final answer is confirmed", async () => {
     renderHook(() =>
       useAgentSystemNotifications({
         enabled: true,
@@ -102,16 +132,27 @@ describe("useAgentSystemNotifications", () => {
       onAgentMessageCompleted?: (event: {
         workspaceId: string;
         threadId: string;
+        turnId: string;
+        phase: string;
         text: string;
       }) => void;
       onTurnCompleted?: (workspaceId: string, threadId: string, turnId: string) => void;
     };
 
     act(() => {
+      handlers.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-old",
+        phase: "final_answer",
+        text: "Stale final",
+      });
       handlers.onTurnStarted?.("ws-1", "thread-1", "turn-1");
       handlers.onAgentMessageCompleted?.({
         workspaceId: "ws-1",
         threadId: "thread-1",
+        turnId: "turn-1",
+        phase: "commentary",
         text: "Intermediate agent message",
       });
     });
@@ -131,7 +172,81 @@ describe("useAgentSystemNotifications", () => {
     expect(sendNotification).toHaveBeenCalledTimes(1);
     expect(sendNotification).toHaveBeenCalledWith(
       "Agent Complete",
-      "Intermediate agent message",
+      "Your agent has finished its task.",
+      expect.any(Object),
+    );
+  });
+
+  it("uses only the final answer from the matching turn", async () => {
+    renderHook(() =>
+      useAgentSystemNotifications({
+        enabled: true,
+        isWindowFocused: false,
+        minDurationMs: 0,
+      }),
+    );
+
+    const handlers = useAppServerEventsMock.mock.calls[
+      useAppServerEventsMock.mock.calls.length - 1
+    ]?.[0] as {
+      onTurnStarted?: (workspaceId: string, threadId: string, turnId: string) => void;
+      onAgentMessageCompleted?: (event: {
+        workspaceId: string;
+        threadId: string;
+        turnId: string;
+        phase: string;
+        text: string;
+      }) => void;
+      onTurnCompleted?: (workspaceId: string, threadId: string, turnId: string) => void;
+    };
+
+    act(() => {
+      handlers.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-old",
+        phase: "final_answer",
+        text: "Stale final",
+      });
+      handlers.onTurnStarted?.("ws-1", "thread-1", "turn-1");
+      handlers.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        phase: "final_answer",
+        text: "Final answer",
+      });
+      handlers.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-2",
+        turnId: "turn-1",
+        phase: "final_answer",
+        text: "Wrong thread",
+      });
+      handlers.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-2",
+        phase: "final_answer",
+        text: "Wrong turn",
+      });
+      handlers.onAgentMessageCompleted?.({
+        workspaceId: "ws-2",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        phase: "final_answer",
+        text: "Wrong workspace",
+      });
+      handlers.onTurnCompleted?.("ws-1", "thread-1", "turn-1");
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(sendNotification).toHaveBeenCalledWith(
+      "Agent Complete",
+      "Final answer",
       expect.any(Object),
     );
   });

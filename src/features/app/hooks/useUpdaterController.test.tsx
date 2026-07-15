@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   sendTransientNotification: vi.fn(),
   updaterCheckHandler: null as (() => void) | null,
   updaterState: { stage: "idle" } as { stage: string; version?: string },
+  useAgentSystemNotifications: vi.fn(),
 }));
 
 vi.mock("../../update/hooks/useUpdater", () => ({
@@ -27,7 +28,7 @@ vi.mock("../../notifications/hooks/useAgentSoundNotifications", () => ({
 }));
 
 vi.mock("../../notifications/hooks/useAgentSystemNotifications", () => ({
-  useAgentSystemNotifications: vi.fn(),
+  useAgentSystemNotifications: mocks.useAgentSystemNotifications,
 }));
 
 vi.mock("../../layout/hooks/useWindowFocusState", () => ({
@@ -60,6 +61,7 @@ describe("useUpdaterController", () => {
     mocks.updaterState = { stage: "idle" };
     mocks.checkForUpdates.mockResolvedValue({ stage: "upToDate" });
     mocks.sendTransientNotification.mockResolvedValue(undefined);
+    mocks.useAgentSystemNotifications.mockClear();
   });
 
   it("shows a three-second system notification after a manual up-to-date check", async () => {
@@ -76,6 +78,11 @@ describe("useUpdaterController", () => {
         errorSoundUrl: "error.mp3",
       }),
     );
+
+    expect(mocks.useAgentSystemNotifications).toHaveBeenCalledWith(
+      expect.objectContaining({ subagentNotificationsEnabled: false }),
+    );
+
 
     act(() => {
       mocks.updaterCheckHandler?.();

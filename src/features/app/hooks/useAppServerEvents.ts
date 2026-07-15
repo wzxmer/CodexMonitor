@@ -25,6 +25,8 @@ type AgentCompleted = {
   workspaceId: string;
   threadId: string;
   itemId: string;
+  turnId?: string;
+  phase?: string | null;
   text: string;
 };
 
@@ -483,12 +485,19 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
         }
         if (threadId && item?.type === "agentMessage") {
           const itemId = String(item.id ?? "");
+          const turnId = String(
+            params.turnId ?? params.turn_id ?? item.turnId ?? item.turn_id ?? "",
+          );
+          const phaseRaw = item.phase ?? params.phase;
+          const phase = typeof phaseRaw === "string" ? phaseRaw : null;
           const text = String(item.text ?? "");
           if (itemId) {
             currentHandlers.onAgentMessageCompleted?.({
               workspaceId: workspace_id,
               threadId,
               itemId,
+              turnId,
+              phase,
               text,
             });
           }

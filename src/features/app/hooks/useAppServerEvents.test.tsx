@@ -344,7 +344,13 @@ describe("useAppServerEvents", () => {
           method: "item/completed",
           params: {
             threadId: "thread-1",
-            item: { type: "agentMessage", id: "item-2", text: "Done" },
+            turnId: "turn-1",
+            item: {
+              type: "agentMessage",
+              id: "item-2",
+              phase: "final_answer",
+              text: "Done",
+            },
           },
         },
       });
@@ -352,12 +358,15 @@ describe("useAppServerEvents", () => {
     expect(handlers.onItemCompleted).toHaveBeenCalledWith("ws-1", "thread-1", {
       type: "agentMessage",
       id: "item-2",
+      phase: "final_answer",
       text: "Done",
     });
     expect(handlers.onAgentMessageCompleted).toHaveBeenCalledWith({
       workspaceId: "ws-1",
       threadId: "thread-1",
       itemId: "item-2",
+      turnId: "turn-1",
+      phase: "final_answer",
       text: "Done",
     });
 
