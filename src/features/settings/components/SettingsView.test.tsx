@@ -1013,6 +1013,27 @@ describe("SettingsView About", () => {
     expect(await screen.findByText("已经是最新版本！")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("shows the mixed-installer safety block without requesting release data", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    windowsInstallerKindMock.mockResolvedValueOnce("mixed");
+    renderAboutSection();
+
+    await waitFor(() => {
+      expect(
+        (screen.getByRole("button", { name: "检查更新" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    expect(
+      await screen.findByText(/检测到 MSI 与 EXE 安装记录并存/),
+    ).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("SettingsView Environments", () => {

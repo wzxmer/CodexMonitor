@@ -156,7 +156,10 @@ export function SettingsAboutSection({
 
         {updaterState.stage === "error" && (
           <div className="settings-help ds-text-danger">
-            {t("about.updateFailed")}：{updaterState.error}
+            {t("about.updateFailed")}：
+            {updaterState.errorCode === "mixedInstaller"
+              ? t("update.mixedInstallerBlocked")
+              : updaterState.error}
           </div>
         )}
 
