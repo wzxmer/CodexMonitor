@@ -48,6 +48,7 @@ macOS 版本当前采用完整 ad-hoc 签名，但尚未使用 Apple Developer I
 - 大型文本附件、日志和 diff 会优先保存为内容寻址快照并发送轻量引用；小文件或旧版远程端继续按原方式内联。
 - 新建普通 Agent、worktree Agent 和副本 Agent，隔离实验性改动。
 - 子会话根据父会话主要语言生成任务标题，生成不可用时回退下发任务名；并可按“仅最终结果 / 关键检查点 / 持续同步”向父会话反馈进展，父会话运行中使用 steer 实时注入，空闲时等待下一轮，不会自动启动新 turn，已同步内容在会话中显示为轻量系统条目。
+- 父会话会将子会话结果整理为精简摘要；长结果可在右侧详情面板独立阅读、复制或打开对应子会话，避免完整输出淹没总控结论。
 - Pin、重命名、归档、复制、停止和中断会话。
 - 本地 Codex 历史会话按项目和来源聚合，缺失项目和子代理会话可单独识别。
 
@@ -280,6 +281,7 @@ The macOS build is fully ad-hoc signed but not notarized with Apple Developer ID
 - **Model-agnostic workflow**: CodexMonitor matches public skills, agents, project rules, and knowledge candidates. Shadow mode (no model context injection) is the default; toggle via Settings > Workflow.
 - **Usage display**: toggle Codex usage in the bottom-left, switch between used/remaining quota. Home page distinguishes cached reads from uncached input.
 - **Local session management**: total local session count, unified entry from session manager, cross-project return or context reference to create new sessions; spawned subagent sessions generate task titles in the parent conversation's primary language and fall back to assigned task names when generation is unavailable.
+- **Subagent result summaries**: parent conversations show compact child-result summaries, while long outputs open in a dedicated detail panel for reading, copying, or opening the child thread without burying the parent conclusion.
 - **Message experience**: failed message re-send overwrites the original, auto-reconnect per session, large paste auto-converts to a previewable and restorable TXT attachment at 4,000 chars or 80 lines, image paste/drag/drop with hover copy and in-app large view.
 - **Git workflow**: view changes, diffs, logs, branches, commit, push/pull, plus GitHub Issues/PR lists and PR context questions.
 - **Remote backend**: desktop daemon, TCP/Tailscale connection, and iOS remote mode.

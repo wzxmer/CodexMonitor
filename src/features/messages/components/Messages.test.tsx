@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { useCallback, useState } from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
+import type { SubagentResultSummary } from "../utils/subagentResults";
 import { expectOpenedFileTarget } from "../test/fileLinkAssertions";
 import { Messages } from "./Messages";
 
@@ -52,6 +53,53 @@ describe("Messages", () => {
     openFileLinkMock.mockReset();
     showFileLinkMenuMock.mockReset();
     exportMarkdownFileMock.mockReset();
+  });
+
+  it("summarizes child results and opens long output in a detail drawer", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const onOpenThreadLink = vi.fn();
+    const subagentResults: SubagentResultSummary[] = [
+      {
+        threadId: "child-thread",
+        title: "检查许可证",
+        status: "completed",
+        summary: "package.json 中没有定义 license 字段。",
+        content: "package.json 中没有定义 license 字段。\n\n这是完整结果。",
+        checkpointCount: 2,
+        updatedAt: 1,
+      },
+    ];
+
+    render(
+      <Messages
+        items={[]}
+        threadId="thread-parent"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        subagentResults={subagentResults}
+        onOpenThreadLink={onOpenThreadLink}
+      />,
+    );
+
+    expect(screen.getByText("子会话结果")).toBeTruthy();
+    expect(screen.getByText("package.json 中没有定义 license 字段。")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /查看详情/ }));
+
+    const drawer = screen.getByRole("dialog", { name: "检查许可证" });
+    expect(drawer).toBeTruthy();
+    expect(screen.getByText("这是完整结果。")).toBeTruthy();
+    fireEvent.click(within(drawer).getByRole("button", { name: "复制结果" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(subagentResults[0].content));
+    fireEvent.click(within(drawer).getByRole("button", { name: "打开子会话" }));
+    expect(onOpenThreadLink).toHaveBeenCalledWith("child-thread", "ws-1");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "检查许可证" })).toBeNull();
   });
 
   it("renders checkpoint injections as visible system rows without user actions", () => {

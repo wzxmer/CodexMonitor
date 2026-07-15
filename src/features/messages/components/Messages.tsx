@@ -53,7 +53,9 @@ import {
   UserInputRow,
   WorkingIndicator,
 } from "./MessageRows";
+import { SubagentResultSummary } from "./SubagentResultSummary";
 import { useMessagesViewState } from "./useMessagesViewState";
+import type { SubagentResultSummary as SubagentResultSummaryData } from "../utils/subagentResults";
 
 function getSearchTargetForEntry(entry: MessageListEntry) {
   if (entry.kind === "processGroup") {
@@ -135,6 +137,7 @@ type MessagesProps = {
   onPlanAccept?: () => void;
   onPlanSubmitChanges?: (changes: string) => void;
   onOpenThreadLink?: (threadId: string, workspaceId?: string | null) => void;
+  subagentResults?: SubagentResultSummaryData[];
   onQuoteMessage?: (text: string) => void;
   onReferenceMessage?: (action: MessageReferenceAction) => void;
   onResendUserMessage?: (
@@ -215,6 +218,7 @@ export const Messages = memo(function Messages({
   onPlanAccept,
   onPlanSubmitChanges,
   onOpenThreadLink,
+  subagentResults = [],
   onQuoteMessage,
   onReferenceMessage,
   onResendUserMessage,
@@ -1001,6 +1005,15 @@ export const Messages = memo(function Messages({
             </div>
           </div>
         )}
+        <SubagentResultSummary
+          results={subagentResults}
+          workspaceId={workspaceId}
+          workspacePath={workspacePath}
+          codeBlockCopyUseModifier={codeBlockCopyUseModifier}
+          showMessageFilePath={showMessageFilePath}
+          onOpenFileLink={openFileLink}
+          onOpenThreadLink={onOpenThreadLink}
+        />
         {hiddenBeforeCount > 0 && (
           <button
             type="button"

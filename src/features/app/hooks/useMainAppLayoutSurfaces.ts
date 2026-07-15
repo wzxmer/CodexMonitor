@@ -25,6 +25,11 @@ import type { LayoutNodesOptions } from "@/features/layout/hooks/layoutNodes/typ
 import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 import { resolveCodexProviderBaseUrl } from "@/utils/providerProfiles";
 import type { MessageReferenceAction } from "@/features/messages/utils/messageReferences";
+import {
+  buildSubagentResultSummaries,
+  type SubagentResultSummary,
+} from "@/features/messages/utils/subagentResults";
+import { useI18n } from "@/features/i18n/I18nProvider";
 
 type SidebarProps = LayoutNodesOptions["primary"]["sidebarProps"];
 type ComposerProps = NonNullable<LayoutNodesOptions["primary"]["composerProps"]>;
@@ -77,6 +82,7 @@ type UseMainAppLayoutSurfacesArgs = {
   activeWorkspaceId: string | null;
   activeThreadId: string | null;
   activeItems: LayoutNodesOptions["primary"]["messagesProps"]["items"];
+  itemsByThread: Record<string, ConversationItem[]>;
   userInputRequests: SidebarProps["userInputRequests"];
   approvals: LayoutNodesOptions["primary"]["approvalToastsProps"]["approvals"];
   activeRateLimits: SidebarProps["accountRateLimits"];
@@ -264,6 +270,7 @@ type MainAppLayoutSurfacesContext = UseMainAppLayoutSurfacesArgs & {
   codexProviderStatus: CodexProviderStatus | null;
   thirdPartyProviderUsage: SidebarProps["thirdPartyProviderUsage"];
   contextCompactionTokenLimit: number | null;
+  subagentResults: SubagentResultSummary[];
 };
 
 function buildPrimarySurface({
@@ -298,6 +305,7 @@ function buildPrimarySurface({
   activeWorkspaceId,
   activeThreadId,
   activeItems,
+  subagentResults,
   userInputRequests,
   approvals,
   sidebarRateLimits,
@@ -538,6 +546,7 @@ function buildPrimarySurface({
     },
     messagesProps: {
       items: messagesItems,
+      subagentResults,
       threadId: activeThreadId ?? null,
       workspaceId: activeWorkspace?.id ?? null,
       workspacePath: activeWorkspace?.path ?? null,
@@ -1150,6 +1159,7 @@ export function useMainAppLayoutSurfaces({
   activeWorkspaceId,
   activeThreadId,
   activeItems,
+  itemsByThread,
   userInputRequests,
   approvals,
   activeRateLimits,
@@ -1294,6 +1304,7 @@ export function useMainAppLayoutSurfaces({
   handleDebugClick,
   onUpdateAppSettings,
 }: UseMainAppLayoutSurfacesArgs): LayoutNodesOptions {
+  const { t } = useI18n();
   const sidebarRateLimits = activeWorkspace ? activeRateLimits : homeRateLimits;
   const sidebarAccount = activeWorkspace ? activeAccount : homeAccount;
   const activeCodexKeyProfile = useMemo(
@@ -1356,6 +1367,27 @@ export function useMainAppLayoutSurfaces({
       codexProviderStatus.isThirdParty,
     workspaceId: activeWorkspaceId,
   });
+  const subagentResults = useMemo(
+    () =>
+      activeWorkspaceId && activeThreadId
+        ? buildSubagentResultSummaries({
+            parentItems: activeItems,
+            threads: threadsByWorkspace[activeWorkspaceId] ?? [],
+            itemsByThread,
+            threadStatusById,
+            fallbackTitle: t("messages.subagentFallbackTitle"),
+          })
+        : [],
+    [
+      activeItems,
+      activeThreadId,
+      activeWorkspaceId,
+      itemsByThread,
+      t,
+      threadStatusById,
+      threadsByWorkspace,
+    ],
+  );
 
   const context: MainAppLayoutSurfacesContext = {
     appSettings,
@@ -1389,6 +1421,7 @@ export function useMainAppLayoutSurfaces({
     activeWorkspaceId,
     activeThreadId,
     activeItems,
+    itemsByThread,
     userInputRequests,
     approvals,
     activeRateLimits,
@@ -1536,6 +1569,7 @@ export function useMainAppLayoutSurfaces({
     codexProviderStatus,
     thirdPartyProviderUsage,
     contextCompactionTokenLimit,
+    subagentResults,
   };
 
   return {

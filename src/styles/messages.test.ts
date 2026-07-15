@@ -46,6 +46,17 @@ describe("message tool group interaction styles", () => {
     expect(controlsRule?.[1]).not.toMatch(/\btop:/);
   });
 
+  it("anchors child result details to the chat layer and above the composer", () => {
+    const drawerRule = messagesCss.match(
+      /\.subagent-result-drawer\s*\{([\s\S]*?)\n\}/,
+    );
+
+    expect(drawerRule?.[1]).toContain("position: absolute");
+    expect(drawerRule?.[1]).toContain("right: 12px");
+    expect(drawerRule?.[1]).toContain("calc(100% - 24px)");
+    expect(drawerRule?.[1]).not.toContain("100vw");
+    expect(drawerRule?.[1]).toContain("--composer-overlay-height");
+  });
 });
 
 describe("markdown table layout styles", () => {

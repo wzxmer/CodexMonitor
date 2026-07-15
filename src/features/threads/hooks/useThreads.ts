@@ -1329,6 +1329,7 @@ export function useThreads({
     setActiveThreadId,
     hasLocalThreadSnapshot,
     activeItems,
+    itemsByThread: state.itemsByThread,
     approvals: state.approvals,
     userInputRequests: state.userInputRequests,
     threadsByWorkspace: state.threadsByWorkspace,
