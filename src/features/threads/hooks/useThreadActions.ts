@@ -24,7 +24,11 @@ import {
   buildThreadSummaryFromThread,
   extractThreadFromResponse,
 } from "@threads/utils/threadSummary";
-import { asString } from "@threads/utils/threadNormalize";
+import {
+  asString,
+  extractTokenUsageFromResponse,
+  normalizeTokenUsage,
+} from "@threads/utils/threadNormalize";
 import {
   getParentThreadIdFromThread,
   shouldHideSubagentThreadFromSidebar,
@@ -255,6 +259,14 @@ export function useThreadActions({
         }
         if (thread) {
           dispatch({ type: "ensureThread", workspaceId, threadId });
+          const tokenUsage = extractTokenUsageFromResponse(response, thread);
+          if (tokenUsage) {
+            dispatch({
+              type: "setThreadTokenUsage",
+              threadId,
+              tokenUsage: normalizeTokenUsage(tokenUsage),
+            });
+          }
           applyThreadMetadata(workspaceId, threadId, thread, {
             notifySubagent: true,
           });

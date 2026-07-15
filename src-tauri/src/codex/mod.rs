@@ -128,18 +128,39 @@ pub(crate) async fn resume_thread(
         .await;
     }
 
-    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
-        &workspace_id,
-        &thread_id,
-        &state,
-        app.clone(),
-    )
-    .await?
+    let mut response = if let Some(session) =
+        crate::session_manager::source_runtime_for_bound_thread(
+            &workspace_id,
+            &thread_id,
+            &state,
+            app.clone(),
+        )
+        .await?
     {
-        return codex_core::resume_thread_with_session_core(&session, workspace_id, thread_id)
-            .await;
+        codex_core::resume_thread_with_session_core(
+            &session,
+            workspace_id.clone(),
+            thread_id.clone(),
+        )
+        .await?
+    } else {
+        codex_core::resume_thread_core(&state.sessions, workspace_id.clone(), thread_id.clone())
+            .await?
+    };
+    if let Some(token_usage) = crate::shared::local_usage_core::thread_token_usage_core(
+        &state.workspaces,
+        workspace_id,
+        thread_id,
+    )
+    .await
+    {
+        if let Some(thread) = response.pointer_mut("/result/thread") {
+            if let Some(thread) = thread.as_object_mut() {
+                thread.insert("tokenUsage".to_string(), token_usage);
+            }
+        }
     }
-    codex_core::resume_thread_core(&state.sessions, workspace_id, thread_id).await
+    Ok(response)
 }
 
 #[tauri::command]

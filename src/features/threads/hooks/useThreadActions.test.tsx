@@ -447,6 +447,57 @@ describe("useThreadActions", () => {
     });
   });
 
+  it("hydrates token usage from a resumed thread before rendering progress", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-usage",
+          token_usage: {
+            total: { total_tokens: 42000 },
+            last: { total_tokens: 1200 },
+            model_context_window: 100000,
+          },
+        },
+      },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(mergeThreadItems).mockReturnValue([]);
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-usage");
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadTokenUsage",
+      threadId: "thread-usage",
+      tokenUsage: expect.objectContaining({
+        total: expect.objectContaining({ totalTokens: 42000 }),
+        last: expect.objectContaining({ totalTokens: 1200 }),
+        modelContextWindow: 100000,
+      }),
+    });
+  });
+
+  it("keeps token usage unknown when resume has no usage snapshot", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: { thread: { id: "thread-without-usage" } },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(mergeThreadItems).mockReturnValue([]);
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-without-usage");
+    });
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "setThreadTokenUsage" }),
+    );
+  });
+
   it("merges server history with stale local items when resume has no overlap", async () => {
     const serverItem: ConversationItem = {
       id: "server-assistant-1",

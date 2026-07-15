@@ -308,6 +308,39 @@ export function normalizeTokenUsage(
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readTokenUsageField(record: Record<string, unknown> | null) {
+  if (!record) {
+    return null;
+  }
+  return (
+    asRecord(record.tokenUsage) ??
+    asRecord(record.token_usage)
+  );
+}
+
+export function extractTokenUsageFromResponse(
+  response: Record<string, unknown> | null | undefined,
+  thread: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  const responseRecord = asRecord(response);
+  const result = asRecord(responseRecord?.result);
+  const threadRecord = asRecord(thread);
+  const turns = Array.isArray(threadRecord?.turns) ? threadRecord.turns : [];
+  const latestTurn = asRecord(turns[turns.length - 1]);
+  return (
+    readTokenUsageField(threadRecord) ??
+    readTokenUsageField(latestTurn) ??
+    readTokenUsageField(result) ??
+    readTokenUsageField(responseRecord)
+  );
+}
+
 export function normalizeRateLimits(
   raw: Record<string, unknown>,
   previous: RateLimitSnapshot | null = null,

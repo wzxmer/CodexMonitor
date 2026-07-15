@@ -543,7 +543,7 @@ describe("Markdown file-like href behavior", () => {
     );
 
     expect(container.querySelector(".markdown-table-wrap")).toBeTruthy();
-    expect(container.querySelector(".markdown-table")).toBeTruthy();
+    expect(container.querySelector(".markdown-table-structured-review")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "File" })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Recommendation" })).toBeTruthy();
     expect(screen.getAllByText("clarity")).toHaveLength(3);
@@ -551,6 +551,16 @@ describe("Markdown file-like href behavior", () => {
     expect(container.querySelectorAll("tbody tr").length).toBe(3);
     expect(screen.getAllByText("high")).toHaveLength(2);
     expect(screen.getByText("Split helpers by concern.")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("columnheader", { name: "Category" })
+        .classList.contains("markdown-table-cell-center"),
+    ).toBe(true);
+    expect(
+      screen
+        .getByRole("columnheader", { name: "Severity" })
+        .classList.contains("markdown-table-cell-center"),
+    ).toBe(true);
   });
 
   it("wraps standard gfm tables in the styled table container", () => {
@@ -563,8 +573,43 @@ describe("Markdown file-like href behavior", () => {
 
     expect(container.querySelector(".markdown-table-wrap")).toBeTruthy();
     expect(container.querySelector(".markdown-table")).toBeTruthy();
+    expect(container.querySelector(".markdown-table-structured-review")).toBeNull();
     expect(screen.getByRole("columnheader", { name: "Name" })).toBeTruthy();
     expect(screen.getByText("Ready")).toBeTruthy();
+  });
+
+  it("aligns numeric and status columns by content semantics", () => {
+    render(
+      <Markdown
+        value={[
+          "| Name | Count | Percent | Status | Description |",
+          "| --- | --- | --- | --- | --- |",
+          "| Alpha | 42 | 37.5% | Ready | Long text stays readable. |",
+          "| Beta | 1,024 | 100% | Blocked | Another description. |",
+        ].join("\n")}
+        className="markdown"
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole("columnheader", { name: "Count" })
+        .classList.contains("markdown-table-cell-numeric"),
+    ).toBe(true);
+    expect(screen.getByText("1,024").classList.contains("markdown-table-cell-numeric")).toBe(
+      true,
+    );
+    expect(
+      screen
+        .getByRole("columnheader", { name: "Status" })
+        .classList.contains("markdown-table-cell-center"),
+    ).toBe(true);
+    expect(screen.getByText("Blocked").classList.contains("markdown-table-cell-center")).toBe(
+      true,
+    );
+    const description = screen.getByText("Long text stays readable.");
+    expect(description.classList.contains("markdown-table-cell-center")).toBe(false);
+    expect(description.classList.contains("markdown-table-cell-numeric")).toBe(false);
   });
 
   it("preserves table scroll position across markdown rerenders", () => {

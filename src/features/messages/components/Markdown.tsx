@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode, type MouseEvent } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -50,11 +59,139 @@ type LinkBlockProps = {
   urls: string[];
 };
 
-const MarkdownTable: NonNullable<Components["table"]> = ({ children }) => (
-  <div className="markdown-table-wrap">
-    <table className="markdown-table">{children}</table>
-  </div>
-);
+type MarkdownTableNode = {
+  tagName?: string;
+  value?: string;
+  children?: MarkdownTableNode[];
+};
+
+type TableColumnAlignment = "numeric" | "center" | null;
+
+type TableChildProps = {
+  children?: ReactNode;
+  className?: string;
+};
+
+function getMarkdownNodeText(node: MarkdownTableNode): string {
+  if (typeof node.value === "string") {
+    return node.value;
+  }
+  return node.children?.map(getMarkdownNodeText).join("") ?? "";
+}
+
+function getMarkdownTableRows(node?: MarkdownTableNode): MarkdownTableNode[] {
+  if (!node) {
+    return [];
+  }
+  if (node.tagName === "tr") {
+    return [node];
+  }
+  return node.children?.flatMap(getMarkdownTableRows) ?? [];
+}
+
+function getMarkdownTableHeaders(node?: MarkdownTableNode) {
+  const headerRow = getMarkdownTableRows(node).find((row) =>
+    row.children?.some((child) => child.tagName === "th"),
+  );
+  return (
+    headerRow?.children
+      ?.filter((child) => child.tagName === "th")
+      .map((child) => getMarkdownNodeText(child).trim()) ?? []
+  );
+}
+
+function isStructuredReviewTable(node?: MarkdownTableNode) {
+  const headers = getMarkdownTableHeaders(node).map((header) => header.toLowerCase());
+  return headers.join("|") === "file|category|finding|recommendation|severity";
+}
+
+function isNumericTableValue(value: string) {
+  return /^[-+]?[$¥€£]?\s*\d[\d,]*(?:\.\d+)?(?:\s*(?:%|ms|s|min|h|kb|mb|gb|tb|tokens?|行|个))?$/i.test(
+    value.trim(),
+  );
+}
+
+function getTableColumnAlignments(node?: MarkdownTableNode): TableColumnAlignment[] {
+  const headers = getMarkdownTableHeaders(node);
+  const bodyRows = getMarkdownTableRows(node).filter((row) =>
+    row.children?.some((child) => child.tagName === "td"),
+  );
+  const centerHeaderPattern =
+    /^(?:status|state|severity|priority|level|category|type|kind|result|状态|等级|级别|优先级|分类|类别|类型|结果)$/i;
+
+  return headers.map((header, columnIndex) => {
+    if (centerHeaderPattern.test(header.trim())) {
+      return "center";
+    }
+    const values = bodyRows
+      .map((row) => row.children?.filter((child) => child.tagName === "td")[columnIndex])
+      .filter((cell): cell is MarkdownTableNode => Boolean(cell))
+      .map((cell) => getMarkdownNodeText(cell).trim())
+      .filter(Boolean);
+    return values.length > 0 && values.every(isNumericTableValue) ? "numeric" : null;
+  });
+}
+
+function alignMarkdownTableCells(
+  children: ReactNode,
+  alignments: TableColumnAlignment[],
+): ReactNode {
+  return Children.map(children, (child) => {
+    if (!isValidElement<TableChildProps>(child)) {
+      return child;
+    }
+    const tagName = typeof child.type === "string" ? child.type : null;
+    if (tagName === "tr") {
+      let columnIndex = 0;
+      const rowChildren = Children.map(child.props.children, (cell) => {
+        if (!isValidElement<TableChildProps>(cell)) {
+          return cell;
+        }
+        const cellTagName = typeof cell.type === "string" ? cell.type : null;
+        if (cellTagName !== "th" && cellTagName !== "td") {
+          return cell;
+        }
+        const alignment = alignments[columnIndex++];
+        if (!alignment) {
+          return cell;
+        }
+        const alignmentClass =
+          alignment === "numeric"
+            ? "markdown-table-cell-numeric"
+            : "markdown-table-cell-center";
+        const className = [cell.props.className, alignmentClass].filter(Boolean).join(" ");
+        return cloneElement(cell, { className });
+      });
+      return cloneElement(child, { children: rowChildren });
+    }
+    if (child.props.children === undefined) {
+      return child;
+    }
+    return cloneElement(child, {
+      children: alignMarkdownTableCells(child.props.children, alignments),
+    });
+  });
+}
+
+const MarkdownTable: NonNullable<Components["table"]> = ({ node, children }) => {
+  const tableNode = node as MarkdownTableNode;
+  const structuredReview = isStructuredReviewTable(tableNode);
+  const alignedChildren = alignMarkdownTableCells(
+    children,
+    getTableColumnAlignments(tableNode),
+  );
+  return (
+    <div className="markdown-table-wrap">
+      <table
+        className={`markdown-table${
+          structuredReview ? " markdown-table-structured-review" : ""
+        }`}
+      >
+        {alignedChildren}
+      </table>
+    </div>
+  );
+};
 
 function extractLanguageTag(className?: string) {
   if (!className) {

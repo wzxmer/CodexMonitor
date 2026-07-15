@@ -222,11 +222,23 @@ fn build_provider_status(
 }
 
 fn read_auto_compact_token_limit_from_document(document: &toml_edit::Document) -> Option<u64> {
-    config_toml_core::read_top_level_positive_integer(document, "model_auto_compact_token_limit")
+    read_context_positive_integer(document, "model_auto_compact_token_limit")
 }
 
 fn read_model_context_window_from_document(document: &toml_edit::Document) -> Option<u64> {
-    config_toml_core::read_top_level_positive_integer(document, "model_context_window")
+    read_context_positive_integer(document, "model_context_window")
+}
+
+fn read_context_positive_integer(document: &toml_edit::Document, key: &str) -> Option<u64> {
+    config_toml_core::read_top_level_positive_integer(document, key).or_else(|| {
+        document
+            .get("env")
+            .and_then(toml_edit::Item::as_table_like)
+            .and_then(|table| table.get(key))
+            .and_then(toml_edit::Item::as_integer)
+            .and_then(|value| u64::try_from(value).ok())
+            .filter(|value| *value > 0)
+    })
 }
 
 fn normalize_optional_string(value: Option<&str>) -> Option<String> {
@@ -417,6 +429,23 @@ mod tests {
 
         assert_eq!(read_auto_compact_token_limit_from_document(&document), None);
         assert_eq!(read_model_context_window_from_document(&document), None);
+    }
+
+    #[test]
+    fn context_settings_read_compatibility_values_from_env_table() {
+        let document = config_toml_core::parse_document(
+            "[env]\nmodel_auto_compact_token_limit = 900000\nmodel_context_window = 1000000\n",
+        )
+        .expect("parse");
+
+        assert_eq!(
+            read_auto_compact_token_limit_from_document(&document),
+            Some(900_000)
+        );
+        assert_eq!(
+            read_model_context_window_from_document(&document),
+            Some(1_000_000)
+        );
     }
 
     #[test]

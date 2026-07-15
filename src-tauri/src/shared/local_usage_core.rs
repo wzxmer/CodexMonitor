@@ -57,6 +57,30 @@ pub(crate) async fn local_usage_snapshot_core(
     Ok(snapshot)
 }
 
+pub(crate) async fn thread_token_usage_core(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    workspace_id: String,
+    thread_id: String,
+) -> Option<Value> {
+    let thread_id = thread_id.trim().to_string();
+    if thread_id.is_empty() {
+        return None;
+    }
+    let (workspace_path, sessions_roots) = {
+        let workspaces = workspaces.lock().await;
+        let workspace = workspaces.get(&workspace_id)?;
+        let workspace_path = PathBuf::from(&workspace.path);
+        let roots = resolve_sessions_roots(&workspaces, Some(&workspace_path));
+        (workspace_path, roots)
+    };
+    tokio::task::spawn_blocking(move || {
+        scan_thread_token_usage(&sessions_roots, &workspace_path, &thread_id)
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 fn scan_local_usage(
     days: u32,
     workspace_path: Option<&Path>,
@@ -441,6 +465,122 @@ fn scan_file(
     Ok(())
 }
 
+fn scan_thread_token_usage(
+    sessions_roots: &[PathBuf],
+    workspace_path: &Path,
+    thread_id: &str,
+) -> Option<Value> {
+    let mut latest: Option<Value> = None;
+    for root in sessions_roots {
+        let Ok(years) = std::fs::read_dir(root) else {
+            continue;
+        };
+        for year in years.flatten() {
+            let Ok(months) = std::fs::read_dir(year.path()) else {
+                continue;
+            };
+            for month in months.flatten() {
+                let Ok(days) = std::fs::read_dir(month.path()) else {
+                    continue;
+                };
+                for day in days.flatten() {
+                    let Ok(files) = std::fs::read_dir(day.path()) else {
+                        continue;
+                    };
+                    for file in files.flatten() {
+                        let path = file.path();
+                        if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
+                            continue;
+                        }
+                        if let Some(usage) =
+                            read_thread_token_usage_file(&path, workspace_path, thread_id)
+                        {
+                            latest = Some(usage);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    latest
+}
+
+fn read_thread_token_usage_file(
+    path: &Path,
+    workspace_path: &Path,
+    thread_id: &str,
+) -> Option<Value> {
+    let file = File::open(path).ok()?;
+    let reader = BufReader::new(file);
+    let mut owns_thread = false;
+    let mut owns_workspace = false;
+    let mut total: Option<serde_json::Map<String, Value>> = None;
+    let mut last: Option<serde_json::Map<String, Value>> = None;
+    let mut model_context_window: Option<Value> = None;
+
+    for line in reader.lines().map_while(Result::ok) {
+        if line.len() > 512_000 {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        let entry_type = value.get("type").and_then(Value::as_str).unwrap_or("");
+        if entry_type == "session_meta" {
+            let Some(payload) = value.get("payload").and_then(Value::as_object) else {
+                continue;
+            };
+            let id = payload
+                .get("id")
+                .or_else(|| payload.get("session_id"))
+                .and_then(Value::as_str);
+            owns_thread = id == Some(thread_id);
+            owns_workspace = payload
+                .get("cwd")
+                .and_then(Value::as_str)
+                .is_some_and(|cwd| path_matches_workspace(cwd, workspace_path));
+            if !owns_thread || !owns_workspace {
+                return None;
+            }
+            continue;
+        }
+        if !owns_thread || !owns_workspace || entry_type != "event_msg" {
+            continue;
+        }
+        let Some(payload) = value.get("payload").and_then(Value::as_object) else {
+            continue;
+        };
+        if payload.get("type").and_then(Value::as_str) != Some("token_count") {
+            continue;
+        }
+        let Some(info) = payload.get("info").and_then(Value::as_object) else {
+            continue;
+        };
+        if let Some(map) = find_usage_map(info, &["total_token_usage", "totalTokenUsage"]) {
+            total = Some(map.clone());
+        }
+        if let Some(map) = find_usage_map(info, &["last_token_usage", "lastTokenUsage"]) {
+            last = Some(map.clone());
+        }
+        model_context_window = info
+            .get("model_context_window")
+            .or_else(|| info.get("modelContextWindow"))
+            .cloned()
+            .or(model_context_window);
+    }
+
+    let last = last?;
+    let mut usage = serde_json::Map::new();
+    usage.insert("last".to_string(), Value::Object(last));
+    if let Some(total) = total {
+        usage.insert("total".to_string(), Value::Object(total));
+    }
+    if let Some(window) = model_context_window {
+        usage.insert("model_context_window".to_string(), window);
+    }
+    Some(Value::Object(usage))
+}
+
 fn extract_model_from_turn_context(value: &Value) -> Option<String> {
     let payload = value.get("payload").and_then(|value| value.as_object())?;
     if let Some(model) = payload.get("model").and_then(|value| value.as_str()) {
@@ -688,6 +828,24 @@ mod tests {
         let totals = daily.get(day_key).copied().unwrap_or_default();
         assert_eq!(totals.input, 10);
         assert_eq!(totals.output, 5);
+    }
+
+    #[test]
+    fn thread_usage_requires_matching_session_and_workspace() {
+        let path = write_temp_jsonl(&[
+            r#"{"type":"session_meta","payload":{"id":"thread-usage","cwd":"/repo"}}"#,
+            r#"{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":10,"output_tokens":5},"total_token_usage":{"input_tokens":100,"output_tokens":50},"model_context_window":1000}}}"#,
+        ]);
+
+        let usage = read_thread_token_usage_file(&path, Path::new("/repo"), "thread-usage")
+            .expect("matching usage");
+        assert_eq!(usage["last"]["input_tokens"], 10);
+        assert_eq!(usage["total"]["output_tokens"], 50);
+        assert_eq!(usage["model_context_window"], 1000);
+        assert!(read_thread_token_usage_file(&path, Path::new("/other"), "thread-usage").is_none());
+        assert!(read_thread_token_usage_file(&path, Path::new("/repo"), "other-thread").is_none());
+
+        let _ = fs::remove_file(path);
     }
 
     #[test]

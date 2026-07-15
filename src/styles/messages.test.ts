@@ -37,3 +37,25 @@ describe("message tool group interaction styles", () => {
     );
   });
 });
+
+describe("markdown table layout styles", () => {
+  const messagesCss = readFileSync(new URL("./messages.css", import.meta.url), "utf8");
+
+  it("keeps generic tables responsive and scopes fixed widths to review tables", () => {
+    expect(messagesCss).toMatch(
+      /\.markdown \.markdown-table\s*\{[^}]*min-width:\s*100%;[^}]*table-layout:\s*auto;/s,
+    );
+    expect(messagesCss).toMatch(
+      /\.markdown \.markdown-table-structured-review\s*\{[^}]*min-width:\s*760px;[^}]*table-layout:\s*fixed;/s,
+    );
+    expect(messagesCss).not.toMatch(
+      /\.message \.markdown \.markdown-table th:first-child/,
+    );
+    expect(messagesCss).toMatch(
+      /\.markdown \.markdown-table \.markdown-table-cell-numeric\s*\{[^}]*text-align:\s*right;[^}]*font-variant-numeric:\s*tabular-nums;/s,
+    );
+    expect(messagesCss).toMatch(
+      /\.markdown \.markdown-table \.markdown-table-cell-center\s*\{[^}]*text-align:\s*center;/s,
+    );
+  });
+});

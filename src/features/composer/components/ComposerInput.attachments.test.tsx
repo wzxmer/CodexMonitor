@@ -117,6 +117,14 @@ function getTextarea(container: HTMLElement) {
   return textarea;
 }
 
+function getContextProgress(container: HTMLElement) {
+  const progress = container.querySelector(".composer-context-progress");
+  if (!progress) {
+    throw new Error("Context progress not found");
+  }
+  return progress;
+}
+
 function dispatchDrop(
   element: HTMLElement,
   files: File[],
@@ -164,6 +172,23 @@ function setMockFileReader() {
 }
 
 describe("Composer attachments integration", () => {
+  it("keeps an unavailable context cycle visibly marked", () => {
+    const harness = renderComposerHarness({
+      activeThreadId: "thread-1",
+      activeWorkspaceId: "ws-1",
+    });
+
+    expect(harness.container.querySelector(".is-context-unknown")).toBeTruthy();
+    expect(getContextProgress(harness.container)).toBeTruthy();
+    expect(
+      harness.container
+        .querySelector(".composer-context-count")
+        ?.getAttribute("aria-label"),
+    ).toContain("压缩周期 --");
+
+    harness.unmount();
+  });
+
   it("previews image files in-app and copies image data from attachment actions", async () => {
     const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     const originalClipboardItem = globalThis.ClipboardItem;
