@@ -36,6 +36,16 @@ describe("message tool group interaction styles", () => {
       /\.tool-group-toggle:(?:hover|active)[^{]*\{[^}]*(?:transform|box-shadow)/s,
     );
   });
+
+  it("keeps reading controls in document flow so they cannot cover messages", () => {
+    const controlsRule = messagesCss.match(
+      /\.messages-tool-controls\s*\{([\s\S]*?)\n\}/,
+    );
+
+    expect(controlsRule?.[1]).not.toMatch(/position:\s*(?:sticky|fixed|absolute)/);
+    expect(controlsRule?.[1]).not.toMatch(/\btop:/);
+  });
+
 });
 
 describe("markdown table layout styles", () => {

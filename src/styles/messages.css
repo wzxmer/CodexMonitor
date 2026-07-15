@@ -114,9 +114,6 @@
   width: fit-content;
   max-width: 100%;
   margin: -4px 0 2px auto;
-  position: sticky;
-  top: 8px;
-  z-index: 6;
   padding: 6px;
   border: 1px solid var(--cm-border-strong);
   border-radius: 18px;

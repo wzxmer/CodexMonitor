@@ -390,7 +390,7 @@
   );
 }
 
-.app.layout-compact.right-panel-collapsed .main-topbar {
+.app.layout-compact .main-topbar {
   padding-right: calc(
     var(--topbar-compact-padding, 16px)
     + var(--window-caption-width, 0px)
