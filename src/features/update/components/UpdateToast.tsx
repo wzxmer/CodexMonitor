@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import { useState } from "react";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { PostUpdateNoticeState, UpdateState } from "../hooks/useUpdater";
@@ -12,6 +13,7 @@ import {
   ToastViewport,
 } from "../../design-system/components/toast/ToastPrimitives";
 import { useI18n } from "@/features/i18n/I18nProvider";
+import { WindowsInstallerRepairDialog } from "./WindowsInstallerRepairDialog";
 
 type UpdateToastProps = {
   state: UpdateState;
@@ -43,6 +45,7 @@ export function UpdateToast({
   onDismissPostUpdateNotice,
 }: UpdateToastProps) {
   const { t } = useI18n();
+  const [repairOpen, setRepairOpen] = useState(false);
   if (postUpdateNotice) {
     return (
       <ToastViewport className="update-toasts" role="region" ariaLive="polite">
@@ -130,6 +133,7 @@ export function UpdateToast({
       : null;
 
   return (
+    <>
     <ToastViewport className="update-toasts" role="region" ariaLive="polite">
       <ToastCard className="update-toast" role="status">
         <ToastHeader className="update-toast-header">
@@ -208,13 +212,25 @@ export function UpdateToast({
               <button className="secondary" onClick={onDismiss}>
                 {t("update.dismiss")}
               </button>
-              <button className="primary" onClick={onUpdate}>
-                {t("update.retry")}
-              </button>
+              {state.errorCode === "mixedInstaller" ? (
+                <button className="primary" onClick={() => setRepairOpen(true)}>
+                  {t("installerRepair.view")}
+                </button>
+              ) : (
+                <button className="primary" onClick={onUpdate}>
+                  {t("update.retry")}
+                </button>
+              )}
             </ToastActions>
           </>
         )}
       </ToastCard>
     </ToastViewport>
+    <WindowsInstallerRepairDialog
+      open={repairOpen}
+      onClose={() => setRepairOpen(false)}
+      onRecheck={onUpdate}
+    />
+    </>
   );
 }

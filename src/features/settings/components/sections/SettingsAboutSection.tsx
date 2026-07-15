@@ -7,6 +7,7 @@ import {
   type AppBuildType,
 } from "@services/tauri";
 import { useUpdater } from "@/features/update/hooks/useUpdater";
+import { WindowsInstallerRepairDialog } from "@/features/update/components/WindowsInstallerRepairDialog";
 import { FeatureIntroPrompt } from "@app/components/FeatureIntroPrompt";
 import {
   SettingsSection,
@@ -44,6 +45,7 @@ export function SettingsAboutSection({
   const [appBuildType, setAppBuildType] = useState<AppBuildType | "unknown">("unknown");
   const [updaterEnabled, setUpdaterEnabled] = useState(false);
   const [featureIntroOpen, setFeatureIntroOpen] = useState(false);
+  const [repairOpen, setRepairOpen] = useState(false);
   const { state: updaterState, checkForUpdates, startUpdate } = useUpdater({
     enabled: updaterEnabled,
     autoCheckOnMount: false,
@@ -191,7 +193,11 @@ export function SettingsAboutSection({
         ) : null}
 
         <div className="settings-controls">
-          {updaterState.stage === "available" ? (
+          {updaterState.stage === "error" && updaterState.errorCode === "mixedInstaller" ? (
+            <button type="button" className="primary" onClick={() => setRepairOpen(true)}>
+              {t("installerRepair.view")}
+            </button>
+          ) : updaterState.stage === "available" ? (
             <button
               type="button"
               className="primary"
@@ -221,6 +227,11 @@ export function SettingsAboutSection({
         </div>
       </div>
       <FeatureIntroPrompt open={featureIntroOpen} onClose={() => setFeatureIntroOpen(false)} />
+      <WindowsInstallerRepairDialog
+        open={repairOpen}
+        onClose={() => setRepairOpen(false)}
+        onRecheck={checkForUpdates}
+      />
     </SettingsSection>
   );
 }

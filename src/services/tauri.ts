@@ -1227,6 +1227,58 @@ export async function windowsInstallerKind(): Promise<
   return invoke<"msi" | "nsis" | "mixed" | "unknown">("windows_installer_kind");
 }
 
+export type WindowsInstallerFamily = "msi" | "nsis" | "unknown";
+export type WindowsInstallerRegistryHive = "currentUser" | "localMachine";
+export type WindowsInstallerRegistryView = "registry32" | "registry64";
+
+export type WindowsInstallerRecordSummary = {
+  family: WindowsInstallerFamily;
+  hive: WindowsInstallerRegistryHive;
+  view: WindowsInstallerRegistryView;
+  displayVersion?: string | null;
+  installLocation?: string | null;
+};
+
+export type WindowsInstallerRepairPreview = {
+  status: "repairable" | "blocked" | "unsupported";
+  fingerprint?: string | null;
+  currentVersion: string;
+  records: WindowsInstallerRecordSummary[];
+  blockers: string[];
+  plannedActions: string[];
+};
+
+export type WindowsInstallerRepairResult = {
+  transactionId?: string | null;
+  status: "completed" | "rolledBack" | "unsupported";
+  fingerprint?: string | null;
+  message?: string | null;
+};
+
+export async function previewWindowsInstallerRepair(): Promise<WindowsInstallerRepairPreview> {
+  return invoke<WindowsInstallerRepairPreview>("preview_windows_installer_repair");
+}
+
+export async function applyWindowsInstallerRepair(
+  fingerprint: string,
+  operationId: string,
+): Promise<WindowsInstallerRepairResult> {
+  return invoke<WindowsInstallerRepairResult>("apply_windows_installer_repair", {
+    fingerprint,
+    operationId,
+  });
+}
+
+export async function rollbackWindowsInstallerRepair(
+  transactionId: string,
+  postFingerprint: string,
+): Promise<WindowsInstallerRepairResult> {
+  return invoke<WindowsInstallerRepairResult>("rollback_windows_installer_repair", {
+    transactionId,
+    postFingerprint,
+  });
+}
+
 export async function downloadAndOpenReleaseAsset(
   urls: string[],
   fileName: string,

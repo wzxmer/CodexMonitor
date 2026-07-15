@@ -73,6 +73,9 @@ import {
   deleteAgent,
   readAgentConfigToml,
   readImageAsDataUrl,
+  previewWindowsInstallerRepair,
+  applyWindowsInstallerRepair,
+  rollbackWindowsInstallerRepair,
   saveComposerImages,
   promoteComposerImages,
   generateAgentDescription,
@@ -186,6 +189,32 @@ describe("tauri invoke wrappers", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("add_workspace", {
       path: "/tmp/project",
+    });
+  });
+
+  it("forwards Windows installer repair contracts without exposing internals", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock
+      .mockResolvedValueOnce({ status: "repairable", fingerprint: "preview-token" })
+      .mockResolvedValueOnce({
+        status: "completed",
+        transactionId: "transaction-token",
+        fingerprint: "post-token",
+      })
+      .mockResolvedValueOnce({ status: "rolledBack", fingerprint: "pre-token" });
+
+    await previewWindowsInstallerRepair();
+    await applyWindowsInstallerRepair("preview-token", "operation-token");
+    await rollbackWindowsInstallerRepair("transaction-token", "post-token");
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "preview_windows_installer_repair");
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "apply_windows_installer_repair", {
+      fingerprint: "preview-token",
+      operationId: "operation-token",
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "rollback_windows_installer_repair", {
+      transactionId: "transaction-token",
+      postFingerprint: "post-token",
     });
   });
 

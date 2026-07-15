@@ -5,13 +5,27 @@ import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UpdateState } from "../hooks/useUpdater";
 import { I18nProvider } from "@/features/i18n/I18nProvider";
+import {
+  applyWindowsInstallerRepair,
+  previewWindowsInstallerRepair,
+  rollbackWindowsInstallerRepair,
+} from "@services/tauri";
 import { UpdateToast } from "./UpdateToast";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(),
 }));
 
+vi.mock("@services/tauri", () => ({
+  previewWindowsInstallerRepair: vi.fn(),
+  applyWindowsInstallerRepair: vi.fn(),
+  rollbackWindowsInstallerRepair: vi.fn(),
+}));
+
 const openUrlMock = vi.mocked(openUrl);
+const previewRepairMock = vi.mocked(previewWindowsInstallerRepair);
+const applyRepairMock = vi.mocked(applyWindowsInstallerRepair);
+const rollbackRepairMock = vi.mocked(rollbackWindowsInstallerRepair);
 
 function renderUpdateToast(element: ReactElement) {
   return render(<I18nProvider preference="en">{element}</I18nProvider>);
@@ -20,6 +34,16 @@ function renderUpdateToast(element: ReactElement) {
 describe("UpdateToast", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    previewRepairMock.mockResolvedValue({
+      status: "blocked",
+      fingerprint: null,
+      currentVersion: "0.7.91",
+      records: [],
+      blockers: ["An unverifiable legacy shortcut (.lnk) exists."],
+      plannedActions: [],
+    });
+    applyRepairMock.mockResolvedValue({ status: "unsupported" });
+    rollbackRepairMock.mockResolvedValue({ status: "unsupported" });
   });
 
   afterEach(() => {
@@ -91,7 +115,7 @@ describe("UpdateToast", () => {
     expect(onUpdate).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the localized mixed-installer safety block", () => {
+  it("opens the safe repair preview for a mixed-installer block", async () => {
     const state: UpdateState = {
       stage: "error",
       errorCode: "mixedInstaller",
@@ -108,6 +132,12 @@ describe("UpdateToast", () => {
     expect(
       screen.getByText(/Both MSI and EXE installer records were detected/),
     ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "View repair" }));
+    expect(
+      await screen.findByRole("dialog", { name: "Repair Windows installer state" }),
+    ).toBeTruthy();
+    expect(await screen.findByText(/unverifiable legacy \.lnk shortcut/)).toBeTruthy();
+    expect(previewRepairMock).toHaveBeenCalledTimes(1);
   });
 
   it("renders post-update loading notice and dismisses", () => {

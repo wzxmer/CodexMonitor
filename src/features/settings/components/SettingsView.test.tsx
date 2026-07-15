@@ -23,6 +23,9 @@ import {
   isMobileRuntime,
   getModelList,
   listWorkspaces,
+  previewWindowsInstallerRepair,
+  applyWindowsInstallerRepair,
+  rollbackWindowsInstallerRepair,
   windowsInstallerKind,
 } from "@services/tauri";
 import { DEFAULT_COMMIT_MESSAGE_PROMPT } from "@utils/commitMessagePrompt";
@@ -53,6 +56,9 @@ vi.mock("@services/tauri", async () => {
     getCodexStatus: vi.fn(),
     isMobileRuntime: vi.fn(),
     listWorkspaces: vi.fn(),
+    previewWindowsInstallerRepair: vi.fn(),
+    applyWindowsInstallerRepair: vi.fn(),
+    rollbackWindowsInstallerRepair: vi.fn(),
     windowsInstallerKind: vi.fn(),
   };
 });
@@ -67,6 +73,9 @@ const getAgentsSettingsMock = vi.mocked(getAgentsSettings);
 const getCodexStatusMock = vi.mocked(getCodexStatus);
 const isMobileRuntimeMock = vi.mocked(isMobileRuntime);
 const listWorkspacesMock = vi.mocked(listWorkspaces);
+const previewWindowsInstallerRepairMock = vi.mocked(previewWindowsInstallerRepair);
+const applyWindowsInstallerRepairMock = vi.mocked(applyWindowsInstallerRepair);
+const rollbackWindowsInstallerRepairMock = vi.mocked(rollbackWindowsInstallerRepair);
 const windowsInstallerKindMock = vi.mocked(windowsInstallerKind);
 const openUrlMock = vi.mocked(openUrl);
 connectWorkspaceMock.mockResolvedValue(undefined);
@@ -75,6 +84,16 @@ getConfigModelMock.mockResolvedValue(null);
 isMobileRuntimeMock.mockResolvedValue(false);
 listWorkspacesMock.mockResolvedValue([]);
 windowsInstallerKindMock.mockResolvedValue("msi");
+previewWindowsInstallerRepairMock.mockResolvedValue({
+  status: "blocked",
+  fingerprint: null,
+  currentVersion: "0.7.91",
+  records: [],
+  blockers: ["An unverifiable legacy shortcut (.lnk) exists."],
+  plannedActions: [],
+});
+applyWindowsInstallerRepairMock.mockResolvedValue({ status: "unsupported" });
+rollbackWindowsInstallerRepairMock.mockResolvedValue({ status: "unsupported" });
 getAgentsSettingsMock.mockResolvedValue({
   configPath: "/Users/me/.codex/config.toml",
   multiAgentEnabled: false,
@@ -1033,6 +1052,13 @@ describe("SettingsView About", () => {
       await screen.findByText(/检测到 MSI 与 EXE 安装记录并存/),
     ).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "查看修复" }));
+    expect(
+      await screen.findByRole("dialog", { name: "修复 Windows 安装器状态" }),
+    ).toBeTruthy();
+    expect(await screen.findByText(/无法验证的旧 \.lnk 快捷方式/)).toBeTruthy();
+    expect(previewWindowsInstallerRepairMock).toHaveBeenCalledTimes(1);
   });
 });
 
