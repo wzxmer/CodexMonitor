@@ -5,10 +5,11 @@ import {
   useEffect,
   useRef,
   useState,
+  type ComponentPropsWithoutRef,
   type MouseEvent,
   type ReactNode,
 } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -54,6 +55,8 @@ type PreProps = {
   children?: ReactNode;
   copyUseModifier: boolean;
 };
+
+type MessagePreProps = ComponentPropsWithoutRef<"pre"> & ExtraProps;
 
 type LinkBlockProps = {
   urls: string[];
@@ -571,6 +574,22 @@ function PreBlock({ node, children, copyUseModifier }: PreProps) {
   );
 }
 
+function MessagePreBlock({ node, children }: MessagePreProps) {
+  return (
+    <PreBlock node={node as PreProps["node"]} copyUseModifier={false}>
+      {children}
+    </PreBlock>
+  );
+}
+
+function ModifierCopyMessagePreBlock({ node, children }: MessagePreProps) {
+  return (
+    <PreBlock node={node as PreProps["node"]} copyUseModifier>
+      {children}
+    </PreBlock>
+  );
+}
+
 export function Markdown({
   value,
   className,
@@ -740,11 +759,9 @@ export function Markdown({
   };
 
   if (codeBlockStyle === "message") {
-    components.pre = ({ node, children }) => (
-      <PreBlock node={node as PreProps["node"]} copyUseModifier={codeBlockCopyUseModifier}>
-        {children}
-      </PreBlock>
-    );
+    components.pre = codeBlockCopyUseModifier
+      ? ModifierCopyMessagePreBlock
+      : MessagePreBlock;
   }
 
   return (

@@ -639,6 +639,36 @@ describe("Markdown file-like href behavior", () => {
     expect(screen.getByText("Updated")).toBeTruthy();
   });
 
+  it("preserves message code block scroll position across markdown rerenders", () => {
+    const value = [
+      "```text",
+      "D:/DevKnowledgeBase/20-项目知识/CodexMonitor/BUG/CodexMonitor-Markdown表格横向滚动位置被重置.md",
+      "Use diagnose and ui-regression-guardian to verify the visible code block scroll state.",
+      "```",
+    ].join("\n");
+    const renderMarkdown = (onOpenThreadLink?: (threadId: string) => void) => (
+      <Markdown
+        value={value}
+        className="markdown"
+        codeBlockStyle="message"
+        onOpenThreadLink={onOpenThreadLink}
+      />
+    );
+    const { container, rerender } = render(renderMarkdown());
+    const codeBlockScroller = container.querySelector<HTMLElement>(".markdown-codeblock pre");
+
+    expect(codeBlockScroller).not.toBeNull();
+    if (!codeBlockScroller) {
+      throw new Error("Expected markdown code block scroller");
+    }
+    codeBlockScroller.scrollLeft = 240;
+
+    rerender(renderMarkdown(() => {}));
+
+    expect(container.querySelector(".markdown-codeblock pre")).toBe(codeBlockScroller);
+    expect(codeBlockScroller.scrollLeft).toBe(240);
+  });
+
   it("copies code block content without markdown fences by default", async () => {
     const writeText = vi.fn();
     Object.defineProperty(navigator, "clipboard", {
