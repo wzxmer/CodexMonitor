@@ -21,6 +21,7 @@ function baseArgs() {
       estimatedTokens: 3,
     })),
     insertCurrent: vi.fn(),
+    insertNew: vi.fn(),
     startThreadForWorkspace: vi.fn(async () => "thread-derived"),
     sendUserMessageToThread: vi.fn(async () => ({ status: "sent" as const })),
     persistDerivation: vi.fn(),
@@ -50,7 +51,7 @@ describe("applyMessageReference", () => {
     expect(args.createSnapshot).not.toHaveBeenCalled();
   });
 
-  it("stores a smart reference before deriving a new conversation", async () => {
+  it("stores a smart reference as a draft in a new conversation", async () => {
     const args = baseArgs();
     const result = await applyMessageReference({
       ...args,
@@ -66,20 +67,11 @@ describe("applyMessageReference", () => {
 
     expect(result).toBe("thread-derived");
     expect(args.createSnapshot).toHaveBeenCalledWith("large source content", "Referenced message");
-    expect(args.sendUserMessageToThread).toHaveBeenCalledWith(
-      workspace,
+    expect(args.insertNew).toHaveBeenCalledWith(
       "thread-derived",
       expect.stringContaining("path=\"D:/Codex/references/reference-1/content.md\""),
-      [],
-      { skipPromptExpansion: true },
     );
-    expect(args.sendUserMessageToThread).not.toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      expect.stringContaining("large source content"),
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(args.sendUserMessageToThread).not.toHaveBeenCalled();
     expect(args.persistDerivation).toHaveBeenCalledWith(
       "workspace-1",
       "thread-derived",
@@ -91,13 +83,13 @@ describe("applyMessageReference", () => {
     );
   });
 
-  it("does not persist derivation when sending fails", async () => {
+  it("does not persist derivation when starting the new conversation fails", async () => {
     const args = baseArgs();
-    const sendUserMessageToThread = vi.fn(async () => ({ status: "blocked" as const }));
+    const startThreadForWorkspace = vi.fn(async () => null);
 
     await expect(applyMessageReference({
       ...args,
-      sendUserMessageToThread,
+      startThreadForWorkspace,
       action: {
         messageId: "message-1",
         sourceRole: "user",
@@ -106,7 +98,8 @@ describe("applyMessageReference", () => {
         mode: "full",
         destination: "new",
       },
-    })).rejects.toThrow("send failed");
+    })).rejects.toThrow("start failed");
+    expect(args.insertNew).not.toHaveBeenCalled();
     expect(args.persistDerivation).not.toHaveBeenCalled();
   });
 });

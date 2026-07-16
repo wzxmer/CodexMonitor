@@ -59,6 +59,23 @@ describe("useComposerController", () => {
     expect(result.current.activeDraft).toBe("no project draft");
   });
 
+  it("appends text to an inactive thread draft without overwriting it", () => {
+    const options = makeOptions({ activeThreadId: "thread-active" });
+    const { result, rerender } = renderHook((props) => useComposerController(props), {
+      initialProps: options,
+    });
+
+    act(() => {
+      result.current.insertDraftForThread("thread-derived", "Referenced content");
+      result.current.insertDraftForThread("thread-derived", "Follow-up");
+    });
+
+    expect(result.current.activeDraft).toBe("");
+    rerender({ ...options, activeThreadId: "thread-derived" });
+    expect(result.current.activeDraft).toBe("Referenced content\n\nFollow-up");
+    expect(options.sendUserMessageToThread).not.toHaveBeenCalled();
+  });
+
   it("restores a failed first-send image transfer without crossing workspace drafts", async () => {
     let rejectConnection: ((error: Error) => void) | null = null;
     const connectWorkspace = vi.fn(

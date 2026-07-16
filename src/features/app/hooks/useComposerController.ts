@@ -149,6 +149,22 @@ export function useComposerController({
     [draftKey],
   );
 
+  const insertDraftForThread = useCallback((threadId: string, insertText: string) => {
+    if (!threadId || !insertText) {
+      return;
+    }
+    setComposerDraftsByThread((prev) => {
+      const current = prev[threadId] ?? "";
+      const separator = current && !/\s$/.test(current) && !/^\s/.test(insertText)
+        ? "\n\n"
+        : "";
+      return {
+        ...prev,
+        [threadId]: `${current}${separator}${insertText}`,
+      };
+    });
+  }, []);
+
   const handleSendPrompt = useCallback(
     (text: string, appMentions?: AppMention[]) => {
       if (!text.trim()) {
@@ -213,6 +229,7 @@ export function useComposerController({
     setComposerInsert,
     activeDraft,
     handleDraftChange,
+    insertDraftForThread,
     handleSendPrompt,
     handleEditQueued,
     handleDeleteQueued,

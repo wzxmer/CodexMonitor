@@ -955,8 +955,6 @@ export default function MainApp() {
     setPreferredCodexArgsOverride,
     activeThreadIdRef,
     pendingNewThreadSeedRef,
-    selectedModelId,
-    resolvedEffort,
     selectedServiceTier,
     accessMode,
     selectedCollaborationModeId,
@@ -1667,13 +1665,12 @@ export default function MainApp() {
           content,
         }),
         insertCurrent: composerWorkspaceState.handleInsertComposerText,
+        insertNew: composerWorkspaceState.insertDraftForThread,
         startThreadForWorkspace,
-        sendUserMessageToThread,
         persistDerivation: (workspaceId, derivedThreadId, metadata) => {
           nextDerivations = saveThreadDerivation(workspaceId, derivedThreadId, metadata);
         },
         startError: t("messages.referenceStartFailed"),
-        sendError: t("messages.referenceSendFailed"),
       });
       if (!threadId) return;
       setThreadDerivations(nextDerivations);
@@ -1684,7 +1681,7 @@ export default function MainApp() {
     } catch (error) {
       alertError(error instanceof Error ? error.message : String(error));
     }
-  }, [activeThreadId, activeWorkspace, alertError, composerWorkspaceState.handleInsertComposerText, exitDiffView, isCompact, selectWorkspace, sendUserMessageToThread, setActiveTab, setActiveThreadId, startThreadForWorkspace, t, threadDerivations]);
+  }, [activeThreadId, activeWorkspace, alertError, composerWorkspaceState.handleInsertComposerText, composerWorkspaceState.insertDraftForThread, exitDiffView, isCompact, selectWorkspace, setActiveTab, setActiveThreadId, startThreadForWorkspace, t, threadDerivations]);
 
   const handleInstallManagedCodex = useCallback(async () => {
     setCodexInstallStage("downloading");

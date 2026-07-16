@@ -44,7 +44,7 @@ macOS 版本当前采用完整 ad-hoc 签名，但尚未使用 Apple Developer I
 - 添加、分组、排序和连接多个工作区。
 - 启动或恢复 Codex `app-server` 会话，显示运行中、未读、审批和用户输入状态。
 - 长会话按设置数量分批显示；滚动到顶部或底部可继续加载，当前会话搜索会自动展开并定位隐藏历史，避免一次性渲染全部内容。
-- 消息支持引用选中内容或整条消息到当前/新会话；长内容可用智能引用保存为后端只读快照，按需读取，避免把全文重复塞入上下文。
+- 消息支持引用选中内容或整条消息到当前/新会话；引用先进入目标会话输入框草稿，由用户确认后发送；长内容可用智能引用保存为后端只读快照，按需读取，避免把全文重复塞入上下文。
 - 大型文本附件、日志和 diff 会优先保存为内容寻址快照并发送轻量引用；小文件或旧版远程端继续按原方式内联。
 - 新建普通 Agent、worktree Agent 和副本 Agent，隔离实验性改动。
 - 子会话根据父会话主要语言生成任务标题，生成不可用时回退下发任务名；并可按“仅最终结果 / 关键检查点 / 持续同步”向父会话反馈进展，父会话运行中使用 steer 实时注入，空闲时等待下一轮，不会自动启动新 turn，已同步内容在会话中显示为轻量系统条目。
@@ -282,7 +282,7 @@ The macOS build is fully ad-hoc signed but not notarized with Apple Developer ID
 - **Usage display**: toggle Codex usage in the bottom-left, switch between used/remaining quota. Home page distinguishes cached reads from uncached input.
 - **Local session management**: total local session count, unified entry from session manager, cross-project return or context reference to create new sessions; spawned subagent sessions generate task titles in the parent conversation's primary language and fall back to assigned task names when generation is unavailable.
 - **Subagent result summaries**: parent conversations show compact child-result summaries, while long outputs open in a dedicated detail panel for reading, copying, or opening the child thread without burying the parent conclusion.
-- **Message experience**: failed message re-send overwrites the original, auto-reconnect per session, large paste auto-converts to a previewable and restorable TXT attachment at 4,000 chars or 80 lines, image paste/drag/drop with hover copy and in-app large view.
+- **Message experience**: references to the current or a new conversation enter the target composer as a draft and require explicit send; failed message re-send overwrites the original, auto-reconnect per session, large paste auto-converts to a previewable and restorable TXT attachment at 4,000 chars or 80 lines, image paste/drag/drop with hover copy and in-app large view.
 - **Git workflow**: view changes, diffs, logs, branches, commit, push/pull, plus GitHub Issues/PR lists and PR context questions.
 - **Remote backend**: desktop daemon, TCP/Tailscale connection, and iOS remote mode.
 - **Task coordination**: create coordination groups, declare resource ownership, block double-write conflicts; deterministic candidate detection with shadow recording; coordination panel in plan area when idle; leases kept on disconnect.
