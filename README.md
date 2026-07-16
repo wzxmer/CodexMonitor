@@ -33,6 +33,7 @@ macOS 版本当前采用完整 ad-hoc 签名，但尚未使用 Apple Developer I
 - 用量显示：左下角 Codex 用量可开关，支持已用/剩余额度切换；首页区分缓存读取和未缓存输入，不把缓存读取直接等同于已节省 token。
 - 本机会话管理：显示本机会话总数，历史统一从会话管理进入；默认选中当前列表首项，右侧展示最初需求和最近有效对话；跨项目可返回原项目或引用上下文到当前项目创建新会话。
 - 消息体验：编辑失败消息后重发会覆盖原消息，避免重复堆积；“自动重连”默认关闭，手动开启后仅对当前会话有效，在任务非主动中止时持续尝试恢复连接并继续，且不占用 Codex 当前任务的尝试次数；图片粘贴、拖放和预览支持悬浮复制、应用内大图查看，内部生成图片使用紧凑显示名；达到 4,000 字符或 80 行的大量文本粘贴会自动转为可预览、可恢复的 TXT 附件。
+- 执行结果摘要：任务结束后保留匹配执行的文件新增/删除行数和 Working 用时；切换会话或重启应用后仍可恢复本机已记录摘要，旧会话缺少记录时不会补造统计。
 - Git 工作流：查看改动、Diff、日志、分支、提交、推送/拉取，并支持 GitHub Issues/PR 列表与 PR 上下文提问。
 - 远程后端：支持桌面 daemon、TCP/Tailscale 连接和 iOS 远程模式。
 - 多会话任务协调：创建协调组绑定相关会话，声明文件/目录/逻辑资源 Ownership，阻止同一目录双写和已确认资源双写；候选检测用确定性关键词匹配并 shadow 记录已探测对，断线时保守保留写租约，不自动释放；计划面板空闲时显示协调面板。
@@ -283,6 +284,7 @@ The macOS build is fully ad-hoc signed but not notarized with Apple Developer ID
 - **Local session management**: total local session count, unified entry from session manager, cross-project return or context reference to create new sessions; spawned subagent sessions generate task titles in the parent conversation's primary language and fall back to assigned task names when generation is unavailable.
 - **Subagent result summaries**: parent conversations show compact child-result summaries, while long outputs open in a dedicated detail panel for reading, copying, or opening the child thread without burying the parent conclusion.
 - **Message experience**: references to the current or a new conversation enter the target composer as a draft and require explicit send; failed message re-send overwrites the original, auto-reconnect per session, large paste auto-converts to a previewable and restorable TXT attachment at 4,000 chars or 80 lines, image paste/drag/drop with hover copy and in-app large view.
+- **Execution summaries**: completed runs retain their matching added/deleted line counts and Working duration across thread switches and app restarts; older sessions without local summary data are left unchanged.
 - **Git workflow**: view changes, diffs, logs, branches, commit, push/pull, plus GitHub Issues/PR lists and PR context questions.
 - **Remote backend**: desktop daemon, TCP/Tailscale connection, and iOS remote mode.
 - **Task coordination**: create coordination groups, declare resource ownership, block double-write conflicts; deterministic candidate detection with shadow recording; coordination panel in plan area when idle; leases kept on disconnect.

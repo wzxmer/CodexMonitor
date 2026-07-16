@@ -2219,6 +2219,81 @@ describe("Messages", () => {
     expect(container.querySelector(".message-line-change-stats")).toBeNull();
   });
 
+  it("binds persisted line changes to the matching turn tool group", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "tool-turn-1",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: first",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+        turnId: "turn-1",
+      },
+      {
+        id: "assistant-turn-1",
+        kind: "message",
+        role: "assistant",
+        text: "First done.",
+        turnId: "turn-1",
+      },
+      {
+        id: "tool-turn-2",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: second",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+        turnId: "turn-2",
+      },
+      {
+        id: "assistant-turn-2",
+        kind: "message",
+        role: "assistant",
+        text: "Second done.",
+        turnId: "turn-2",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        turnExecutionSummary={{
+          schemaVersion: 1,
+          executionId: "execution-2",
+          workspaceId: "ws-1",
+          threadId: "thread-1",
+          turnId: "turn-2",
+          turnChain: ["turn-2"],
+          status: "completed",
+          startedAtMs: 10,
+          endedAtMs: 20,
+          workingDurationMs: 10,
+          addedLines: 5,
+          deletedLines: 2,
+          diffRevision: 1,
+          recordRevision: 2,
+          updatedAtMs: 20,
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      const groups = container.querySelectorAll(".tool-group-header");
+      expect(groups).toHaveLength(2);
+      expect(groups[0]?.textContent).not.toContain("+5");
+      expect(groups[1]?.textContent).toContain("+5");
+      expect(groups[1]?.textContent).toContain("-2");
+    });
+  });
+
   it("collapses assistant process messages before a final message without a visible user anchor", async () => {
     const items: ConversationItem[] = [
       {

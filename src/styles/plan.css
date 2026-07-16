@@ -39,6 +39,17 @@
   color: var(--text-faint);
 }
 
+.plan-stream {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12px/1.5 var(--code-font-family);
+  color: var(--text-emphasis);
+}
+
 .plan-list {
   display: flex;
   flex-direction: column;

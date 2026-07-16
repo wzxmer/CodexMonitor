@@ -35,6 +35,7 @@ type ThreadEventHandlersOptions = {
     threadId: string,
     timestamp?: number,
   ) => void;
+  shouldContinueAfterError?: (threadId: string, turnId: string) => boolean;
   onUserMessageCreated?: (
     workspaceId: string,
     threadId: string,
@@ -72,6 +73,7 @@ export function useThreadEventHandlers({
   getActiveTurnId,
   safeMessageActivity,
   recordThreadActivity,
+  shouldContinueAfterError,
   onUserMessageCreated,
   pushThreadErrorMessage,
   onDebug,
@@ -144,6 +146,7 @@ export function useThreadEventHandlers({
     activeThreadId,
     dispatch,
     getCustomName,
+    getActiveTurnId,
     markProcessing,
     markReviewing,
     safeMessageActivity,
@@ -183,6 +186,7 @@ export function useThreadEventHandlers({
     pushThreadErrorMessage,
     safeMessageActivity,
     recordThreadActivity,
+    shouldContinueAfterError,
   });
 
   const onBackgroundThreadAction = useCallback(

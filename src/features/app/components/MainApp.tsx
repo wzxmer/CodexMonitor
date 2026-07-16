@@ -37,6 +37,7 @@ import { useWorkspaceController } from "@app/hooks/useWorkspaceController";
 import { useWorkspaceSelection } from "@/features/workspaces/hooks/useWorkspaceSelection";
 import { normalizeRootPath } from "@/features/threads/utils/threadNormalize";
 import { usePlanReadyActions } from "@app/hooks/usePlanReadyActions";
+import { getActivePlanStream } from "@/features/plan/planStream";
 import { useThreadRows } from "@app/hooks/useThreadRows";
 import { useInterruptShortcut } from "@app/hooks/useInterruptShortcut";
 import { useArchiveShortcut } from "@app/hooks/useArchiveShortcut";
@@ -670,6 +671,8 @@ export default function MainApp() {
     threadListCursorByWorkspace,
     activeTurnIdByThread,
     turnDiffByThread,
+    turnExecutionSummaryByThread,
+    turnExecutionSummariesByThread,
     tokenUsageByThread,
     rateLimitsByWorkspace,
     accountByWorkspace,
@@ -1499,8 +1502,12 @@ export default function MainApp() {
   const activePlan = activeThreadId
     ? planByThread[activeThreadId] ?? null
     : null;
+  const activeTurnId = activeThreadId
+    ? activeTurnIdByThread[activeThreadId] ?? null
+    : null;
+  const activePlanStream = getActivePlanStream(activeItems);
   const hasActivePlan = Boolean(
-    activePlan && (activePlan.steps.length > 0 || activePlan.explanation)
+    (activePlan && (activePlan.steps.length > 0 || activePlan.explanation)) || activePlanStream
   );
   const composerWorkspaceState = useMainAppComposerWorkspaceState({
     view: {
@@ -2167,6 +2174,8 @@ export default function MainApp() {
     threadParentById,
     threadStatusById,
     turnDiffByThread,
+    turnExecutionSummaryByThread,
+    turnExecutionSummariesByThread,
     interruptedThreadById,
     autoContinueStatusByThread,
     setThreadAutoContinueEnabled,
@@ -2203,6 +2212,8 @@ export default function MainApp() {
       void handleMessageReference(action);
     },
     activePlan,
+    activePlanStream,
+    activeTurnId,
     activeTokenUsage,
     latestAgentRuns,
     isLoadingLatestAgents,

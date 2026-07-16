@@ -16,6 +16,10 @@ use crate::remote_backend;
 use crate::shared::agents_config_core;
 use crate::shared::codex_core::{self, insert_optional_nullable_string};
 use crate::shared::provider_profiles_core::{self, active_codex_key_runtime};
+use crate::shared::turn_execution_summary_core::{
+    runtime_id_for_data_dir, source_id_for_codex_home, TurnExecutionSummaryQuery,
+    TurnExecutionSummaryUpsert,
+};
 use crate::shared::workflow_preflight_core;
 use crate::state::AppState;
 use crate::types::WorkspaceEntry;
@@ -31,6 +35,30 @@ fn emit_thread_live_event(app: &AppHandle, workspace_id: &str, method: &str, par
             }),
         },
     );
+}
+
+async fn resolve_turn_execution_summary_scope(
+    workspace_id: &str,
+    thread_id: &str,
+    state: &AppState,
+) -> Result<(String, String), String> {
+    let source_id = if let Some(binding) = state
+        .source_thread_runtimes
+        .get(workspace_id, thread_id)
+        .await
+    {
+        binding.source.id
+    } else {
+        let settings = state.app_settings.lock().await.clone();
+        let codex_home = home::resolve_settings_codex_home(&settings)
+            .ok_or_else(|| "Unable to resolve CODEX_HOME for turn execution summary".to_string())?;
+        source_id_for_codex_home(&codex_home)
+    };
+    let data_dir = state
+        .settings_path
+        .parent()
+        .ok_or_else(|| "Unable to resolve app data directory".to_string())?;
+    Ok((source_id, runtime_id_for_data_dir(data_dir)))
 }
 
 pub(crate) async fn spawn_workspace_session(
@@ -191,6 +219,56 @@ pub(crate) async fn read_thread(
         return codex_core::read_thread_with_session_core(&session, workspace_id, thread_id).await;
     }
     codex_core::read_thread_core(&state.sessions, workspace_id, thread_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn turn_execution_summary_get(
+    mut input: TurnExecutionSummaryQuery,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "turn_execution_summary_get",
+            json!({ "input": input }),
+        )
+        .await;
+    }
+    let (source_id, runtime_id) =
+        resolve_turn_execution_summary_scope(&input.workspace_id, &input.thread_id, &state).await?;
+    input.source_id = source_id;
+    input.runtime_id = runtime_id;
+    let mut sidecar = state.turn_execution_summaries.lock().await;
+    serde_json::to_value(sidecar.get(&input)?).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn turn_execution_summary_upsert(
+    mut input: TurnExecutionSummaryUpsert,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "turn_execution_summary_upsert",
+            json!({ "input": input }),
+        )
+        .await;
+    }
+    let (source_id, runtime_id) = resolve_turn_execution_summary_scope(
+        &input.summary.workspace_id,
+        &input.summary.thread_id,
+        &state,
+    )
+    .await?;
+    input.source_id = source_id;
+    input.runtime_id = runtime_id;
+    let mut sidecar = state.turn_execution_summaries.lock().await;
+    serde_json::to_value(sidecar.upsert(input)?).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -1306,7 +1384,6 @@ pub(crate) async fn task_coordination_release_claim(
     }
     Ok(())
 }
-
 #[tauri::command]
 pub(crate) async fn task_coordination_heartbeat(
     group_id: String,
@@ -1339,8 +1416,6 @@ pub(crate) async fn task_coordination_heartbeat(
     }
     Ok(())
 }
-
-
 #[tauri::command]
 pub(crate) async fn task_coordination_detect_candidates(
     target: Value,

@@ -180,6 +180,8 @@ struct DaemonState {
     task_coordination_ledger: tokio::sync::Mutex<
         Option<crate::shared::task_coordination_core::ledger::CoordinationLedger>,
     >,
+    turn_execution_summaries:
+        tokio::sync::Mutex<crate::shared::turn_execution_summary_core::TurnExecutionSummarySidecar>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -189,6 +191,30 @@ struct WorkspaceFileResponse {
 }
 
 impl DaemonState {
+    async fn turn_execution_summary_scope(
+        &self,
+        workspace_id: &str,
+        thread_id: &str,
+    ) -> Result<(String, String), String> {
+        let source_id = if let Some(binding) = self
+            .source_thread_runtimes
+            .get(workspace_id, thread_id)
+            .await
+        {
+            binding.source.id
+        } else {
+            let settings = self.app_settings.lock().await.clone();
+            let codex_home = codex_home::resolve_settings_codex_home(&settings).ok_or_else(|| {
+                "Unable to resolve CODEX_HOME for turn execution summary".to_string()
+            })?;
+            crate::shared::turn_execution_summary_core::source_id_for_codex_home(&codex_home)
+        };
+        Ok((
+            source_id,
+            crate::shared::turn_execution_summary_core::runtime_id_for_data_dir(&self.data_dir),
+        ))
+    }
+
     async fn source_runtime_for_workspace(
         &self,
         source: &SessionSource,
@@ -321,6 +347,9 @@ impl DaemonState {
             source_thread_runtimes: SourceThreadRuntimeBindings::default(),
             daemon_binary_path,
             task_coordination_ledger: tokio::sync::Mutex::new(Some(Default::default())),
+            turn_execution_summaries: tokio::sync::Mutex::new(
+                crate::shared::turn_execution_summary_core::TurnExecutionSummarySidecar::for_data_dir(&config.data_dir),
+            ),
         }
     }
 
@@ -1246,6 +1275,30 @@ impl DaemonState {
                 .await;
         }
         codex_core::read_thread_core(&self.sessions, workspace_id, thread_id).await
+    }
+
+    async fn turn_execution_summary_get(
+        &self,
+        mut query: crate::shared::turn_execution_summary_core::TurnExecutionSummaryQuery,
+    ) -> Result<Vec<crate::shared::turn_execution_summary_core::TurnExecutionSummary>, String> {
+        let (source_id, runtime_id) = self
+            .turn_execution_summary_scope(&query.workspace_id, &query.thread_id)
+            .await?;
+        query.source_id = source_id;
+        query.runtime_id = runtime_id;
+        self.turn_execution_summaries.lock().await.get(&query)
+    }
+
+    async fn turn_execution_summary_upsert(
+        &self,
+        mut input: crate::shared::turn_execution_summary_core::TurnExecutionSummaryUpsert,
+    ) -> Result<crate::shared::turn_execution_summary_core::TurnExecutionSummary, String> {
+        let (source_id, runtime_id) = self
+            .turn_execution_summary_scope(&input.summary.workspace_id, &input.summary.thread_id)
+            .await?;
+        input.source_id = source_id;
+        input.runtime_id = runtime_id;
+        self.turn_execution_summaries.lock().await.upsert(input)
     }
 
     async fn thread_live_subscribe(
@@ -2342,6 +2395,9 @@ mod tests {
             source_thread_runtimes: SourceThreadRuntimeBindings::default(),
             daemon_binary_path: Some("/tmp/codex-monitor-daemon".to_string()),
             task_coordination_ledger: tokio::sync::Mutex::new(Some(Default::default())),
+            turn_execution_summaries: tokio::sync::Mutex::new(
+                crate::shared::turn_execution_summary_core::TurnExecutionSummarySidecar::for_data_dir(data_dir),
+            ),
         }
     }
 
@@ -2484,6 +2540,49 @@ mod tests {
             assert!(result.get("days").and_then(Value::as_array).is_some());
             assert!(result.get("totals").is_some());
             let _ = std::fs::remove_dir_all(&tmp);
+        });
+    }
+
+    #[test]
+    fn rpc_turn_execution_summary_roundtrips_and_isolates_compound_key() {
+        run_async_test(async {
+            let tmp = make_temp_dir("turn-execution-summary-rpc");
+            let state = test_state(&tmp);
+            let summary = json!({
+                "schemaVersion": 1, "executionId": "execution-a", "workspaceId": "workspace-a",
+                "threadId": "thread-a", "turnId": "turn-a", "turnChain": ["turn-a"],
+                "status": "completed", "startedAtMs": 10, "endedAtMs": 20,
+                "workingDurationMs": 10, "addedLines": 4, "deletedLines": 1,
+                "diffRevision": 1, "recordRevision": 2, "updatedAtMs": 20
+            });
+            let stored = rpc::handle_rpc_request(
+                &state,
+                "turn_execution_summary_upsert",
+                json!({ "input": { "summary": summary } }),
+                "daemon-test".to_string(),
+            )
+            .await
+            .expect("upsert summary");
+            assert_eq!(stored["executionId"], "execution-a");
+            let visible = rpc::handle_rpc_request(
+                &state,
+                "turn_execution_summary_get",
+                json!({ "input": { "workspaceId": "workspace-a", "threadId": "thread-a" } }),
+                "daemon-test".to_string(),
+            )
+            .await
+            .expect("get matching summary");
+            assert_eq!(visible.as_array().map(Vec::len), Some(1));
+            let isolated = rpc::handle_rpc_request(
+                &state,
+                "turn_execution_summary_get",
+                json!({ "input": { "workspaceId": "workspace-b", "threadId": "thread-a" } }),
+                "daemon-test".to_string(),
+            )
+            .await
+            .expect("get isolated summary");
+            assert_eq!(isolated.as_array().map(Vec::len), Some(0));
+            let _ = std::fs::remove_dir_all(tmp);
         });
     }
 

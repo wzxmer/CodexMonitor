@@ -69,6 +69,13 @@ import {
 const TEXT_ATTACHMENT_EXTENSIONS = /\.(txt|md|markdown|json|jsonc|yaml|yml|toml|xml|html?|css|scss|sass|less|js|jsx|ts|tsx|mjs|cjs|rs|go|py|rb|php|java|kt|kts|swift|c|cc|cpp|cxx|h|hpp|cs|sh|bash|zsh|fish|ps1|bat|cmd|sql|csv|tsv|log|diff|patch|ini|env|gitignore|dockerfile)$/i;
 const WORKFLOW_PREFLIGHT_TIMEOUT_MS = 1_500;
 
+type OptimisticUserMessage = {
+  id: string;
+  timestamp: number;
+  images: string[];
+  attachments: string[];
+};
+
 async function workflowPreflightWithTimeout(
   promise: Promise<WorkflowHostPreflightPreview>,
 ) {
@@ -369,6 +376,75 @@ export function useThreadMessaging({
   onUserMessageCreated,
 }: UseThreadMessagingOptions) {
   const { t } = useI18n();
+  const upsertOptimisticUserMessage = useCallback(
+    (
+      workspace: WorkspaceInfo,
+      threadId: string,
+      text: string,
+      message: OptimisticUserMessage,
+      replaceExisting: boolean,
+    ) => {
+      const customThreadName = getCustomName(workspace.id, threadId) ?? null;
+      dispatch({
+        type: "upsertItem",
+        workspaceId: workspace.id,
+        threadId,
+        item: {
+          id: message.id,
+          kind: "message",
+          role: "user",
+          text,
+          createdAt: message.timestamp,
+          images: message.images,
+          attachments: message.attachments,
+        },
+        replaceExisting,
+        hasCustomName: Boolean(customThreadName),
+      });
+    },
+    [dispatch, getCustomName],
+  );
+
+  const insertOptimisticUserMessage = useCallback(
+    (
+      workspace: WorkspaceInfo,
+      threadId: string,
+      text: string,
+      attachments: string[],
+      replaceMessageId?: string,
+    ): OptimisticUserMessage => {
+      const timestamp = Date.now();
+      const id = replaceMessageId ?? `local-user-${timestamp}`;
+      const images = attachments.filter(isImageAttachment);
+      const displayAttachments = attachments.filter(
+        (attachment) => !isImageAttachment(attachment),
+      );
+      const message = { id, timestamp, images, attachments: displayAttachments };
+      upsertOptimisticUserMessage(
+        workspace,
+        threadId,
+        text,
+        message,
+        Boolean(replaceMessageId),
+      );
+      recordThreadActivity(workspace.id, threadId, timestamp);
+      dispatch({
+        type: "setThreadTimestamp",
+        workspaceId: workspace.id,
+        threadId,
+        timestamp,
+      });
+      safeMessageActivity();
+      return message;
+    },
+    [
+      dispatch,
+      recordThreadActivity,
+      safeMessageActivity,
+      upsertOptimisticUserMessage,
+    ],
+  );
+
   const sendMessageToThread = useCallback(
     async (
       workspace: WorkspaceInfo,
@@ -376,6 +452,7 @@ export function useThreadMessaging({
       text: string,
       images: string[] = [],
       options?: SendMessageOptions,
+      existingOptimisticMessage?: OptimisticUserMessage,
     ): Promise<SendMessageResult> => {
       const messageText = text.trim();
       if (!messageText && images.length === 0) {
@@ -390,6 +467,23 @@ export function useThreadMessaging({
           return { status: "blocked" };
         }
         finalText = promptExpansion?.expanded ?? messageText;
+      }
+      const optimisticMessage = existingOptimisticMessage ??
+        insertOptimisticUserMessage(
+          workspace,
+          threadId,
+          finalText,
+          images,
+          options?.replaceMessageId,
+        );
+      if (existingOptimisticMessage) {
+        upsertOptimisticUserMessage(
+          workspace,
+          threadId,
+          finalText,
+          optimisticMessage,
+          Boolean(options?.replaceMessageId),
+        );
       }
       let preparedAttachments: {
         text: string;
@@ -438,6 +532,29 @@ export function useThreadMessaging({
           safeMessageActivity();
           return { status: "blocked" };
         }
+      }
+      const attachmentsChanged =
+        preparedAttachments.images.length !== optimisticMessage.images.length ||
+        preparedAttachments.displayAttachments.length !==
+          optimisticMessage.attachments.length ||
+        preparedAttachments.images.some(
+          (image, index) => image !== optimisticMessage.images[index],
+        ) ||
+        preparedAttachments.displayAttachments.some(
+          (attachment, index) => attachment !== optimisticMessage.attachments[index],
+        );
+      if (attachmentsChanged) {
+        upsertOptimisticUserMessage(
+          workspace,
+          threadId,
+          finalText,
+          {
+            ...optimisticMessage,
+            images: preparedAttachments.images,
+            attachments: preparedAttachments.displayAttachments,
+          },
+          Boolean(options?.replaceMessageId),
+        );
       }
       const isProcessing = threadStatusById[threadId]?.isProcessing ?? false;
       const activeTurnId = activeTurnIdByThread[threadId] ?? null;
@@ -513,35 +630,8 @@ export function useThreadMessaging({
           send_intent: sendIntent,
         },
       });
-      const timestamp = Date.now();
-      const optimisticMessageId =
-        options?.replaceMessageId ?? `local-user-${timestamp}`;
       const customThreadName = getCustomName(workspace.id, threadId) ?? null;
-      dispatch({
-        type: "upsertItem",
-        workspaceId: workspace.id,
-        threadId,
-        item: {
-          id: optimisticMessageId,
-          kind: "message",
-          role: "user",
-          text: finalText,
-          createdAt: timestamp,
-          images: preparedAttachments.images,
-          attachments: preparedAttachments.displayAttachments,
-        },
-        replaceExisting: Boolean(options?.replaceMessageId),
-        hasCustomName: Boolean(customThreadName),
-      });
-      recordThreadActivity(workspace.id, threadId, timestamp);
-      dispatch({
-        type: "setThreadTimestamp",
-        workspaceId: workspace.id,
-        threadId,
-        timestamp,
-      });
       markProcessing(threadId, true);
-      safeMessageActivity();
       if (!options?.replaceMessageId && requestMode === "start") {
         void onUserMessageCreated?.(workspace.id, threadId, finalText);
       }
@@ -724,7 +814,7 @@ export function useThreadMessaging({
           dispatch({
             type: "removeItem",
             threadId,
-            itemId: optimisticMessageId,
+            itemId: optimisticMessage.id,
           });
           pushThreadErrorMessage(
             threadId,
@@ -768,7 +858,7 @@ export function useThreadMessaging({
           dispatch({
             type: "removeItem",
             threadId,
-            itemId: optimisticMessageId,
+            itemId: optimisticMessage.id,
           });
         }
         onDebug?.({
@@ -799,6 +889,7 @@ export function useThreadMessaging({
       shouldPreflightRuntimeCodexArgsForSend,
       activeTurnIdByThread,
       getCustomName,
+      insertOptimisticUserMessage,
       markProcessing,
       model,
       workflowProviderKind,
@@ -807,7 +898,6 @@ export function useThreadMessaging({
       workflowAgents,
       onDebug,
       pushThreadErrorMessage,
-      recordThreadActivity,
       safeMessageActivity,
       setActiveTurnId,
       steerEnabled,
@@ -815,6 +905,7 @@ export function useThreadMessaging({
       tokenUsageByThread,
       onUserMessageCreated,
       t,
+      upsertOptimisticUserMessage,
     ],
   );
 
@@ -849,8 +940,33 @@ export function useThreadMessaging({
         return { status: "blocked" };
       }
       const finalText = promptExpansion?.expanded ?? messageText;
-      const threadId = await ensureThreadForActiveWorkspace();
+      const optimisticMessage = activeThreadId
+        ? insertOptimisticUserMessage(
+          activeWorkspace,
+          activeThreadId,
+          finalText,
+          images,
+          options?.replaceMessageId,
+        )
+        : undefined;
+      const discardOptimisticMessage = () => {
+        if (activeThreadId && optimisticMessage) {
+          dispatch({
+            type: "removeItem",
+            threadId: activeThreadId,
+            itemId: optimisticMessage.id,
+          });
+        }
+      };
+      let threadId: string | null;
+      try {
+        threadId = await ensureThreadForActiveWorkspace();
+      } catch (error) {
+        discardOptimisticMessage();
+        throw error;
+      }
       if (!threadId) {
+        discardOptimisticMessage();
         return { status: "blocked" };
       }
       return sendMessageToThread(activeWorkspace, threadId, finalText, images, {
@@ -858,13 +974,15 @@ export function useThreadMessaging({
         appMentions,
         sendIntent: options?.sendIntent,
         replaceMessageId: options?.replaceMessageId,
-      });
+      }, optimisticMessage);
     },
     [
       activeThreadId,
       activeWorkspace,
       customPrompts,
+      dispatch,
       ensureThreadForActiveWorkspace,
+      insertOptimisticUserMessage,
       onDebug,
       pushThreadErrorMessage,
       safeMessageActivity,
@@ -931,6 +1049,15 @@ export function useThreadMessaging({
     const activeTurnId = activeTurnIdByThread[activeThreadId] ?? null;
     const turnId = activeTurnId ?? "pending";
     const timestamp = Date.now();
+    if (activeTurnId) {
+      dispatch({
+        type: "completeTurnExecution",
+        threadId: activeThreadId,
+        turnId: activeTurnId,
+        status: "interrupted",
+        timestamp,
+      });
+    }
     markProcessing(activeThreadId, false);
     setActiveTurnId(activeThreadId, null);
     dispatch({

@@ -300,6 +300,7 @@ function mergeConsecutiveExploreRuns(items: ToolGroupItem[]): ToolGroupItem[] {
 export function buildToolGroups(items: ConversationItem[]): MessageListBaseEntry[] {
   const entries: MessageListBaseEntry[] = [];
   let buffer: ToolGroupItem[] = [];
+  let bufferTurnId: string | null = null;
 
   const flush = () => {
     if (buffer.length === 0) {
@@ -328,11 +329,16 @@ export function buildToolGroups(items: ConversationItem[]): MessageListBaseEntry
       },
     });
     buffer = [];
+    bufferTurnId = null;
   };
 
   items.forEach((item) => {
     if (isToolGroupItem(item)) {
+      if (buffer.length > 0 && item.turnId && bufferTurnId && item.turnId !== bufferTurnId) {
+        flush();
+      }
       buffer.push(item);
+      bufferTurnId = item.turnId ?? bufferTurnId;
     } else {
       flush();
       entries.push({ kind: "item", item });

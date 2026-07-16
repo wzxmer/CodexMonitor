@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ConversationItem, ThreadSummary } from "@/types";
+import type { ConversationItem, ThreadSummary, TurnExecutionSummary } from "@/types";
 import { initialState, threadReducer } from "./useThreadsReducer";
 import type { ThreadState } from "./useThreadsReducer";
 
@@ -406,6 +406,29 @@ describe("threadReducer", () => {
       title: "Plan",
       output: "- Step 1",
     });
+    expect(next.planByThread["thread-1"]).toBeUndefined();
+  });
+
+  it("keeps delta-only plan streams separate from structured turn plans", () => {
+    const withFirstDelta = threadReducer(initialState, {
+      type: "appendPlanDelta",
+      threadId: "thread-1",
+      itemId: "plan-1",
+      delta: "- Inspect source\n",
+    });
+    const next = threadReducer(withFirstDelta, {
+      type: "appendPlanDelta",
+      threadId: "thread-1",
+      itemId: "plan-1",
+      delta: "- Run tests",
+    });
+
+    expect(next.itemsByThread["thread-1"]?.[0]).toMatchObject({
+      id: "plan-1",
+      toolType: "plan",
+      output: "- Inspect source\n- Run tests",
+    });
+    expect(next.planByThread["thread-1"]).toBeUndefined();
   });
 
   it("appends reasoning summary and content when missing", () => {
@@ -974,4 +997,169 @@ describe("threadReducer", () => {
     expect(echoed.pendingUserMessageReplacementByThread["thread-1"]).toBeUndefined();
   });
 
+  it("keeps retry turns in one execution chain and ignores stale diffs", () => {
+    const started = threadReducer(initialState, {
+      type: "startTurnExecution",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      executionId: "execution-1",
+      timestamp: 100,
+      continueExecution: false,
+    });
+    const continued = threadReducer(started, {
+      type: "startTurnExecution",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      turnId: "turn-2",
+      executionId: "ignored-execution",
+      timestamp: 200,
+      continueExecution: true,
+    });
+    const staleDiff = threadReducer(continued, {
+      type: "updateTurnExecutionDiff",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      diff: "+stale",
+      timestamp: 300,
+    });
+
+    expect(staleDiff.turnExecutionSummaryByThread["thread-1"]).toMatchObject({
+      executionId: "execution-1",
+      turnId: "turn-2",
+      turnChain: ["turn-1", "turn-2"],
+      diffRevision: 0,
+    });
+  });
+
+  it("preserves manual interruption against delayed completion", () => {
+    const started = threadReducer(initialState, {
+      type: "startTurnExecution",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      executionId: "execution-1",
+      timestamp: 100,
+      continueExecution: false,
+    });
+    const interrupted = threadReducer(started, {
+      type: "completeTurnExecution",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      status: "interrupted",
+      timestamp: 200,
+    });
+    const delayedCompletion = threadReducer(interrupted, {
+      type: "completeTurnExecution",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      status: "completed",
+      timestamp: 300,
+    });
+
+    expect(delayedCompletion.turnExecutionSummaryByThread["thread-1"]).toMatchObject({
+      status: "interrupted",
+      endedAtMs: 200,
+      workingDurationMs: 100,
+    });
+  });
+
+  it("does not let a late failure change a completed execution", () => {
+    const started = threadReducer(initialState, {
+      type: "startTurnExecution",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      executionId: "execution-1",
+      timestamp: 100,
+      continueExecution: false,
+    });
+    const completed = threadReducer(started, {
+      type: "completeTurnExecution",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      status: "completed",
+      timestamp: 200,
+    });
+    const delayedFailure = threadReducer(completed, {
+      type: "completeTurnExecution",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      status: "failed",
+      timestamp: 300,
+    });
+
+    expect(delayedFailure.turnExecutionSummaryByThread["thread-1"]).toMatchObject({
+      status: "completed",
+      endedAtMs: 200,
+      workingDurationMs: 100,
+    });
+  });
+
+  it("retains a completed summary when the next execution starts", () => {
+    const started = threadReducer(initialState, {
+      type: "startTurnExecution",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      executionId: "execution-1",
+      timestamp: 100,
+      continueExecution: false,
+    });
+    const completed = threadReducer(started, {
+      type: "completeTurnExecution",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      status: "completed",
+      timestamp: 200,
+    });
+    const next = threadReducer(completed, {
+      type: "startTurnExecution",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      turnId: "turn-2",
+      executionId: "execution-2",
+      timestamp: 300,
+      continueExecution: false,
+    });
+
+    expect(next.turnExecutionSummariesByThread["thread-1"]).toMatchObject([
+      { executionId: "execution-1", status: "completed" },
+      { executionId: "execution-2", status: "active" },
+    ]);
+  });
+
+  it("hydrates only a newer matching terminal execution summary", () => {
+    const hydrated: TurnExecutionSummary = {
+      schemaVersion: 1,
+      executionId: "execution-1",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      turnChain: ["turn-1"],
+      status: "completed",
+      startedAtMs: 100,
+      endedAtMs: 200,
+      workingDurationMs: 100,
+      addedLines: 4,
+      deletedLines: 1,
+      diffRevision: 1,
+      recordRevision: 2,
+      updatedAtMs: 200,
+    };
+    const next = threadReducer(initialState, {
+      type: "hydrateTurnExecutionSummary",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      summary: hydrated,
+    });
+    const stale = threadReducer(next, {
+      type: "hydrateTurnExecutionSummary",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      summary: { ...hydrated, recordRevision: 1, updatedAtMs: 150 },
+    });
+
+    expect(stale.turnExecutionSummaryByThread["thread-1"]).toEqual(hydrated);
+  });
 });

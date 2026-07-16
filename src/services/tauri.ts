@@ -53,6 +53,7 @@ import type {
   AppMention,
   WorkspaceSettings,
   CandidateMatch,
+  TurnExecutionSummary,
 } from "../types";
 import {
   buildThirdPartyUsageUrl,
@@ -1583,6 +1584,23 @@ export async function prepareManagedSessionDerivation(
 
 export async function readThread(workspaceId: string, threadId: string) {
   return invoke<any>("read_thread", { workspaceId, threadId });
+}
+
+export async function getTurnExecutionSummaries(
+  workspaceId: string,
+  threadId: string,
+): Promise<TurnExecutionSummary[]> {
+  return invoke<TurnExecutionSummary[]>("turn_execution_summary_get", {
+    input: { workspaceId, threadId },
+  });
+}
+
+export async function upsertTurnExecutionSummary(
+  summary: TurnExecutionSummary,
+): Promise<TurnExecutionSummary> {
+  return invoke<TurnExecutionSummary>("turn_execution_summary_upsert", {
+    input: { summary },
+  });
 }
 
 export async function threadLiveSubscribe(workspaceId: string, threadId: string) {

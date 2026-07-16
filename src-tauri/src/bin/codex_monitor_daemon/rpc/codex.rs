@@ -16,6 +16,36 @@ pub(super) async fn try_handle(
     params: &Value,
 ) -> Option<Result<Value, String>> {
     match method {
+        "turn_execution_summary_get" => {
+            let query = match parse_input::<
+                crate::shared::turn_execution_summary_core::TurnExecutionSummaryQuery,
+            >(params)
+            {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .turn_execution_summary_get(query)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "turn_execution_summary_upsert" => {
+            let input = match parse_input::<
+                crate::shared::turn_execution_summary_core::TurnExecutionSummaryUpsert,
+            >(params)
+            {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .turn_execution_summary_upsert(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
         "get_codex_config_path" => {
             let settings = state.app_settings.lock().await.clone();
             let path = match settings_core::get_codex_config_path_core(&settings) {

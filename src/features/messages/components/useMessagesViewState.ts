@@ -368,6 +368,14 @@ export function useMessagesViewState({
 
     const result: MessageListEntry[] = [];
     let turnEntries: MessageListBaseEntry[] = [];
+    let turnId: string | null = null;
+
+    const entryTurnId = (entry: MessageListBaseEntry): string | null => {
+      if (entry.kind === "item") {
+        return entry.item.turnId ?? null;
+      }
+      return entry.group.items.find((item) => item.turnId)?.turnId ?? null;
+    };
 
     const flushTurn = () => {
       if (turnEntries.length === 0) {
@@ -388,6 +396,7 @@ export function useMessagesViewState({
       if (finalAssistantIndex < 0 || turnEntries.length <= 1) {
         result.push(...turnEntries);
         turnEntries = [];
+        turnId = null;
         return;
       }
       const finalEntry = turnEntries[finalAssistantIndex];
@@ -404,9 +413,14 @@ export function useMessagesViewState({
         result.push(...turnEntries);
       }
       turnEntries = [];
+      turnId = null;
     };
 
     baseGroupedItems.forEach((entry) => {
+      const entryId = entryTurnId(entry);
+      if (turnEntries.length > 0 && entryId && turnId && entryId !== turnId) {
+        flushTurn();
+      }
       if (
         entry.kind === "item" &&
         ((entry.item.kind === "message" && entry.item.role === "user") ||
@@ -417,6 +431,7 @@ export function useMessagesViewState({
         return;
       }
       turnEntries.push(entry);
+      turnId = turnId ?? entryId;
     });
     flushTurn();
     return result;

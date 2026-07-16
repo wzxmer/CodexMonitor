@@ -426,13 +426,14 @@ export function buildItemsFromThread(thread: Record<string, unknown>) {
   const items: ConversationItem[] = [];
   turns.forEach((turn) => {
     const turnRecord = turn as Record<string, unknown>;
+    const turnId = asString(turnRecord.id).trim() || undefined;
     const turnItems = Array.isArray(turnRecord.items)
       ? (turnRecord.items as Record<string, unknown>[])
       : [];
     turnItems.forEach((item) => {
       const converted = buildConversationItemFromThreadItem(item);
       if (converted) {
-        items.push(converted);
+        items.push({ ...converted, turnId });
       }
     });
   });

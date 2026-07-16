@@ -7,6 +7,7 @@ import type {
   ThreadListSortKey,
   ThreadSummary,
   ThreadTokenUsage,
+  TurnExecutionSummary,
   TurnPlan,
 } from "@/types";
 import { CHAT_SCROLLBACK_DEFAULT } from "@utils/chatScrollback";
@@ -15,6 +16,7 @@ import { reduceThreadLifecycle } from "./threadReducer/threadLifecycleSlice";
 import { reduceThreadConfig } from "./threadReducer/threadConfigSlice";
 import { reduceThreadQueue } from "./threadReducer/threadQueueSlice";
 import { reduceThreadSnapshots } from "./threadReducer/threadSnapshotSlice";
+import { reduceThreadExecutionSummaries } from "./threadReducer/threadExecutionSummarySlice";
 
 type ThreadActivityStatus = {
   isProcessing: boolean;
@@ -39,6 +41,8 @@ export type ThreadState = {
   threadSortKeyByWorkspace: Record<string, ThreadListSortKey>;
   activeTurnIdByThread: Record<string, string | null>;
   turnDiffByThread: Record<string, string>;
+  turnExecutionSummaryByThread: Record<string, TurnExecutionSummary>;
+  turnExecutionSummariesByThread: Record<string, TurnExecutionSummary[]>;
   approvals: ApprovalRequest[];
   userInputRequests: RequestUserInputRequest[];
   tokenUsageByThread: Record<string, ThreadTokenUsage>;
@@ -185,6 +189,35 @@ export type ThreadAction =
     }
   | { type: "setActiveTurnId"; threadId: string; turnId: string | null }
   | { type: "setThreadTurnDiff"; threadId: string; diff: string }
+  | {
+      type: "startTurnExecution";
+      workspaceId: string;
+      threadId: string;
+      turnId: string;
+      executionId: string;
+      timestamp: number;
+      continueExecution: boolean;
+    }
+  | {
+      type: "updateTurnExecutionDiff";
+      threadId: string;
+      turnId: string;
+      diff: string;
+      timestamp: number;
+    }
+  | {
+      type: "completeTurnExecution";
+      threadId: string;
+      turnId: string;
+      status: Extract<TurnExecutionSummary["status"], "completed" | "interrupted" | "failed">;
+      timestamp: number;
+    }
+  | {
+      type: "hydrateTurnExecutionSummary";
+      workspaceId: string;
+      threadId: string;
+      summary: TurnExecutionSummary;
+    }
   | { type: "setThreadPlan"; threadId: string; plan: TurnPlan | null }
   | { type: "clearThreadPlan"; threadId: string }
   | { type: "markThreadInterrupted"; threadId: string; timestamp: number }
@@ -213,6 +246,8 @@ export const initialState: ThreadState = {
   threadSortKeyByWorkspace: {},
   activeTurnIdByThread: {},
   turnDiffByThread: {},
+  turnExecutionSummaryByThread: {},
+  turnExecutionSummariesByThread: {},
   approvals: [],
   userInputRequests: [],
   tokenUsageByThread: {},
@@ -232,6 +267,7 @@ const threadSliceReducers: ThreadSliceReducer[] = [
   reduceThreadItems,
   reduceThreadQueue,
   reduceThreadSnapshots,
+  reduceThreadExecutionSummaries,
 ];
 
 export function threadReducer(state: ThreadState, action: ThreadAction): ThreadState {

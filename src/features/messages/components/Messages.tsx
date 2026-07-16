@@ -23,6 +23,7 @@ import type {
   RequestUserInputResponse,
   ThemeAccentPreference,
   ThemePreference,
+  TurnExecutionSummary,
 } from "../../../types";
 import { PlanReadyFollowupMessage } from "../../app/components/PlanReadyFollowupMessage";
 import { RequestUserInputMessage } from "../../app/components/RequestUserInputMessage";
@@ -73,6 +74,16 @@ function baseEntryContainsItem(entry: MessageListBaseEntry, itemId: string) {
     : entry.item.id === itemId;
 }
 
+function entryContainsTurn(entry: MessageListEntry, turnChain: Set<string>): boolean {
+  if (entry.kind === "item") {
+    return entry.item.turnId ? turnChain.has(entry.item.turnId) : false;
+  }
+  if (entry.kind === "toolGroup") {
+    return entry.group.items.some((item) => item.turnId && turnChain.has(item.turnId));
+  }
+  return entry.group.entries.some((child) => entryContainsTurn(child, turnChain));
+}
+
 function getSearchTargetForItem(entries: MessageListEntry[], itemId: string) {
   const entry = entries.find((candidate) => {
     if (candidate.kind === "processGroup") {
@@ -117,6 +128,8 @@ type MessagesProps = {
   chatHistoryScrollbackItems?: number | null;
   interruptedStatus?: { timestamp: number } | null;
   activeTurnDiff?: string | null;
+  turnExecutionSummary?: TurnExecutionSummary | null;
+  turnExecutionSummaries?: TurnExecutionSummary[];
   onUpdateConversationStyle?: (next: {
     theme?: ThemePreference;
     themeAccent?: ThemeAccentPreference;
@@ -212,6 +225,8 @@ export const Messages = memo(function Messages({
   chatHistoryScrollbackItems = null,
   interruptedStatus = null,
   activeTurnDiff = null,
+  turnExecutionSummary = null,
+  turnExecutionSummaries = [],
   onUpdateConversationStyle,
   userInputRequests = [],
   onUserInputSubmit,
@@ -560,37 +575,73 @@ export const Messages = memo(function Messages({
     () => countDiffLineChanges(activeTurnDiff),
     [activeTurnDiff],
   );
-  const lineChangeStatsGroupId = useMemo(() => {
-    if (!activeTurnLineChangeStats) {
+  const lineChangeStatsByGroupId = useMemo(() => {
+    const result = new Map<string, { additions: number; deletions: number }>();
+    const summaries =
+      turnExecutionSummaries.length > 0
+        ? turnExecutionSummaries
+        : turnExecutionSummary
+          ? [turnExecutionSummary]
+          : [];
+    const findGroupId = (turnChain: string[]) => {
+      const ids = new Set(turnChain);
+      for (let index = groupedItems.length - 1; index >= 0; index -= 1) {
+        const entry = groupedItems[index];
+        if (
+          (entry?.kind === "processGroup" || entry?.kind === "toolGroup") &&
+          entryContainsTurn(entry, ids)
+        ) {
+          return entry.group.id;
+        }
+      }
       return null;
-    }
-    for (let index = groupedItems.length - 1; index >= 0; index -= 1) {
-      const entry = groupedItems[index];
-      if (entry?.kind === "processGroup" || entry?.kind === "toolGroup") {
-        return entry.group.id;
+    };
+    summaries.forEach((summary) => {
+      const additions = summary.addedLines ?? 0;
+      const deletions = summary.deletedLines ?? 0;
+      if (summary.status === "active" || (additions === 0 && deletions === 0)) {
+        return;
+      }
+      const groupId = findGroupId(summary.turnChain);
+      if (groupId) {
+        result.set(groupId, { additions, deletions });
+      }
+    });
+    if (activeTurnLineChangeStats) {
+      const activeSummary = summaries.find((summary) => summary.status === "active");
+      const groupId = activeSummary
+        ? findGroupId(activeSummary.turnChain)
+        : [...groupedItems]
+            .reverse()
+            .find((entry) => entry.kind === "processGroup" || entry.kind === "toolGroup")?.group.id;
+      if (groupId) {
+        result.set(groupId, activeTurnLineChangeStats);
       }
     }
-    return null;
-  }, [activeTurnLineChangeStats, groupedItems]);
-  const renderLineChangeStats = useCallback(() => {
-    if (!activeTurnLineChangeStats) {
+    return result;
+  }, [activeTurnLineChangeStats, groupedItems, turnExecutionSummaries, turnExecutionSummary]);
+  const renderLineChangeStats = useCallback((lineChangeStats?: {
+    additions: number;
+    deletions: number;
+  }) => {
+    if (!lineChangeStats) {
       return null;
     }
     return (
       <span className="tool-group-line-change-stats" aria-label="Line changes">
-        {activeTurnLineChangeStats.additions > 0 && (
+        {lineChangeStats.additions > 0 && (
           <span className="tool-group-line-change-stat tool-group-line-change-stat-add">
-            +{activeTurnLineChangeStats.additions}
+            +{lineChangeStats.additions}
           </span>
         )}
-        {activeTurnLineChangeStats.deletions > 0 && (
+        {lineChangeStats.deletions > 0 && (
           <span className="tool-group-line-change-stat tool-group-line-change-stat-delete">
-            -{activeTurnLineChangeStats.deletions}
+            -{lineChangeStats.deletions}
           </span>
         )}
       </span>
     );
-  }, [activeTurnLineChangeStats]);
+  }, []);
   const statusSeparator = t("messages.statusSeparator");
   const assistantColorPresets = [
     { label: t("color.defaultBlue"), bg: "#f7f9fc", accent: "#7dadff", text: "#263040" },
@@ -1082,7 +1133,7 @@ export const Messages = memo(function Messages({
                     </span>
                     <span className="tool-group-summary-content">
                       <span className="tool-group-summary">{summaryText}</span>
-                      {group.id === lineChangeStatsGroupId && renderLineChangeStats()}
+                      {renderLineChangeStats(lineChangeStatsByGroupId.get(group.id))}
                     </span>
                   </button>
                 </div>
@@ -1161,7 +1212,7 @@ export const Messages = memo(function Messages({
                     </span>
                     <span className="tool-group-summary-content">
                       <span className="tool-group-summary">{summaryText}</span>
-                      {group.id === lineChangeStatsGroupId && renderLineChangeStats()}
+                      {renderLineChangeStats(lineChangeStatsByGroupId.get(group.id))}
                     </span>
                   </button>
                 </div>
@@ -1205,6 +1256,15 @@ export const Messages = memo(function Messages({
           reasoningLabel={latestReasoningLabel}
           showPollingFetchStatus={showPollingFetchStatus}
           pollingIntervalMs={pollingIntervalMs}
+          completionStatus={
+            turnExecutionSummary?.status === "active"
+              ? null
+              : turnExecutionSummary?.status ?? null
+          }
+          workingLabel={turnExecutionSummary ? t("messages.working") : undefined}
+          completedLabel={turnExecutionSummary ? t("messages.completedIn") : undefined}
+          interruptedLabel={turnExecutionSummary ? t("messages.interruptedIn") : undefined}
+          failedLabel={turnExecutionSummary ? t("messages.failedIn") : undefined}
         />
         {!items.length && !userInputNode && !isThinking && !isLoadingMessages && (
           <div className="empty messages-empty">

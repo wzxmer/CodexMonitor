@@ -7,6 +7,7 @@ import { useThreadRows } from "@app/hooks/useThreadRows";
 import {
   archiveThread,
   generateRunMetadata,
+  getTurnExecutionSummaries,
   interruptTurn,
   listThreads,
   listWorkspaces,
@@ -16,6 +17,7 @@ import {
   setThreadName,
   startThread,
   startReview,
+  upsertTurnExecutionSummary,
   steerTurn,
 } from "@services/tauri";
 import { STORAGE_KEY_DETACHED_REVIEW_LINKS } from "@threads/utils/threadStorage";
@@ -61,6 +63,8 @@ vi.mock("@services/tauri", () => ({
   readThread: vi.fn(),
   archiveThread: vi.fn(),
   generateRunMetadata: vi.fn(),
+  getTurnExecutionSummaries: vi.fn(),
+  upsertTurnExecutionSummary: vi.fn(),
   setThreadName: vi.fn(),
   getAccountRateLimits: vi.fn(),
   getAccountInfo: vi.fn(),
@@ -85,6 +89,8 @@ describe("useThreads UX integration", () => {
     localStorage.clear();
     vi.clearAllMocks();
     vi.mocked(listWorkspaces).mockResolvedValue([]);
+    vi.mocked(getTurnExecutionSummaries).mockResolvedValue([]);
+    vi.mocked(upsertTurnExecutionSummary).mockImplementation(async (summary) => summary);
     now = 1000;
     nowSpy = vi.spyOn(Date, "now").mockImplementation(() => now++);
   });
@@ -593,6 +599,70 @@ describe("useThreads UX integration", () => {
     });
   });
 
+  it("hydrates every matching terminal execution summary on resume", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-summary-hydrate",
+          preview: "Remote preview",
+          turns: [{ id: "turn-1", items: [] }, { id: "turn-2", items: [] }],
+        },
+      },
+    });
+    vi.mocked(getTurnExecutionSummaries).mockResolvedValue([
+      {
+        schemaVersion: 1,
+        executionId: "execution-2",
+        workspaceId: "ws-1",
+        threadId: "thread-summary-hydrate",
+        turnId: "turn-2",
+        turnChain: ["turn-1", "turn-2"],
+        status: "completed",
+        startedAtMs: 200,
+        endedAtMs: 300,
+        workingDurationMs: 100,
+        addedLines: 2,
+        deletedLines: 1,
+        diffRevision: 1,
+        recordRevision: 3,
+        updatedAtMs: 300,
+      },
+      {
+        schemaVersion: 1,
+        executionId: "execution-1",
+        workspaceId: "ws-1",
+        threadId: "thread-summary-hydrate",
+        turnId: "turn-1",
+        turnChain: ["turn-1"],
+        status: "interrupted",
+        startedAtMs: 100,
+        endedAtMs: 150,
+        workingDurationMs: 50,
+        addedLines: 1,
+        deletedLines: 0,
+        diffRevision: 1,
+        recordRevision: 2,
+        updatedAtMs: 150,
+      },
+    ]);
+
+    const { result } = renderHook(() =>
+      useThreads({ activeWorkspace: workspace, onWorkspaceConnected: vi.fn() }),
+    );
+    act(() => {
+      result.current.setActiveThreadId("thread-summary-hydrate");
+    });
+
+    await waitFor(() => {
+      expect(result.current.turnExecutionSummariesByThread["thread-summary-hydrate"]).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ executionId: "execution-1" }),
+          expect.objectContaining({ executionId: "execution-2" }),
+        ]),
+      );
+    });
+  });
+
   it("auto-archives inactive old threads", async () => {
     now = Date.UTC(2026, 0, 10);
     vi.mocked(listThreads).mockResolvedValue({
@@ -898,6 +968,38 @@ describe("useThreads UX integration", () => {
     expect(result.current.turnDiffByThread["thread-1"]).toBe(
       "diff --git a/src/a.ts b/src/a.ts",
     );
+  });
+
+  it("persists a terminal execution summary without blocking turn completion", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onTurnStarted?.("ws-1", "thread-1", "turn-1");
+      handlers?.onTurnDiffUpdated?.("ws-1", "thread-1", "+added\n-removed");
+      handlers?.onTurnCompleted?.("ws-1", "thread-1", "turn-1", "completed");
+    });
+
+    expect(result.current.turnExecutionSummaryByThread["thread-1"]).toMatchObject({
+      turnId: "turn-1",
+      status: "completed",
+      addedLines: 1,
+      deletedLines: 1,
+    });
+    await waitFor(() => {
+      expect(upsertTurnExecutionSummary).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          workspaceId: "ws-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          status: "completed",
+        }),
+      );
+    });
   });
 
   it("does not resume selected threads that already have local items", async () => {

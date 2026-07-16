@@ -14,6 +14,7 @@ type UseThreadItemEventsOptions = {
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
   markProcessing: (threadId: string, isProcessing: boolean) => void;
   markReviewing: (threadId: string, isReviewing: boolean) => void;
+  getActiveTurnId?: (threadId: string) => string | null;
   safeMessageActivity: () => void;
   recordThreadActivity: (
     workspaceId: string,
@@ -43,6 +44,7 @@ export function useThreadItemEvents({
   getCustomName,
   markProcessing,
   markReviewing,
+  getActiveTurnId = () => null,
   safeMessageActivity,
   recordThreadActivity,
   applyCollabThreadLinks,
@@ -86,7 +88,10 @@ export function useThreadItemEvents({
           type: "upsertItem",
           workspaceId,
           threadId,
-          item: converted,
+          item: {
+            ...converted,
+            turnId: getActiveTurnId(threadId) ?? undefined,
+          },
           hasCustomName: Boolean(getCustomName(workspaceId, threadId)),
         });
       }
@@ -96,6 +101,7 @@ export function useThreadItemEvents({
       applyCollabThreadLinks,
       dispatch,
       getCustomName,
+      getActiveTurnId,
       markProcessing,
       markReviewing,
       onReviewExited,

@@ -57,6 +57,8 @@ type UseMainAppLayoutSurfacesArgs = {
   threadParentById: SidebarProps["threadParentById"];
   threadStatusById: ThreadState["threadStatusById"];
   turnDiffByThread: ThreadState["turnDiffByThread"];
+  turnExecutionSummaryByThread: ThreadState["turnExecutionSummaryByThread"];
+  turnExecutionSummariesByThread: ThreadState["turnExecutionSummariesByThread"];
   interruptedThreadById: ThreadState["interruptedThreadById"];
   autoContinueStatusByThread: Record<
     string,
@@ -99,6 +101,8 @@ type UseMainAppLayoutSurfacesArgs = {
   onPlanSubmitChanges: LayoutNodesOptions["primary"]["messagesProps"]["onPlanSubmitChanges"];
   onReferenceMessage: (action: MessageReferenceAction) => void;
   activePlan: LayoutNodesOptions["secondary"]["planPanelProps"]["plan"];
+  activePlanStream: string | null;
+  activeTurnId: string | null;
   activeTokenUsage: ComposerProps["contextUsage"];
   latestAgentRuns: LayoutNodesOptions["primary"]["homeProps"]["latestAgentRuns"];
   isLoadingLatestAgents: LayoutNodesOptions["primary"]["homeProps"]["isLoadingLatestAgents"];
@@ -288,6 +292,8 @@ function buildPrimarySurface({
   threadParentById,
   threadStatusById,
   turnDiffByThread,
+  turnExecutionSummaryByThread,
+  turnExecutionSummariesByThread,
   interruptedThreadById,
   autoContinueStatusByThread,
   setThreadAutoContinueEnabled,
@@ -568,6 +574,12 @@ function buildPrimarySurface({
         ? interruptedThreadById[activeThreadId] ?? null
         : null,
       activeTurnDiff: activeThreadId ? turnDiffByThread[activeThreadId] ?? null : null,
+      turnExecutionSummary: activeThreadId
+        ? turnExecutionSummaryByThread[activeThreadId] ?? null
+        : null,
+      turnExecutionSummaries: activeThreadId
+        ? turnExecutionSummariesByThread[activeThreadId] ?? []
+        : [],
       onUpdateConversationStyle: (next) => {
         void onUpdateAppSettings({
           ...appSettings,
@@ -594,7 +606,9 @@ function buildPrimarySurface({
         ? threadStatusById[activeThreadId]?.processingStartedAt ?? null
         : null,
       lastDurationMs: activeThreadId
-        ? threadStatusById[activeThreadId]?.lastDurationMs ?? null
+        ? turnExecutionSummaryByThread[activeThreadId]?.workingDurationMs ??
+          threadStatusById[activeThreadId]?.lastDurationMs ??
+          null
         : null,
       showPollingFetchStatus: showMobilePollingFetchStatus,
       pollingIntervalMs: REMOTE_THREAD_POLL_INTERVAL_MS,
@@ -1052,6 +1066,8 @@ function buildGitSurface({
 
 function buildSecondarySurface({
   activePlan,
+  activePlanStream,
+  activeTurnId,
   composerWorkspaceState,
   gitState,
   terminalOpen,
@@ -1077,6 +1093,8 @@ function buildSecondarySurface({
   return {
     planPanelProps: {
       plan: activePlan,
+      planStream: activePlanStream,
+      activeTurnId,
       isProcessing: composerWorkspaceState.isProcessing,
       activeWorkspaceId,
       activeThreadId,
@@ -1142,6 +1160,8 @@ export function useMainAppLayoutSurfaces({
   threadParentById,
   threadStatusById,
   turnDiffByThread,
+  turnExecutionSummaryByThread,
+  turnExecutionSummariesByThread,
   interruptedThreadById,
   autoContinueStatusByThread,
   setThreadAutoContinueEnabled,
@@ -1176,6 +1196,8 @@ export function useMainAppLayoutSurfaces({
   onPlanSubmitChanges,
   onReferenceMessage,
   activePlan,
+  activePlanStream,
+  activeTurnId,
   activeTokenUsage,
   latestAgentRuns,
   isLoadingLatestAgents,
@@ -1404,6 +1426,8 @@ export function useMainAppLayoutSurfaces({
     threadParentById,
     threadStatusById,
     turnDiffByThread,
+    turnExecutionSummaryByThread,
+    turnExecutionSummariesByThread,
     interruptedThreadById,
     autoContinueStatusByThread,
     setThreadAutoContinueEnabled,
@@ -1438,6 +1462,8 @@ export function useMainAppLayoutSurfaces({
     onPlanSubmitChanges,
     onReferenceMessage,
     activePlan,
+    activePlanStream,
+    activeTurnId,
     activeTokenUsage,
     latestAgentRuns,
     isLoadingLatestAgents,

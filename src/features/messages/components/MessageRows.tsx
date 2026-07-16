@@ -67,6 +67,11 @@ type WorkingIndicatorProps = {
   reasoningLabel?: string | null;
   showPollingFetchStatus?: boolean;
   pollingIntervalMs?: number;
+  completionStatus?: "completed" | "interrupted" | "failed" | null;
+  workingLabel?: string;
+  completedLabel?: string;
+  interruptedLabel?: string;
+  failedLabel?: string;
 };
 
 type MessageRowProps = MarkdownFileLinkProps & {
@@ -395,6 +400,11 @@ export const WorkingIndicator = memo(function WorkingIndicator({
   reasoningLabel = null,
   showPollingFetchStatus = false,
   pollingIntervalMs = 12000,
+  completionStatus = null,
+  workingLabel = "Working…",
+  completedLabel = "Done in",
+  interruptedLabel = "Interrupted in",
+  failedLabel = "Failed in",
 }: WorkingIndicatorProps) {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [pollCountdownSeconds, setPollCountdownSeconds] = useState(() =>
@@ -437,7 +447,7 @@ export const WorkingIndicator = memo(function WorkingIndicator({
           <div className="working-timer">
             <span className="working-timer-clock">{formatDurationMs(elapsedMs)}</span>
           </div>
-          <span className="working-text">{reasoningLabel || "Working…"}</span>
+          <span className="working-text">{reasoningLabel || workingLabel}</span>
         </div>
       )}
       {!isThinking && lastDurationMs !== null && hasItems && (
@@ -446,7 +456,13 @@ export const WorkingIndicator = memo(function WorkingIndicator({
           <span className="turn-complete-label">
             {showPollingFetchStatus
               ? `New message will be fetched in ${pollCountdownSeconds} seconds`
-              : `Done in ${formatDurationMs(lastDurationMs)}`}
+              : `${
+                  completionStatus === "interrupted"
+                    ? interruptedLabel
+                    : completionStatus === "failed"
+                      ? failedLabel
+                      : completedLabel
+                } ${formatDurationMs(lastDurationMs)}`}
           </span>
           <span className="turn-complete-line" aria-hidden />
         </div>

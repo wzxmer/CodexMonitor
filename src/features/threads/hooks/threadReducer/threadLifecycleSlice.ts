@@ -162,12 +162,16 @@ export function reduceThreadLifecycle(
       const { [action.threadId]: __, ...restStatus } = state.threadStatusById;
       const { [action.threadId]: ___, ...restTurns } = state.activeTurnIdByThread;
       const { [action.threadId]: ____, ...restDiffs } = state.turnDiffByThread;
-      const { [action.threadId]: _____, ...restPlans } = state.planByThread;
-      const { [action.threadId]: ______, ...restParents } = state.threadParentById;
-      const { [action.threadId]: _______, ...restInterrupted } =
+      const { [action.threadId]: _____, ...restExecutionSummaries } =
+        state.turnExecutionSummaryByThread;
+      const { [action.threadId]: ______, ...restExecutionSummaryLists } =
+        state.turnExecutionSummariesByThread;
+      const { [action.threadId]: _______, ...restPlans } = state.planByThread;
+      const { [action.threadId]: ________, ...restParents } = state.threadParentById;
+      const { [action.threadId]: _________, ...restInterrupted } =
         state.interruptedThreadById;
       const {
-        [action.threadId]: ________,
+        [action.threadId]: __________,
         ...restPendingUserMessageReplacement
       } = state.pendingUserMessageReplacementByThread;
       return {
@@ -180,6 +184,8 @@ export function reduceThreadLifecycle(
         threadStatusById: restStatus,
         activeTurnIdByThread: restTurns,
         turnDiffByThread: restDiffs,
+        turnExecutionSummaryByThread: restExecutionSummaries,
+        turnExecutionSummariesByThread: restExecutionSummaryLists,
         planByThread: restPlans,
         threadParentById: restParents,
         interruptedThreadById: restInterrupted,

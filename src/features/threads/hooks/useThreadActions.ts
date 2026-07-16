@@ -6,6 +6,7 @@ import type {
   ThreadSummary,
   TokenEfficiencyMode,
   WorkspaceInfo,
+  TurnExecutionSummary,
 } from "@/types";
 import {
   archiveThread as archiveThreadService,
@@ -86,6 +87,11 @@ type UseThreadActionsOptions = {
     threadId: string,
     metadata: { modelId: string | null; effort: string | null },
   ) => void;
+  hydrateTurnExecutionSummary?: (
+    workspaceId: string,
+    threadId: string,
+    thread: Record<string, unknown>,
+  ) => Promise<TurnExecutionSummary | null>;
 };
 
 export function useThreadActions({
@@ -111,6 +117,7 @@ export function useThreadActions({
   onSubagentThreadDetected,
   onSubagentTitleCandidate,
   onThreadCodexMetadataDetected,
+  hydrateTurnExecutionSummary = async () => null,
 }: UseThreadActionsOptions) {
   const localArchivedCursorByWorkspaceRef = useRef<Record<string, string | null>>({});
   const resumeInFlightByThreadRef = useRef<Record<string, number>>({});
@@ -272,6 +279,7 @@ export function useThreadActions({
           return null;
         }
         if (thread) {
+          await hydrateTurnExecutionSummary(workspaceId, threadId, thread);
           if (
             resumeGeneration <
             (resumeAppliedGenerationByThreadRef.current[resumeKey] ?? 0)
@@ -409,6 +417,7 @@ export function useThreadActions({
       dispatch,
       getCustomName,
       hydrateSubagentThreads,
+      hydrateTurnExecutionSummary,
       itemsByThread,
       loadedThreadsRef,
       onDebug,

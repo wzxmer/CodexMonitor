@@ -14,6 +14,7 @@ import type {
   ThreadListSortKey,
   WorkspaceInfo,
   SubagentCheckpointSyncMode,
+  TurnExecutionSummary,
 } from "@/types";
 import { CHAT_SCROLLBACK_DEFAULT } from "@utils/chatScrollback";
 import { useAppServerEvents } from "@app/hooks/useAppServerEvents";
@@ -39,6 +40,8 @@ import {
   listThreads as listThreadsService,
   listWorkspaces as listWorkspacesService,
   readThread as readThreadService,
+  getTurnExecutionSummaries,
+  upsertTurnExecutionSummary,
   setThreadName as setThreadNameService,
 } from "@services/tauri";
 import { getThreadTimestamp } from "@utils/threadItems";
@@ -102,6 +105,19 @@ type UseThreadsOptions = {
 
 function buildWorkspaceThreadKey(workspaceId: string, threadId: string) {
   return `${workspaceId}:${threadId}`;
+}
+
+function getServerTurnIds(thread: Record<string, unknown>) {
+  const turns = Array.isArray(thread.turns) ? thread.turns : [];
+  return new Set(
+    turns
+      .map((turn) =>
+        turn && typeof turn === "object" && !Array.isArray(turn)
+          ? String((turn as Record<string, unknown>).id ?? "").trim()
+          : "",
+      )
+      .filter(Boolean),
+  );
 }
 
 const CASCADE_ARCHIVE_SKIP_TTL_MS = 120_000;
@@ -169,6 +185,7 @@ export function useThreads({
   const subagentHydrationInFlightRef = useRef<Record<string, true>>({});
   const tokenUsageRevisionByThreadRef = useRef<Record<string, number>>({});
   const autoArchiveInFlightRef = useRef(false);
+  const persistedExecutionRevisionRef = useRef<Record<string, number>>({});
   const workspacesRef = useRef(workspaces);
   const autoContinueSendRef = useRef<
     | ((
@@ -224,6 +241,7 @@ export function useThreads({
     onTurnCompleted: handleAutoContinueTurnCompleted,
     onTurnError: handleAutoContinueTurnError,
     markManualStop: markAutoContinueManualStop,
+    shouldContinueAfterError,
     clearThread: clearAutoContinueThread,
   } = useThreadAutoContinue({
     getWorkspace: getWorkspaceForAutoContinue,
@@ -241,6 +259,81 @@ export function useThreads({
     (workspaceId: string) => rateLimitsByWorkspaceRef.current[workspaceId] ?? null,
     [],
   );
+
+  const hydrateTurnExecutionSummary = useCallback(
+    async (
+      workspaceId: string,
+      threadId: string,
+      thread: Record<string, unknown>,
+    ): Promise<TurnExecutionSummary | null> => {
+      try {
+        const serverTurnIds = getServerTurnIds(thread);
+        if (serverTurnIds.size === 0) {
+          return null;
+        }
+        const summaries = await getTurnExecutionSummaries(workspaceId, threadId);
+        const matchingSummaries = summaries.filter(
+          (candidate) =>
+            candidate.status !== "active" &&
+            candidate.workspaceId === workspaceId &&
+            candidate.threadId === threadId &&
+            candidate.turnChain.some((turnId) => serverTurnIds.has(turnId)),
+        );
+        if (matchingSummaries.length === 0) {
+          return null;
+        }
+        matchingSummaries.forEach((summary) => {
+          dispatch({
+            type: "hydrateTurnExecutionSummary",
+            workspaceId,
+            threadId,
+            summary,
+          });
+        });
+        return matchingSummaries[0] ?? null;
+      } catch (error) {
+        onDebug?.({
+          id: `${Date.now()}-client-turn-execution-summary-hydrate-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "turn execution summary hydrate error",
+          payload: {
+            workspaceId,
+            threadId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+        return null;
+      }
+    },
+    [dispatch, onDebug],
+  );
+
+  useEffect(() => {
+    Object.values(state.turnExecutionSummariesByThread)
+      .flat()
+      .forEach((summary) => {
+        const key = `${summary.workspaceId}:${summary.threadId}:${summary.executionId}`;
+        if ((persistedExecutionRevisionRef.current[key] ?? 0) >= summary.recordRevision) {
+          return;
+        }
+        persistedExecutionRevisionRef.current[key] = summary.recordRevision;
+        void upsertTurnExecutionSummary(summary).catch((error) => {
+          delete persistedExecutionRevisionRef.current[key];
+          onDebug?.({
+            id: `${Date.now()}-client-turn-execution-summary-upsert-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "turn execution summary upsert error",
+            payload: {
+              workspaceId: summary.workspaceId,
+              threadId: summary.threadId,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+        });
+      });
+  }, [onDebug, state.turnExecutionSummariesByThread]);
 
   const { refreshAccountRateLimits } = useThreadRateLimits({
     activeWorkspaceId,
@@ -450,6 +543,7 @@ export function useThreads({
             if (!thread) {
               return;
             }
+            await hydrateTurnExecutionSummary(workspaceId, threadId, thread);
             const fallbackIndex =
               threadsByWorkspaceRef.current[workspaceId]?.length ?? 0;
             const summary = buildThreadSummaryFromThread({
@@ -523,6 +617,7 @@ export function useThreads({
     [
       dispatch,
       getCustomName,
+      hydrateTurnExecutionSummary,
       onDebug,
       onSubagentThreadDetected,
       onSubagentTitleCandidate,
@@ -574,6 +669,7 @@ export function useThreads({
     getActiveTurnId,
     safeMessageActivity,
     recordThreadActivity,
+    shouldContinueAfterError,
     onUserMessageCreated,
     pushThreadErrorMessage,
     onDebug,
@@ -721,8 +817,13 @@ export function useThreads({
   );
 
   const handleTurnCompleted = useCallback(
-    (workspaceId: string, threadId: string, turnId: string) => {
-      threadHandlers.onTurnCompleted?.(workspaceId, threadId, turnId);
+    (
+      workspaceId: string,
+      threadId: string,
+      turnId: string,
+      status?: "completed" | "interrupted" | "failed",
+    ) => {
+      threadHandlers.onTurnCompleted?.(workspaceId, threadId, turnId, status);
       handleAutoContinueTurnCompleted(workspaceId, threadId);
       subagentCheckpointSync.onTurnCompleted(workspaceId, threadId, turnId);
     },
@@ -831,6 +932,7 @@ export function useThreads({
     onSubagentThreadDetected,
     onSubagentTitleCandidate,
     onThreadCodexMetadataDetected,
+    hydrateTurnExecutionSummary,
   });
 
   useEffect(() => {
@@ -1361,6 +1463,8 @@ export function useThreads({
     threadListCursorByWorkspace: state.threadListCursorByWorkspace,
     activeTurnIdByThread: state.activeTurnIdByThread,
     turnDiffByThread: state.turnDiffByThread,
+    turnExecutionSummaryByThread: state.turnExecutionSummaryByThread,
+    turnExecutionSummariesByThread: state.turnExecutionSummariesByThread,
     tokenUsageByThread: state.tokenUsageByThread,
     rateLimitsByWorkspace: state.rateLimitsByWorkspace,
     accountByWorkspace: state.accountByWorkspace,

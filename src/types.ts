@@ -107,7 +107,7 @@ export type CollabAgentStatus = CollabAgentRef & {
   status: string;
 };
 
-export type ConversationItem =
+export type ConversationItem = (
   | {
       id: string;
       kind: "message";
@@ -172,7 +172,8 @@ export type ConversationItem =
       collabReceiver?: CollabAgentRef;
       collabReceivers?: CollabAgentRef[];
       collabStatuses?: CollabAgentStatus[];
-    };
+    }
+) & { turnId?: string };
 
 export type LineChangeStats = {
   additions: number;
@@ -1007,6 +1008,30 @@ export type TurnPlan = {
   turnId: string;
   explanation: string | null;
   steps: TurnPlanStep[];
+};
+
+export type TurnExecutionStatus =
+  | "active"
+  | "completed"
+  | "interrupted"
+  | "failed";
+
+export type TurnExecutionSummary = {
+  schemaVersion: 1;
+  executionId: string;
+  workspaceId: string;
+  threadId: string;
+  turnId: string;
+  turnChain: string[];
+  status: TurnExecutionStatus;
+  startedAtMs: number;
+  endedAtMs: number | null;
+  workingDurationMs: number | null;
+  addedLines: number | null;
+  deletedLines: number | null;
+  diffRevision: number;
+  recordRevision: number;
+  updatedAtMs: number;
 };
 
 export type RateLimitWindow = {

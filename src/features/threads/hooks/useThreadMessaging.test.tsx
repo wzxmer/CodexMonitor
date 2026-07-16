@@ -457,11 +457,14 @@ describe("useThreadMessaging telemetry", () => {
     );
   });
 
-  it("promotes draft images before inserting and sending the user message", async () => {
+  it("shows draft images before promotion and updates them before sending", async () => {
     const dispatch = vi.fn();
-    vi.mocked(promoteComposerImages).mockResolvedValueOnce([
-      "/home/.codex/codex-monitor/attachments/sessions/thread/image.png",
-    ]);
+    let resolvePromotion: (images: string[]) => void = () => {};
+    vi.mocked(promoteComposerImages).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePromotion = resolve;
+      }),
+    );
     const { result } = renderHook(() =>
       useThreadMessaging({
         activeWorkspace: workspace,
@@ -494,13 +497,30 @@ describe("useThreadMessaging telemetry", () => {
       }),
     );
 
+    const sendPromise = result.current.sendUserMessageToThread(
+      workspace,
+      "thread-1",
+      "image",
+      ["/home/.codex/codex-monitor/attachments/pending/draft/image.png"],
+    );
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upsertItem",
+        item: expect.objectContaining({
+          images: [
+            "/home/.codex/codex-monitor/attachments/pending/draft/image.png",
+          ],
+        }),
+      }),
+    );
+    expect(sendUserMessageService).not.toHaveBeenCalled();
+
+    resolvePromotion([
+      "/home/.codex/codex-monitor/attachments/sessions/thread/image.png",
+    ]);
     await act(async () => {
-      await result.current.sendUserMessageToThread(
-        workspace,
-        "thread-1",
-        "image",
-        ["/home/.codex/codex-monitor/attachments/pending/draft/image.png"],
-      );
+      await sendPromise;
     });
 
     expect(promoteComposerImages).toHaveBeenCalledWith("ws-1", "thread-1", [
@@ -709,6 +729,189 @@ describe("useThreadMessaging telemetry", () => {
     await act(async () => {
       await sendPromise;
     });
+  });
+
+  it("optimistically inserts the active-thread message before resume resolves", async () => {
+    let resolveThread: (threadId: string | null) => void = () => {};
+    const ensureThreadForActiveWorkspace = vi.fn(
+      () => new Promise<string | null>((resolve) => {
+        resolveThread = resolve;
+      }),
+    );
+    const dispatch = vi.fn();
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace,
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    const sendPromise = result.current.sendUserMessage("show before resume");
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upsertItem",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        item: expect.objectContaining({
+          kind: "message",
+          role: "user",
+          text: "show before resume",
+        }),
+      }),
+    );
+    expect(sendUserMessageService).not.toHaveBeenCalled();
+
+    resolveThread("thread-1");
+    await act(async () => {
+      await sendPromise;
+    });
+
+    const upserts = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "upsertItem");
+    expect(upserts).toHaveLength(2);
+    expect(upserts[1]).toEqual(
+      expect.objectContaining({
+        item: expect.objectContaining({ id: upserts[0]?.item.id }),
+      }),
+    );
+  });
+
+  it("removes the optimistic active-thread message when resume is blocked", async () => {
+    const dispatch = vi.fn();
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => null),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    let sendResult;
+    await act(async () => {
+      sendResult = await result.current.sendUserMessage("blocked resume");
+    });
+
+    const optimisticAction = dispatch.mock.calls
+      .map(([action]) => action)
+      .find((action) => action.type === "upsertItem");
+    expect(sendResult).toEqual({ status: "blocked" });
+    expect(optimisticAction).toBeDefined();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "removeItem",
+      threadId: "thread-1",
+      itemId: optimisticAction?.item.id,
+    });
+    expect(sendUserMessageService).not.toHaveBeenCalled();
+  });
+
+  it("removes the optimistic active-thread message when resume rejects", async () => {
+    const dispatch = vi.fn();
+    const resumeError = new Error("resume failed");
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(async () => {
+          throw resumeError;
+        }),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    let caughtError: unknown;
+    await act(async () => {
+      try {
+        await result.current.sendUserMessage("failed resume");
+      } catch (error) {
+        caughtError = error;
+      }
+    });
+
+    const optimisticAction = dispatch.mock.calls
+      .map(([action]) => action)
+      .find((action) => action.type === "upsertItem");
+    expect(caughtError).toBe(resumeError);
+    expect(optimisticAction).toBeDefined();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "removeItem",
+      threadId: "thread-1",
+      itemId: optimisticAction?.item.id,
+    });
+    expect(sendUserMessageService).not.toHaveBeenCalled();
   });
 
   it("reuses the original message id when resending an edited message", async () => {

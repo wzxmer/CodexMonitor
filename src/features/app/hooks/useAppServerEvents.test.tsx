@@ -568,4 +568,33 @@ describe("useAppServerEvents", () => {
       root.unmount();
     });
   });
+
+  it("preserves interrupted status from turn/completed", async () => {
+    const handlers: Handlers = { onTurnCompleted: vi.fn() };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "turn/completed",
+          params: {
+            threadId: "thread-1",
+            turn: { id: "turn-1", status: "interrupted" },
+          },
+        },
+      });
+    });
+
+    expect(handlers.onTurnCompleted).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "turn-1",
+      "interrupted",
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });

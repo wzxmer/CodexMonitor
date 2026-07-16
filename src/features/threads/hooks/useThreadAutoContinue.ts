@@ -188,6 +188,13 @@ export function useThreadAutoContinue({
     [clearTimer, updateStatus],
   );
 
+  const shouldContinueAfterError = useCallback(
+    (threadId: string, turnId: string) =>
+      (statusRef.current[threadId] ?? EMPTY_STATUS).enabled &&
+      !manuallyStoppedTurnRef.current.has(`${threadId}:${turnId}`),
+    [],
+  );
+
   const clearThread = useCallback(
     (threadId: string) => {
       clearTimer(threadId);
@@ -219,6 +226,7 @@ export function useThreadAutoContinue({
     onTurnCompleted,
     onTurnError,
     markManualStop,
+    shouldContinueAfterError,
     clearThread,
   };
 }

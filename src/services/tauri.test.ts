@@ -30,6 +30,8 @@ import {
   listSessionSources,
   listMcpServerStatus,
   readThread,
+  getTurnExecutionSummaries,
+  upsertTurnExecutionSummary,
   resumeManagedSession,
   rollbackThread,
   scanManagedSessions,
@@ -83,6 +85,7 @@ import {
   writeAgentConfigToml,
   writeAgentMd,
 } from "./tauri";
+import type { TurnExecutionSummary } from "@/types";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -115,6 +118,37 @@ describe("tauri invoke wrappers", () => {
         return false;
       }
       return undefined;
+    });
+  });
+
+  it("keeps turn execution summary IPC scoped to workspace and thread", async () => {
+    const invokeMock = vi.mocked(invoke);
+    const summary: TurnExecutionSummary = {
+      schemaVersion: 1,
+      executionId: "execution-1",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      turnChain: ["turn-1"],
+      status: "completed",
+      startedAtMs: 10,
+      endedAtMs: 20,
+      workingDurationMs: 10,
+      addedLines: 2,
+      deletedLines: 1,
+      diffRevision: 1,
+      recordRevision: 2,
+      updatedAtMs: 20,
+    };
+
+    await getTurnExecutionSummaries("ws-1", "thread-1");
+    await upsertTurnExecutionSummary(summary);
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "turn_execution_summary_get", {
+      input: { workspaceId: "ws-1", threadId: "thread-1" },
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "turn_execution_summary_upsert", {
+      input: { summary },
     });
   });
 

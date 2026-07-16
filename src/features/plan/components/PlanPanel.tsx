@@ -3,6 +3,8 @@ import { CoordinationPanel } from "@/features/threads/components/CoordinationPan
 
 type PlanPanelProps = {
   plan: TurnPlan | null;
+  planStream?: string | null;
+  activeTurnId?: string | null;
   isProcessing: boolean;
   activeWorkspaceId?: string | null;
   activeThreadId?: string | null;
@@ -30,14 +32,20 @@ function statusLabel(status: TurnPlan["steps"][number]["status"]) {
 
 export function PlanPanel({
   plan,
+  planStream = null,
+  activeTurnId = null,
   isProcessing,
   activeWorkspaceId = null,
   activeThreadId = null,
   workspacePath = null,
 }: PlanPanelProps) {
-  const progress = plan ? formatProgress(plan) : "";
-  const steps = plan?.steps ?? [];
-  const showEmpty = !steps.length && !plan?.explanation;
+  const showPlanStream = Boolean(
+    planStream && (!plan || Boolean(activeTurnId && plan.turnId !== activeTurnId)),
+  );
+  const visiblePlan = showPlanStream ? null : plan;
+  const progress = visiblePlan ? formatProgress(visiblePlan) : "";
+  const steps = visiblePlan?.steps ?? [];
+  const showEmpty = !showPlanStream && !steps.length && !visiblePlan?.explanation;
   const emptyLabel = isProcessing ? "Waiting on a plan..." : "No active plan.";
 
   return (
@@ -46,10 +54,12 @@ export function PlanPanel({
         <span>Plan</span>
         {progress && <span className="plan-progress">{progress}</span>}
       </div>
-      {plan?.explanation && (
-        <div className="plan-explanation">{plan.explanation}</div>
+      {visiblePlan?.explanation && (
+        <div className="plan-explanation">{visiblePlan.explanation}</div>
       )}
-      {showEmpty ? (
+      {showPlanStream ? (
+        <pre className="plan-stream">{planStream}</pre>
+      ) : showEmpty ? (
         <div className="plan-empty">{emptyLabel}</div>
       ) : (
         <ol className="plan-list">

@@ -63,7 +63,12 @@ type AppServerEventHandlers = {
   onAgentMessageCompleted?: (event: AgentCompleted) => void;
   onAppServerEvent?: (event: AppServerEvent) => void;
   onTurnStarted?: (workspaceId: string, threadId: string, turnId: string) => void;
-  onTurnCompleted?: (workspaceId: string, threadId: string, turnId: string) => void;
+  onTurnCompleted?: (
+    workspaceId: string,
+    threadId: string,
+    turnId: string,
+    status?: "completed" | "interrupted" | "failed",
+  ) => void;
   onTurnError?: (
     workspaceId: string,
     threadId: string,
@@ -401,8 +406,17 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
           params.threadId ?? params.thread_id ?? turn?.threadId ?? turn?.thread_id ?? "",
         );
         const turnId = String(turn?.id ?? params.turnId ?? params.turn_id ?? "");
+        const statusValue = String(turn?.status ?? params.status ?? "completed")
+          .trim()
+          .toLowerCase();
+        const status =
+          statusValue.includes("interrupt")
+            ? "interrupted"
+            : statusValue.includes("fail") || statusValue.includes("error")
+              ? "failed"
+              : "completed";
         if (threadId) {
-          currentHandlers.onTurnCompleted?.(workspace_id, threadId, turnId);
+          currentHandlers.onTurnCompleted?.(workspace_id, threadId, turnId, status);
         }
         return;
       }
