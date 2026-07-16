@@ -716,10 +716,12 @@ impl<B: MigrationBackend> MigrationEngine<B> {
                         Err(error) if error.interrupted => {
                             return Err(MigrationEngineError::Interrupted(error.message))
                         }
-                        Err(error) => return self.fail_and_rollback(manifest, error.message),
+                        Err(error) => return Err(MigrationEngineError::Backend(error.message)),
                     };
                     if let Err(error) = verify_post_install(manifest, &observation) {
-                        return self.fail_and_rollback(manifest, error);
+                        return Err(MigrationEngineError::Blocked(format!(
+                            "completed migration postcondition failed: {error}"
+                        )));
                     }
                     return Ok(MigrationOutcome::Completed {
                         transaction_id: manifest.transaction_id.clone(),
@@ -1453,6 +1455,7 @@ mod tests {
             &mut self,
             _manifest: &MigrationManifest,
         ) -> Result<PostInstallObservation, MigrationBackendError> {
+            self.before("observe_post_install")?;
             if self.post_invalid {
                 return Ok(PostInstallObservation {
                     ownership: ObservedOwnership::Mixed,
@@ -1895,12 +1898,54 @@ mod tests {
             Ok(MigrationOutcome::Completed { .. })
         ));
         let mut backend = completed.into_backend();
+        let next_observation = backend
+            .calls
+            .get("observe_post_install")
+            .copied()
+            .unwrap_or_default()
+            + 1;
+        let mut observation_error = MigrationEngine::new(
+            backend
+                .clone()
+                .fail("observe_post_install", next_observation),
+        );
+        let observation_result = observation_error.execute(&intent, &continuation, GRANT);
+        assert!(
+            matches!(observation_result, Err(MigrationEngineError::Backend(_))),
+            "unexpected observation result: {observation_result:?}"
+        );
+        let observation_error_backend = observation_error.into_backend();
+        assert!(!observation_error_backend.source_attached);
+        assert!(observation_error_backend
+            .metadata_present
+            .iter()
+            .all(|present| !present));
+        assert!(observation_error_backend.target_installed);
+        assert_eq!(observation_error_backend.calls.get("rollback_target"), None);
+        assert_eq!(
+            observation_error_backend.calls.get("restore_metadata"),
+            None
+        );
+        assert_eq!(observation_error_backend.calls.get("restore_root"), None);
+
         backend.target_installed = false;
         let mut resumed = MigrationEngine::new(backend);
         assert!(matches!(
             resumed.execute(&intent, &continuation, GRANT),
-            Err(MigrationEngineError::FailedAndRolledBack(_))
+            Err(MigrationEngineError::Blocked(_))
         ));
+        let backend = resumed.into_backend();
+        assert!(!backend.source_attached);
+        assert!(backend.metadata_present.iter().all(|present| !present));
+        assert!(!backend.target_installed);
+        assert_eq!(backend.calls.get("rollback_target"), None);
+        assert_eq!(backend.calls.get("restore_metadata"), None);
+        assert_eq!(backend.calls.get("restore_root"), None);
+        let manifest = backend.manifests.get(INTENT_ID).unwrap();
+        assert_eq!(manifest.phase, MigrationPhase::Completed);
+        assert!(!manifest.target_rollback_completed);
+        assert_eq!(manifest.restored_metadata_count, 0);
+        assert!(!manifest.source_root_restored);
 
         let mut failing_backend = FakeBackend::healthy();
         failing_backend.post_invalid = true;
