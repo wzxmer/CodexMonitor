@@ -230,6 +230,30 @@ describe("threadCodexParamsSeed", () => {
     });
   });
 
+  it("uses the workspace no-thread model and effort for an unseeded thread", () => {
+    const resolved = resolveThreadCodexState({
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      defaultAccessMode: "current",
+      lastComposerModelId: "gpt-5",
+      lastComposerReasoningEffort: "medium",
+      stored: null,
+      noThreadStored: {
+        modelId: "gpt-5.6-terra",
+        effort: "low",
+        serviceTier: undefined,
+        accessMode: null,
+        collaborationModeId: null,
+        codexArgsOverride: undefined,
+        updatedAt: 100,
+      },
+      pendingSeed: null,
+    });
+
+    expect(resolved.preferredModelId).toBe("gpt-5.6-terra");
+    expect(resolved.preferredEffort).toBe("low");
+  });
+
   it("keeps explicit thread-scoped Fast off when no-thread scope is fast", () => {
     const resolved = resolveThreadCodexState({
       workspaceId: "ws-1",

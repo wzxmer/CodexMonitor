@@ -82,8 +82,6 @@ function makeSyncParams(
     pendingNewThreadSeedRef: {
       current: null,
     } as MutableRefObject<PendingNewThreadSeed | null>,
-    selectedModelId: "gpt-5",
-    resolvedEffort: "high",
     selectedServiceTier: undefined,
     accessMode: "full-access",
     selectedCollaborationModeId: "default",
@@ -360,6 +358,37 @@ describe("useThreadUiOrchestration", () => {
       undefined,
       undefined,
     );
+  });
+
+  it("seeds a new thread from its resolved scope instead of the previous thread UI selection", async () => {
+    const params = makeSyncParams();
+    params.getThreadCodexParams.mockImplementation(
+      (_workspaceId: string, threadId: string) =>
+        threadId === "__no_thread__"
+          ? {
+              modelId: "gpt-5.6-terra",
+              effort: "low",
+              serviceTier: undefined,
+              accessMode: null,
+              collaborationModeId: null,
+              codexArgsOverride: undefined,
+              updatedAt: 1,
+            }
+          : null,
+    );
+
+    renderHook(() => useThreadCodexSyncOrchestration(params));
+
+    await waitFor(() => {
+      expect(params.patchThreadCodexParams).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-2",
+        expect.objectContaining({
+          modelId: "gpt-5.6-terra",
+          effort: "low",
+        }),
+      );
+    });
   });
 
   it("opens thread links in their source workspace", () => {

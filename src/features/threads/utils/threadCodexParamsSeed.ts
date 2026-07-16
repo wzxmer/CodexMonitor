@@ -143,8 +143,10 @@ export function resolveThreadCodexState(
   return {
     scopeKey: makeThreadCodexParamsKey(workspaceId, threadId),
     accessMode: stored?.accessMode ?? pendingForWorkspace?.accessMode ?? defaultAccessMode,
-    preferredModelId: stored?.modelId ?? lastComposerModelId ?? null,
-    preferredEffort: stored?.effort ?? lastComposerReasoningEffort ?? null,
+    preferredModelId:
+      stored?.modelId ?? noThreadStored?.modelId ?? lastComposerModelId ?? null,
+    preferredEffort:
+      stored?.effort ?? noThreadStored?.effort ?? lastComposerReasoningEffort ?? null,
     preferredServiceTier:
       stored?.serviceTier !== undefined
         ? stored.serviceTier

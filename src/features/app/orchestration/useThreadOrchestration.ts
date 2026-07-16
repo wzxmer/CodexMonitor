@@ -71,8 +71,6 @@ type UseThreadCodexSyncOrchestrationParams = {
   setPreferredCodexArgsOverride?: SetState<string | null>;
   activeThreadIdRef: MutableRefObject<string | null>;
   pendingNewThreadSeedRef: MutableRefObject<PendingNewThreadSeed | null>;
-  selectedModelId: string | null;
-  resolvedEffort: string | null;
   selectedServiceTier: ServiceTier | null | undefined;
   accessMode: AccessMode;
   selectedCollaborationModeId: string | null;
@@ -141,8 +139,6 @@ export function useThreadCodexSyncOrchestration({
   setPreferredCodexArgsOverride,
   activeThreadIdRef,
   pendingNewThreadSeedRef,
-  selectedModelId,
-  resolvedEffort,
   selectedServiceTier,
   accessMode,
   selectedCollaborationModeId,
@@ -220,13 +216,23 @@ export function useThreadCodexSyncOrchestration({
 
     seededThreadParamsRef.current.add(key);
     const pendingSeed = pendingNewThreadSeedRef.current;
+    const resolved = resolveThreadCodexState({
+      workspaceId,
+      threadId,
+      defaultAccessMode: appSettings.defaultAccessMode,
+      lastComposerModelId: appSettings.lastComposerModelId,
+      lastComposerReasoningEffort: appSettings.lastComposerReasoningEffort,
+      stored,
+      noThreadStored: getThreadCodexParams(workspaceId, NO_THREAD_SCOPE_SUFFIX),
+      pendingSeed,
+    });
     patchThreadCodexParams(
       workspaceId,
       threadId,
       buildThreadCodexSeedPatch({
         workspaceId,
-        selectedModelId,
-        resolvedEffort,
+        selectedModelId: resolved.preferredModelId,
+        resolvedEffort: resolved.preferredEffort,
         accessMode,
         selectedCollaborationModeId,
         codexArgsOverride:
@@ -243,12 +249,13 @@ export function useThreadCodexSyncOrchestration({
     activeThreadId,
     activeWorkspaceId,
     accessMode,
+    appSettings.defaultAccessMode,
+    appSettings.lastComposerModelId,
+    appSettings.lastComposerReasoningEffort,
     getThreadCodexParams,
     patchThreadCodexParams,
-    resolvedEffort,
     selectedCollaborationModeId,
     selectedCodexArgsOverride,
-    selectedModelId,
     pendingNewThreadSeedRef,
   ]);
 
