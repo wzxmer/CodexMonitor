@@ -522,6 +522,38 @@ describe("Messages", () => {
     expect(container.querySelector(".markdown-table-wrap")).toBeTruthy();
   });
 
+  it("preserves markdown table scroll position across conversation rerenders", () => {
+    const tableItem: ConversationItem = {
+      id: "assistant-table-scroll",
+      kind: "message",
+      role: "assistant",
+      text: ["| Name | Value |", "| --- | --- |", "| Status | Ready |"].join("\n"),
+    };
+    const renderMessages = (items: ConversationItem[]) => (
+      <Messages
+        items={items}
+        threadId="thread-table-scroll"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />
+    );
+    const { container, rerender } = render(renderMessages([tableItem]));
+    const tableWrap = container.querySelector<HTMLElement>(".markdown-table-wrap");
+
+    expect(tableWrap).not.toBeNull();
+    if (!tableWrap) {
+      throw new Error("Expected markdown table wrapper");
+    }
+    tableWrap.scrollLeft = 240;
+
+    rerender(renderMessages([{ ...tableItem }]));
+
+    expect(container.querySelector(".markdown-table-wrap")).toBe(tableWrap);
+    expect(tableWrap.scrollLeft).toBe(240);
+  });
+
   it("quotes a message into composer using markdown blockquote format", () => {
     const onQuoteMessage = vi.fn();
     const items: ConversationItem[] = [
@@ -2478,6 +2510,22 @@ describe("Messages", () => {
     expect(onUpdateConversationStyle).toHaveBeenCalledWith({
       messageReadingStyle: "cli",
     });
+  });
+
+  it("keeps conversation style controls visible for an empty new thread", () => {
+    render(
+      <Messages
+        items={[]}
+        threadId={null}
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByRole("group", { name: "阅读样式" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "样式" })).toBeTruthy();
   });
 
   it("uses a concrete timestamp for CLI assistant message headers", () => {

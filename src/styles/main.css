@@ -9,7 +9,7 @@
   min-height: 0;
   min-width: 0;
   --main-panel-padding: 24px;
-  --conversation-column-width: 900px;
+  --conversation-column-width: min(100%, 1440px);
   transition: grid-template-columns 220ms ease;
 }
 

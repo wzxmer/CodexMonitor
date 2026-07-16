@@ -541,9 +541,6 @@ export const Messages = memo(function Messages({
         }}
       />
     ) : null;
-  const toolGroupCount = groupedItems.filter(
-    (entry) => entry.kind === "toolGroup" || entry.kind === "processGroup",
-  ).length;
   const stoppedAssistantMessageId = useMemo(() => {
     if (!interruptedStatus) {
       return null;
@@ -791,8 +788,7 @@ export const Messages = memo(function Messages({
             </button>
           </div>
         )}
-        {(toolGroupCount > 0 || threadId || items.length > 0) && (
-          <div className="messages-tool-controls" aria-label={t("messages.readingStyle")}>
+        <div className="messages-tool-controls" aria-label={t("messages.readingStyle")}>
             <div
               className="messages-reading-segmented"
               role="group"
@@ -1003,8 +999,7 @@ export const Messages = memo(function Messages({
                 </div>
               )}
             </div>
-          </div>
-        )}
+        </div>
         <SubagentResultSummary
           results={subagentResults}
           workspaceId={workspaceId}

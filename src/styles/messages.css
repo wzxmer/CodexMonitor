@@ -1,5 +1,6 @@
 .messages {
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-app-region: no-drag;
   flex: 1;
   min-height: 0;

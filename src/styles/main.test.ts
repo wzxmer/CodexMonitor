@@ -16,4 +16,8 @@ describe("main topbar layout styles", () => {
       ".app.layout-compact.right-panel-collapsed .main-topbar",
     );
   });
+
+  it("lets the conversation column grow on wide windows while retaining a readable cap", () => {
+    expect(mainCss).toContain("--conversation-column-width: min(100%, 1440px);");
+  });
 });

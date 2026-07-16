@@ -46,6 +46,16 @@ describe("message tool group interaction styles", () => {
     expect(controlsRule?.[1]).not.toMatch(/\btop:/);
   });
 
+  it("keeps horizontal scrolling inside wide content instead of the conversation pane", () => {
+    const messagesRule = messagesCss.match(/\.messages\s*\{([\s\S]*?)\n\}/);
+
+    expect(messagesRule?.[1]).toContain("overflow-y: auto");
+    expect(messagesRule?.[1]).toContain("overflow-x: hidden");
+    expect(messagesCss).toMatch(
+      /\.markdown-table-wrap\s*\{[^}]*overflow-x:\s*auto;/s,
+    );
+  });
+
   it("anchors child result details to the chat layer and above the composer", () => {
     const drawerRule = messagesCss.match(
       /\.subagent-result-drawer\s*\{([\s\S]*?)\n\}/,
