@@ -21,11 +21,12 @@ describe("resolveCodexProviderBaseUrl", () => {
     expect(resolveCodexProviderBaseUrl("custom", null)).toBeNull();
   });
 
-  it("prefers the active provider model over a thread model", () => {
+  it("prefers a persisted thread model and falls back to the active provider model", () => {
     expect(resolveCodexProviderModel("kimi-k2.7-code", "gpt-5.6-sol")).toBe(
-      "kimi-k2.7-code",
+      "gpt-5.6-sol",
     );
     expect(resolveCodexProviderModel(null, "gpt-5.6-sol")).toBe("gpt-5.6-sol");
+    expect(resolveCodexProviderModel("kimi-k2.7-code", null)).toBe("kimi-k2.7-code");
   });
 
   it("merges partial provider model results without losing metadata", () => {

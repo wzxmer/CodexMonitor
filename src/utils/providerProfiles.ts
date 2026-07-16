@@ -33,7 +33,7 @@ export function resolveCodexProviderModel(
   providerModel: string | null | undefined,
   threadModel: string | null | undefined,
 ): string | null {
-  return providerModel?.trim() || threadModel?.trim() || null;
+  return threadModel?.trim() || providerModel?.trim() || null;
 }
 
 export function mergeCodexProviderModels(

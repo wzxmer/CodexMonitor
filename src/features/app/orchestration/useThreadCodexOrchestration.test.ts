@@ -66,4 +66,34 @@ describe("useThreadCodexOrchestration", () => {
     );
     expect(result.current.getThreadCodexParams("ws-1", "thread-1")).toBeNull();
   });
+
+  it("restores independent Luna and Sol selections while retaining the latest workspace default", () => {
+    const { result } = renderHook(() => {
+      const activeWorkspaceIdForParamsRef = useRef<string | null>("ws-1");
+      return useThreadCodexOrchestration({ activeWorkspaceIdForParamsRef });
+    });
+
+    act(() => {
+      result.current.activeThreadIdRef.current = "thread-luna";
+      result.current.persistThreadCodexParams({
+        modelId: "gpt-5.6-luna",
+        effort: "low",
+      });
+      result.current.activeThreadIdRef.current = "thread-sol";
+      result.current.persistThreadCodexParams({
+        modelId: "gpt-5.6-sol",
+        effort: "medium",
+      });
+    });
+
+    expect(result.current.getThreadCodexParams("ws-1", "thread-luna")).toEqual(
+      expect.objectContaining({ modelId: "gpt-5.6-luna", effort: "low" }),
+    );
+    expect(result.current.getThreadCodexParams("ws-1", "thread-sol")).toEqual(
+      expect.objectContaining({ modelId: "gpt-5.6-sol", effort: "medium" }),
+    );
+    expect(result.current.getThreadCodexParams("ws-1", "__no_thread__")).toEqual(
+      expect.objectContaining({ modelId: "gpt-5.6-sol", effort: "medium" }),
+    );
+  });
 });
