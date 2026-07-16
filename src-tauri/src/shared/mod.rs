@@ -13,6 +13,8 @@ pub(crate) mod git_ui_core;
 pub(crate) mod installer_migration_core;
 #[allow(dead_code)]
 pub(crate) mod installer_migration_engine;
+#[allow(dead_code)]
+pub(crate) mod installer_migration_store;
 pub(crate) mod local_usage_core;
 pub(crate) mod message_reference_core;
 pub(crate) mod process_core;

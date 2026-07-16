@@ -9,6 +9,9 @@ pub(crate) const INSTALLER_MIGRATION_ENGINE_SCHEMA_VERSION: u32 = 1;
 const REBOOT_REQUIRED_EXIT_CODE: i32 = 3010;
 const MAX_SOURCE_METADATA_ITEMS: usize = 64;
 const MAX_METADATA_SNAPSHOT_BYTES: usize = 1024 * 1024;
+const MAX_TOTAL_METADATA_SNAPSHOT_BYTES: usize = 4 * 1024 * 1024;
+const MAX_MANIFEST_TEXT_BYTES: usize = 32 * 1024;
+const MAX_ERROR_MESSAGE_BYTES: usize = 16 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -140,6 +143,15 @@ impl MigrationManifest {
         validate_sha256(&self.grant_digest, "grantDigest")?;
         validate_source_snapshot(&self.source)?;
         validate_target_snapshot(&self.target)?;
+        if self
+            .last_error
+            .as_ref()
+            .is_some_and(|message| message.len() > MAX_ERROR_MESSAGE_BYTES)
+        {
+            return Err(MigrationEngineError::InvalidManifest(
+                "migration error text exceeds the size limit".into(),
+            ));
+        }
 
         if self.removed_metadata_count > self.source.metadata.len()
             || self.restored_metadata_count > self.removed_metadata_count
@@ -196,6 +208,26 @@ impl MigrationManifest {
                 "reboot state does not match the installer exit code".into(),
             ));
         }
+        if matches!(
+            self.phase,
+            MigrationPhase::Prepared
+                | MigrationPhase::GrantConsumptionPending
+                | MigrationPhase::GrantConsumed
+                | MigrationPhase::SourceDetachPending
+                | MigrationPhase::SourceDetached
+                | MigrationPhase::MetadataRemovalPending
+                | MigrationPhase::MetadataRemoved
+                | MigrationPhase::TargetInstallPending
+                | MigrationPhase::TargetInstallReturned
+                | MigrationPhase::Completed
+        ) && (self.restored_metadata_count != 0
+            || self.source_root_restored
+            || self.target_rollback_completed)
+        {
+            return Err(MigrationEngineError::InvalidManifest(
+                "forward migration contains rollback progress".into(),
+            ));
+        }
         if self.phase == MigrationPhase::Completed
             && (!self.grant_consumed
                 || !self.source_detached
@@ -211,7 +243,7 @@ impl MigrationManifest {
             ));
         }
         match self.phase {
-            MigrationPhase::Prepared
+            MigrationPhase::Prepared | MigrationPhase::GrantConsumptionPending
                 if self.grant_consumed
                     || self.source_detached
                     || self.removed_metadata_count != 0
@@ -222,21 +254,39 @@ impl MigrationManifest {
                 ));
             }
             MigrationPhase::GrantConsumed | MigrationPhase::SourceDetachPending
-                if !self.grant_consumed =>
+                if !self.grant_consumed
+                    || self.source_detached
+                    || self.removed_metadata_count != 0
+                    || self.target_install_attempted =>
             {
                 return Err(MigrationEngineError::InvalidManifest(
                     "migration advanced without consuming its grant".into(),
                 ));
             }
             MigrationPhase::SourceDetached | MigrationPhase::MetadataRemovalPending
-                if !self.grant_consumed || !self.source_detached =>
+                if !self.grant_consumed
+                    || !self.source_detached
+                    || self.target_install_attempted =>
             {
                 return Err(MigrationEngineError::InvalidManifest(
                     "metadata mutation advanced before source detachment".into(),
                 ));
             }
-            MigrationPhase::MetadataRemoved | MigrationPhase::TargetInstallPending
-                if self.removed_metadata_count != self.source.metadata.len()
+            MigrationPhase::MetadataRemoved
+                if !self.grant_consumed
+                    || !self.source_detached
+                    || self.removed_metadata_count != self.source.metadata.len()
+                    || self.pending_metadata_index.is_some()
+                    || self.target_install_attempted =>
+            {
+                return Err(MigrationEngineError::InvalidManifest(
+                    "metadata-removed manifest is internally inconsistent".into(),
+                ));
+            }
+            MigrationPhase::TargetInstallPending
+                if !self.grant_consumed
+                    || !self.source_detached
+                    || self.removed_metadata_count != self.source.metadata.len()
                     || self.pending_metadata_index.is_some() =>
             {
                 return Err(MigrationEngineError::InvalidManifest(
@@ -248,8 +298,18 @@ impl MigrationManifest {
                     "target install is pending without a durable attempt marker".into(),
                 ));
             }
+            MigrationPhase::TargetInstallPending if self.target_exit_code.is_some() => {
+                return Err(MigrationEngineError::InvalidManifest(
+                    "target install is pending with a durable result".into(),
+                ));
+            }
             MigrationPhase::TargetInstallReturned | MigrationPhase::Completed
-                if !self.target_install_attempted || self.target_exit_code.is_none() =>
+                if !self.grant_consumed
+                    || !self.source_detached
+                    || self.removed_metadata_count != self.source.metadata.len()
+                    || self.pending_metadata_index.is_some()
+                    || !self.target_install_attempted
+                    || self.target_exit_code.is_none() =>
             {
                 return Err(MigrationEngineError::InvalidManifest(
                     "target install returned without a durable result".into(),
@@ -350,6 +410,12 @@ pub(crate) trait MigrationBackend {
         &mut self,
         manifest: &MigrationManifest,
     ) -> Result<(), MigrationBackendError>;
+    /// Treat journal progress as untrusted. Accept only live states compatible
+    /// with the durable phase, including either side of a pending mutation.
+    fn validate_manifest_recovery_state(
+        &mut self,
+        manifest: &MigrationManifest,
+    ) -> Result<(), MigrationBackendError>;
     fn detach_source_root(
         &mut self,
         transaction_id: &str,
@@ -447,6 +513,9 @@ impl<B: MigrationBackend> MigrationEngine<B> {
                 }
                 self.backend
                     .validate_manifest_scope(&manifest)
+                    .map_err(map_backend_read_error)?;
+                self.backend
+                    .validate_manifest_recovery_state(&manifest)
                     .map_err(map_backend_read_error)?;
                 manifest
             }
@@ -710,7 +779,7 @@ impl<B: MigrationBackend> MigrationEngine<B> {
         cause: String,
     ) -> Result<MigrationOutcome, MigrationEngineError> {
         manifest.pending_metadata_index = None;
-        manifest.last_error = Some(cause.clone());
+        manifest.last_error = Some(bounded_manifest_error(cause.clone()));
         match self.drive_rollback(manifest, Some(cause.clone())) {
             Ok(MigrationOutcome::RolledBack { .. }) => {
                 Err(MigrationEngineError::FailedAndRolledBack(cause))
@@ -829,7 +898,9 @@ impl<B: MigrationBackend> MigrationEngine<B> {
     ) -> Result<MigrationOutcome, MigrationEngineError> {
         manifest.phase = MigrationPhase::RollbackFailed;
         manifest.pending_metadata_index = None;
-        manifest.last_error = Some(format!("{cause}; rollback: {rollback}"));
+        manifest.last_error = Some(bounded_manifest_error(format!(
+            "{cause}; rollback: {rollback}"
+        )));
         let _ = self.persist(manifest);
         Err(MigrationEngineError::RollbackFailed {
             cause: cause.into(),
@@ -860,6 +931,18 @@ fn map_backend_read_error(error: MigrationBackendError) -> MigrationEngineError 
     }
 }
 
+fn bounded_manifest_error(mut message: String) -> String {
+    if message.len() <= MAX_ERROR_MESSAGE_BYTES {
+        return message;
+    }
+    let mut boundary = MAX_ERROR_MESSAGE_BYTES;
+    while !message.is_char_boundary(boundary) {
+        boundary -= 1;
+    }
+    message.truncate(boundary);
+    message
+}
+
 fn validate_source_snapshot(source: &NsisSourceSnapshot) -> Result<(), MigrationEngineError> {
     if source.ownership != ObservedOwnership::PureNsis {
         return Err(MigrationEngineError::Blocked(
@@ -868,6 +951,8 @@ fn validate_source_snapshot(source: &NsisSourceSnapshot) -> Result<(), Migration
     }
     if source.root.source_path.is_empty()
         || source.root.backup_path.is_empty()
+        || source.root.source_path.len() > MAX_MANIFEST_TEXT_BYTES
+        || source.root.backup_path.len() > MAX_MANIFEST_TEXT_BYTES
         || source.root.source_path == source.root.backup_path
     {
         return Err(MigrationEngineError::InvalidManifest(
@@ -887,6 +972,7 @@ fn validate_source_snapshot(source: &NsisSourceSnapshot) -> Result<(), Migration
         ));
     }
     let mut locators = BTreeSet::new();
+    let mut total_snapshot_bytes = 0usize;
     for metadata in &source.metadata {
         if metadata.locator.is_empty()
             || metadata.locator.len() > 32_767
@@ -896,6 +982,18 @@ fn validate_source_snapshot(source: &NsisSourceSnapshot) -> Result<(), Migration
         {
             return Err(MigrationEngineError::InvalidManifest(
                 "source metadata locator or snapshot is invalid".into(),
+            ));
+        }
+        total_snapshot_bytes = total_snapshot_bytes
+            .checked_add(metadata.snapshot.len())
+            .ok_or_else(|| {
+                MigrationEngineError::InvalidManifest(
+                    "source metadata snapshot size overflowed".into(),
+                )
+            })?;
+        if total_snapshot_bytes > MAX_TOTAL_METADATA_SNAPSHOT_BYTES {
+            return Err(MigrationEngineError::InvalidManifest(
+                "source metadata snapshots exceed the total size limit".into(),
             ));
         }
         validate_sha256(&metadata.snapshot_sha256, "metadataSnapshotSha256")?;
@@ -911,10 +1009,14 @@ fn validate_source_snapshot(source: &NsisSourceSnapshot) -> Result<(), Migration
 fn validate_target_snapshot(target: &TargetInstallerSnapshot) -> Result<(), MigrationEngineError> {
     if target.family != InstallerFamily::Msi
         || target.artifact_path.is_empty()
+        || target.artifact_path.len() > MAX_MANIFEST_TEXT_BYTES
         || target.artifact_size == 0
         || target.version.is_empty()
+        || target.version.len() > MAX_MANIFEST_TEXT_BYTES
         || target.product_code.is_empty()
+        || target.product_code.len() > MAX_MANIFEST_TEXT_BYTES
         || target.expected_install_root.is_empty()
+        || target.expected_install_root.len() > MAX_MANIFEST_TEXT_BYTES
     {
         return Err(MigrationEngineError::InvalidManifest(
             "target installer snapshot is incomplete".into(),
@@ -1187,6 +1289,105 @@ mod tests {
         ) -> Result<(), MigrationBackendError> {
             if manifest.source != self.source || manifest.target != self.target {
                 return Err(MigrationBackendError::failure("manifest scope drifted"));
+            }
+            Ok(())
+        }
+
+        fn validate_manifest_recovery_state(
+            &mut self,
+            manifest: &MigrationManifest,
+        ) -> Result<(), MigrationBackendError> {
+            let actual_removed_count = self
+                .metadata_present
+                .iter()
+                .take_while(|present| !**present)
+                .count();
+            let metadata_is_contiguous = self
+                .metadata_present
+                .iter()
+                .skip(actual_removed_count)
+                .all(|present| *present);
+            let forward_metadata_matches =
+                metadata_is_contiguous && actual_removed_count == manifest.removed_metadata_count;
+            let rollback_remaining = manifest
+                .removed_metadata_count
+                .saturating_sub(manifest.restored_metadata_count);
+            let rollback_metadata_matches =
+                metadata_is_contiguous && actual_removed_count == rollback_remaining;
+            let source_matches_detach_progress =
+                self.source_attached != manifest.source_detached || manifest.source_root_restored;
+
+            let valid = match manifest.phase {
+                MigrationPhase::Prepared
+                | MigrationPhase::GrantConsumptionPending
+                | MigrationPhase::GrantConsumed => {
+                    self.source_attached && actual_removed_count == 0 && !self.target_installed
+                }
+                MigrationPhase::SourceDetachPending => {
+                    actual_removed_count == 0 && !self.target_installed
+                }
+                MigrationPhase::SourceDetached => {
+                    !self.source_attached && forward_metadata_matches && !self.target_installed
+                }
+                MigrationPhase::MetadataRemovalPending => {
+                    !self.source_attached
+                        && metadata_is_contiguous
+                        && matches!(
+                            actual_removed_count,
+                            count if count == manifest.removed_metadata_count
+                                || count == manifest.removed_metadata_count + 1
+                        )
+                        && !self.target_installed
+                }
+                MigrationPhase::MetadataRemoved => {
+                    !self.source_attached
+                        && actual_removed_count == manifest.source.metadata.len()
+                        && !self.target_installed
+                }
+                MigrationPhase::TargetInstallPending => {
+                    !self.source_attached && actual_removed_count == manifest.source.metadata.len()
+                }
+                MigrationPhase::TargetInstallReturned => {
+                    !self.source_attached
+                        && actual_removed_count == manifest.source.metadata.len()
+                        && self.target_installed == is_success_exit(manifest.target_exit_code)
+                }
+                MigrationPhase::Completed => {
+                    !self.source_attached && actual_removed_count == manifest.source.metadata.len()
+                }
+                MigrationPhase::RollbackTargetPending => {
+                    source_matches_detach_progress && forward_metadata_matches
+                }
+                MigrationPhase::RollbackTargetCompleted => {
+                    source_matches_detach_progress
+                        && forward_metadata_matches
+                        && !self.target_installed
+                }
+                MigrationPhase::RollbackMetadataPending => {
+                    source_matches_detach_progress
+                        && metadata_is_contiguous
+                        && matches!(
+                            actual_removed_count,
+                            count if count == rollback_remaining
+                                || count + 1 == rollback_remaining
+                        )
+                        && !self.target_installed
+                }
+                MigrationPhase::RollbackMetadataCompleted => {
+                    source_matches_detach_progress
+                        && actual_removed_count == 0
+                        && !self.target_installed
+                }
+                MigrationPhase::RollbackRootPending => {
+                    actual_removed_count == 0 && !self.target_installed
+                }
+                MigrationPhase::RolledBack => true,
+                MigrationPhase::RollbackFailed => rollback_metadata_matches,
+            };
+            if !valid {
+                return Err(MigrationBackendError::failure(
+                    "manifest progress does not match live recovery state",
+                ));
             }
             Ok(())
         }
@@ -1621,6 +1822,67 @@ mod tests {
             Err(MigrationEngineError::InvalidManifest(_))
         ));
         assert_eq!(resumed.into_backend().calls, calls);
+    }
+
+    #[test]
+    fn internally_consistent_forged_progress_must_match_live_recovery_state() {
+        let intent = intent_with_id(INTENT_ID);
+        let continuation = continuation(&intent, GRANT);
+        let mut engine = MigrationEngine::new(FakeBackend::healthy().interrupt("persist", 1));
+        assert!(matches!(
+            engine.execute(&intent, &continuation, GRANT),
+            Err(MigrationEngineError::Interrupted(_))
+        ));
+        let mut backend = engine.into_backend();
+        backend.interrupt_after = None;
+        let manifest = backend.manifests.get_mut(INTENT_ID).unwrap();
+        manifest.grant_consumed = true;
+        manifest.source_detached = true;
+        manifest.removed_metadata_count = manifest.source.metadata.len();
+        manifest.phase = MigrationPhase::MetadataRemoved;
+        manifest.validate().unwrap();
+        let mut rollback_tamper = manifest.clone();
+        rollback_tamper.target_rollback_completed = true;
+        assert!(matches!(
+            rollback_tamper.validate(),
+            Err(MigrationEngineError::InvalidManifest(_))
+        ));
+        let calls = backend.calls.clone();
+
+        let mut resumed = MigrationEngine::new(backend);
+        assert!(matches!(
+            resumed.execute(&intent, &continuation, GRANT),
+            Err(MigrationEngineError::Backend(_))
+        ));
+        assert_eq!(resumed.into_backend().calls, calls);
+    }
+
+    #[test]
+    fn persisted_error_text_is_bounded_on_utf8_boundary() {
+        let message = "界".repeat(MAX_ERROR_MESSAGE_BYTES);
+        let bounded = bounded_manifest_error(message);
+        assert!(bounded.len() <= MAX_ERROR_MESSAGE_BYTES);
+        assert!(std::str::from_utf8(bounded.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn source_metadata_total_size_is_bounded() {
+        let mut source = FakeBackend::healthy().source;
+        source.metadata = (0..5)
+            .map(|index| {
+                let snapshot = vec![index as u8; MAX_METADATA_SNAPSHOT_BYTES];
+                ExactSourceMetadata {
+                    kind: SourceMetadataKind::NsisUninstallRegistration,
+                    locator: format!("hkcu-{index}"),
+                    snapshot_sha256: digest_bytes(&snapshot),
+                    snapshot,
+                }
+            })
+            .collect();
+        assert!(matches!(
+            validate_source_snapshot(&source),
+            Err(MigrationEngineError::InvalidManifest(_))
+        ));
     }
 
     #[test]
