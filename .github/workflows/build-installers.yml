@@ -20,7 +20,7 @@ jobs:
           - name: Windows installers
             os: windows-latest
             rust_target: ""
-            command: npm run tauri -- build --config src-tauri/tauri.windows.conf.json
+            command: npm run tauri:build:win
             artifact: windows-installers
             optional: false
             paths: |

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "sync:material-icons": "node scripts/sync-material-icons.mjs",
+    "stage:installer-migrator": "node scripts/stage-installer-migrator.mjs",
     "postinstall": "npm run sync:material-icons",
     "predev": "npm run sync:material-icons",
     "dev": "vite",
@@ -32,8 +33,8 @@
     "tauri:build": "npm run doctor:strict && tauri build",
     "pretauri:dev:win": "npm run sync:material-icons",
     "tauri:dev:win": "npm run doctor:win && tauri dev --config src-tauri/tauri.windows.conf.json",
-    "pretauri:build:win": "npm run sync:material-icons",
-    "tauri:build:win": "npm run doctor:win && tauri build --config src-tauri/tauri.windows.conf.json"
+    "pretauri:build:win": "npm run sync:material-icons && npm run stage:installer-migrator",
+    "tauri:build:win": "npm run doctor:win && tauri build --config src-tauri/tauri.windows.conf.json --config src-tauri/tauri.installer-migrator.conf.json"
   },
   "dependencies": {
     "@fontsource-variable/noto-sans-sc": "^5.2.10",

@@ -9,6 +9,8 @@ pub(crate) mod files_core;
 pub(crate) mod git_core;
 pub(crate) mod git_rpc;
 pub(crate) mod git_ui_core;
+#[allow(dead_code)]
+pub(crate) mod installer_migration_core;
 pub(crate) mod local_usage_core;
 pub(crate) mod message_reference_core;
 pub(crate) mod process_core;

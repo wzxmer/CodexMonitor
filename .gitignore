@@ -30,6 +30,7 @@ src-tauri/tauri.ios.local.conf.json
 /release-artifacts
 /.codex-target*/
 /src-tauri/target*/
+/src-tauri/binaries/codex-monitor-installer-migrator-*.exe
 CodexMonitor.zip
 .codex-worktrees/
 .codex-monitor/
