@@ -97,7 +97,9 @@
 .sidebar-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 0;
+  width: 100%;
   min-height: 32px;
   padding: 0;
   margin-bottom: 0;
@@ -107,17 +109,11 @@
 }
 
 .sidebar-header-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+  display: contents;
 }
 
 .sidebar-title-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+  display: contents;
 }
 
 .sidebar-title-add {
@@ -184,10 +180,7 @@
 }
 
 .sidebar-header-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
+  display: contents;
 }
 
 .sidebar-sort-menu {
