@@ -2245,6 +2245,30 @@
   color: var(--text-muted);
 }
 
+.subagent-checkpoint-inline {
+  color: var(--conversation-assistant-text);
+}
+
+.subagent-checkpoint-inline :where(
+    .process-inline-summary,
+    .tool-inline-value,
+    .tool-inline-status
+  ) {
+  color: var(--conversation-assistant-text);
+}
+
+.subagent-checkpoint-inline .tool-inline-detail {
+  color: var(--conversation-assistant-text);
+}
+
+.subagent-checkpoint-inline .tool-inline-label {
+  color: color-mix(
+    in srgb,
+    var(--conversation-assistant-text) 78%,
+    var(--conversation-canvas)
+  );
+}
+
 @media (max-width: 720px) {
   .messages-full {
     padding-left: 16px;

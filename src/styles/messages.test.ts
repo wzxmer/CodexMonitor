@@ -69,6 +69,28 @@ describe("message tool group interaction styles", () => {
     expect(headerRule?.[1]).toContain("color: var(--conversation-assistant-text)");
     expect(headingRule?.[1]).toContain("color: inherit");
   });
+
+  it("keeps checkpoint text paired with the runtime conversation canvas", () => {
+    const checkpointRule = messagesCss.match(
+      /\.subagent-checkpoint-inline\s*\{([\s\S]*?)\n\}/,
+    );
+    const checkpointLabelRule = messagesCss.match(
+      /\.subagent-checkpoint-inline \.tool-inline-label\s*\{([\s\S]*?)\n\}/,
+    );
+    const checkpointDetailRule = messagesCss.match(
+      /\.subagent-checkpoint-inline \.tool-inline-detail\s*\{([\s\S]*?)\n\}/,
+    );
+
+    expect(checkpointRule?.[1]).toContain(
+      "color: var(--conversation-assistant-text)",
+    );
+    expect(checkpointLabelRule?.[1]).toContain(
+      "var(--conversation-assistant-text)",
+    );
+    expect(checkpointDetailRule?.[1]).toContain(
+      "color: var(--conversation-assistant-text)",
+    );
+  });
 });
 
 describe("markdown table layout styles", () => {
