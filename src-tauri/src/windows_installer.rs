@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 
 const PRODUCT_NAME: &str = "Codex Monitor";
 const UNINSTALL_ROOT: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
-const SNAPSHOT_SCHEMA_VERSION: u32 = 2;
+const LEGACY_SNAPSHOT_SCHEMA_VERSION: u32 = 2;
+const SNAPSHOT_SCHEMA_VERSION: u32 = 3;
 const REPARSE_POINT_ATTRIBUTE: u32 = 0x400;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -151,7 +152,7 @@ impl WindowsInstallerRepairResult {
 struct RepairPlan {
     fingerprint: String,
     msi: InstallerRecord,
-    nsis: InstallerRecord,
+    nsis_records: Vec<InstallerRecord>,
     current_exe: FileSnapshot,
     files: Vec<FileSnapshot>,
 }
@@ -188,6 +189,8 @@ struct RepairManifest {
     msi_digest: String,
     current_exe: FileSnapshot,
     nsis_record: InstallerRecord,
+    #[serde(default)]
+    additional_nsis_records: Vec<InstallerRecord>,
     files: Vec<FileMoveSnapshot>,
     moved_file_count: usize,
     pending_file_move: Option<usize>,
@@ -358,11 +361,26 @@ fn load_latest_journals(entries: Vec<(PathBuf, Vec<u8>)>) -> Result<Vec<RepairMa
 }
 
 fn validate_manifest(manifest: &RepairManifest) -> Result<(), String> {
-    if manifest.schema_version != SNAPSHOT_SCHEMA_VERSION {
+    if !matches!(
+        manifest.schema_version,
+        LEGACY_SNAPSHOT_SCHEMA_VERSION | SNAPSHOT_SCHEMA_VERSION
+    ) {
         return Err(format!(
             "Unsupported installer repair journal schema {}.",
             manifest.schema_version
         ));
+    }
+    if manifest.schema_version == LEGACY_SNAPSHOT_SCHEMA_VERSION
+        && !manifest.additional_nsis_records.is_empty()
+    {
+        return Err("Legacy installer repair journals cannot contain extra NSIS records.".into());
+    }
+    let nsis_records = manifest_nsis_records(manifest);
+    if nsis_records.len() > 2
+        || (nsis_records.len() == 2
+            && !equivalent_dual_view_records(&nsis_records[0], &nsis_records[1]))
+    {
+        return Err("Installer repair journal has divergent NSIS registrations.".into());
     }
     validate_opaque_id(&manifest.transaction_id, "journal transaction ID")?;
     validate_opaque_id(&manifest.operation_id, "journal operation ID")?;
@@ -565,7 +583,8 @@ impl<B: RepairBackend> RepairEngine<B> {
             post_fingerprint: None,
             msi_digest: record_digest(&plan.msi),
             current_exe: plan.current_exe,
-            nsis_record: plan.nsis,
+            nsis_record: plan.nsis_records[0].clone(),
+            additional_nsis_records: plan.nsis_records[1..].to_vec(),
             files,
             moved_file_count: 0,
             pending_file_move: None,
@@ -674,7 +693,9 @@ impl<B: RepairBackend> RepairEngine<B> {
         }
         manifest.registry_delete_pending = true;
         self.persist(manifest)?;
-        self.backend.delete_record(&manifest.nsis_record)?;
+        for record in manifest_nsis_records(manifest) {
+            self.backend.delete_record(&record)?;
+        }
         manifest.registry_deleted = true;
         manifest.registry_delete_pending = false;
         self.persist(manifest)?;
@@ -740,7 +761,14 @@ impl<B: RepairBackend> RepairEngine<B> {
         mode: RecoveryScopeMode,
     ) -> Result<(), String> {
         validate_manifest(manifest)?;
-        let uninstall_path = validate_nsis_record_scope(&manifest.nsis_record)?;
+        let expected_nsis_records = manifest_nsis_records(manifest);
+        let uninstall_path = validate_nsis_record_scope(&expected_nsis_records[0])?;
+        for record in &expected_nsis_records[1..] {
+            let additional_uninstall_path = validate_nsis_record_scope(record)?;
+            if normalize_path(&additional_uninstall_path) != normalize_path(&uninstall_path) {
+                return Err("Recovery NSIS registrations have different uninstall paths.".into());
+            }
+        }
         if manifest.current_exe.role != "currentExe"
             || !Path::new(&manifest.current_exe.path).is_absolute()
             || manifest.current_exe.is_reparse_point()
@@ -868,21 +896,23 @@ impl<B: RepairBackend> RepairEngine<B> {
         }
         match mode {
             RecoveryScopeMode::TrustedInMemory => unreachable!("trusted recovery returned above"),
-            RecoveryScopeMode::Incomplete => match nsis_records.as_slice() {
-                [record]
-                    if record.locator == manifest.nsis_record.locator
-                        && record_digest(record) == record_digest(&manifest.nsis_record) => {}
-                [] if manifest.registry_delete_pending || manifest.registry_deleted => {}
-                [] => {
+            RecoveryScopeMode::Incomplete => {
+                let deletion_may_have_started =
+                    manifest.registry_delete_pending || manifest.registry_deleted;
+                if !exact_record_subset_matches(
+                    &nsis_records,
+                    &expected_nsis_records,
+                    deletion_may_have_started,
+                ) {
+                    return Err("Current NSIS registration differs from the recovery owner.".into());
+                }
+                if nsis_records.is_empty() && !deletion_may_have_started {
                     return Err(
                         "NSIS registration is missing without a pending delete journal state."
                             .into(),
-                    )
+                    );
                 }
-                _ => {
-                    return Err("Current NSIS registration differs from the recovery owner.".into())
-                }
-            },
+            }
             RecoveryScopeMode::CompletedRollback if nsis_records.is_empty() => {}
             RecoveryScopeMode::CompletedRollback => {
                 return Err("Completed repair unexpectedly has an NSIS registration.".into())
@@ -924,11 +954,13 @@ impl<B: RepairBackend> RepairEngine<B> {
             let _ = self.persist(manifest);
         }
         if manifest.registry_deleted || manifest.registry_delete_pending {
-            if let Err(error) = self.backend.restore_record(&manifest.nsis_record) {
-                manifest.state = TransactionState::RollbackFailed;
-                manifest.last_error = Some(combine_errors(&error, journal_error.as_deref()));
-                let _ = self.persist(manifest);
-                return Err(combine_errors(&error, journal_error.as_deref()));
+            for record in manifest_nsis_records(manifest) {
+                if let Err(error) = self.backend.restore_record(&record) {
+                    manifest.state = TransactionState::RollbackFailed;
+                    manifest.last_error = Some(combine_errors(&error, journal_error.as_deref()));
+                    let _ = self.persist(manifest);
+                    return Err(combine_errors(&error, journal_error.as_deref()));
+                }
             }
             manifest.registry_deleted = false;
             manifest.registry_delete_pending = false;
@@ -1017,11 +1049,13 @@ fn build_repair_plan(observation: &SystemObservation) -> Result<RepairPlan, Vec<
         .iter()
         .filter(|record| record.family == InstallerFamily::Msi)
         .collect::<Vec<_>>();
-    let nsis = observation
+    let mut nsis = observation
         .records
         .iter()
         .filter(|record| record.family == InstallerFamily::Nsis)
+        .cloned()
         .collect::<Vec<_>>();
+    nsis.sort_by(|left, right| left.locator.cmp(&right.locator));
     if observation
         .records
         .iter()
@@ -1032,14 +1066,17 @@ fn build_repair_plan(observation: &SystemObservation) -> Result<RepairPlan, Vec<
     if msi.len() != 1 {
         blockers.push("Repair requires exactly one MSI registration.".into());
     }
-    if nsis.len() != 1 {
-        blockers.push("Repair requires exactly one stale NSIS registration.".into());
+    if nsis.is_empty()
+        || nsis.len() > 2
+        || (nsis.len() == 2 && !equivalent_dual_view_records(&nsis[0], &nsis[1]))
+    {
+        blockers.push("Repair requires exactly one logical stale NSIS registration.".into());
     }
     if !blockers.is_empty() {
         return Err(blockers);
     }
     let msi = msi[0];
-    let nsis = nsis[0];
+    let primary_nsis = &nsis[0];
     if msi.display_version.as_deref() != Some(observation.current_version.as_str()) {
         blockers.push("The MSI registration does not match the running app version.".into());
     }
@@ -1049,13 +1086,13 @@ fn build_repair_plan(observation: &SystemObservation) -> Result<RepairPlan, Vec<
     if !msi.product_code.as_deref().is_some_and(is_product_code) {
         blockers.push("The MSI registration does not have a valid product code.".into());
     }
-    if nsis.locator.hive != RegistryHive::CurrentUser {
+    if primary_nsis.locator.hive != RegistryHive::CurrentUser {
         blockers.push("Only a stale current-user NSIS registration can be repaired.".into());
     }
-    if nsis.has_subkeys {
+    if primary_nsis.has_subkeys {
         blockers.push("The NSIS uninstall registration contains unexpected subkeys.".into());
     }
-    let nsis_version = nsis.display_version.as_deref();
+    let nsis_version = primary_nsis.display_version.as_deref();
     if nsis_version
         .zip(Some(observation.current_version.as_str()))
         .and_then(|(left, right)| compare_versions(left, right))
@@ -1075,7 +1112,7 @@ fn build_repair_plan(observation: &SystemObservation) -> Result<RepairPlan, Vec<
     if msi_location.as_deref() != Some(current_parent.as_str()) {
         blockers.push("The MSI install location does not own the running executable.".into());
     }
-    let Some(uninstall_path) = nsis
+    let Some(uninstall_path) = primary_nsis
         .uninstall_string
         .as_deref()
         .and_then(parse_strict_uninstall_path)
@@ -1137,9 +1174,45 @@ fn build_repair_plan(observation: &SystemObservation) -> Result<RepairPlan, Vec<
     Ok(RepairPlan {
         fingerprint: observation_fingerprint(observation),
         msi: msi.clone(),
-        nsis: nsis.clone(),
+        nsis_records: nsis,
         current_exe: current_file.clone(),
         files,
+    })
+}
+
+fn equivalent_dual_view_records(left: &InstallerRecord, right: &InstallerRecord) -> bool {
+    left.locator.view != right.locator.view && records_equal_ignoring_view(left, right)
+}
+
+fn records_equal_ignoring_view(left: &InstallerRecord, right: &InstallerRecord) -> bool {
+    let mut normalized_left = left.clone();
+    let mut normalized_right = right.clone();
+    normalized_left.locator.view = RegistryView::Registry32;
+    normalized_right.locator.view = RegistryView::Registry32;
+    normalized_left == normalized_right
+}
+
+fn manifest_nsis_records(manifest: &RepairManifest) -> Vec<InstallerRecord> {
+    std::iter::once(manifest.nsis_record.clone())
+        .chain(manifest.additional_nsis_records.iter().cloned())
+        .collect()
+}
+
+fn exact_record_subset_matches(
+    current: &[&InstallerRecord],
+    expected: &[InstallerRecord],
+    allow_subset: bool,
+) -> bool {
+    if current.len() > expected.len() || (!allow_subset && current.len() != expected.len()) {
+        return false;
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    current.iter().all(|record| {
+        seen.insert(record.locator.clone())
+            && expected.iter().any(|candidate| {
+                candidate.locator == record.locator
+                    && record_digest(candidate) == record_digest(record)
+            })
     })
 }
 
@@ -1935,6 +2008,7 @@ mod tests {
         drift_on_observe: Option<usize>,
         drift_exe_on_observe: Option<usize>,
         drift_on_move: bool,
+        alias_nsis_views: bool,
         mutations: usize,
     }
 
@@ -2013,12 +2087,32 @@ mod tests {
                 drift_on_observe: None,
                 drift_exe_on_observe: None,
                 drift_on_move: false,
+                alias_nsis_views: false,
                 mutations: 0,
             }
         }
 
+        fn healthy_mixed_dual_view(include_shortcut: bool) -> Self {
+            let mut backend = Self::healthy_mixed(include_shortcut);
+            let mut mirror = backend
+                .observation
+                .records
+                .iter()
+                .find(|record| record.family == InstallerFamily::Nsis)
+                .expect("healthy mixed fixture has an NSIS record")
+                .clone();
+            mirror.locator.view = RegistryView::Registry32;
+            backend.observation.records.push(mirror);
+            backend
+        }
+
         fn fail(mut self, method: &'static str, call: usize) -> Self {
             self.fail_methods.push((method, call));
+            self
+        }
+
+        fn alias_nsis_views(mut self) -> Self {
+            self.alias_nsis_views = true;
             self
         }
 
@@ -2114,9 +2208,15 @@ mod tests {
             if record_digest(current) != record_digest(record) {
                 return Err("record drifted before delete".into());
             }
-            self.observation
-                .records
-                .retain(|candidate| candidate.locator != record.locator);
+            if self.alias_nsis_views && record.family == InstallerFamily::Nsis {
+                self.observation
+                    .records
+                    .retain(|candidate| !records_equal_ignoring_view(candidate, record));
+            } else {
+                self.observation
+                    .records
+                    .retain(|candidate| candidate.locator != record.locator);
+            }
             self.mutations += 1;
             Ok(())
         }
@@ -2136,6 +2236,14 @@ mod tests {
                 };
             }
             self.observation.records.push(record.clone());
+            if self.alias_nsis_views && record.family == InstallerFamily::Nsis {
+                let mut mirror = record.clone();
+                mirror.locator.view = match record.locator.view {
+                    RegistryView::Registry32 => RegistryView::Registry64,
+                    RegistryView::Registry64 => RegistryView::Registry32,
+                };
+                self.observation.records.push(mirror);
+            }
             self.mutations += 1;
             Ok(())
         }
@@ -2223,7 +2331,8 @@ mod tests {
             post_fingerprint: None,
             msi_digest: record_digest(&plan.msi),
             current_exe: plan.current_exe,
-            nsis_record: plan.nsis,
+            nsis_record: plan.nsis_records[0].clone(),
+            additional_nsis_records: plan.nsis_records[1..].to_vec(),
             files,
             moved_file_count: 0,
             pending_file_move: None,
@@ -2267,6 +2376,210 @@ mod tests {
             serde_json::to_value(&preview).unwrap()["recoveryRequired"],
             false
         );
+    }
+
+    #[test]
+    fn equivalent_dual_view_nsis_is_one_repairable_logical_owner() {
+        let mut engine = RepairEngine::new(FakeBackend::healthy_mixed_dual_view(false), "1.2.3");
+        let preview = engine.preview();
+        assert_eq!(preview.status, "repairable");
+        assert!(preview.fingerprint.is_some());
+        assert_eq!(preview.records.len(), 3);
+    }
+
+    #[test]
+    fn divergent_dual_view_nsis_remains_blocked_and_zero_write() {
+        for variant in 0..3 {
+            let mut backend = FakeBackend::healthy_mixed_dual_view(false);
+            match variant {
+                0 => backend.observation.records[2].display_version = Some("1.2.1".into()),
+                1 => {
+                    backend.observation.records[2]
+                        .values
+                        .get_mut("DisplayName")
+                        .unwrap()
+                        .data_base64 = BASE64.encode([9]);
+                }
+                2 => backend.observation.records[2]
+                    .locator
+                    .key_path
+                    .push_str("-other"),
+                _ => unreachable!(),
+            }
+            let mut engine = RepairEngine::new(backend, "1.2.3");
+            let preview = engine.preview();
+            assert_eq!(preview.status, "blocked", "variant {variant}");
+            assert!(preview.fingerprint.is_none(), "variant {variant}");
+            assert_eq!(engine.backend.mutations, 0, "variant {variant}");
+            assert!(engine.backend.manifests.is_empty(), "variant {variant}");
+        }
+    }
+
+    #[test]
+    fn third_nsis_registration_remains_blocked_and_zero_write() {
+        let mut backend = FakeBackend::healthy_mixed_dual_view(false);
+        let mut third = backend.observation.records[2].clone();
+        third.locator.key_path.push_str("-third");
+        backend.observation.records.push(third);
+        let mut engine = RepairEngine::new(backend, "1.2.3");
+        let preview = engine.preview();
+        assert_eq!(preview.status, "blocked");
+        assert!(preview.fingerprint.is_none());
+        assert_eq!(engine.backend.mutations, 0);
+        assert!(engine.backend.manifests.is_empty());
+    }
+
+    #[test]
+    fn dual_view_apply_and_rollback_cover_both_exact_locators() {
+        let backend = FakeBackend::healthy_mixed_dual_view(false);
+        let pre = observation_fingerprint(&backend.observation);
+        let mut engine = RepairEngine::new(backend, "1.2.3");
+        let completed = engine.apply(&pre, "operation-dual-view").unwrap();
+        assert!(engine
+            .backend
+            .observation
+            .records
+            .iter()
+            .all(|record| record.family != InstallerFamily::Nsis));
+
+        let rolled_back = engine
+            .rollback(
+                completed.transaction_id.as_deref().unwrap(),
+                completed.fingerprint.as_deref().unwrap(),
+            )
+            .unwrap();
+        assert_eq!(rolled_back.status, "rolledBack");
+        assert_eq!(observation_fingerprint(&engine.backend.observation), pre);
+    }
+
+    #[test]
+    fn aliased_dual_view_apply_and_rollback_remain_idempotent() {
+        let backend = FakeBackend::healthy_mixed_dual_view(false).alias_nsis_views();
+        let pre = observation_fingerprint(&backend.observation);
+        let mut engine = RepairEngine::new(backend, "1.2.3");
+        let completed = engine.apply(&pre, "operation-aliased-dual-view").unwrap();
+        assert!(engine
+            .backend
+            .observation
+            .records
+            .iter()
+            .all(|record| record.family != InstallerFamily::Nsis));
+
+        engine
+            .rollback(
+                completed.transaction_id.as_deref().unwrap(),
+                completed.fingerprint.as_deref().unwrap(),
+            )
+            .unwrap();
+        assert_eq!(observation_fingerprint(&engine.backend.observation), pre);
+    }
+
+    #[test]
+    fn dual_view_second_delete_failure_restores_both_exact_locators() {
+        let backend = FakeBackend::healthy_mixed_dual_view(false).fail("delete", 2);
+        let pre = observation_fingerprint(&backend.observation);
+        let mut engine = RepairEngine::new(backend, "1.2.3");
+        let error = engine
+            .apply(&pre, "operation-dual-view-delete-failure")
+            .unwrap_err();
+        assert!(error.contains("rolled back"));
+        assert_eq!(observation_fingerprint(&engine.backend.observation), pre);
+    }
+
+    #[test]
+    fn dual_view_partial_registry_delete_explicit_recovery_restores_pre_state() {
+        let mut backend = FakeBackend::healthy_mixed_dual_view(false);
+        let pre = observation_fingerprint(&backend.observation);
+        let mut manifest = crash_manifest(&backend, "dual-view-partial-delete");
+        manifest.registry_delete_pending = true;
+        backend.delete_record(&manifest.nsis_record).unwrap();
+        backend
+            .manifests
+            .insert(manifest.transaction_id.clone(), manifest);
+        let observation_after_crash = backend.observation.clone();
+        let mutations_after_crash = backend.mutations;
+
+        let mut engine = RepairEngine::new(backend, "1.2.3");
+        let preview = engine.preview();
+        assert_eq!(preview.status, "blocked");
+        assert!(preview.recovery_required);
+        assert_eq!(engine.backend.observation, observation_after_crash);
+        assert_eq!(engine.backend.mutations, mutations_after_crash);
+
+        let recovered = engine.recover().unwrap();
+        assert_eq!(recovered.status, "rolledBack");
+        assert_eq!(observation_fingerprint(&engine.backend.observation), pre);
+        let mut restored_locators = engine
+            .backend
+            .observation
+            .records
+            .iter()
+            .filter(|record| record.family == InstallerFamily::Nsis)
+            .map(|record| record.locator.clone())
+            .collect::<Vec<_>>();
+        restored_locators.sort();
+        assert_eq!(restored_locators.len(), 2);
+        assert_ne!(restored_locators[0].view, restored_locators[1].view);
+    }
+
+    #[test]
+    fn dual_view_manifest_rejects_divergent_or_escaped_additional_record() {
+        for variant in 0..3 {
+            let mut backend = FakeBackend::healthy_mixed_dual_view(false);
+            let mut manifest = crash_manifest(&backend, &format!("malicious-dual-{variant}"));
+            match variant {
+                0 => {
+                    manifest.additional_nsis_records[0].locator.view =
+                        manifest.nsis_record.locator.view;
+                }
+                1 => {
+                    manifest.additional_nsis_records[0]
+                        .values
+                        .get_mut("DisplayName")
+                        .unwrap()
+                        .data_base64 = BASE64.encode([9]);
+                }
+                2 => {
+                    manifest.additional_nsis_records[0].locator.hive = RegistryHive::LocalMachine;
+                }
+                _ => unreachable!(),
+            }
+            manifest.registry_delete_pending = true;
+            backend
+                .manifests
+                .insert(manifest.transaction_id.clone(), manifest);
+            let observation = backend.observation.clone();
+            let manifests = backend.manifests.clone();
+            let mutations = backend.mutations;
+            let mut engine = RepairEngine::new(backend, "1.2.3");
+            assert_eq!(engine.preview().status, "blocked", "variant {variant}");
+            assert!(engine.recover().is_err(), "variant {variant}");
+            assert_eq!(engine.backend.observation, observation, "variant {variant}");
+            assert_eq!(engine.backend.manifests, manifests, "variant {variant}");
+            assert_eq!(engine.backend.mutations, mutations, "variant {variant}");
+        }
+    }
+
+    #[test]
+    fn journal_schema_three_preserves_legacy_schema_two_read_compatibility() {
+        let single_backend = FakeBackend::healthy_mixed(false);
+        let mut legacy = crash_manifest(&single_backend, "legacy-schema-two");
+        legacy.schema_version = LEGACY_SNAPSHOT_SCHEMA_VERSION;
+        let mut legacy_json = serde_json::to_value(&legacy).unwrap();
+        legacy_json
+            .as_object_mut()
+            .unwrap()
+            .remove("additionalNsisRecords");
+        let parsed: RepairManifest = serde_json::from_value(legacy_json).unwrap();
+        assert!(validate_manifest(&parsed).is_ok());
+
+        let dual_backend = FakeBackend::healthy_mixed_dual_view(false);
+        let current = crash_manifest(&dual_backend, "current-schema-three");
+        assert_eq!(current.schema_version, SNAPSHOT_SCHEMA_VERSION);
+        assert_eq!(current.additional_nsis_records.len(), 1);
+        let mut unsafe_legacy = current;
+        unsafe_legacy.schema_version = LEGACY_SNAPSHOT_SCHEMA_VERSION;
+        assert!(validate_manifest(&unsafe_legacy).is_err());
     }
 
     #[test]
