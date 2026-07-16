@@ -65,6 +65,7 @@ type UseThreadActionsOptions = {
   threadActivityRef: MutableRefObject<Record<string, Record<string, number>>>;
   loadedThreadsRef: MutableRefObject<Record<string, boolean>>;
   replaceOnResumeRef: MutableRefObject<Record<string, boolean>>;
+  tokenUsageRevisionByThreadRef: MutableRefObject<Record<string, number>>;
   applyCollabThreadLinksFromThread: (
     workspaceId: string,
     threadId: string,
@@ -103,6 +104,7 @@ export function useThreadActions({
   threadActivityRef,
   loadedThreadsRef,
   replaceOnResumeRef,
+  tokenUsageRevisionByThreadRef,
   applyCollabThreadLinksFromThread,
   hydrateSubagentThreads,
   updateThreadParent,
@@ -112,6 +114,8 @@ export function useThreadActions({
 }: UseThreadActionsOptions) {
   const localArchivedCursorByWorkspaceRef = useRef<Record<string, string | null>>({});
   const resumeInFlightByThreadRef = useRef<Record<string, number>>({});
+  const resumeGenerationByThreadRef = useRef<Record<string, number>>({});
+  const resumeAppliedGenerationByThreadRef = useRef<Record<string, number>>({});
   const threadStatusByIdRef = useRef(threadStatusById);
   const activeTurnIdByThreadRef = useRef(activeTurnIdByThread);
   threadStatusByIdRef.current = threadStatusById;
@@ -240,6 +244,11 @@ export function useThreadActions({
         label: "thread/resume",
         payload: { workspaceId, threadId },
       });
+      const resumeKey = `${workspaceId}:${threadId}`;
+      const resumeGeneration = (resumeGenerationByThreadRef.current[resumeKey] ?? 0) + 1;
+      resumeGenerationByThreadRef.current[resumeKey] = resumeGeneration;
+      const tokenUsageRevisionAtStart =
+        tokenUsageRevisionByThreadRef.current[resumeKey] ?? 0;
       const inFlightCount =
         (resumeInFlightByThreadRef.current[threadId] ?? 0) + 1;
       resumeInFlightByThreadRef.current[threadId] = inFlightCount;
@@ -263,9 +272,21 @@ export function useThreadActions({
           return null;
         }
         if (thread) {
+          if (
+            resumeGeneration <
+            (resumeAppliedGenerationByThreadRef.current[resumeKey] ?? 0)
+          ) {
+            return threadId;
+          }
           dispatch({ type: "ensureThread", workspaceId, threadId });
           const tokenUsage = extractTokenUsageFromResponse(response, thread);
-          if (tokenUsage) {
+          if (
+            tokenUsage &&
+            (tokenUsageRevisionByThreadRef.current[resumeKey] ?? 0) ===
+              tokenUsageRevisionAtStart
+          ) {
+            tokenUsageRevisionByThreadRef.current[resumeKey] =
+              tokenUsageRevisionAtStart + 1;
             dispatch({
               type: "setThreadTokenUsage",
               threadId,
@@ -355,6 +376,7 @@ export function useThreadActions({
               hydrationPlan.lastMessageTimestamp,
             );
           }
+          resumeAppliedGenerationByThreadRef.current[resumeKey] = resumeGeneration;
         }
         loadedThreadsRef.current[threadId] = true;
         return threadId;
@@ -391,6 +413,7 @@ export function useThreadActions({
       loadedThreadsRef,
       onDebug,
       replaceOnResumeRef,
+      tokenUsageRevisionByThreadRef,
     ],
   );
 

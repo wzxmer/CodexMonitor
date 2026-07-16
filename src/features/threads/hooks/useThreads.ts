@@ -167,6 +167,7 @@ export function useThreads({
   const threadParentByIdRef = useRef(state.threadParentById);
   const cascadeArchiveSkipRef = useRef<Record<string, number>>({});
   const subagentHydrationInFlightRef = useRef<Record<string, true>>({});
+  const tokenUsageRevisionByThreadRef = useRef<Record<string, number>>({});
   const autoArchiveInFlightRef = useRef(false);
   const workspacesRef = useRef(workspaces);
   const autoContinueSendRef = useRef<
@@ -705,6 +706,20 @@ export function useThreads({
     [handleAutoContinueTurnStarted, subagentCheckpointSync, threadHandlers],
   );
 
+  const handleThreadTokenUsageUpdated = useCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+      tokenUsage: Record<string, unknown> | null,
+    ) => {
+      const key = buildWorkspaceThreadKey(workspaceId, threadId);
+      tokenUsageRevisionByThreadRef.current[key] =
+        (tokenUsageRevisionByThreadRef.current[key] ?? 0) + 1;
+      threadHandlers.onThreadTokenUsageUpdated?.(workspaceId, threadId, tokenUsage);
+    },
+    [threadHandlers],
+  );
+
   const handleTurnCompleted = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
       threadHandlers.onTurnCompleted?.(workspaceId, threadId, turnId);
@@ -757,6 +772,7 @@ export function useThreads({
       onThreadArchived: handleThreadArchived,
       onThreadUnarchived: handleThreadUnarchived,
       onTurnStarted: handleTurnStarted,
+      onThreadTokenUsageUpdated: handleThreadTokenUsageUpdated,
       onTurnCompleted: handleTurnCompleted,
       onTurnError: handleTurnError,
       onThreadClosed: handleThreadClosed,
@@ -770,6 +786,7 @@ export function useThreads({
       handleThreadArchived,
       handleThreadUnarchived,
       handleTurnStarted,
+      handleThreadTokenUsageUpdated,
       handleTurnCompleted,
       handleTurnError,
       handleThreadClosed,
@@ -807,6 +824,7 @@ export function useThreads({
     threadActivityRef,
     loadedThreadsRef,
     replaceOnResumeRef,
+    tokenUsageRevisionByThreadRef,
     applyCollabThreadLinksFromThread,
     hydrateSubagentThreads,
     updateThreadParent,

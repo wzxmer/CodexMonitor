@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { ConversationItem, ThreadSummary } from "@/types";
 import { generateRunMetadata } from "@services/tauri";
@@ -91,6 +91,15 @@ describe("useThreadTitleAutogeneration", () => {
       setThreadName: (value: string) => {
         const index = threadsByWorkspaceRef.current["ws-1"].findIndex(
           (thread) => thread.id === "thread-1",
+        );
+        threadsByWorkspaceRef.current["ws-1"][index] = {
+          ...threadsByWorkspaceRef.current["ws-1"][index],
+          name: value,
+        };
+      },
+      setParentThreadName: (value: string) => {
+        const index = threadsByWorkspaceRef.current["ws-1"].findIndex(
+          (thread) => thread.id === "thread-parent",
         );
         threadsByWorkspaceRef.current["ws-1"][index] = {
           ...threadsByWorkspaceRef.current["ws-1"][index],
@@ -809,5 +818,103 @@ describe("useThreadTitleAutogeneration", () => {
     });
 
     expect(persistGeneratedTitle).not.toHaveBeenCalled();
+  });
+
+  it("does not persist a subagent title generated from a stale parent title", async () => {
+    let resolvePromise!: (value: { title: string; worktreeName: string }) => void;
+    const pending = new Promise<{ title: string; worktreeName: string }>((resolve) => {
+      resolvePromise = resolve;
+    });
+    vi.mocked(generateRunMetadata)
+      .mockReturnValueOnce(pending)
+      .mockResolvedValueOnce({
+        title: "Routing audit",
+        worktreeName: "chore/routing-audit",
+      });
+    const { result, persistGeneratedTitle, setParentThreadName } = setup({
+      parentThreadName: "完善会话路由",
+      threadName: "routing audit",
+    });
+
+    const generation = result.current.onSubagentThreadDetected("ws-1", {
+      id: "thread-1",
+      source: {
+        subagent: {
+          thread_spawn: {
+            parent_thread_id: "thread-parent",
+            agent_path: "/root/routing_audit",
+          },
+        },
+      },
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    setParentThreadName("Stabilize session routing");
+    resolvePromise({ title: "路由审查", worktreeName: "chore/routing-audit" });
+    await act(async () => {
+      await generation;
+    });
+
+    await waitFor(() => {
+      expect(persistGeneratedTitle).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-1",
+        "Routing audit",
+      );
+    });
+    expect(persistGeneratedTitle).not.toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "路由审查",
+    );
+  });
+
+  it("requeues immediately when a stale parent title request rejects", async () => {
+    let rejectPromise!: (error: Error) => void;
+    const pending = new Promise<{ title: string; worktreeName: string }>(
+      (_resolve, reject) => {
+        rejectPromise = reject;
+      },
+    );
+    vi.mocked(generateRunMetadata)
+      .mockReturnValueOnce(pending)
+      .mockResolvedValueOnce({
+        title: "Routing audit",
+        worktreeName: "chore/routing-audit",
+      });
+    const { result, persistGeneratedTitle, setParentThreadName } = setup({
+      parentThreadName: "完善会话路由",
+      threadName: "routing audit",
+    });
+
+    const generation = result.current.onSubagentThreadDetected("ws-1", {
+      id: "thread-1",
+      source: {
+        subagent: {
+          thread_spawn: {
+            parent_thread_id: "thread-parent",
+            agent_path: "/root/routing_audit",
+          },
+        },
+      },
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    setParentThreadName("Stabilize session routing");
+    rejectPromise(new Error("stale generation failed"));
+    await act(async () => {
+      await generation;
+    });
+
+    await waitFor(() => {
+      expect(generateRunMetadata).toHaveBeenCalledTimes(2);
+      expect(persistGeneratedTitle).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-1",
+        "Routing audit",
+      );
+    });
   });
 });

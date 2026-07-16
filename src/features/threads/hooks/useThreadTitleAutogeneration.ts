@@ -182,12 +182,31 @@ export function useThreadTitleAutogeneration({
       }
       subagentAttemptsRef.current[key] = attempts + 1;
       subagentInFlightRef.current[key] = true;
+      let requeueForParentTitleChange = false;
+      const resetIfParentTitleChanged = () => {
+        const latestParentTitle =
+          threadsByWorkspaceRef.current[workspaceId]
+            ?.find((thread) => thread.id === parentThreadId)
+            ?.name.trim() ?? "";
+        if (latestParentTitle === parentTitle) {
+          return false;
+        }
+        subagentAttemptsRef.current[key] = Math.max(
+          0,
+          (subagentAttemptsRef.current[key] ?? 1) - 1,
+        );
+        requeueForParentTitleChange = Boolean(latestParentTitle);
+        return true;
+      };
       const language = getSubagentTitleLanguage(parentTitle);
       try {
         const metadata = await generateRunMetadata(
           workspaceId,
           buildSubagentTitlePrompt(parentTitle, taskTitle, language),
         );
+        if (resetIfParentTitleChanged()) {
+          return;
+        }
         const title = clampThreadName(metadata.title ?? "");
         if (!title || !titleMatchesLanguage(title, language)) {
           throw new Error("Generated subagent title language did not match parent title");
@@ -220,6 +239,9 @@ export function useThreadTitleAutogeneration({
         if (disposedRef.current) {
           return;
         }
+        if (resetIfParentTitleChanged()) {
+          return;
+        }
         onDebug?.({
           id: `${Date.now()}-subagent-title-autogen-error`,
           timestamp: Date.now(),
@@ -250,6 +272,12 @@ export function useThreadTitleAutogeneration({
         }
       } finally {
         delete subagentInFlightRef.current[key];
+        if (requeueForParentTitleChange) {
+          const pending = pendingSubagentTitlesRef.current[key];
+          if (pending) {
+            void enqueueSubagentTitleCandidateRef.current(pending);
+          }
+        }
       }
     },
     [

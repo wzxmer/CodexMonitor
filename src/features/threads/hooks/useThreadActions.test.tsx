@@ -77,6 +77,9 @@ describe("useThreadActions", () => {
     const dispatch = vi.fn();
     const loadedThreadsRef = { current: {} as Record<string, boolean> };
     const replaceOnResumeRef = { current: {} as Record<string, boolean> };
+    const tokenUsageRevisionByThreadRef = {
+      current: {} as Record<string, number>,
+    };
     const threadActivityRef = {
       current: {} as Record<string, Record<string, number>>,
     };
@@ -101,6 +104,7 @@ describe("useThreadActions", () => {
       threadActivityRef,
       loadedThreadsRef,
       replaceOnResumeRef,
+      tokenUsageRevisionByThreadRef,
       applyCollabThreadLinksFromThread,
       hydrateSubagentThreads,
       updateThreadParent,
@@ -512,6 +516,149 @@ describe("useThreadActions", () => {
         modelContextWindow: 100000,
       }),
     });
+  });
+
+  it("ignores token usage from an older overlapping resume", async () => {
+    let resolveFirst!: (value: Record<string, unknown>) => void;
+    let resolveSecond!: (value: Record<string, unknown>) => void;
+    const first = new Promise<Record<string, unknown>>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const second = new Promise<Record<string, unknown>>((resolve) => {
+      resolveSecond = resolve;
+    });
+    vi.mocked(resumeThread)
+      .mockReturnValueOnce(first as any)
+      .mockReturnValueOnce(second as any);
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(mergeThreadItems).mockReturnValue([]);
+
+    const { result, dispatch } = renderActions();
+    let firstResume!: Promise<string | null>;
+    let secondResume!: Promise<string | null>;
+    await act(async () => {
+      firstResume = result.current.resumeThreadForWorkspace("ws-1", "thread-usage", true);
+      secondResume = result.current.resumeThreadForWorkspace("ws-1", "thread-usage", true);
+    });
+
+    resolveSecond({
+      result: {
+        thread: {
+          id: "thread-usage",
+          token_usage: { total: { total_tokens: 200 } },
+        },
+      },
+    });
+    await act(async () => {
+      await secondResume;
+    });
+    resolveFirst({
+      result: {
+        thread: {
+          id: "thread-usage",
+          token_usage: { total: { total_tokens: 100 } },
+        },
+      },
+    });
+    await act(async () => {
+      await firstResume;
+    });
+
+    const usageActions = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "setThreadTokenUsage");
+    expect(usageActions).toEqual([
+      expect.objectContaining({
+        tokenUsage: expect.objectContaining({
+          total: expect.objectContaining({ totalTokens: 200 }),
+        }),
+      }),
+    ]);
+  });
+
+  it("keeps an earlier successful resume when a newer request fails", async () => {
+    let resolveFirst!: (value: Record<string, unknown>) => void;
+    let rejectSecond!: (error: Error) => void;
+    const first = new Promise<Record<string, unknown>>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const second = new Promise<Record<string, unknown>>((_resolve, reject) => {
+      rejectSecond = reject;
+    });
+    vi.mocked(resumeThread)
+      .mockReturnValueOnce(first as any)
+      .mockReturnValueOnce(second as any);
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(mergeThreadItems).mockReturnValue([]);
+
+    const { result, dispatch } = renderActions();
+    let firstResume!: Promise<string | null>;
+    let secondResume!: Promise<string | null>;
+    await act(async () => {
+      firstResume = result.current.resumeThreadForWorkspace("ws-1", "thread-usage", true);
+      secondResume = result.current.resumeThreadForWorkspace("ws-1", "thread-usage", true);
+    });
+    resolveFirst({
+      result: {
+        thread: {
+          id: "thread-usage",
+          token_usage: { total: { total_tokens: 100 } },
+        },
+      },
+    });
+    await act(async () => {
+      await firstResume;
+    });
+    rejectSecond(new Error("newer resume failed"));
+    await act(async () => {
+      await secondResume;
+    });
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "setThreadTokenUsage",
+        tokenUsage: expect.objectContaining({
+          total: expect.objectContaining({ totalTokens: 100 }),
+        }),
+      }),
+    );
+  });
+
+  it("does not overwrite token usage updated live during resume", async () => {
+    let resolveResume!: (value: Record<string, unknown>) => void;
+    const pending = new Promise<Record<string, unknown>>((resolve) => {
+      resolveResume = resolve;
+    });
+    vi.mocked(resumeThread).mockReturnValue(pending as any);
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(mergeThreadItems).mockReturnValue([]);
+    const tokenUsageRevisionByThreadRef = {
+      current: { "ws-1:thread-usage": 0 } as Record<string, number>,
+    };
+    const { result, dispatch } = renderActions({
+      tokenUsageRevisionByThreadRef,
+    });
+
+    let resume!: Promise<string | null>;
+    await act(async () => {
+      resume = result.current.resumeThreadForWorkspace("ws-1", "thread-usage", true);
+    });
+    tokenUsageRevisionByThreadRef.current["ws-1:thread-usage"] = 1;
+    resolveResume({
+      result: {
+        thread: {
+          id: "thread-usage",
+          token_usage: { total: { total_tokens: 100 } },
+        },
+      },
+    });
+    await act(async () => {
+      await resume;
+    });
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "setThreadTokenUsage" }),
+    );
   });
 
   it("keeps token usage unknown when resume has no usage snapshot", async () => {
