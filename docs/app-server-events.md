@@ -1,4 +1,4 @@
-# App-Server Events Reference (Codex `9e552e9d15ba52bed7077d5357f3e18e330f8f38`)
+# App-Server Events Reference (Codex `8aae85895809601a055902f1b85647620e01a523`)
 
 This document helps agents quickly answer:
 - Which app-server events CodexMonitor supports right now.
@@ -7,15 +7,22 @@ This document helps agents quickly answer:
 - Where to look in `../Codex` to compare event lists and find emitters.
 
 When updating this document:
-1. Fetch latest refs with `git -C ../Codex fetch --all --prune`.
-2. Update the Codex hash in the title using `git -C ../Codex rev-parse origin/main`.
-3. Compare Codex events vs CodexMonitor routing.
-4. Compare Codex client request methods vs CodexMonitor outgoing request methods.
-5. Compare Codex server request methods vs CodexMonitor inbound request handling.
-6. Update supported and missing lists below.
+1. Confirm the intended Codex baseline. This revision is pinned to
+   `8aae85895809601a055902f1b85647620e01a523`; do not replace it with
+   `origin/main` unless the baseline is intentionally advanced.
+2. Compare Codex events vs CodexMonitor routing.
+3. Compare Codex client request methods vs CodexMonitor outgoing request methods.
+4. Compare Codex server request methods vs CodexMonitor inbound request handling.
+5. Update supported and missing lists below.
 
 Related project skill:
 - `.codex/skills/app-server-events-sync/SKILL.md`
+
+Multi-agent schema notes:
+- Upstream `spawn_agent` can expose per-spawn `model`, `reasoning_effort`, `service_tier`, and `fork_turns`. Model overrides depend on the effective `expose_spawn_agent_model_overrides` configuration.
+- The currently observed Codex tool surface exposes only `task_name`, `message`, and `fork_turns`; CodexMonitor must inspect the active runtime schema before enabling automatic model or effort routing.
+- `fork_turns` accepts `none`, `all`, or a positive recent-turn count. Upstream has no generic per-spawn metadata or token-level context budget field, and full-history forks cannot override agent type, model, or reasoning effort.
+- The upstream `collabAgentToolCall` item carries optional `model` and `reasoningEffort`, but CodexMonitor's normalized `ConversationItem` currently drops them. Execution routing must retain and compare these fields before claiming planned-versus-actual verification.
 
 ## Where To Look In CodexMonitor
 
@@ -68,8 +75,9 @@ subscriptions.
 - `item/commandExecution/outputDelta`
 - `item/commandExecution/terminalInteraction`
 - `item/completed`
-- `item/fileChange/outputDelta`
-- `item/plan/delta`
+- `item/fileChange/outputDelta` (deprecated legacy apply-patch stream)
+- `item/plan/delta` (upstream documents this as experimental; it is not
+  `#[experimental]`-gated)
 - `item/reasoning/summaryPartAdded`
 - `item/reasoning/summaryTextDelta`
 - `item/reasoning/textDelta`
@@ -120,27 +128,48 @@ CodexMonitor status:
 Compared against Codex app-server protocol v2 notifications, the following
 events are currently not routed:
 
-- `configWarning`
+At the baseline hash, upstream defines 70 server notifications; CM routes 28 and leaves 42 below unsupported.
+
 - `command/exec/outputDelta`
+- `configWarning`
 - `deprecationNotice`
+- `externalAgentConfig/import/completed`
+- `externalAgentConfig/import/progress`
+- `fs/changed`
 - `fuzzyFileSearch/sessionCompleted`
 - `fuzzyFileSearch/sessionUpdated`
+- `guardianWarning`
 - `item/mcpToolCall/progress`
 - `item/autoApprovalReview/completed`
 - `item/autoApprovalReview/started`
+- `item/fileChange/patchUpdated`
 - `mcpServer/oauthLogin/completed`
 - `mcpServer/startupStatus/updated`
 - `model/rerouted`
-- `rawResponseItem/completed`
+- `model/safetyBuffering/updated`
+- `model/verification`
+- `process/exited` (experimental)
+- `process/outputDelta` (experimental)
+- `rawResponse/completed` (internal-only)
+- `rawResponseItem/completed` (internal-only)
+- `remoteControl/status/changed`
 - `serverRequest/resolved`
 - `skills/changed`
 - `thread/compacted` (deprecated; intentionally not routed)
-- `thread/realtime/closed`
-- `thread/realtime/error`
-- `thread/realtime/itemAdded`
-- `thread/realtime/outputAudio/delta`
-- `thread/realtime/started`
-- `thread/realtime/transcriptUpdated`
+- `thread/deleted`
+- `thread/goal/cleared`
+- `thread/goal/updated`
+- `thread/realtime/closed` (experimental)
+- `thread/realtime/error` (experimental)
+- `thread/realtime/itemAdded` (experimental)
+- `thread/realtime/outputAudio/delta` (experimental)
+- `thread/realtime/sdp` (experimental)
+- `thread/realtime/started` (experimental)
+- `thread/realtime/transcript/delta` (experimental)
+- `thread/realtime/transcript/done` (experimental)
+- `thread/settings/updated` (experimental)
+- `turn/moderationMetadata` (experimental)
+- `warning`
 - `windows/worldWritableWarning`
 - `windowsSandbox/setupCompleted`
 
@@ -148,6 +177,7 @@ events are currently not routed:
 
 These are v2 request methods CodexMonitor currently sends to Codex app-server:
 
+- `initialize`
 - `thread/start`
 - `thread/resume`
 - `thread/fork`
@@ -156,13 +186,14 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
 - `thread/archive`
 - `thread/compact/start`
 - `thread/name/set`
+- `thread/rollback`
 - `turn/start`
 - `turn/steer` (used for explicit steer follow-ups while a turn is active)
 - `turn/interrupt`
 - `review/start`
 - `model/list`
 - `experimentalFeature/list`
-- `collaborationMode/list`
+- `collaborationMode/list` (experimental)
 - `mcpServerStatus/list`
 - `account/login/start`
 - `account/login/cancel`
@@ -174,12 +205,19 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
 Notes:
 - `turn/start` now forwards the optional `serviceTier` override (`"fast"` for `/fast`, `null` for default/off) alongside `model`, `effort`, and `collaborationMode`.
 - `turn/start` and `turn/steer` forward CM workflow rules, matched skills/agents, and bounded knowledge excerpts through experimental `additionalContext` entries. CM initializes app-server with `experimentalApi: true`; this context is separate from persisted user input.
+- `spawn_agent` is an internal Codex collaboration tool, not a CodexMonitor-to-app-server request. Its raw `collabAgentToolCall` result includes optional `model` and `reasoningEffort`; the current normalized CM item does not retain them.
 
 ## Missing Client Requests (Codex v2 ClientRequest Methods)
 
 Compared against Codex v2 request methods, CodexMonitor currently does not send:
 
+At the baseline hash, upstream defines 119 non-deprecated client requests; CM sends 24 including `initialize`, leaving 95 below unsupported.
+
 - `account/logout`
+- `account/rateLimitResetCredit/consume`
+- `account/sendAddCreditsNudgeEmail`
+- `account/usage/read`
+- `account/workspaceMessages/read`
 - `command/exec`
 - `command/exec/resize`
 - `command/exec/terminate`
@@ -189,8 +227,13 @@ Compared against Codex v2 request methods, CodexMonitor currently does not send:
 - `config/read`
 - `config/value/write`
 - `configRequirements/read`
+- `environment/add` (experimental)
+- `environment/info` (experimental)
+- `environment/status` (experimental)
+- `experimentalFeature/enablement/set`
 - `externalAgentConfig/detect`
 - `externalAgentConfig/import`
+- `externalAgentConfig/import/readHistories`
 - `feedback/upload`
 - `fs/copy`
 - `fs/createDirectory`
@@ -198,31 +241,83 @@ Compared against Codex v2 request methods, CodexMonitor currently does not send:
 - `fs/readDirectory`
 - `fs/readFile`
 - `fs/remove`
+- `fs/unwatch`
+- `fs/watch`
 - `fs/writeFile`
-- `fuzzyFileSearch/sessionStart`
-- `fuzzyFileSearch/sessionStop`
-- `fuzzyFileSearch/sessionUpdate`
+- `hooks/list`
+- `marketplace/add`
+- `marketplace/remove`
+- `marketplace/upgrade`
 - `mcpServer/oauth/login`
-- `mock/experimentalMethod`
+- `mcpServer/resource/read`
+- `mcpServer/tool/call`
+- `memory/reset` (experimental)
+- `mock/experimentalMethod` (experimental)
+- `modelProvider/capabilities/read`
+- `permissionProfile/list`
 - `plugin/install`
+- `plugin/installed`
 - `plugin/list`
 - `plugin/read`
+- `plugin/share/checkout`
+- `plugin/share/delete`
+- `plugin/share/list`
+- `plugin/share/save`
+- `plugin/share/updateTargets`
+- `plugin/skill/read`
 - `plugin/uninstall`
+- `process/kill` (experimental)
+- `process/resizePty` (experimental)
+- `process/spawn` (experimental)
+- `process/writeStdin` (experimental)
+- `remoteControl/client/list` (experimental)
+- `remoteControl/client/revoke` (experimental)
+- `remoteControl/disable` (experimental)
+- `remoteControl/enable` (experimental)
+- `remoteControl/pairing/start` (experimental)
+- `remoteControl/pairing/status` (experimental)
+- `remoteControl/status/read` (experimental)
 - `skills/config/write`
-- `thread/backgroundTerminals/clean`
-- `thread/decrement_elicitation`
-- `thread/increment_elicitation`
+- `skills/extraRoots/set`
+- `thread/approveGuardianDeniedAction`
+- `thread/backgroundTerminals/clean` (experimental)
+- `thread/backgroundTerminals/list` (experimental)
+- `thread/backgroundTerminals/terminate` (experimental)
+- `thread/decrement_elicitation` (experimental)
+- `thread/delete`
+- `thread/goal/clear`
+- `thread/goal/get`
+- `thread/goal/set`
+- `thread/increment_elicitation` (experimental)
+- `thread/inject_items`
+- `thread/items/list` (experimental)
 - `thread/loaded/list`
+- `thread/memoryMode/set` (experimental)
 - `thread/metadata/update`
-- `thread/realtime/appendAudio`
-- `thread/realtime/appendText`
-- `thread/realtime/start`
-- `thread/realtime/stop`
-- `thread/rollback`
+- `thread/realtime/appendAudio` (experimental)
+- `thread/realtime/appendSpeech` (experimental)
+- `thread/realtime/appendText` (experimental)
+- `thread/realtime/listVoices` (experimental)
+- `thread/realtime/start` (experimental)
+- `thread/realtime/stop` (experimental)
+- `thread/search` (experimental)
+- `thread/settings/update` (experimental)
 - `thread/shellCommand`
+- `thread/turns/list` (experimental)
 - `thread/unarchive`
 - `thread/unsubscribe`
+- `windowsSandbox/readiness`
 - `windowsSandbox/setupStart`
+
+Deprecated client requests are deliberately excluded from the missing-support backlog:
+
+- `fuzzyFileSearch`
+- `fuzzyFileSearch/sessionStart` (experimental)
+- `fuzzyFileSearch/sessionStop` (experimental)
+- `fuzzyFileSearch/sessionUpdate` (experimental)
+- `getAuthStatus`
+- `getConversationSummary`
+- `gitDiffToRemote`
 
 ## Server Requests (App-Server -> CodexMonitor, v2)
 
@@ -235,9 +330,29 @@ Supported server requests:
 
 Missing server requests:
 
-- `item/tool/call`
+At the baseline hash, upstream defines 9 non-deprecated server requests; CM handles 4 and leaves 5 below unsupported.
+
 - `account/chatgptAuthTokens/refresh`
+- `attestation/generate`
+- `currentTime/read` (experimental)
+- `item/tool/call`
 - `mcpServer/elicitation/request`
+
+Deprecated server requests `applyPatchApproval` and `execCommandApproval` are deliberately not supported; CM uses the current item-scoped approval requests.
+
+## Upstream Classification
+
+Classifications above are from Codex `8aae85895809601a055902f1b85647620e01a523`:
+
+- `experimental`: the protocol declaration carries `#[experimental(...)]`.
+- `deprecated`: the declaration or adjacent upstream documentation explicitly
+  marks the method deprecated.
+- `internal-only`: upstream documentation restricts the notification to Codex
+  Cloud or clients requiring exact upstream usage.
+
+These labels describe protocol status, not whether CodexMonitor supports a
+method. `item/plan/delta` is separately called experimental by upstream prose
+but has no `#[experimental(...)]` attribute at this baseline.
 
 ## Where To Look In ../Codex
 
@@ -246,7 +361,13 @@ Start here for the authoritative v2 notification list:
 
 Useful follow-ups:
 - Notification payload types:
-  - `../Codex/codex-rs/app-server-protocol/src/protocol/v2.rs`
+  - `../Codex/codex-rs/app-server-protocol/src/protocol/v2/*.rs`
+- Thread item payload types:
+  - `../Codex/codex-rs/app-server-protocol/src/protocol/v2/item.rs`
+- Multi-agent tool schema and validation:
+  - `../Codex/codex-rs/core/src/tools/handlers/multi_agents_spec.rs`
+  - `../Codex/codex-rs/core/src/tools/handlers/multi_agents_v2/spawn.rs`
+  - `../Codex/codex-rs/core/src/tools/handlers/multi_agents_common.rs`
 - Emitters / wiring from core events to server notifications:
   - `../Codex/codex-rs/app-server/src/bespoke_event_handling.rs`
 - Human-readable protocol notes:
@@ -276,7 +397,8 @@ Use this workflow to update request support lists:
    - `git -C ../Codex show origin/main:codex-rs/app-server-protocol/src/protocol/common.rs | awk '/server_request_definitions! \\{/,/\\/\\/\\/ DEPRECATED APIs below/' | rg -N -o '=>\\s*\"[^\"]+\"\\s*\\{' | sed -E 's/.*\"([^\"]+)\".*/\\1/' | sort -u`
 4. List CodexMonitor outgoing requests:
    - `perl -0777 -ne 'while(/send_request_for_workspace\\(\\s*&[^,]+\\s*,\\s*\"([^\"]+)\"/g){print \"$1\\n\"}' src-tauri/src/shared/codex_core.rs | sort -u`
-5. Update the Supported Requests, Missing Client Requests, and Server Requests sections.
+5. Check `src-tauri/src/backend/app_server.rs` separately for the initial `initialize` request; it is not sent through `send_request_for_workspace`.
+6. Update the Supported Requests, Missing Client Requests, and Server Requests sections.
 
 ## Schema Drift Workflow (Best)
 
@@ -285,16 +407,16 @@ Use this when the method list is unchanged but behavior looks off.
 1. Confirm the current Codex hash:
    - `git -C ../Codex fetch --all --prune && git -C ../Codex rev-parse origin/main`
 2. Inspect the authoritative notification structs:
-   - `git -C ../Codex show origin/main:codex-rs/app-server-protocol/src/protocol/v2.rs | rg -n \"struct .*Notification\"`
+   - `git -C ../Codex grep -n \"struct .*Notification\" origin/main -- codex-rs/app-server-protocol/src/protocol/v2`
 3. For a specific method, jump to its struct definition:
-   - Example: `git -C ../Codex show origin/main:codex-rs/app-server-protocol/src/protocol/v2.rs | rg -n \"struct TurnPlanUpdatedNotification|struct ThreadTokenUsageUpdatedNotification|struct AccountRateLimitsUpdatedNotification|struct ItemStartedNotification|struct ItemCompletedNotification\"`
+   - Example: `git -C ../Codex grep -n \"struct TurnPlanUpdatedNotification|struct ThreadTokenUsageUpdatedNotification|struct AccountRateLimitsUpdatedNotification|struct ItemStartedNotification|struct ItemCompletedNotification\" origin/main -- codex-rs/app-server-protocol/src/protocol/v2`
 4. Compare payload shapes to the router expectations:
    - Parser/source of truth: `src/utils/appServerEvents.ts`
    - Router: `src/features/app/hooks/useAppServerEvents.ts`
    - Turn/plan/token/rate-limit normalization: `src/features/threads/utils/threadNormalize.ts`
    - Item shaping for display: `src/utils/threadItems.ts`
 5. Verify the ThreadItem schema (many UI issues start here):
-   - `git -C ../Codex show origin/main:codex-rs/app-server-protocol/src/protocol/v2.rs | rg -n \"enum ThreadItem|CommandExecution|FileChange|McpToolCall|EnteredReviewMode|ExitedReviewMode|ContextCompaction\"`
+   - `git -C ../Codex show origin/main:codex-rs/app-server-protocol/src/protocol/v2/item.rs | rg -n \"enum ThreadItem|CommandExecution|FileChange|McpToolCall|CollabAgentToolCall|EnteredReviewMode|ExitedReviewMode|ContextCompaction\"`
 6. Check for camelCase vs snake_case mismatches:
    - The protocol uses `#[serde(rename_all = \"camelCase\")]`, but fields are often declared in snake_case.
    - CodexMonitor generally defends against this by checking both forms (for example in `threadNormalize.ts` and `useAppServerEvents.ts`), while centralizing method/type parsing in `appServerEvents.ts`.
