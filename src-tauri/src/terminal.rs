@@ -628,12 +628,30 @@ pub(crate) async fn terminal_close(
         .remove(&key)
         .ok_or_else(|| "Terminal session not found".to_string())?;
     drop(sessions);
+    shutdown_terminal_session(session).await;
+    Ok(())
+}
+
+async fn shutdown_terminal_session(session: Arc<TerminalSession>) {
     let _ = tokio::task::spawn_blocking(move || {
         let mut child = session.child.blocking_lock();
         let _ = child.kill();
     })
     .await;
-    Ok(())
+}
+
+#[allow(dead_code)]
+pub(crate) async fn shutdown_all_terminal_sessions(state: &AppState) {
+    let sessions = {
+        let mut sessions = state.terminal_sessions.lock().await;
+        sessions
+            .drain()
+            .map(|(_, session)| session)
+            .collect::<Vec<_>>()
+    };
+    for session in sessions {
+        shutdown_terminal_session(session).await;
+    }
 }
 
 #[tauri::command]

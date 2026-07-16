@@ -92,14 +92,19 @@ pub(crate) enum MigrationContractError {
 
 impl MigrationIntent {
     pub(crate) fn validate(&self, now_unix_ms: u64) -> Result<(), MigrationContractError> {
-        validate_schema(self.schema_version)?;
-        validate_uuid_like(&self.intent_id, "intentId")?;
-        validate_uuid_like(&self.nonce, "nonce")?;
-        validate_time_window(
+        self.validate_for_recovery()?;
+        validate_time_window_active(
             self.created_at_unix_ms,
             self.expires_at_unix_ms,
             now_unix_ms,
-        )?;
+        )
+    }
+
+    pub(crate) fn validate_for_recovery(&self) -> Result<(), MigrationContractError> {
+        validate_schema(self.schema_version)?;
+        validate_uuid_like(&self.intent_id, "intentId")?;
+        validate_uuid_like(&self.nonce, "nonce")?;
+        validate_time_window_shape(self.created_at_unix_ms, self.expires_at_unix_ms)?;
 
         if self.adapter_family != self.target.family {
             return Err(MigrationContractError::InvalidAdapterFamily);
@@ -143,16 +148,26 @@ impl MigrationContinuation {
         now_unix_ms: u64,
     ) -> Result<(), MigrationContractError> {
         intent.validate(now_unix_ms)?;
+        self.validate_for_intent_recovery(intent, expected_one_time_grant)?;
+        validate_time_window_active(
+            self.created_at_unix_ms,
+            self.expires_at_unix_ms,
+            now_unix_ms,
+        )
+    }
+
+    pub(crate) fn validate_for_intent_recovery(
+        &self,
+        intent: &MigrationIntent,
+        expected_one_time_grant: &str,
+    ) -> Result<(), MigrationContractError> {
+        intent.validate_for_recovery()?;
         validate_schema(self.schema_version)?;
         validate_uuid_like(&self.continuation_id, "continuationId")?;
         validate_uuid_like(&self.intent_id, "intentId")?;
         validate_uuid_like(&self.one_time_grant, "oneTimeGrant")?;
         validate_uuid_like(expected_one_time_grant, "expectedOneTimeGrant")?;
-        validate_time_window(
-            self.created_at_unix_ms,
-            self.expires_at_unix_ms,
-            now_unix_ms,
-        )?;
+        validate_time_window_shape(self.created_at_unix_ms, self.expires_at_unix_ms)?;
         if self.created_at_unix_ms < intent.created_at_unix_ms
             || self.expires_at_unix_ms > intent.expires_at_unix_ms
         {
@@ -224,10 +239,9 @@ fn validate_uuid_like(value: &str, field: &'static str) -> Result<(), MigrationC
     Ok(())
 }
 
-fn validate_time_window(
+fn validate_time_window_shape(
     created_at_unix_ms: u64,
     expires_at_unix_ms: u64,
-    now_unix_ms: u64,
 ) -> Result<(), MigrationContractError> {
     if created_at_unix_ms == 0 || expires_at_unix_ms <= created_at_unix_ms {
         return Err(MigrationContractError::InvalidTimestamp("ordering"));
@@ -235,6 +249,15 @@ fn validate_time_window(
     if expires_at_unix_ms - created_at_unix_ms > MAX_MIGRATION_LIFETIME_MS {
         return Err(MigrationContractError::InvalidTimestamp("lifetime"));
     }
+    Ok(())
+}
+
+fn validate_time_window_active(
+    created_at_unix_ms: u64,
+    expires_at_unix_ms: u64,
+    now_unix_ms: u64,
+) -> Result<(), MigrationContractError> {
+    validate_time_window_shape(created_at_unix_ms, expires_at_unix_ms)?;
     if created_at_unix_ms > now_unix_ms.saturating_add(MAX_CLOCK_SKEW_MS) {
         return Err(MigrationContractError::InvalidTimestamp("createdAt"));
     }
@@ -695,6 +718,10 @@ mod tests {
             continuation.validate_for_intent(&intent, GRANT, continuation.expires_at_unix_ms),
             Err(MigrationContractError::InvalidTimestamp("expired"))
         );
+        intent.validate_for_recovery().unwrap();
+        continuation
+            .validate_for_intent_recovery(&intent, GRANT)
+            .unwrap();
     }
 
     #[test]

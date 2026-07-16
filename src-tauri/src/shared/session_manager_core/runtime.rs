@@ -221,6 +221,16 @@ impl<T> SourceRuntimePool<T> {
         self.take_idle_at(Instant::now()).await
     }
 
+    pub(crate) async fn take_all(&self) -> Vec<Arc<T>> {
+        let _spawn_guard = self.spawn_lock.lock().await;
+        self.entries
+            .lock()
+            .await
+            .drain()
+            .map(|(_, entry)| entry.runtime)
+            .collect()
+    }
+
     async fn take_idle_at(&self, now: Instant) -> Vec<Arc<T>> {
         let mut entries = self.entries.lock().await;
         let idle_keys = entries
@@ -250,6 +260,13 @@ impl SourceRuntimePool<WorkspaceSession> {
 
     pub(crate) async fn close_idle(&self) {
         for session in self.take_idle().await {
+            session.shutdown().await;
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) async fn close_all(&self) {
+        for session in self.take_all().await {
             session.shutdown().await;
         }
     }
@@ -409,6 +426,39 @@ mod tests {
             drop(runtime);
             assert_eq!(pool.take_idle().await.len(), 1);
             drop(background_handle);
+        });
+    }
+
+    #[test]
+    fn take_all_atomically_drains_borrowed_runtimes() {
+        let executor = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        executor.block_on(async {
+            let pool = SourceRuntimePool::<usize>::new(Duration::from_secs(60));
+            let first = pool
+                .get_or_spawn(
+                    SourceRuntimeKey::new(r"C:\A", r"D:\Project\One").unwrap(),
+                    || async { Ok(Arc::new(1)) },
+                )
+                .await
+                .unwrap();
+            let second = pool
+                .get_or_spawn(
+                    SourceRuntimeKey::new(r"C:\B", r"D:\Project\Two").unwrap(),
+                    || async { Ok(Arc::new(2)) },
+                )
+                .await
+                .unwrap();
+
+            let drained = pool.take_all().await;
+
+            assert_eq!(drained.len(), 2);
+            assert!(drained.iter().any(|runtime| Arc::ptr_eq(runtime, &first)));
+            assert!(drained.iter().any(|runtime| Arc::ptr_eq(runtime, &second)));
+            assert_eq!(pool.len().await, 0);
+            assert!(pool.take_all().await.is_empty());
         });
     }
 
