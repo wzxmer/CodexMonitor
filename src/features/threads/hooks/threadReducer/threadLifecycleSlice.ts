@@ -473,17 +473,33 @@ export function reduceThreadLifecycle(
         const activeThreadStillVisible = currentActiveThreadId
           ? visibleThreads.some((thread) => thread.id === currentActiveThreadId)
           : false;
+        const activeThreadIsInFlight = Boolean(
+          currentActiveThreadId &&
+            (state.threadResumeLoadingById[currentActiveThreadId] ||
+              state.threadStatusById[currentActiveThreadId]?.isProcessing),
+        );
+        const nextThreads =
+          activeThreadStillVisible || !activeThreadIsInFlight
+            ? visibleThreads
+            : [
+                ...visibleThreads,
+                ...(state.threadsByWorkspace[action.workspaceId] ?? []).filter(
+                  (thread) => thread.id === currentActiveThreadId,
+                ),
+              ];
         return {
           ...state,
           threadsByWorkspace: {
             ...state.threadsByWorkspace,
-            [action.workspaceId]: visibleThreads,
+            [action.workspaceId]: nextThreads,
           },
           activeThreadIdByWorkspace: {
             ...state.activeThreadIdByWorkspace,
             [action.workspaceId]: activeThreadStillVisible
               ? currentActiveThreadId
-              : (visibleThreads[0]?.id ?? null),
+              : activeThreadIsInFlight
+                ? currentActiveThreadId
+                : (visibleThreads[0]?.id ?? null),
           },
           threadSortKeyByWorkspace: {
             ...state.threadSortKeyByWorkspace,

@@ -744,6 +744,53 @@ describe("threadReducer", () => {
     expect(next.activeThreadIdByWorkspace["ws-1"]).toBe("thread-fresh");
   });
 
+  it("keeps an active thread while resume or turn processing is in flight", () => {
+    const base: ThreadState = {
+      ...initialState,
+      threadsByWorkspace: {
+        "ws-1": [{ id: "thread-resumed", name: "Resumed", updatedAt: 10 }],
+      },
+      activeThreadIdByWorkspace: { "ws-1": "thread-resumed" },
+      threadResumeLoadingById: { "thread-resumed": true },
+    };
+
+    const duringResume = threadReducer(base, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      sortKey: "updated_at",
+      threads: [],
+    });
+
+    expect(duringResume.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "thread-resumed",
+    ]);
+    expect(duringResume.activeThreadIdByWorkspace["ws-1"]).toBe("thread-resumed");
+
+    const duringTurn = threadReducer(
+      {
+        ...base,
+        threadResumeLoadingById: {},
+        threadStatusById: {
+          "thread-resumed": {
+            isProcessing: true,
+            hasUnread: false,
+            isReviewing: false,
+            processingStartedAt: 100,
+            lastDurationMs: null,
+          },
+        },
+      },
+      {
+        type: "setThreads",
+        workspaceId: "ws-1",
+        sortKey: "updated_at",
+        threads: [],
+      },
+    );
+
+    expect(duringTurn.activeThreadIdByWorkspace["ws-1"]).toBe("thread-resumed");
+  });
+
   it("removes an optimistic user message by id", () => {
     const next = threadReducer(
       {
