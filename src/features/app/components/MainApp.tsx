@@ -124,6 +124,7 @@ import { SessionManagerWorkspace } from "@/features/sessions/components/SessionM
 import { SessionResumeChoicePrompt } from "@/features/sessions/components/SessionResumeChoicePrompt";
 import { applyMessageReference } from "@/features/messages/orchestration/deriveMessageReference";
 import type { MessageReferenceAction } from "@/features/messages/utils/messageReferences";
+import { buildProviderSessionDiagnostics } from "@settings/utils/providerSessionDiagnostics";
 
 const SettingsView = lazy(() =>
   import("@settings/components/SettingsView").then((module) => ({
@@ -718,6 +719,7 @@ export default function MainApp() {
     threadListLoadingByWorkspace,
     threadListPagingByWorkspace,
     threadListCursorByWorkspace,
+    threadListContinuityByWorkspace,
     activeTurnIdByThread,
     turnDiffByThread,
     turnExecutionSummaryByThread,
@@ -815,6 +817,32 @@ export default function MainApp() {
     threadSortKey: threadListSortKey,
     onThreadCodexMetadataDetected: handleThreadCodexMetadataDetected,
   });
+  const providerSessionDiagnostics = useMemo(
+    () =>
+      buildProviderSessionDiagnostics({
+        workspaceName: activeWorkspace?.name ?? null,
+        provider: activeCodexKeyProfile
+          ? {
+              name: activeCodexKeyProfile.name,
+              providerKind: activeCodexKeyProfile.providerKind,
+            }
+          : null,
+        runtimeContext: threadListRuntimeContext,
+        continuity: activeWorkspaceId
+          ? threadListContinuityByWorkspace[activeWorkspaceId]
+          : undefined,
+        continuityEnabled:
+          appSettings.preserveSessionLibraryOnProviderSwitch,
+      }),
+    [
+      activeCodexKeyProfile,
+      activeWorkspace?.name,
+      activeWorkspaceId,
+      appSettings.preserveSessionLibraryOnProviderSwitch,
+      threadListContinuityByWorkspace,
+      threadListRuntimeContext,
+    ],
+  );
   const activeThreadIsProcessing = Boolean(
     activeThreadId && threadStatusById[activeThreadId]?.isProcessing,
   );
@@ -1517,6 +1545,7 @@ export default function MainApp() {
       handleTestSystemNotification,
       handleMobileConnectSuccess,
       dictationModel,
+      providerSessionDiagnostics,
       workflowSectionProps: {
         workspaceName: projectActiveWorkspace?.name ?? null,
         providerKind: activeCodexKeyProfile?.providerKind ?? "openai",

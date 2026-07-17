@@ -20,6 +20,7 @@ import { useSettingsProjectsSection } from "./useSettingsProjectsSection";
 import { useSettingsServerSection } from "./useSettingsServerSection";
 import type { GroupedWorkspaces } from "./settingsSectionTypes";
 import type { SettingsWorkflowSectionProps } from "@settings/components/sections/SettingsWorkflowSection";
+import type { ProviderSessionDiagnostics } from "@settings/utils/providerSessionDiagnostics";
 import {
   COMPOSER_PRESET_CONFIGS,
   COMPOSER_PRESET_LABELS,
@@ -67,6 +68,7 @@ type UseSettingsViewOrchestrationArgs = {
   onDownloadDictationModel?: () => void;
   onCancelDictationDownload?: () => void;
   onRemoveDictationModel?: () => void;
+  providerSessionDiagnostics?: ProviderSessionDiagnostics | null;
   workflowSectionProps: Omit<
     SettingsWorkflowSectionProps,
     "appSettings" | "onUpdateAppSettings"
@@ -102,6 +104,7 @@ export function useSettingsViewOrchestration({
   onDownloadDictationModel,
   onCancelDictationDownload,
   onRemoveDictationModel,
+  providerSessionDiagnostics,
   workflowSectionProps,
 }: UseSettingsViewOrchestrationArgs) {
   const projects = useMemo(
@@ -289,7 +292,10 @@ export function useSettingsViewOrchestration({
       appSettings,
       onUpdateAppSettings,
     },
-    codexSectionProps,
+    codexSectionProps: {
+      ...codexSectionProps,
+      providerSessionDiagnostics,
+    },
     featuresSectionProps,
   };
 }

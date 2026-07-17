@@ -19,6 +19,7 @@ import { SettingsNav } from "./SettingsNav";
 import type { CodexSection } from "./settingsTypes";
 import { SettingsSectionContainers } from "./sections/SettingsSectionContainers";
 import type { SettingsWorkflowSectionProps } from "./sections/SettingsWorkflowSection";
+import type { ProviderSessionDiagnostics } from "@settings/utils/providerSessionDiagnostics";
 
 export type SettingsViewProps = {
   workspaceGroups: WorkspaceGroup[];
@@ -70,6 +71,7 @@ export type SettingsViewProps = {
     SettingsWorkflowSectionProps,
     "appSettings" | "onUpdateAppSettings"
   >;
+  providerSessionDiagnostics?: ProviderSessionDiagnostics | null;
   initialSection?: CodexSection;
 };
 
@@ -104,6 +106,7 @@ export function SettingsView({
   onCancelDictationDownload,
   onRemoveDictationModel,
   workflowSectionProps,
+  providerSessionDiagnostics,
   initialSection,
 }: SettingsViewProps) {
   const { t } = useI18n();
@@ -173,6 +176,7 @@ export function SettingsView({
     onDownloadDictationModel,
     onCancelDictationDownload,
     onRemoveDictationModel,
+    providerSessionDiagnostics,
     workflowSectionProps: resolvedWorkflowSectionProps,
   });
 

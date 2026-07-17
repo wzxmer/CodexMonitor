@@ -131,6 +131,7 @@ type UseMainAppModalsArgs = {
       cancel?: () => void;
       remove?: () => void;
     };
+    providerSessionDiagnostics: SettingsViewProps["providerSessionDiagnostics"];
     workflowSectionProps: SettingsViewProps["workflowSectionProps"];
   };
 };
@@ -199,6 +200,7 @@ function buildSettingsViewProps({
     onDownloadDictationModel: settings.dictationModel.download,
     onCancelDictationDownload: settings.dictationModel.cancel,
     onRemoveDictationModel: settings.dictationModel.remove,
+    providerSessionDiagnostics: settings.providerSessionDiagnostics,
     workflowSectionProps: settings.workflowSectionProps,
   };
 }

@@ -365,6 +365,9 @@ const renderCodexSection = (
     appSettings?: Partial<AppSettings>;
     onUpdateAppSettings?: ComponentProps<typeof SettingsView>["onUpdateAppSettings"];
     initialSection?: ComponentProps<typeof SettingsView>["initialSection"];
+    providerSessionDiagnostics?: ComponentProps<
+      typeof SettingsView
+    >["providerSessionDiagnostics"];
   } = {},
 ) => {
   cleanup();
@@ -397,11 +400,12 @@ const renderCodexSection = (
     onDownloadDictationModel: vi.fn(),
     onCancelDictationDownload: vi.fn(),
     onRemoveDictationModel: vi.fn(),
+    providerSessionDiagnostics: options.providerSessionDiagnostics,
     initialSection: options.initialSection ?? "codex",
   };
 
-  render(<SettingsView {...props} />);
-  return { onUpdateAppSettings };
+  const rendered = render(<SettingsView {...props} />);
+  return { ...rendered, onUpdateAppSettings };
 };
 
 const renderAboutSection = (
@@ -1816,6 +1820,102 @@ describe("SettingsView Codex defaults", () => {
       ).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByPlaceholderText(/倍率/)).toBeNull();
+  });
+
+  it("persists independent Provider continuity settings with keyboard-ready controls", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderCodexSection({ initialSection: "providers", onUpdateAppSettings });
+
+    const continuityToggle = screen.getByRole("button", {
+      name: "切换服务商时保留本机会话",
+    });
+    const configSyncToggle = screen.getByRole("button", {
+      name: "同步服务商到本机 config.toml",
+    });
+
+    expect(continuityToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(configSyncToggle.getAttribute("aria-pressed")).toBe("false");
+    continuityToggle.focus();
+    expect(document.activeElement).toBe(continuityToggle);
+
+    fireEvent.click(continuityToggle);
+    await waitFor(() =>
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ preserveSessionLibraryOnProviderSwitch: false }),
+      ),
+    );
+
+    fireEvent.click(configSyncToggle);
+    await waitFor(() =>
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ syncProviderProfileToLocalConfig: true }),
+      ),
+    );
+  });
+
+  it("shows a redacted Provider session diagnostic without exposing the key", () => {
+    const { container } = renderCodexSection({
+      initialSection: "providers",
+      appSettings: {
+        codexKeyProfiles: [
+          {
+            id: "work",
+            name: "Work",
+            providerKind: "custom",
+            keyEnvVar: "OPENAI_API_KEY",
+            key: "diagnostic-secret",
+            baseUrlEnvVar: "OPENAI_BASE_URL",
+            baseUrl: "https://example.test/v1",
+            model: "model-a",
+            contextWindow: null,
+            maxOutputTokens: null,
+            useGateway: false,
+            lastModelRefreshAtMs: null,
+            cachedModels: [],
+            groupName: "Work",
+          },
+        ],
+        activeCodexKeyProfileId: "work",
+      },
+      providerSessionDiagnostics: {
+        workspaceName: "Workspace A",
+        providerName: "Work",
+        providerKind: "custom",
+        sessionSourceId: "source-a",
+        runtimeGeneration: 4,
+        listGeneration: 8,
+        staleThreadCount: 2,
+        staleReason: "snapshot-incomplete",
+        fallback: "retained-previous-list",
+      },
+    });
+
+    const diagnostics = container.querySelector(".settings-provider-diagnostics");
+    expect(diagnostics?.textContent).toContain("Work (custom)");
+    expect(diagnostics?.textContent).toContain("source-a");
+    expect(diagnostics?.textContent).toContain("来源快照不完整");
+    expect(diagnostics?.textContent).toContain("保留上一份列表");
+    expect(diagnostics?.textContent).not.toContain("diagnostic-secret");
+  });
+
+  it("shows a generic error and keeps the previous value when a Provider setting save fails", async () => {
+    const onUpdateAppSettings = vi
+      .fn()
+      .mockRejectedValue(new Error("diagnostic-secret backend detail"));
+    renderCodexSection({ initialSection: "providers", onUpdateAppSettings });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "切换服务商时保留本机会话" }),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("设置保存失败，原值保持不变。");
+    expect(alert.textContent).not.toContain("diagnostic-secret");
+    expect(
+      screen
+        .getByRole("button", { name: "切换服务商时保留本机会话" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 
   it("renders provider profiles as compact URL buttons and switches the active profile", () => {

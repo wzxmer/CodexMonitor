@@ -16,6 +16,7 @@ import type {
 import {
   SettingsSection,
   SettingsToggleRow,
+  SettingsToggleSwitch,
 } from "@/features/design-system/components/settings/SettingsPrimitives";
 import { FileEditorCard } from "@/features/shared/components/FileEditorCard";
 import { useI18n } from "@/features/i18n/I18nProvider";
@@ -25,11 +26,13 @@ import {
   mergeCodexProviderModels,
   resolveCodexProviderBaseUrl,
 } from "@/utils/providerProfiles";
+import type { ProviderSessionDiagnostics } from "@settings/utils/providerSessionDiagnostics";
 
 type SettingsCodexSectionProps = {
   mode?: "codex" | "providers";
   appSettings: AppSettings;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
+  providerSessionDiagnostics?: ProviderSessionDiagnostics | null;
   defaultModels: ModelOption[];
   defaultModelsLoading: boolean;
   defaultModelsError: string | null;
@@ -155,6 +158,7 @@ export function SettingsCodexSection({
   mode = "codex",
   appSettings,
   onUpdateAppSettings,
+  providerSessionDiagnostics = null,
   defaultModels,
   defaultModelsLoading,
   defaultModelsError,
@@ -278,6 +282,10 @@ export function SettingsCodexSection({
     NonNullable<CodexKeyProfile["cachedModels"]>
   >([]);
   const [keyProfileFetchedAtMs, setKeyProfileFetchedAtMs] = useState<number | null>(null);
+  const [providerSettingSaving, setProviderSettingSaving] = useState<
+    "continuity" | "config-sync" | null
+  >(null);
+  const [providerSettingError, setProviderSettingError] = useState<string | null>(null);
   const [editingKeyProfileId, setEditingKeyProfileId] = useState<string | null>(null);
   const keyProfiles = appSettings.codexKeyProfiles ?? [];
   const selectedKeyProfile = keyProfiles.find(
@@ -362,6 +370,72 @@ export function SettingsCodexSection({
       ...patch,
     });
   };
+
+  const updateProviderBehaviorSetting = async (
+    setting: "continuity" | "config-sync",
+  ) => {
+    if (providerSettingSaving) {
+      return;
+    }
+    setProviderSettingSaving(setting);
+    setProviderSettingError(null);
+    try {
+      await onUpdateAppSettings({
+        ...appSettings,
+        ...(setting === "continuity"
+          ? {
+              preserveSessionLibraryOnProviderSwitch:
+                !appSettings.preserveSessionLibraryOnProviderSwitch,
+            }
+          : {
+              syncProviderProfileToLocalConfig:
+                !appSettings.syncProviderProfileToLocalConfig,
+            }),
+      });
+    } catch {
+      setProviderSettingError(t("settings.codex.providerSettingSaveFailed"));
+    } finally {
+      setProviderSettingSaving(null);
+    }
+  };
+
+  const providerStaleReasonLabel = providerSessionDiagnostics
+    ? {
+        none: t("settings.codex.diagnosticsStaleNone"),
+        "continuity-disabled": t(
+          "settings.codex.diagnosticsStaleContinuityDisabled",
+        ),
+        "runtime-refresh-pending": t(
+          "settings.codex.diagnosticsStaleRuntimeRefreshPending",
+        ),
+        "pagination-incomplete": t(
+          "settings.codex.diagnosticsStalePaginationIncomplete",
+        ),
+        "snapshot-unavailable": t(
+          "settings.codex.diagnosticsStaleSnapshotUnavailable",
+        ),
+        "snapshot-incomplete": t(
+          "settings.codex.diagnosticsStaleSnapshotIncomplete",
+        ),
+        "verification-inconclusive": t(
+          "settings.codex.diagnosticsStaleVerificationInconclusive",
+        ),
+      }[providerSessionDiagnostics.staleReason]
+    : unknownLabel;
+  const providerFallbackLabel = providerSessionDiagnostics
+    ? {
+        none: t("settings.codex.diagnosticsFallbackNone"),
+        "runtime-authoritative": t(
+          "settings.codex.diagnosticsFallbackRuntimeAuthoritative",
+        ),
+        "retained-previous-list": t(
+          "settings.codex.diagnosticsFallbackRetainedList",
+        ),
+        "awaiting-runtime-list": t(
+          "settings.codex.diagnosticsFallbackAwaitingList",
+        ),
+      }[providerSessionDiagnostics.fallback]
+    : unknownLabel;
 
   const handleSelectKeyProfile = (profileId: string) => {
     updateCodexKeySettings({
@@ -910,6 +984,102 @@ export function SettingsCodexSection({
       ) : null}
       {mode === "providers" ? (
       <div className="settings-field">
+        <div className="settings-field-label settings-field-label--section">
+          {t("settings.codex.providerBehavior")}
+        </div>
+        <SettingsToggleRow
+          title={t("settings.codex.preserveSessionLibrary")}
+          subtitle={t("settings.codex.preserveSessionLibraryHelp")}
+        >
+          <SettingsToggleSwitch
+            pressed={appSettings.preserveSessionLibraryOnProviderSwitch}
+            disabled={providerSettingSaving !== null}
+            data-button-elevation="none"
+            aria-label={t("settings.codex.preserveSessionLibrary")}
+            onClick={() => void updateProviderBehaviorSetting("continuity")}
+          />
+        </SettingsToggleRow>
+        <SettingsToggleRow
+          title={t("settings.codex.syncProviderToLocalConfig")}
+          subtitle={t("settings.codex.syncProviderToLocalConfigHelp")}
+        >
+          <SettingsToggleSwitch
+            pressed={appSettings.syncProviderProfileToLocalConfig}
+            disabled={providerSettingSaving !== null}
+            data-button-elevation="none"
+            aria-label={t("settings.codex.syncProviderToLocalConfig")}
+            onClick={() => void updateProviderBehaviorSetting("config-sync")}
+          />
+        </SettingsToggleRow>
+        {providerSettingError ? (
+          <div className="settings-help settings-help-error" role="alert">
+            {providerSettingError}
+          </div>
+        ) : null}
+        <div className="settings-provider-diagnostics">
+          <div className="settings-provider-diagnostics-title">
+            {t("settings.codex.providerDiagnostics")}
+          </div>
+          <div className="settings-help">
+            {t("settings.codex.providerDiagnosticsHelp")}
+          </div>
+          <dl className="settings-provider-diagnostics-grid">
+            <div>
+              <dt>{t("settings.codex.diagnosticsWorkspace")}</dt>
+              <dd>
+                {providerSessionDiagnostics?.workspaceName ??
+                  t("settings.codex.diagnosticsUnavailable")}
+              </dd>
+            </div>
+            <div>
+              <dt>{t("settings.codex.diagnosticsProvider")}</dt>
+              <dd>
+                {providerSessionDiagnostics
+                  ? `${
+                      providerSessionDiagnostics.providerName ??
+                      t("settings.codex.diagnosticsDefaultProvider")
+                    } (${providerSessionDiagnostics.providerKind})`
+                  : t("settings.codex.diagnosticsUnavailable")}
+              </dd>
+            </div>
+            <div>
+              <dt>{t("settings.codex.diagnosticsSessionSource")}</dt>
+              <dd>
+                <code>
+                  {providerSessionDiagnostics?.sessionSourceId ??
+                    t("settings.codex.diagnosticsUnavailable")}
+                </code>
+              </dd>
+            </div>
+            <div>
+              <dt>{t("settings.codex.diagnosticsRuntimeGeneration")}</dt>
+              <dd>
+                {providerSessionDiagnostics?.runtimeGeneration ??
+                  t("settings.codex.diagnosticsUnavailable")}
+              </dd>
+            </div>
+            <div>
+              <dt>{t("settings.codex.diagnosticsListGeneration")}</dt>
+              <dd>
+                {providerSessionDiagnostics?.listGeneration ??
+                  t("settings.codex.diagnosticsUnavailable")}
+              </dd>
+            </div>
+            <div>
+              <dt>{t("settings.codex.diagnosticsStaleReason")}</dt>
+              <dd>{providerStaleReasonLabel}</dd>
+            </div>
+            <div>
+              <dt>{t("settings.codex.diagnosticsStaleThreads")}</dt>
+              <dd>{providerSessionDiagnostics?.staleThreadCount ?? 0}</dd>
+            </div>
+            <div>
+              <dt>{t("settings.codex.diagnosticsFallback")}</dt>
+              <dd>{providerFallbackLabel}</dd>
+            </div>
+          </dl>
+        </div>
+        <div className="settings-divider" />
         <div className="settings-field-label">
           {t("settings.codex.keyProfile")}
         </div>

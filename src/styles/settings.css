@@ -331,6 +331,48 @@
   margin-top: -2px;
 }
 
+.settings-provider-diagnostics {
+  padding: 12px 14px;
+  border: 1px solid var(--border-muted);
+  border-radius: 12px;
+  background: var(--surface-card);
+}
+
+.settings-provider-diagnostics-title {
+  margin-bottom: 3px;
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-provider-diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin: 12px 0 0;
+}
+
+.settings-provider-diagnostics-grid > div {
+  min-width: 0;
+}
+
+.settings-provider-diagnostics-grid dt {
+  color: var(--text-subtle);
+  font-size: 10px;
+}
+
+.settings-provider-diagnostics-grid dd {
+  min-width: 0;
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+  font-size: 11px;
+}
+
+.settings-provider-diagnostics-grid code {
+  white-space: normal;
+}
+
 .settings-key-profile-grid .settings-button-compact {
   min-height: 36px;
 }
@@ -1632,6 +1674,17 @@
   border-color: var(--border-accent);
 }
 
+.settings-toggle:focus-visible {
+  outline: none;
+  border-color: var(--border-accent-soft);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.settings-toggle:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .app.reduced-transparency .settings-toggle:not(.on) {
   background: var(--surface-control-hover);
   border-color: var(--border-stronger);
@@ -1684,6 +1737,10 @@
   }
 
   .settings-provider-profile-list {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-provider-diagnostics-grid {
     grid-template-columns: 1fr;
   }
 
