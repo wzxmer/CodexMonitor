@@ -469,6 +469,15 @@ async fn track_active_turn_event(
     }
 }
 
+const PENDING_TURN_ID: &str = "__codex_monitor_pending_turn__";
+
+async fn clear_pending_turn_marker(session: &WorkspaceSession, thread_id: &str) {
+    let mut active_turns = session.active_turns.lock().await;
+    if active_turns.get(thread_id).map(String::as_str) == Some(PENDING_TURN_ID) {
+        active_turns.remove(thread_id);
+    }
+}
+
 async fn fail_pending_and_active_turns_after_output_end<E: EventSink>(
     session: &WorkspaceSession,
     event_sink: &E,
@@ -663,6 +672,18 @@ impl WorkspaceSession {
     ) -> Result<Value, String> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = oneshot::channel();
+        let thread_id = extract_thread_id(&json!({ "params": params.clone() }));
+        let pending_turn_thread_id = if method == "turn/start" {
+            if let Some(thread_id) = thread_id.as_ref() {
+                self.active_turns
+                    .lock()
+                    .await
+                    .insert(thread_id.clone(), PENDING_TURN_ID.to_string());
+            }
+            thread_id.clone()
+        } else {
+            None
+        };
         self.register_workspace(workspace_id).await;
         self.pending.lock().await.insert(id, tx);
         self.request_context.lock().await.insert(
@@ -670,10 +691,10 @@ impl WorkspaceSession {
             RequestContext {
                 workspace_id: workspace_id.to_string(),
                 method: method.to_string(),
-                thread_id: extract_thread_id(&json!({ "params": params.clone() })),
+                thread_id: thread_id.clone(),
             },
         );
-        if let Some(thread_id) = extract_thread_id(&json!({ "params": params.clone() })) {
+        if let Some(thread_id) = thread_id {
             self.thread_workspace
                 .lock()
                 .await
@@ -685,10 +706,20 @@ impl WorkspaceSession {
         {
             self.pending.lock().await.remove(&id);
             self.request_context.lock().await.remove(&id);
+            if let Some(thread_id) = pending_turn_thread_id.as_deref() {
+                clear_pending_turn_marker(self, thread_id).await;
+            }
             return Err(error);
         }
         match timeout(REQUEST_TIMEOUT, rx).await {
-            Ok(Ok(value)) => Ok(value),
+            Ok(Ok(value)) => {
+                if value.get("error").is_some() {
+                    if let Some(thread_id) = pending_turn_thread_id.as_deref() {
+                        clear_pending_turn_marker(self, thread_id).await;
+                    }
+                }
+                Ok(value)
+            }
             Ok(Err(_)) => Err("request canceled".to_string()),
             Err(_) => {
                 self.pending.lock().await.remove(&id);

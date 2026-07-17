@@ -52,6 +52,7 @@ import type {
   TrayRecentThreadEntry,
   TraySessionUsage,
   WorkspaceInfo,
+  WorkspaceRuntimeCodexArgsResult,
   AppMention,
   WorkspaceSettings,
   CandidateMatch,
@@ -596,7 +597,7 @@ export async function connectWorkspace(id: string): Promise<void> {
 export async function setWorkspaceRuntimeCodexArgs(
   workspaceId: string,
   codexArgs: string | null,
-): Promise<{ appliedCodexArgs: string | null; respawned: boolean }> {
+): Promise<WorkspaceRuntimeCodexArgsResult> {
   return invoke("set_workspace_runtime_codex_args", {
     workspaceId,
     codexArgs,

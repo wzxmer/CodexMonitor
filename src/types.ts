@@ -58,6 +58,15 @@ export type WorkspaceInfo = {
   settings: WorkspaceSettings;
 };
 
+export type WorkspaceRuntimeCodexArgsResult = {
+  appliedCodexArgs: string | null;
+  respawned: boolean;
+  beforeProviderRuntimeFingerprint: string | null;
+  afterProviderRuntimeFingerprint: string | null;
+  sessionSourceId: string;
+  configSynced: boolean;
+};
+
 export type AppServerEvent = {
   workspace_id: string;
   message: Record<string, unknown>;

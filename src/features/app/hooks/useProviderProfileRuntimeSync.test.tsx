@@ -2,8 +2,12 @@
 
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { CodexKeyProfile, WorkspaceInfo } from "@/types";
-import { useProviderProfileRuntimeSync } from "./useProviderProfileRuntimeSync";
+import type { AppSettings, CodexKeyProfile, WorkspaceInfo } from "@/types";
+import {
+  restoreProviderRuntimeSettings,
+  useProviderProfileRuntimeSync,
+  type ProviderRuntimeSettingsSnapshot,
+} from "./useProviderProfileRuntimeSync";
 
 const workspace = {
   id: "ws-1",
@@ -32,7 +36,40 @@ const profile = (id: string): CodexKeyProfile => ({
   groupName: id,
 });
 
+const runtimeSettings = (
+  activeProfile: CodexKeyProfile | null,
+  syncLocalConfig: boolean,
+): ProviderRuntimeSettingsSnapshot => ({
+  activeCodexKeyProfileId: activeProfile?.id ?? null,
+  activeProfile,
+  syncProviderProfileToLocalConfig: syncLocalConfig,
+});
+
+const noopRollbackSettings = async () => undefined;
+
 describe("useProviderProfileRuntimeSync", () => {
+  it("restores only Provider transaction fields and preserves unrelated settings", () => {
+    const profileA = profile("profile-a");
+    const editedProfileA = { ...profileA, key: "edited-key" };
+    const profileB = profile("profile-b");
+    const current = {
+      codexKeyProfiles: [editedProfileA, profileB],
+      activeCodexKeyProfileId: profileB.id,
+      syncProviderProfileToLocalConfig: true,
+      theme: "dark",
+    } as AppSettings;
+
+    const restored = restoreProviderRuntimeSettings(
+      current,
+      runtimeSettings(profileA, false),
+    );
+
+    expect(restored.activeCodexKeyProfileId).toBe(profileA.id);
+    expect(restored.syncProviderProfileToLocalConfig).toBe(false);
+    expect(restored.codexKeyProfiles).toEqual([profileA, profileB]);
+    expect(restored.theme).toBe("dark");
+  });
+
   it("syncs the connected workspace when the active provider changes", async () => {
     const syncWorkspaceRuntime = vi.fn(async () => undefined);
     const { rerender } = renderHook(
@@ -43,7 +80,10 @@ describe("useProviderProfileRuntimeSync", () => {
           activeThreadId: "thread-1",
           settingsLoading: false,
           defer: false,
+          syncLocalConfig: false,
+          settingsSnapshot: runtimeSettings(activeProfile, false),
           syncWorkspaceRuntime,
+          rollbackSettings: noopRollbackSettings,
         }),
       { initialProps: { activeProfile: profile("profile-a") } },
     );
@@ -70,7 +110,10 @@ describe("useProviderProfileRuntimeSync", () => {
           activeThreadId,
           settingsLoading: false,
           defer: false,
+          syncLocalConfig: false,
+          settingsSnapshot: runtimeSettings(activeProfile, false),
           syncWorkspaceRuntime,
+          rollbackSettings: noopRollbackSettings,
         }),
       { initialProps: { activeThreadId: "thread-1" } },
     );
@@ -92,7 +135,10 @@ describe("useProviderProfileRuntimeSync", () => {
           activeThreadId: "thread-1",
           settingsLoading: false,
           defer,
+          syncLocalConfig: false,
+          settingsSnapshot: runtimeSettings(profile("profile-a"), false),
           syncWorkspaceRuntime,
+          rollbackSettings: noopRollbackSettings,
         }),
       { initialProps: { defer: true } },
     );
@@ -100,5 +146,168 @@ describe("useProviderProfileRuntimeSync", () => {
     expect(syncWorkspaceRuntime).not.toHaveBeenCalled();
     rerender({ defer: false });
     await waitFor(() => expect(syncWorkspaceRuntime).toHaveBeenCalledTimes(1));
+  });
+
+  it("resyncs when local config synchronization is enabled", async () => {
+    const syncWorkspaceRuntime = vi.fn(async () => undefined);
+    const activeProfile = profile("profile-a");
+    const { rerender } = renderHook(
+      ({ syncLocalConfig }) =>
+        useProviderProfileRuntimeSync({
+          activeProfile,
+          activeWorkspace: workspace,
+          activeThreadId: "thread-1",
+          settingsLoading: false,
+          defer: false,
+          syncLocalConfig,
+          settingsSnapshot: runtimeSettings(activeProfile, syncLocalConfig),
+          syncWorkspaceRuntime,
+          rollbackSettings: noopRollbackSettings,
+        }),
+      { initialProps: { syncLocalConfig: false } },
+    );
+
+    await waitFor(() => expect(syncWorkspaceRuntime).toHaveBeenCalledTimes(1));
+    rerender({ syncLocalConfig: true });
+    await waitFor(() => expect(syncWorkspaceRuntime).toHaveBeenCalledTimes(2));
+  });
+
+  it("resyncs when a provider environment variable mapping changes", async () => {
+    const syncWorkspaceRuntime = vi.fn(async () => undefined);
+    const { rerender } = renderHook(
+      ({ keyEnvVar }) =>
+        useProviderProfileRuntimeSync({
+          activeProfile: { ...profile("profile-a"), keyEnvVar },
+          activeWorkspace: workspace,
+          activeThreadId: "thread-1",
+          settingsLoading: false,
+          defer: false,
+          syncLocalConfig: true,
+          settingsSnapshot: runtimeSettings(
+            { ...profile("profile-a"), keyEnvVar },
+            true,
+          ),
+          syncWorkspaceRuntime,
+          rollbackSettings: noopRollbackSettings,
+        }),
+      { initialProps: { keyEnvVar: "OPENAI_API_KEY" } },
+    );
+
+    await waitFor(() => expect(syncWorkspaceRuntime).toHaveBeenCalledTimes(1));
+    rerender({ keyEnvVar: "COMPANY_API_KEY" });
+    await waitFor(() => expect(syncWorkspaceRuntime).toHaveBeenCalledTimes(2));
+  });
+
+  it("rolls settings back to the last successful Provider transaction", async () => {
+    const syncWorkspaceRuntime = vi
+      .fn<() => Promise<void>>()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("spawn failed"));
+    const rollbackSettings = vi.fn(async () => undefined);
+    const onError = vi.fn();
+    const profileA = profile("profile-a");
+    const profileB = profile("profile-b");
+    const { rerender } = renderHook(
+      ({ activeProfile }) =>
+        useProviderProfileRuntimeSync({
+          activeProfile,
+          activeWorkspace: workspace,
+          activeThreadId: "thread-1",
+          settingsLoading: false,
+          defer: false,
+          syncLocalConfig: false,
+          settingsSnapshot: runtimeSettings(activeProfile, false),
+          syncWorkspaceRuntime,
+          rollbackSettings,
+          onError,
+        }),
+      { initialProps: { activeProfile: profileA } },
+    );
+
+    await waitFor(() => expect(syncWorkspaceRuntime).toHaveBeenCalledTimes(1));
+    rerender({ activeProfile: profileB });
+
+    await waitFor(() =>
+      expect(rollbackSettings).toHaveBeenCalledWith(
+        runtimeSettings(profileA, false),
+      ),
+    );
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "spawn failed" }),
+    );
+  });
+
+  it("does not let a stale failed switch roll back a newer Provider request", async () => {
+    let rejectStale: (error: Error) => void = () => undefined;
+    const staleRequest = new Promise<void>((_resolve, reject) => {
+      rejectStale = reject;
+    });
+    const syncWorkspaceRuntime = vi
+      .fn<() => Promise<void>>()
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(() => staleRequest)
+      .mockResolvedValueOnce(undefined);
+    const rollbackSettings = vi.fn(async () => undefined);
+    const { rerender } = renderHook(
+      ({ activeProfile }) =>
+        useProviderProfileRuntimeSync({
+          activeProfile,
+          activeWorkspace: workspace,
+          activeThreadId: "thread-1",
+          settingsLoading: false,
+          defer: false,
+          syncLocalConfig: false,
+          settingsSnapshot: runtimeSettings(activeProfile, false),
+          syncWorkspaceRuntime,
+          rollbackSettings,
+        }),
+      { initialProps: { activeProfile: profile("profile-a") } },
+    );
+
+    await waitFor(() => expect(syncWorkspaceRuntime).toHaveBeenCalledTimes(1));
+    rerender({ activeProfile: profile("profile-b") });
+    await waitFor(() => expect(syncWorkspaceRuntime).toHaveBeenCalledTimes(2));
+    rerender({ activeProfile: profile("profile-a") });
+    await waitFor(() => expect(syncWorkspaceRuntime).toHaveBeenCalledTimes(3));
+    rejectStale(new Error("stale failure"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(rollbackSettings).not.toHaveBeenCalled();
+  });
+
+  it("invalidates an older request even while the newer Provider is deferred", async () => {
+    let rejectInitial: (error: Error) => void = () => undefined;
+    const initialRequest = new Promise<void>((_resolve, reject) => {
+      rejectInitial = reject;
+    });
+    const syncWorkspaceRuntime = vi.fn(() => initialRequest);
+    const rollbackSettings = vi.fn(async () => undefined);
+    const { rerender } = renderHook(
+      ({ activeProfile, defer }) =>
+        useProviderProfileRuntimeSync({
+          activeProfile,
+          activeWorkspace: workspace,
+          activeThreadId: "thread-1",
+          settingsLoading: false,
+          defer,
+          syncLocalConfig: false,
+          settingsSnapshot: runtimeSettings(activeProfile, false),
+          syncWorkspaceRuntime,
+          rollbackSettings,
+        }),
+      {
+        initialProps: {
+          activeProfile: profile("profile-a"),
+          defer: false,
+        },
+      },
+    );
+
+    await waitFor(() => expect(syncWorkspaceRuntime).toHaveBeenCalledTimes(1));
+    rerender({ activeProfile: profile("profile-b"), defer: true });
+    rejectInitial(new Error("stale failure"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(rollbackSettings).not.toHaveBeenCalled();
   });
 });

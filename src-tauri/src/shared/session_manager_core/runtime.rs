@@ -264,6 +264,15 @@ impl SourceRuntimePool<WorkspaceSession> {
         }
     }
 
+    pub(crate) async fn sessions_snapshot(&self) -> Vec<Arc<WorkspaceSession>> {
+        self.entries
+            .lock()
+            .await
+            .values()
+            .map(|entry| Arc::clone(&entry.runtime))
+            .collect()
+    }
+
     #[allow(dead_code)]
     pub(crate) async fn close_all(&self) {
         for session in self.take_all().await {

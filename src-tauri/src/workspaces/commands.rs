@@ -17,7 +17,7 @@ use super::worktree::{
 };
 
 use crate::backend::app_server::WorkspaceSession;
-use crate::codex::spawn_workspace_session;
+use crate::codex::{spawn_workspace_session, spawn_workspace_session_with_settings};
 use crate::git_utils::resolve_git_root;
 use crate::remote_backend;
 use crate::shared::{workspace_rpc, workspaces_core};
@@ -111,13 +111,23 @@ pub(crate) async fn set_workspace_runtime_codex_args(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    workspaces_core::set_workspace_runtime_codex_args_core(
+    workspaces_core::set_workspace_runtime_codex_args_with_source_runtimes_core(
         workspace_id,
         codex_args,
         &state.workspaces,
         &state.sessions,
         &state.app_settings,
-        |entry, default_bin, args, home| spawn_with_app(&app, entry, default_bin, args, home),
+        &state.session_source_runtimes,
+        |entry, default_bin, args, home, settings| {
+            spawn_workspace_session_with_settings(
+                entry,
+                default_bin,
+                args,
+                app.clone(),
+                home,
+                settings,
+            )
+        },
     )
     .await
 }

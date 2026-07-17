@@ -22,7 +22,7 @@ use crate::shared::turn_execution_summary_core::{
 };
 use crate::shared::workflow_preflight_core;
 use crate::state::AppState;
-use crate::types::WorkspaceEntry;
+use crate::types::{AppSettings, WorkspaceEntry};
 
 fn emit_thread_live_event(app: &AppHandle, workspace_id: &str, method: &str, params: Value) {
     let _ = app.emit(
@@ -68,12 +68,32 @@ pub(crate) async fn spawn_workspace_session(
     app_handle: AppHandle,
     codex_home: Option<PathBuf>,
 ) -> Result<Arc<WorkspaceSession>, String> {
-    let client_version = app_handle.package_info().version.to_string();
-    let runtime_env = {
+    let settings = {
         let state = app_handle.state::<AppState>();
         let settings = state.app_settings.lock().await.clone();
-        active_codex_key_runtime(&settings, codex_args).await?
+        settings
     };
+    spawn_workspace_session_with_settings(
+        entry,
+        default_codex_bin,
+        codex_args,
+        app_handle,
+        codex_home,
+        settings,
+    )
+    .await
+}
+
+pub(crate) async fn spawn_workspace_session_with_settings(
+    entry: WorkspaceEntry,
+    default_codex_bin: Option<String>,
+    codex_args: Option<String>,
+    app_handle: AppHandle,
+    codex_home: Option<PathBuf>,
+    settings: AppSettings,
+) -> Result<Arc<WorkspaceSession>, String> {
+    let client_version = app_handle.package_info().version.to_string();
+    let runtime_env = active_codex_key_runtime(&settings, codex_args).await?;
     let event_sink = TauriEventSink::new(app_handle);
     spawn_workspace_session_inner(
         entry,
@@ -660,6 +680,9 @@ pub(crate) async fn send_user_message(
         .await;
     }
 
+    let _runtime_switch_guard = crate::shared::workspaces_core::provider_runtime_switch_gate()
+        .read()
+        .await;
     if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
         &workspace_id,
         &thread_id,

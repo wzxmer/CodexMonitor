@@ -21,7 +21,8 @@ pub(crate) use io::{
     read_workspace_file_core,
 };
 pub(crate) use runtime_codex_args::{
-    set_workspace_runtime_codex_args_core, WorkspaceRuntimeCodexArgsResult,
+    provider_runtime_switch_gate, set_workspace_runtime_codex_args_with_source_runtimes_core,
+    WorkspaceRuntimeCodexArgsResult,
 };
 pub(crate) use worktree::{
     add_worktree_core, remove_worktree_core, rename_worktree_core, rename_worktree_upstream_core,

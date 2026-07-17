@@ -110,10 +110,32 @@ fn spawn_with_client(
     codex_home: Option<PathBuf>,
 ) -> impl std::future::Future<Output = Result<Arc<WorkspaceSession>, String>> + '_ {
     async move {
-        let runtime_env = {
-            let settings = app_settings.lock().await.clone();
-            provider_profiles_core::active_codex_key_runtime(&settings, codex_args).await?
-        };
+        let settings = app_settings.lock().await.clone();
+        spawn_with_client_settings(
+            event_sink,
+            client_version,
+            entry,
+            default_bin,
+            codex_args,
+            codex_home,
+            settings,
+        )
+        .await
+    }
+}
+
+fn spawn_with_client_settings(
+    event_sink: DaemonEventSink,
+    client_version: String,
+    entry: WorkspaceEntry,
+    default_bin: Option<String>,
+    codex_args: Option<String>,
+    codex_home: Option<PathBuf>,
+    settings: AppSettings,
+) -> impl std::future::Future<Output = Result<Arc<WorkspaceSession>, String>> {
+    async move {
+        let runtime_env =
+            provider_profiles_core::active_codex_key_runtime(&settings, codex_args).await?;
         spawn_workspace_session(
             entry,
             default_bin,
@@ -723,21 +745,22 @@ impl DaemonState {
         codex_args: Option<String>,
         client_version: String,
     ) -> Result<workspaces_core::WorkspaceRuntimeCodexArgsResult, String> {
-        workspaces_core::set_workspace_runtime_codex_args_core(
+        workspaces_core::set_workspace_runtime_codex_args_with_source_runtimes_core(
             workspace_id,
             codex_args,
             &self.workspaces,
             &self.sessions,
             &self.app_settings,
-            move |entry, default_bin, next_args, codex_home| {
-                spawn_with_client(
+            &self.session_source_runtimes,
+            move |entry, default_bin, next_args, codex_home, settings| {
+                spawn_with_client_settings(
                     self.event_sink.clone(),
                     client_version.clone(),
-                    &self.app_settings,
                     entry,
                     default_bin,
                     next_args,
                     codex_home,
+                    settings,
                 )
             },
         )
@@ -1526,6 +1549,9 @@ impl DaemonState {
         collaboration_mode: Option<Value>,
         additional_context: Option<Value>,
     ) -> Result<Value, String> {
+        let _runtime_switch_guard = workspaces_core::provider_runtime_switch_gate()
+            .read()
+            .await;
         if let Some(session) = self
             .source_runtime_for_bound_thread(&workspace_id, &thread_id)
             .await?

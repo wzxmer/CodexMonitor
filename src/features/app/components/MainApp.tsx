@@ -55,7 +55,11 @@ import { useMainAppShellProps } from "@app/hooks/useMainAppShellProps";
 import { useMainAppSidebarMenuOrchestration } from "@app/hooks/useMainAppSidebarMenuOrchestration";
 import { useMainAppSettingsActions } from "@app/hooks/useMainAppSettingsActions";
 import { useMainAppThreadCodexState } from "@app/hooks/useMainAppThreadCodexState";
-import { useProviderProfileRuntimeSync } from "@app/hooks/useProviderProfileRuntimeSync";
+import {
+  restoreProviderRuntimeSettings,
+  useProviderProfileRuntimeSync,
+  type ProviderRuntimeSettingsSnapshot,
+} from "@app/hooks/useProviderProfileRuntimeSync";
 import { useMainAppWorktreeState } from "@app/hooks/useMainAppWorktreeState";
 import { useMainAppWorkspaceActions } from "@app/hooks/useMainAppWorkspaceActions";
 import { useMainAppWorkspaceLifecycle } from "@app/hooks/useMainAppWorkspaceLifecycle";
@@ -781,13 +785,30 @@ export default function MainApp() {
     },
     [addDebugEntry],
   );
+  const appSettingsRef = useRef(appSettings);
+  appSettingsRef.current = appSettings;
+  const rollbackProviderRuntimeSettings = useCallback(
+    (snapshot: ProviderRuntimeSettingsSnapshot) =>
+      queueSaveSettings(
+        restoreProviderRuntimeSettings(appSettingsRef.current, snapshot),
+      ),
+    [queueSaveSettings],
+  );
   useProviderProfileRuntimeSync({
     activeProfile: activeCodexKeyProfile,
     activeWorkspace,
     activeThreadId,
     settingsLoading: appSettingsLoading,
     defer: hasAnyProcessingThread,
+    syncLocalConfig: appSettings.syncProviderProfileToLocalConfig,
+    settingsSnapshot: {
+      activeCodexKeyProfileId: appSettings.activeCodexKeyProfileId,
+      activeProfile: activeCodexKeyProfile,
+      syncProviderProfileToLocalConfig:
+        appSettings.syncProviderProfileToLocalConfig,
+    },
     syncWorkspaceRuntime: ensureWorkspaceRuntimeCodexArgs,
+    rollbackSettings: rollbackProviderRuntimeSettings,
     onError: handleProviderRuntimeSyncError,
   });
   const { connectionState: remoteThreadConnectionState, reconnectLive } =
