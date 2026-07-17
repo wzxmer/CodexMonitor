@@ -793,6 +793,19 @@ impl DaemonState {
         .await
     }
 
+    async fn verify_session_threads(
+        &self,
+        request: types::VerifySessionThreadsRequest,
+    ) -> Result<types::VerifySessionThreadsResponse, String> {
+        settings_core::get_app_settings_core(&self.app_settings, &self.settings_path).await;
+        shared::session_manager_core::service::verify_session_threads_core(
+            request,
+            &self.app_settings,
+            &self.session_manager,
+        )
+        .await
+    }
+
     async fn fetch_managed_sessions_page(
         &self,
         request: types::ManagedSessionPageRequest,

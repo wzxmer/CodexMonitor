@@ -169,6 +169,48 @@ pub(crate) struct SessionScanSummary {
     pub(crate) total_sessions: usize,
     pub(crate) diagnostic_count: usize,
     pub(crate) cancelled: bool,
+    #[serde(default)]
+    pub(crate) source_snapshots: Vec<SessionSourceSnapshot>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionSourceSnapshot {
+    pub(crate) source_id: String,
+    pub(crate) generation: u64,
+    pub(crate) fingerprint: String,
+    pub(crate) complete: bool,
+    pub(crate) scanned_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct VerifySessionThreadsRequest {
+    pub(crate) source_id: String,
+    pub(crate) thread_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum SessionThreadPresence {
+    Present,
+    Missing,
+    Unknown,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SessionThreadVerification {
+    pub(crate) thread_id: String,
+    pub(crate) presence: SessionThreadPresence,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct VerifySessionThreadsResponse {
+    pub(crate) snapshot: SessionSourceSnapshot,
+    pub(crate) threads: Vec<SessionThreadVerification>,
+    pub(crate) diagnostics: Vec<SessionScanDiagnosticDto>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

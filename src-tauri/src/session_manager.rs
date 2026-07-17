@@ -10,7 +10,7 @@ use crate::shared::session_manager_core::runtime::SourceThreadRuntimeBinding;
 use crate::shared::session_manager_core::service::{
     cancel_session_task_core, fetch_managed_session_preview_core, fetch_managed_sessions_page_core,
     fetch_session_search_results_core, list_session_sources_core, scan_managed_sessions_core,
-    search_managed_sessions_core, update_session_source_core,
+    search_managed_sessions_core, update_session_source_core, verify_session_threads_core,
 };
 use crate::shared::settings_core;
 use crate::state::AppState;
@@ -24,7 +24,8 @@ use crate::types::{
     PrepareManagedSessionDerivationRequest, ResumeManagedSessionRequest,
     ResumeManagedSessionResponse, SessionScanRequest, SessionScanSummary, SessionSearchProgress,
     SessionSearchRequest, SessionSearchResponse, SessionSource, SessionSourceUpdateRequest,
-    WorkspaceEntry, WorkspaceInfo, WorkspaceKind, WorkspaceSettings,
+    VerifySessionThreadsRequest, VerifySessionThreadsResponse, WorkspaceEntry, WorkspaceInfo,
+    WorkspaceKind, WorkspaceSettings,
 };
 
 fn workspace_info(entry: &WorkspaceEntry, connected: bool) -> WorkspaceInfo {
@@ -541,6 +542,26 @@ pub(crate) async fn scan_managed_sessions(
     }
     settings_core::get_app_settings_core(&state.app_settings, &state.settings_path).await;
     scan_managed_sessions_core(request, &state.app_settings, &state.session_manager).await
+}
+
+#[tauri::command]
+pub(crate) async fn verify_session_threads(
+    request: VerifySessionThreadsRequest,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<VerifySessionThreadsResponse, String> {
+    if let Some(value) = remote_typed_if_enabled(
+        &state,
+        &app,
+        "verify_session_threads",
+        json!({ "request": request }),
+    )
+    .await?
+    {
+        return Ok(value);
+    }
+    settings_core::get_app_settings_core(&state.app_settings, &state.settings_path).await;
+    verify_session_threads_core(request, &state.app_settings, &state.session_manager).await
 }
 
 #[tauri::command]

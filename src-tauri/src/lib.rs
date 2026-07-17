@@ -218,6 +218,7 @@ pub fn run() {
             session_manager::list_session_sources,
             session_manager::update_session_source,
             session_manager::scan_managed_sessions,
+            session_manager::verify_session_threads,
             session_manager::fetch_managed_sessions_page,
             session_manager::fetch_managed_session_preview,
             session_manager::search_managed_sessions,

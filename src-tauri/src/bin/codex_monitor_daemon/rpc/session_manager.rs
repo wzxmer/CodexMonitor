@@ -46,6 +46,18 @@ pub(super) async fn try_handle(
                     .and_then(to_value),
             )
         }
+        "verify_session_threads" => {
+            let request = match parse_request::<types::VerifySessionThreadsRequest>(params) {
+                Ok(request) => request,
+                Err(error) => return Some(Err(error)),
+            };
+            Some(
+                state
+                    .verify_session_threads(request)
+                    .await
+                    .and_then(to_value),
+            )
+        }
         "fetch_managed_sessions_page" => {
             let request = match parse_request::<types::ManagedSessionPageRequest>(params) {
                 Ok(request) => request,
@@ -208,6 +220,7 @@ mod tests {
     use super::parse_request;
     use crate::types::{
         ManagedSessionCleanupRequest, ManagedSessionCleanupSchedulerRequest, SessionScanRequest,
+        VerifySessionThreadsRequest,
     };
 
     #[test]
@@ -222,6 +235,20 @@ mod tests {
 
         assert_eq!(request.request_id, "scan-a");
         assert_eq!(request.source_ids, vec!["source-a"]);
+    }
+
+    #[test]
+    fn parses_camel_case_thread_verification_contract() {
+        let request: VerifySessionThreadsRequest = parse_request(&json!({
+            "request": {
+                "sourceId": "source-a",
+                "threadIds": ["thread-a", "thread-b"]
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(request.source_id, "source-a");
+        assert_eq!(request.thread_ids, vec!["thread-a", "thread-b"]);
     }
 
     #[test]

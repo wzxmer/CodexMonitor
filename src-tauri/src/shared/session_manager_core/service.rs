@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
 use crate::shared::attachment_storage_core::validate_session_attachment_cleanup;
@@ -21,6 +22,7 @@ use crate::shared::session_manager_core::ledger::{
 };
 use crate::shared::session_manager_core::scanner::{
     scan_session_source, scan_session_sources, MultiSourceSessionScanResult,
+    SourceSessionScanResult,
 };
 use crate::shared::session_manager_core::search::{
     search_scan_results, SearchCacheKey, SearchDocument,
@@ -38,10 +40,13 @@ use crate::types::{
     PermanentlyDeleteManagedSessionRequest, PermanentlyDeleteManagedSessionResponse,
     PermanentlyDeleteManagedSessionResult, PrepareManagedSessionDerivationRequest,
     SessionScanDiagnosticDto, SessionScanRequest, SessionScanSummary, SessionSearchProgress,
-    SessionSearchRequest, SessionSearchResponse, SessionSource, SessionSourceUpdateRequest,
+    SessionSearchRequest, SessionSearchResponse, SessionSource, SessionSourceSnapshot,
+    SessionSourceUpdateRequest, SessionThreadPresence, SessionThreadVerification,
+    VerifySessionThreadsRequest, VerifySessionThreadsResponse,
 };
 
 const MAX_PAGE_LIMIT: usize = 500;
+const MAX_VERIFY_THREAD_IDS: usize = 256;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DeleteOperationOutcome {
@@ -76,6 +81,8 @@ where
 pub(crate) struct SessionManagerRuntime {
     scans: Arc<Mutex<HashMap<String, MultiSourceSessionScanResult>>>,
     latest_scan: Arc<Mutex<Option<MultiSourceSessionScanResult>>>,
+    source_snapshots: Arc<Mutex<HashMap<String, SessionSourceSnapshot>>>,
+    source_generation_counters: Arc<Mutex<HashMap<String, u64>>>,
     cancelled_requests: Arc<Mutex<HashSet<String>>>,
     search_cache: Arc<StdMutex<HashMap<SearchCacheKey, SearchDocument>>>,
     searches: Arc<StdMutex<HashMap<String, SessionSearchResponse>>>,
@@ -87,6 +94,93 @@ pub(crate) struct SessionManagerRuntime {
     archive_ledger_path: Option<PathBuf>,
     deletion_audit_path: Option<PathBuf>,
     cleanup_scheduler_path: Option<PathBuf>,
+}
+
+fn fingerprint_source_scan(scan: &SourceSessionScanResult) -> String {
+    let mut facts = scan
+        .sessions
+        .iter()
+        .map(|session| {
+            format!(
+                "session\0{}\0{:?}\0{:?}\0{:?}\0{:?}",
+                session.thread_id,
+                session.updated_at,
+                session.archived_at,
+                session.file_status,
+                session.file_confidence
+            )
+        })
+        .collect::<Vec<_>>();
+    facts.extend(scan.diagnostics.iter().map(|diagnostic| {
+        format!(
+            "diagnostic\0{}\0{}",
+            diagnostic
+                .path
+                .as_ref()
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            diagnostic.error
+        )
+    }));
+    facts.sort();
+
+    let mut digest = Sha256::new();
+    digest.update(scan.source_id.as_bytes());
+    for fact in facts {
+        digest.update([0]);
+        digest.update(fact.as_bytes());
+    }
+    format!("{:x}", digest.finalize())
+}
+
+async fn record_source_snapshot(
+    runtime: &SessionManagerRuntime,
+    source_id: &str,
+    generation: u64,
+    fingerprint: String,
+    complete: bool,
+    scanned_at: i64,
+) -> SessionSourceSnapshot {
+    let snapshot = SessionSourceSnapshot {
+        source_id: source_id.to_string(),
+        generation,
+        fingerprint,
+        complete,
+        scanned_at,
+    };
+    let mut snapshots = runtime.source_snapshots.lock().await;
+    if snapshots
+        .get(source_id)
+        .is_none_or(|current| current.generation <= generation)
+    {
+        snapshots.insert(source_id.to_string(), snapshot.clone());
+    }
+    snapshot
+}
+
+async fn reserve_source_generation(runtime: &SessionManagerRuntime, source_id: &str) -> u64 {
+    let mut counters = runtime.source_generation_counters.lock().await;
+    let generation = counters
+        .get(source_id)
+        .copied()
+        .unwrap_or(0)
+        .saturating_add(1);
+    counters.insert(source_id.to_string(), generation);
+    generation
+}
+
+fn scan_diagnostics_dto(scan: &SourceSessionScanResult) -> Vec<SessionScanDiagnosticDto> {
+    scan.diagnostics
+        .iter()
+        .map(|diagnostic| SessionScanDiagnosticDto {
+            source_id: diagnostic.source_id.clone(),
+            path: diagnostic
+                .path
+                .as_ref()
+                .map(|path| path.to_string_lossy().into_owned()),
+            error: diagnostic.error.clone(),
+        })
+        .collect()
 }
 
 pub(crate) async fn permanently_delete_managed_session_core(
@@ -492,11 +586,24 @@ pub(crate) async fn scan_managed_sessions_core(
         .session_sources
         .iter()
         .filter(|source| {
-            requested_sources.is_empty() || requested_sources.contains(source.id.as_str())
+            source.enabled
+                && (requested_sources.is_empty() || requested_sources.contains(source.id.as_str()))
         })
         .cloned()
-        .collect();
+        .collect::<Vec<_>>();
+    let source_ids = sources
+        .iter()
+        .map(|source| source.id.clone())
+        .collect::<Vec<_>>();
+    let mut source_generations = HashMap::with_capacity(source_ids.len());
+    for source_id in &source_ids {
+        source_generations.insert(
+            source_id.clone(),
+            reserve_source_generation(runtime, source_id).await,
+        );
+    }
     let mut result = scan_session_sources(sources, 4).await;
+    let snapshot_result = result.clone();
     if let Some(path) = runtime.archive_ledger_path.as_deref() {
         let _ledger_guard = runtime.archive_ledger_lock.lock().await;
         apply_archive_ledger(&mut result.sessions, path, current_time_ms())?;
@@ -516,17 +623,129 @@ pub(crate) async fn scan_managed_sessions_core(
             total_sessions: 0,
             diagnostic_count: result.diagnostics.len(),
             cancelled: true,
+            source_snapshots: Vec::new(),
         });
+    }
+    let scanned_at = current_time_ms();
+    let mut source_snapshots = Vec::with_capacity(source_ids.len());
+    for source_id in source_ids {
+        let source_scan = SourceSessionScanResult {
+            source_id: source_id.clone(),
+            sessions: snapshot_result
+                .sessions
+                .iter()
+                .filter(|session| session.source_id == source_id)
+                .cloned()
+                .collect(),
+            diagnostics: snapshot_result
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.source_id == source_id)
+                .cloned()
+                .collect(),
+            files_by_key: HashMap::new(),
+        };
+        let fingerprint = fingerprint_source_scan(&source_scan);
+        let complete = source_scan.diagnostics.is_empty();
+        source_snapshots.push(
+            record_source_snapshot(
+                runtime,
+                &source_id,
+                source_generations[&source_id],
+                fingerprint,
+                complete,
+                scanned_at,
+            )
+            .await,
+        );
     }
     let summary = SessionScanSummary {
         request_id: request_id.clone(),
         total_sessions: result.sessions.len(),
         diagnostic_count: result.diagnostics.len(),
         cancelled: false,
+        source_snapshots,
     };
     *runtime.latest_scan.lock().await = Some(result.clone());
     runtime.scans.lock().await.insert(request_id, result);
     Ok(summary)
+}
+
+pub(crate) async fn verify_session_threads_core(
+    request: VerifySessionThreadsRequest,
+    app_settings: &Mutex<AppSettings>,
+    runtime: &SessionManagerRuntime,
+) -> Result<VerifySessionThreadsResponse, String> {
+    let source_id = request.source_id.trim();
+    if source_id.is_empty() {
+        return Err("Session source id is required".to_string());
+    }
+    if request.thread_ids.len() > MAX_VERIFY_THREAD_IDS {
+        return Err(format!(
+            "At most {MAX_VERIFY_THREAD_IDS} session thread ids can be verified at once"
+        ));
+    }
+    let mut seen = HashSet::new();
+    let thread_ids = request
+        .thread_ids
+        .iter()
+        .map(|thread_id| thread_id.trim())
+        .filter(|thread_id| !thread_id.is_empty())
+        .filter(|thread_id| seen.insert((*thread_id).to_string()))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if thread_ids.is_empty() {
+        return Err("At least one session thread id is required".to_string());
+    }
+
+    let source = app_settings
+        .lock()
+        .await
+        .session_sources
+        .iter()
+        .find(|source| source.id == source_id && source.enabled)
+        .cloned()
+        .ok_or_else(|| "Session source is unavailable".to_string())?;
+    let generation = reserve_source_generation(runtime, source_id).await;
+    let scan = tokio::task::spawn_blocking(move || scan_session_source(&source))
+        .await
+        .map_err(|error| error.to_string())?;
+    let complete = scan.diagnostics.is_empty();
+    let present_ids = scan
+        .sessions
+        .iter()
+        .map(|session| session.thread_id.as_str())
+        .collect::<HashSet<_>>();
+    let threads = thread_ids
+        .into_iter()
+        .map(|thread_id| {
+            let presence = if present_ids.contains(thread_id.as_str()) {
+                SessionThreadPresence::Present
+            } else if complete {
+                SessionThreadPresence::Missing
+            } else {
+                SessionThreadPresence::Unknown
+            };
+            SessionThreadVerification {
+                thread_id,
+                presence,
+            }
+        })
+        .collect();
+    let snapshot = record_source_snapshot(
+        runtime,
+        source_id,
+        generation,
+        fingerprint_source_scan(&scan),
+        complete,
+        current_time_ms(),
+    )
+    .await;
+    Ok(VerifySessionThreadsResponse {
+        snapshot,
+        threads,
+        diagnostics: scan_diagnostics_dto(&scan),
+    })
 }
 
 pub(crate) async fn fetch_managed_sessions_page_core(
@@ -966,7 +1185,8 @@ mod tests {
         permanently_delete_managed_session_core, prepare_managed_session_derivation_core,
         preview_managed_session_cleanup_core, resolve_managed_session_core,
         run_managed_session_cleanup_scheduler_core, scan_managed_sessions_core,
-        search_managed_sessions_core, update_session_source_core, SessionManagerRuntime,
+        search_managed_sessions_core, update_session_source_core, verify_session_threads_core,
+        SessionManagerRuntime,
     };
     use crate::shared::attachment_storage_core::session_attachment_dir;
     use crate::shared::session_manager_core::ledger::{
@@ -977,8 +1197,158 @@ mod tests {
         ManagedSessionCleanupRequest, ManagedSessionCleanupSchedulerRequest,
         ManagedSessionPageRequest, PermanentlyDeleteManagedSessionRequest,
         PrepareManagedSessionDerivationRequest, SessionScanRequest, SessionSearchRequest,
-        SessionSourceUpdateRequest,
+        SessionSourceUpdateRequest, SessionThreadPresence, VerifySessionThreadsRequest,
     };
+
+    #[test]
+    fn verifies_bounded_thread_presence_with_stable_source_generations() {
+        let runtime_executor = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime_executor.block_on(async {
+            let root = std::env::temp_dir().join(format!(
+                "codex-monitor-source-verification-{}",
+                Uuid::new_v4()
+            ));
+            let codex_home = root.join("codex-home");
+            let sessions = codex_home.join("sessions");
+            fs::create_dir_all(&sessions).unwrap();
+            let session_path = sessions.join("rollout-thread-present.jsonl");
+            fs::write(
+                &session_path,
+                "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-present\"}}\n",
+            )
+            .unwrap();
+            let settings = Mutex::new(AppSettings::default());
+            let sources = update_session_source_core(
+                SessionSourceUpdateRequest {
+                    action: "add".to_string(),
+                    source_id: None,
+                    name: Some("Fixture".to_string()),
+                    path: Some(codex_home.to_string_lossy().to_string()),
+                    enabled: None,
+                },
+                &settings,
+                &root.join("settings.json"),
+            )
+            .await
+            .unwrap();
+            let runtime = SessionManagerRuntime::default();
+            let request = VerifySessionThreadsRequest {
+                source_id: sources[0].id.clone(),
+                thread_ids: vec!["thread-present".to_string(), "thread-missing".to_string()],
+            };
+
+            let first = verify_session_threads_core(request.clone(), &settings, &runtime)
+                .await
+                .unwrap();
+            assert!(first.snapshot.complete);
+            assert_eq!(first.snapshot.generation, 1);
+            assert_eq!(first.threads[0].presence, SessionThreadPresence::Present);
+            assert_eq!(first.threads[1].presence, SessionThreadPresence::Missing);
+
+            let unchanged = verify_session_threads_core(request.clone(), &settings, &runtime)
+                .await
+                .unwrap();
+            assert_eq!(unchanged.snapshot.generation, 2);
+            assert_eq!(unchanged.snapshot.fingerprint, first.snapshot.fingerprint);
+
+            fs::remove_file(&session_path).unwrap();
+            let deleted = verify_session_threads_core(request, &settings, &runtime)
+                .await
+                .unwrap();
+            assert_eq!(deleted.snapshot.generation, 3);
+            assert_ne!(deleted.snapshot.fingerprint, first.snapshot.fingerprint);
+            assert!(deleted
+                .threads
+                .iter()
+                .all(|thread| thread.presence == SessionThreadPresence::Missing));
+
+            let _ = fs::remove_dir_all(root);
+        });
+    }
+
+    #[test]
+    fn late_source_snapshot_cannot_replace_a_newer_generation() {
+        let runtime_executor = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime_executor.block_on(async {
+            let runtime = SessionManagerRuntime::default();
+            let older = super::reserve_source_generation(&runtime, "source-a").await;
+            let newer = super::reserve_source_generation(&runtime, "source-a").await;
+
+            super::record_source_snapshot(
+                &runtime,
+                "source-a",
+                newer,
+                "newer".to_string(),
+                true,
+                20,
+            )
+            .await;
+            super::record_source_snapshot(
+                &runtime,
+                "source-a",
+                older,
+                "older".to_string(),
+                true,
+                10,
+            )
+            .await;
+
+            let snapshots = runtime.source_snapshots.lock().await;
+            assert_eq!(snapshots["source-a"].generation, newer);
+            assert_eq!(snapshots["source-a"].fingerprint, "newer");
+        });
+    }
+
+    #[test]
+    fn reports_unknown_instead_of_missing_when_source_scan_is_incomplete() {
+        let runtime_executor = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime_executor.block_on(async {
+            let root = std::env::temp_dir().join(format!(
+                "codex-monitor-source-verification-missing-{}",
+                Uuid::new_v4()
+            ));
+            fs::create_dir_all(&root).unwrap();
+            let settings = Mutex::new(AppSettings::default());
+            let sources = update_session_source_core(
+                SessionSourceUpdateRequest {
+                    action: "add".to_string(),
+                    source_id: None,
+                    name: Some("Missing".to_string()),
+                    path: Some(root.join("missing-home").to_string_lossy().to_string()),
+                    enabled: None,
+                },
+                &settings,
+                &root.join("settings.json"),
+            )
+            .await
+            .unwrap();
+
+            let response = verify_session_threads_core(
+                VerifySessionThreadsRequest {
+                    source_id: sources[0].id.clone(),
+                    thread_ids: vec!["thread-a".to_string()],
+                },
+                &settings,
+                &SessionManagerRuntime::default(),
+            )
+            .await
+            .unwrap();
+
+            assert!(!response.snapshot.complete);
+            assert_eq!(response.threads[0].presence, SessionThreadPresence::Unknown);
+            assert!(!response.diagnostics.is_empty());
+            let _ = fs::remove_dir_all(root);
+        });
+    }
 
     #[test]
     fn previews_and_immediately_cleans_expired_archives() {
@@ -1369,6 +1739,11 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(summary.total_sessions, 1);
+            assert_eq!(summary.source_snapshots.len(), 1);
+            assert_eq!(summary.source_snapshots[0].source_id, sources[0].id);
+            assert_eq!(summary.source_snapshots[0].generation, 1);
+            assert!(summary.source_snapshots[0].complete);
+            assert!(!summary.source_snapshots[0].fingerprint.is_empty());
             let page = fetch_managed_sessions_page_core(
                 ManagedSessionPageRequest {
                     request_id: "scan-a".to_string(),

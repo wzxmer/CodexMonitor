@@ -192,6 +192,7 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "list_git_roots"
             | "list_mcp_server_status"
             | "list_session_sources"
+            | "verify_session_threads"
             | "list_threads"
             | "local_usage_snapshot"
             | "list_workspace_files"
@@ -298,6 +299,7 @@ mod tests {
         assert!(can_retry_after_disconnect("resume_thread"));
         assert!(can_retry_after_disconnect("list_threads"));
         assert!(can_retry_after_disconnect("list_session_sources"));
+        assert!(can_retry_after_disconnect("verify_session_threads"));
         assert!(can_retry_after_disconnect("fetch_managed_sessions_page"));
         assert!(can_retry_after_disconnect("search_managed_sessions"));
         assert!(can_retry_after_disconnect("fetch_session_search_results"));

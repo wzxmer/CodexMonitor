@@ -40,6 +40,8 @@ import type {
   SessionSearchResponse,
   SessionSource,
   SessionSourceUpdateRequest,
+  VerifySessionThreadsRequest,
+  VerifySessionThreadsResponse,
   TcpDaemonStatus,
   TailscaleDaemonCommandPreview,
   TailscaleStatus,
@@ -1584,6 +1586,12 @@ export async function prepareManagedSessionDerivation(
 
 export async function readThread(workspaceId: string, threadId: string) {
   return invoke<any>("read_thread", { workspaceId, threadId });
+}
+
+export async function verifySessionThreads(
+  request: VerifySessionThreadsRequest,
+): Promise<VerifySessionThreadsResponse> {
+  return invoke<VerifySessionThreadsResponse>("verify_session_threads", { request });
 }
 
 export async function getTurnExecutionSummaries(

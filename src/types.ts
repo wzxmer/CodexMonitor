@@ -304,6 +304,33 @@ export type SessionScanSummary = {
   totalSessions: number;
   diagnosticCount: number;
   cancelled: boolean;
+  sourceSnapshots: SessionSourceSnapshot[];
+};
+
+export type SessionSourceSnapshot = {
+  sourceId: string;
+  generation: number;
+  fingerprint: string;
+  complete: boolean;
+  scannedAt: number;
+};
+
+export type VerifySessionThreadsRequest = {
+  sourceId: string;
+  threadIds: string[];
+};
+
+export type SessionThreadPresence = "present" | "missing" | "unknown";
+
+export type SessionThreadVerification = {
+  threadId: string;
+  presence: SessionThreadPresence;
+};
+
+export type VerifySessionThreadsResponse = {
+  snapshot: SessionSourceSnapshot;
+  threads: SessionThreadVerification[];
+  diagnostics: SessionScanDiagnostic[];
 };
 
 export type ManagedSessionPageRequest = {
