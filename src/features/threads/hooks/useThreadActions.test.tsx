@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, WorkspaceInfo } from "@/types";
 import {
   archiveThread,
   forkThread,
+  listSessionSources,
   listThreads,
   listWorkspaces,
   resumeThread,
   startThread,
+  verifySessionThreads,
 } from "@services/tauri";
 import {
   buildItemsFromThread,
@@ -24,10 +26,12 @@ import { useThreadActions } from "./useThreadActions";
 vi.mock("@services/tauri", () => ({
   startThread: vi.fn(),
   forkThread: vi.fn(),
+  listSessionSources: vi.fn(),
   resumeThread: vi.fn(),
   listThreads: vi.fn(),
   listWorkspaces: vi.fn(),
   archiveThread: vi.fn(),
+  verifySessionThreads: vi.fn(),
 }));
 
 vi.mock("@utils/threadItems", () => ({
@@ -68,6 +72,20 @@ describe("useThreadActions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(listWorkspaces).mockResolvedValue([]);
+    vi.mocked(listSessionSources).mockResolvedValue([
+      {
+        id: "source-a",
+        name: "Default",
+        codexHomePath: "/tmp/codex",
+        enabled: true,
+        isCurrent: true,
+        isDefault: true,
+        discoveredAt: 0,
+        lastScanAt: null,
+        status: "ready",
+        error: null,
+      },
+    ]);
     vi.mocked(getThreadCreatedTimestamp).mockReturnValue(0);
   });
 
@@ -1275,9 +1293,643 @@ describe("useThreadActions", () => {
     });
   });
 
-  it.todo("preserves verified threads when a refresh returns an abnormal empty page");
+  it("preserves verified threads when a refresh returns an abnormal empty page", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    vi.mocked(verifySessionThreads).mockResolvedValue({
+      snapshot: {
+        sourceId: "source-a",
+        generation: 7,
+        fingerprint: "snapshot-7",
+        complete: true,
+        scannedAt: 7000,
+      },
+      threads: [{ threadId: "thread-verified", presence: "present" }],
+      diagnostics: [],
+    });
 
-  it.todo("retains uncovered verified threads when the fetched page is incomplete");
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "thread-verified", name: "Verified", updatedAt: 5000 },
+        ],
+      },
+      preserveSessionLibraryOnProviderSwitch: true,
+      getThreadListRuntimeContext: () => ({
+        sourceId: "source-a",
+        runtimeGeneration: 3,
+      }),
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expect(verifySessionThreads).toHaveBeenCalledWith({
+      sourceId: "source-a",
+      threadIds: ["thread-verified"],
+    });
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "setThreads",
+        workspaceId: "ws-1",
+        threads: [
+          { id: "thread-verified", name: "Verified", updatedAt: 5000 },
+        ],
+      }),
+    );
+  });
+
+  it("marks an uncovered thread stale until source verification completes", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    let resolveVerification!: (
+      value: Awaited<ReturnType<typeof verifySessionThreads>>,
+    ) => void;
+    const pendingVerification = new Promise<
+      Awaited<ReturnType<typeof verifySessionThreads>>
+    >((resolve) => {
+      resolveVerification = resolve;
+    });
+    vi.mocked(verifySessionThreads).mockReturnValue(pendingVerification);
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "thread-verified", name: "Verified", updatedAt: 5000 },
+        ],
+      },
+      preserveSessionLibraryOnProviderSwitch: true,
+      getThreadListRuntimeContext: () => ({
+        sourceId: "source-a",
+        runtimeGeneration: 3,
+      }),
+    });
+
+    let request!: Promise<void>;
+    act(() => {
+      request = result.current.listThreadsForWorkspace(workspace);
+    });
+    await waitFor(() => expect(verifySessionThreads).toHaveBeenCalled());
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "setThreads",
+        continuity: expect.objectContaining({
+          staleThreadIds: ["thread-verified"],
+        }),
+      }),
+    );
+
+    resolveVerification({
+      snapshot: {
+        sourceId: "source-a",
+        generation: 7,
+        fingerprint: "snapshot-7",
+        complete: true,
+        scannedAt: 7000,
+      },
+      threads: [{ threadId: "thread-verified", presence: "present" }],
+      diagnostics: [],
+    });
+    await act(async () => {
+      await request;
+    });
+
+    const setThreadsActions = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "setThreads");
+    const finalSetThreads = setThreadsActions[setThreadsActions.length - 1];
+    expect(finalSetThreads).toEqual(
+      expect.objectContaining({
+        continuity: expect.objectContaining({ staleThreadIds: [] }),
+      }),
+    );
+  });
+
+  it("retains uncovered verified threads when the fetched page is incomplete", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-fresh",
+            cwd: workspace.path,
+            preview: "Fresh",
+            updated_at: 6000,
+          },
+        ],
+        nextCursor: "cursor-more",
+      },
+    });
+    vi.mocked(getThreadTimestamp).mockReturnValue(6000);
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "thread-verified", name: "Verified", updatedAt: 5000 },
+        ],
+      },
+      preserveSessionLibraryOnProviderSwitch: true,
+      getThreadListRuntimeContext: () => ({
+        sourceId: "source-a",
+        runtimeGeneration: 3,
+      }),
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, { maxPages: 1 });
+    });
+
+    expect(verifySessionThreads).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "setThreads",
+        workspaceId: "ws-1",
+        threads: [
+          {
+            id: "thread-fresh",
+            name: "Fresh",
+            updatedAt: 6000,
+            createdAt: 0,
+          },
+          { id: "thread-verified", name: "Verified", updatedAt: 5000 },
+        ],
+      }),
+    );
+  });
+
+  it("removes a missing thread only after a complete source verification", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    vi.mocked(verifySessionThreads).mockResolvedValue({
+      snapshot: {
+        sourceId: "source-a",
+        generation: 8,
+        fingerprint: "snapshot-8",
+        complete: true,
+        scannedAt: 8000,
+      },
+      threads: [{ threadId: "thread-deleted", presence: "missing" }],
+      diagnostics: [],
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "thread-deleted", name: "Deleted", updatedAt: 5000 },
+        ],
+      },
+      preserveSessionLibraryOnProviderSwitch: true,
+      getThreadListRuntimeContext: () => ({
+        sourceId: "source-a",
+        runtimeGeneration: 3,
+      }),
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "setThreads",
+        workspaceId: "ws-1",
+        threads: [],
+        continuity: expect.objectContaining({
+          paginationComplete: true,
+          staleThreadIds: [],
+          verifiedSnapshot: expect.objectContaining({ generation: 8 }),
+        }),
+      }),
+    );
+  });
+
+  it("retains a reported missing thread when the source snapshot is incomplete", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    vi.mocked(verifySessionThreads).mockResolvedValue({
+      snapshot: {
+        sourceId: "source-a",
+        generation: 8,
+        fingerprint: "snapshot-8",
+        complete: false,
+        scannedAt: 8000,
+      },
+      threads: [{ threadId: "thread-uncertain", presence: "missing" }],
+      diagnostics: [],
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "thread-uncertain", name: "Uncertain", updatedAt: 5000 },
+        ],
+      },
+      preserveSessionLibraryOnProviderSwitch: true,
+      getThreadListRuntimeContext: () => ({
+        sourceId: "source-a",
+        runtimeGeneration: 3,
+      }),
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    const setThreadsActions = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "setThreads");
+    const finalSetThreads = setThreadsActions[setThreadsActions.length - 1];
+    expect(finalSetThreads).toEqual(
+      expect.objectContaining({
+        threads: [
+          { id: "thread-uncertain", name: "Uncertain", updatedAt: 5000 },
+        ],
+        continuity: expect.objectContaining({
+          staleThreadIds: ["thread-uncertain"],
+        }),
+      }),
+    );
+  });
+
+  it("ignores an older thread/list response after a newer request wins", async () => {
+    let resolveFirst!: (value: Record<string, unknown>) => void;
+    const first = new Promise<Record<string, unknown>>((resolve) => {
+      resolveFirst = resolve;
+    });
+    vi.mocked(listThreads)
+      .mockReturnValueOnce(first as ReturnType<typeof listThreads>)
+      .mockResolvedValueOnce({
+        result: {
+          data: [
+            {
+              id: "thread-newer",
+              cwd: workspace.path,
+              preview: "Newer",
+              updated_at: 7000,
+            },
+          ],
+          nextCursor: null,
+        },
+      });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) =>
+      Number((thread as Record<string, unknown>).updated_at ?? 0),
+    );
+
+    const { result, dispatch } = renderActions({
+      preserveSessionLibraryOnProviderSwitch: true,
+      getThreadListRuntimeContext: () => ({
+        sourceId: "source-a",
+        runtimeGeneration: 3,
+      }),
+    });
+    let firstRequest!: Promise<void>;
+    await act(async () => {
+      firstRequest = result.current.listThreadsForWorkspace(workspace);
+      await Promise.resolve();
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+    resolveFirst({
+      result: {
+        data: [
+          {
+            id: "thread-older",
+            cwd: workspace.path,
+            preview: "Older",
+            updated_at: 6000,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    await act(async () => {
+      await firstRequest;
+    });
+
+    const appliedThreadIds = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "setThreads")
+      .flatMap((action) =>
+        action.threads.map((thread: { id: string }) => thread.id),
+      );
+    expect(appliedThreadIds).toContain("thread-newer");
+    expect(appliedThreadIds).not.toContain("thread-older");
+  });
+
+  it("lets a foreground refresh clear loading after a newer background refresh wins", async () => {
+    let resolveFirst!: (value: Record<string, unknown>) => void;
+    const first = new Promise<Record<string, unknown>>((resolve) => {
+      resolveFirst = resolve;
+    });
+    vi.mocked(listThreads)
+      .mockReturnValueOnce(first as ReturnType<typeof listThreads>)
+      .mockResolvedValueOnce({
+        result: { data: [], nextCursor: null },
+      });
+    const { result, dispatch } = renderActions({
+      preserveSessionLibraryOnProviderSwitch: true,
+      getThreadListRuntimeContext: () => ({
+        sourceId: "source-a",
+        runtimeGeneration: 3,
+      }),
+    });
+
+    let foreground!: Promise<void>;
+    act(() => {
+      foreground = result.current.listThreadsForWorkspace(workspace);
+    });
+    await waitFor(() => expect(listThreads).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+      });
+    });
+    resolveFirst({ result: { data: [], nextCursor: null } });
+    await act(async () => {
+      await foreground;
+    });
+
+    const loadingActions = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter(
+        (action) =>
+          action.type === "setThreadListLoading" &&
+          action.workspaceId === "ws-1",
+      );
+    expect(loadingActions).toEqual([
+      {
+        type: "setThreadListLoading",
+        workspaceId: "ws-1",
+        isLoading: true,
+      },
+      {
+        type: "setThreadListLoading",
+        workspaceId: "ws-1",
+        isLoading: false,
+      },
+    ]);
+  });
+
+  it("ignores a thread/list response from an older runtime generation", async () => {
+    let resolveList!: (value: Record<string, unknown>) => void;
+    const pending = new Promise<Record<string, unknown>>((resolve) => {
+      resolveList = resolve;
+    });
+    vi.mocked(listThreads).mockReturnValue(
+      pending as ReturnType<typeof listThreads>,
+    );
+    let runtimeGeneration = 3;
+    const { result, dispatch } = renderActions({
+      preserveSessionLibraryOnProviderSwitch: true,
+      getThreadListRuntimeContext: () => ({
+        sourceId: "source-a",
+        runtimeGeneration,
+      }),
+    });
+    let request!: Promise<void>;
+    await act(async () => {
+      request = result.current.listThreadsForWorkspace(workspace);
+      await Promise.resolve();
+    });
+    runtimeGeneration = 4;
+    resolveList({
+      result: {
+        data: [
+          {
+            id: "thread-stale-runtime",
+            cwd: workspace.path,
+            preview: "Stale",
+            updated_at: 6000,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    await act(async () => {
+      await request;
+    });
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "setThreads" }),
+    );
+  });
+
+  it("does not carry a verified snapshot across a session source change", async () => {
+    vi.mocked(listThreads)
+      .mockResolvedValueOnce({
+        result: {
+          data: [
+            {
+              id: "thread-source-a",
+              cwd: workspace.path,
+              preview: "Source A",
+              updated_at: 6000,
+            },
+          ],
+          nextCursor: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        result: { data: [], nextCursor: null },
+      })
+      .mockResolvedValueOnce({
+        result: { data: [], nextCursor: null },
+      });
+    vi.mocked(getThreadTimestamp).mockReturnValue(6000);
+    let runtimeContext = {
+      sourceId: "source-a",
+      runtimeGeneration: 3,
+    };
+    const { result, dispatch } = renderActions({
+      preserveSessionLibraryOnProviderSwitch: true,
+      getThreadListRuntimeContext: () => runtimeContext,
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+    runtimeContext = {
+      sourceId: "source-b",
+      runtimeGeneration: 4,
+    };
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    const setThreadsActions = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "setThreads");
+    expect(setThreadsActions[setThreadsActions.length - 1]).toEqual(
+      expect.objectContaining({
+        threads: [],
+        preserveAnchors: false,
+        continuity: expect.objectContaining({ sourceId: "source-b" }),
+      }),
+    );
+    expect(verifySessionThreads).not.toHaveBeenCalled();
+  });
+
+  it("does not treat an unavailable source lookup as a source change", async () => {
+    vi.mocked(listThreads)
+      .mockResolvedValueOnce({
+        result: {
+          data: [
+            {
+              id: "thread-source-a",
+              cwd: workspace.path,
+              preview: "Source A",
+              updated_at: 6000,
+            },
+          ],
+          nextCursor: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        result: { data: [], nextCursor: null },
+      });
+    vi.mocked(listSessionSources)
+      .mockResolvedValueOnce([
+        {
+          id: "source-a",
+          name: "Default",
+          codexHomePath: "/tmp/codex",
+          enabled: true,
+          isCurrent: true,
+          isDefault: true,
+          discoveredAt: 0,
+          lastScanAt: null,
+          status: "ready",
+          error: null,
+        },
+      ])
+      .mockRejectedValueOnce(new Error("source lookup unavailable"))
+      .mockResolvedValueOnce([
+        {
+          id: "source-b",
+          name: "Other",
+          codexHomePath: "/tmp/other-codex",
+          enabled: true,
+          isCurrent: true,
+          isDefault: false,
+          discoveredAt: 0,
+          lastScanAt: null,
+          status: "ready",
+          error: null,
+        },
+      ]);
+    vi.mocked(getThreadTimestamp).mockReturnValue(6000);
+    const { result, dispatch, rerender, args } = renderActions({
+      preserveSessionLibraryOnProviderSwitch: true,
+      getThreadListRuntimeContext: () => ({
+        sourceId: null,
+        runtimeGeneration: 0,
+      }),
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+    args.threadsByWorkspace = {
+      "ws-1": [
+        { id: "thread-source-a", name: "Source A", updatedAt: 6000 },
+      ],
+    };
+    rerender();
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    const setThreadsActions = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "setThreads");
+    const finalSetThreads = setThreadsActions[setThreadsActions.length - 1];
+    expect(finalSetThreads).toEqual(
+      expect.objectContaining({
+        preserveAnchors: true,
+        continuity: expect.objectContaining({ sourceId: null }),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+    const changedSourceActions = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "setThreads");
+    const changedSourceSetThreads =
+      changedSourceActions[changedSourceActions.length - 1];
+    expect(changedSourceSetThreads).toEqual(
+      expect.objectContaining({
+        threads: [],
+        preserveAnchors: false,
+        continuity: expect.objectContaining({ sourceId: "source-b" }),
+      }),
+    );
+    expect(verifySessionThreads).not.toHaveBeenCalled();
+  });
+
+  it("keeps runtime-authoritative replacement when continuity is disabled", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [{ id: "thread-old", name: "Old", updatedAt: 5000 }],
+      },
+      preserveSessionLibraryOnProviderSwitch: false,
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expect(verifySessionThreads).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [],
+      sortKey: "updated_at",
+      preserveAnchors: true,
+      continuity: undefined,
+    });
+  });
+
+  it("clears prior continuity metadata when continuity is disabled", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    const { result, dispatch } = renderActions({
+      preserveSessionLibraryOnProviderSwitch: false,
+      threadListContinuityByWorkspace: {
+        "ws-1": {
+          sourceId: "source-a",
+          runtimeGeneration: 3,
+          listGeneration: 1,
+          requestId: "request-1",
+          requestSequence: 1,
+          paginationComplete: false,
+          verifiedSnapshot: null,
+          staleThreadIds: ["thread-old"],
+        },
+      },
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "setThreads",
+        workspaceId: "ws-1",
+        continuity: null,
+      }),
+    );
+  });
 
   it("uses fresh fetched data for active anchors outside top thread target", async () => {
     const data = Array.from({ length: 21 }, (_, index) => ({
@@ -2921,6 +3573,34 @@ describe("useThreadActions", () => {
         label: "thread/archive error",
         payload: "nope",
       }),
+    );
+  });
+
+  it("blocks archive routing for a stale continuity entry", async () => {
+    const onDebug = vi.fn();
+    const { result } = renderActions({
+      onDebug,
+      threadListContinuityByWorkspace: {
+        "ws-1": {
+          sourceId: "source-a",
+          runtimeGeneration: 3,
+          listGeneration: 4,
+          requestId: "request-4",
+          requestSequence: 4,
+          paginationComplete: false,
+          verifiedSnapshot: null,
+          staleThreadIds: ["thread-stale"],
+        },
+      },
+    });
+
+    await act(async () => {
+      await result.current.archiveThread("ws-1", "thread-stale");
+    });
+
+    expect(archiveThread).not.toHaveBeenCalled();
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "thread/archive blocked stale" }),
     );
   });
 });

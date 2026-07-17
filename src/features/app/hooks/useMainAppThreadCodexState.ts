@@ -94,7 +94,10 @@ export function useMainAppThreadCodexState({
         threadId,
         getThreadCodexParams,
       });
-      await setWorkspaceRuntimeCodexArgs(workspaceId, sanitizedCodexArgsOverride);
+      return setWorkspaceRuntimeCodexArgs(
+        workspaceId,
+        sanitizedCodexArgsOverride,
+      );
     },
     [getThreadCodexParams],
   );

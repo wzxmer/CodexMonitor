@@ -65,6 +65,7 @@ import {
   resolveWorkspaceIdForThreadPath,
 } from "@threads/utils/threadActionHelpers";
 import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
+import type { ThreadListRuntimeContext } from "@threads/types";
 
 type UseThreadsOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -96,6 +97,8 @@ type UseThreadsOptions = {
   customPrompts?: CustomPromptOption[];
   onMessageActivity?: () => void;
   threadSortKey?: ThreadListSortKey;
+  preserveSessionLibraryOnProviderSwitch?: boolean;
+  getThreadListRuntimeContext?: () => ThreadListRuntimeContext;
   onThreadCodexMetadataDetected?: (
     workspaceId: string,
     threadId: string,
@@ -152,6 +155,11 @@ export function useThreads({
   customPrompts = [],
   onMessageActivity,
   threadSortKey = "updated_at",
+  preserveSessionLibraryOnProviderSwitch = false,
+  getThreadListRuntimeContext = () => ({
+    sourceId: null,
+    runtimeGeneration: 0,
+  }),
   onThreadCodexMetadataDetected,
 }: UseThreadsOptions) {
   const maxItemsPerThread =
@@ -917,8 +925,11 @@ export function useThreads({
     activeTurnIdByThread: state.activeTurnIdByThread,
     threadParentById: state.threadParentById,
     threadListCursorByWorkspace: state.threadListCursorByWorkspace,
+    threadListContinuityByWorkspace: state.threadListContinuityByWorkspace,
     threadStatusById: state.threadStatusById,
     threadSortKey,
+    preserveSessionLibraryOnProviderSwitch,
+    getThreadListRuntimeContext,
     tokenEfficiencyMode,
     onDebug,
     getCustomName,
@@ -1437,12 +1448,32 @@ export function useThreads({
 
   const removeThread = useCallback(
     (workspaceId: string, threadId: string) => {
+      if (
+        state.threadListContinuityByWorkspace[
+          workspaceId
+        ]?.staleThreadIds.includes(threadId)
+      ) {
+        onDebug?.({
+          id: `${Date.now()}-client-thread-remove-stale`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "thread/remove blocked stale",
+          payload: { workspaceId, threadId },
+        });
+        return;
+      }
       unpinThread(workspaceId, threadId);
       subagentCheckpointSync.clearThread(threadId);
       dispatch({ type: "removeThread", workspaceId, threadId });
       void archiveThread(workspaceId, threadId);
     },
-    [archiveThread, subagentCheckpointSync, unpinThread],
+    [
+      archiveThread,
+      onDebug,
+      state.threadListContinuityByWorkspace,
+      subagentCheckpointSync,
+      unpinThread,
+    ],
   );
 
   return {
@@ -1461,6 +1492,7 @@ export function useThreads({
     threadListLoadingByWorkspace: state.threadListLoadingByWorkspace,
     threadListPagingByWorkspace: state.threadListPagingByWorkspace,
     threadListCursorByWorkspace: state.threadListCursorByWorkspace,
+    threadListContinuityByWorkspace: state.threadListContinuityByWorkspace,
     activeTurnIdByThread: state.activeTurnIdByThread,
     turnDiffByThread: state.turnDiffByThread,
     turnExecutionSummaryByThread: state.turnExecutionSummaryByThread,

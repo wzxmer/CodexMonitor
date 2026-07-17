@@ -69,8 +69,10 @@ import type {
   ComposerEditorSettings,
   ModelOption,
   ServiceTier,
+  WorkspaceRuntimeCodexArgsResult,
   WorkspaceInfo,
 } from "@/types";
+import type { ThreadListRuntimeContext } from "@threads/types";
 import { useOpenAppIcons } from "@app/hooks/useOpenAppIcons";
 import { useAccountSwitching } from "@app/hooks/useAccountSwitching";
 import { useNewAgentDraft } from "@app/hooks/useNewAgentDraft";
@@ -172,6 +174,13 @@ export default function MainApp() {
   const [codexInstallError, setCodexInstallError] = useState<string | null>(null);
   const codexInstallCheckStartedRef = useRef(false);
   const codexInstallRequestIdRef = useRef<string | null>(null);
+  const [threadListRuntimeContext, setThreadListRuntimeContext] =
+    useState<ThreadListRuntimeContext>({
+      sourceId: null,
+      runtimeGeneration: 0,
+    });
+  const threadListRuntimeContextRef = useRef(threadListRuntimeContext);
+  threadListRuntimeContextRef.current = threadListRuntimeContext;
   const {
     appSettings,
     setAppSettings,
@@ -649,6 +658,42 @@ export default function MainApp() {
     getThreadCodexParams,
     patchThreadCodexParams,
   });
+  const applyThreadListRuntimeResult = useCallback(
+    (runtimeResult: WorkspaceRuntimeCodexArgsResult) => {
+      const previous = threadListRuntimeContextRef.current;
+      const sourceId = runtimeResult.sessionSourceId || previous.sourceId;
+      const shouldAdvanceGeneration =
+        runtimeResult.respawned || previous.sourceId !== sourceId;
+      const next = {
+        sourceId,
+        runtimeGeneration:
+          previous.runtimeGeneration + (shouldAdvanceGeneration ? 1 : 0),
+      };
+      if (
+        next.sourceId === previous.sourceId &&
+        next.runtimeGeneration === previous.runtimeGeneration
+      ) {
+        return;
+      }
+      threadListRuntimeContextRef.current = next;
+      setThreadListRuntimeContext(next);
+    },
+    [],
+  );
+  const ensureWorkspaceRuntimeCodexArgsWithContinuity = useCallback(
+    async (workspaceId: string, threadId: string | null) => {
+      const runtimeResult = await ensureWorkspaceRuntimeCodexArgs(
+        workspaceId,
+        threadId,
+      );
+      applyThreadListRuntimeResult(runtimeResult);
+    },
+    [applyThreadListRuntimeResult, ensureWorkspaceRuntimeCodexArgs],
+  );
+  const getThreadListRuntimeContext = useCallback(
+    () => threadListRuntimeContextRef.current,
+    [],
+  );
 
   const { collaborationModePayload } = useCollaborationModeSelection({
     selectedCollaborationMode,
@@ -752,7 +797,10 @@ export default function MainApp() {
     collaborationMode: collaborationModePayload,
     onSelectServiceTier: handleSelectServiceTier,
     accessMode,
-    ensureWorkspaceRuntimeCodexArgs,
+    ensureWorkspaceRuntimeCodexArgs: ensureWorkspaceRuntimeCodexArgsWithContinuity,
+    preserveSessionLibraryOnProviderSwitch:
+      appSettings.preserveSessionLibraryOnProviderSwitch,
+    getThreadListRuntimeContext,
     reviewDeliveryMode: appSettings.reviewDeliveryMode,
     steerEnabled: appSettings.steerEnabled,
     subagentCheckpointSyncMode: appSettings.subagentCheckpointSyncMode,
@@ -807,10 +855,35 @@ export default function MainApp() {
       syncProviderProfileToLocalConfig:
         appSettings.syncProviderProfileToLocalConfig,
     },
-    syncWorkspaceRuntime: ensureWorkspaceRuntimeCodexArgs,
+    syncWorkspaceRuntime: ensureWorkspaceRuntimeCodexArgsWithContinuity,
     rollbackSettings: rollbackProviderRuntimeSettings,
     onError: handleProviderRuntimeSyncError,
   });
+  const refreshedThreadListRuntimeGenerationRef = useRef(0);
+  useEffect(() => {
+    if (
+      threadListRuntimeContext.runtimeGeneration <= 0 ||
+      refreshedThreadListRuntimeGenerationRef.current ===
+        threadListRuntimeContext.runtimeGeneration
+    ) {
+      return;
+    }
+    const connectedWorkspaces = workspaces.filter(
+      (workspace) => workspace.connected,
+    );
+    if (connectedWorkspaces.length === 0) {
+      return;
+    }
+    refreshedThreadListRuntimeGenerationRef.current =
+      threadListRuntimeContext.runtimeGeneration;
+    void listThreadsForWorkspaces(connectedWorkspaces, {
+      preserveState: true,
+    });
+  }, [
+    listThreadsForWorkspaces,
+    threadListRuntimeContext.runtimeGeneration,
+    workspaces,
+  ]);
   const { connectionState: remoteThreadConnectionState, reconnectLive } =
     useRemoteThreadLiveConnection({
       backendMode: appSettings.backendMode,

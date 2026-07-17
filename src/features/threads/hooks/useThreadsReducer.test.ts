@@ -1162,4 +1162,143 @@ describe("threadReducer", () => {
 
     expect(stale.turnExecutionSummaryByThread["thread-1"]).toEqual(hydrated);
   });
+
+  it("ignores an older continuity request for the same runtime generation", () => {
+    const newer = threadReducer(initialState, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [{ id: "thread-new", name: "New", updatedAt: 20 }],
+      sortKey: "updated_at",
+      continuity: {
+        sourceId: "source-a",
+        runtimeGeneration: 4,
+        listGeneration: 2,
+        requestId: "request-2",
+        requestSequence: 2,
+        paginationComplete: true,
+        verifiedSnapshot: null,
+        staleThreadIds: [],
+      },
+    });
+    const stale = threadReducer(newer, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [{ id: "thread-old", name: "Old", updatedAt: 10 }],
+      sortKey: "updated_at",
+      continuity: {
+        sourceId: "source-a",
+        runtimeGeneration: 4,
+        listGeneration: 1,
+        requestId: "request-1",
+        requestSequence: 1,
+        paginationComplete: true,
+        verifiedSnapshot: null,
+        staleThreadIds: [],
+      },
+    });
+
+    expect(stale).toBe(newer);
+    expect(stale.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "thread-new",
+    ]);
+  });
+
+  it("ignores an older runtime response after the session source changes", () => {
+    const newer = threadReducer(initialState, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [{ id: "thread-source-b", name: "Source B", updatedAt: 20 }],
+      sortKey: "updated_at",
+      continuity: {
+        sourceId: "source-b",
+        runtimeGeneration: 5,
+        listGeneration: 2,
+        requestId: "request-2",
+        requestSequence: 2,
+        paginationComplete: true,
+        verifiedSnapshot: null,
+        staleThreadIds: [],
+      },
+    });
+    const stale = threadReducer(newer, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [{ id: "thread-source-a", name: "Source A", updatedAt: 10 }],
+      sortKey: "updated_at",
+      continuity: {
+        sourceId: "source-a",
+        runtimeGeneration: 4,
+        listGeneration: 1,
+        requestId: "request-1",
+        requestSequence: 1,
+        paginationComplete: true,
+        verifiedSnapshot: null,
+        staleThreadIds: [],
+      },
+    });
+
+    expect(stale).toBe(newer);
+  });
+
+  it("keeps hidden threads excluded from continuity stale metadata", () => {
+    const state = {
+      ...initialState,
+      hiddenThreadIdsByWorkspace: {
+        "ws-1": { "thread-hidden": true as const },
+      },
+    };
+    const next = threadReducer(state, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [
+        { id: "thread-visible", name: "Visible", updatedAt: 20 },
+        { id: "thread-hidden", name: "Hidden", updatedAt: 10 },
+      ],
+      sortKey: "updated_at",
+      continuity: {
+        sourceId: "source-a",
+        runtimeGeneration: 4,
+        listGeneration: 1,
+        requestId: "request-1",
+        requestSequence: 1,
+        paginationComplete: false,
+        verifiedSnapshot: null,
+        staleThreadIds: ["thread-visible", "thread-hidden"],
+      },
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "thread-visible",
+    ]);
+    expect(
+      next.threadListContinuityByWorkspace["ws-1"]?.staleThreadIds,
+    ).toEqual(["thread-visible"]);
+  });
+
+  it("clears continuity metadata when continuity protection is disabled", () => {
+    const state = {
+      ...initialState,
+      threadListContinuityByWorkspace: {
+        "ws-1": {
+          sourceId: "source-a",
+          runtimeGeneration: 4,
+          listGeneration: 1,
+          requestId: "request-1",
+          requestSequence: 1,
+          paginationComplete: false,
+          verifiedSnapshot: null,
+          staleThreadIds: ["thread-stale"],
+        },
+      },
+    };
+    const next = threadReducer(state, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [],
+      sortKey: "updated_at",
+      continuity: null,
+    });
+
+    expect(next.threadListContinuityByWorkspace["ws-1"]).toBeUndefined();
+  });
 });

@@ -11,6 +11,7 @@ import type {
   TurnPlan,
 } from "@/types";
 import { CHAT_SCROLLBACK_DEFAULT } from "@utils/chatScrollback";
+import type { ThreadListContinuityState } from "@threads/types";
 import { reduceThreadItems } from "./threadReducer/threadItemsSlice";
 import { reduceThreadLifecycle } from "./threadReducer/threadLifecycleSlice";
 import { reduceThreadConfig } from "./threadReducer/threadConfigSlice";
@@ -38,6 +39,10 @@ export type ThreadState = {
   threadListLoadingByWorkspace: Record<string, boolean>;
   threadListPagingByWorkspace: Record<string, boolean>;
   threadListCursorByWorkspace: Record<string, string | null>;
+  threadListContinuityByWorkspace: Record<
+    string,
+    ThreadListContinuityState | undefined
+  >;
   threadSortKeyByWorkspace: Record<string, ThreadListSortKey>;
   activeTurnIdByThread: Record<string, string | null>;
   turnDiffByThread: Record<string, string>;
@@ -147,6 +152,7 @@ export type ThreadAction =
       threads: ThreadSummary[];
       sortKey: ThreadListSortKey;
       preserveAnchors?: boolean;
+      continuity?: ThreadListContinuityState | null;
     }
   | {
       type: "setThreadListLoading";
@@ -243,6 +249,7 @@ export const initialState: ThreadState = {
   threadListLoadingByWorkspace: {},
   threadListPagingByWorkspace: {},
   threadListCursorByWorkspace: {},
+  threadListContinuityByWorkspace: {},
   threadSortKeyByWorkspace: {},
   activeTurnIdByThread: {},
   turnDiffByThread: {},

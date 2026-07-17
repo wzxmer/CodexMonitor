@@ -430,7 +430,39 @@ export function reduceThreadLifecycle(
       };
     }
     case "setThreads": {
+      const currentContinuity =
+        state.threadListContinuityByWorkspace[action.workspaceId];
+      if (action.continuity && currentContinuity) {
+        const isOlderRuntime =
+          action.continuity.runtimeGeneration <
+          currentContinuity.runtimeGeneration;
+        const isOlderRequest =
+          action.continuity.runtimeGeneration ===
+            currentContinuity.runtimeGeneration &&
+          action.continuity.requestSequence <
+            currentContinuity.requestSequence;
+        if (isOlderRuntime || isOlderRequest) {
+          return state;
+        }
+      }
       const hidden = state.hiddenThreadIdsByWorkspace[action.workspaceId] ?? {};
+      const nextContinuityByWorkspace =
+        action.continuity === null
+          ? {
+              ...state.threadListContinuityByWorkspace,
+              [action.workspaceId]: undefined,
+            }
+          : action.continuity
+            ? {
+                ...state.threadListContinuityByWorkspace,
+                [action.workspaceId]: {
+                  ...action.continuity,
+                  staleThreadIds: action.continuity.staleThreadIds.filter(
+                    (threadId) => !hidden[threadId],
+                  ),
+                },
+              }
+            : state.threadListContinuityByWorkspace;
       const visibleThreads = dedupeThreadSummaries(
         action.threads.filter((thread) => !hidden[thread.id]),
       );
@@ -457,6 +489,7 @@ export function reduceThreadLifecycle(
             ...state.threadSortKeyByWorkspace,
             [action.workspaceId]: action.sortKey,
           },
+          threadListContinuityByWorkspace: nextContinuityByWorkspace,
         };
       }
       const existingThreads = state.threadsByWorkspace[action.workspaceId] ?? [];
@@ -524,6 +557,7 @@ export function reduceThreadLifecycle(
           ...state.threadSortKeyByWorkspace,
           [action.workspaceId]: action.sortKey,
         },
+        threadListContinuityByWorkspace: nextContinuityByWorkspace,
       };
     }
     case "setThreadListLoading":
