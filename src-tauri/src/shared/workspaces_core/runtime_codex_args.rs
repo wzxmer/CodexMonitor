@@ -99,8 +99,12 @@ async fn terminate_unpublished_session(session: &Arc<WorkspaceSession>) {
 
 async fn sync_provider_config(settings: AppSettings, codex_home: PathBuf) -> Result<bool, String> {
     tokio::task::spawn_blocking(move || {
-        sync_active_provider_profile_to_local_config(&codex_home, &settings)
-            .map(|outcome| outcome == ProviderConfigSyncOutcome::Updated)
+        sync_active_provider_profile_to_local_config(&codex_home, &settings).map(|outcome| {
+            matches!(
+                outcome,
+                ProviderConfigSyncOutcome::Updated | ProviderConfigSyncOutcome::RestoredDefault
+            )
+        })
     })
     .await
     .map_err(|error| error.to_string())?

@@ -28,7 +28,7 @@ macOS 版本当前采用完整 ad-hoc 签名，但尚未使用 Apple Developer I
 - 视觉统一：设置页、侧栏、消息区和弹层控件改为更一致的桌面软件风格。
 - 对话主题：原生亮色、纯白、原生暗色、CLI 暗黑等会话风格；跟随系统暗色时自动使用黑橙外观。
 - 字体体验：默认使用 `PingFang SC` / 内置 `Noto Sans SC Variable` / `Microsoft YaHei UI` 字体链，中文显示更圆润饱满；支持 UI、会话、过程状态、代码四类字号独立调整，UI 字号同步覆盖侧栏、设置、工具栏、弹层和输入区。
-- 模型服务商管理：以卡片按钮切换多组配置，展示启用状态与 URL，并支持独立模型和上下文参数。
+- 模型服务商管理：以卡片按钮切换多组配置，展示启用状态与 URL，并支持独立模型和上下文参数；默认在切换服务商时保留同一套本机会话，可在“设置 > 模型服务商”独立控制会话保留和 `config.toml` 同步，并通过脱敏诊断确认当前会话来源。
 - 模型无关工作流：CodexMonitor 统一匹配公共 skills、agents、项目规则和知识候选；默认使用不注入模型上下文的影子模式，可在“设置 > 工作流”切换关闭、影子或启用模式，并刷新 Registry、查看脱敏诊断。
 - 用量显示：左下角 Codex 用量可开关，支持已用/剩余额度切换；首页区分缓存读取和未缓存输入，不把缓存读取直接等同于已节省 token。
 - 本机会话管理：显示本机会话总数，历史统一从会话管理进入；默认选中当前列表首项，右侧展示最初需求和最近有效对话；跨项目可返回原项目或引用上下文到当前项目创建新会话。
@@ -236,7 +236,7 @@ src-tauri/
 
 - 工作区保存到应用数据目录的 `workspaces.json`。
 - 设置保存到应用数据目录的 `settings.json`。
-- Codex 配置读取 `$CODEX_HOME/config.toml` 或 `~/.codex/config.toml`；Provider 配置支持 OpenAI、DeepSeek、OpenRouter、OpenCode Zen 和自定义 OpenAI 兼容服务。激活 Provider 配置时会覆盖全局 `model_provider`；OpenCode Zen 会自动使用兼容网关转换 Codex Responses API 请求，并要求选择明确模型。
+- Codex 配置读取 `$CODEX_HOME/config.toml` 或 `~/.codex/config.toml`；Provider 配置支持 OpenAI、DeepSeek、OpenRouter、OpenCode Zen 和自定义 OpenAI 兼容服务。“切换服务商时保留本机会话”默认开启，“同步到本机 `config.toml`”默认关闭；仅在同步开启时写入 Provider、模型和上下文参数，不写入密钥或会话数据。切回默认 Provider 或关闭同步时会恢复启用同步前的 Provider 与模型字段，并保留无关配置修改。OpenCode Zen 会自动使用兼容网关转换 Codex Responses API 请求，并要求选择明确模型。
 - 自定义提示词读取 `$CODEX_HOME/prompts` 或 `~/.codex/prompts`。
 - worktree Agent 默认位于应用数据目录 `worktrees/<workspace-id>`，旧 `.codex-worktrees/` 路径仍兼容。
 - UI 状态如面板尺寸、透明度和最近活动保存在 `localStorage`。
@@ -278,7 +278,7 @@ The macOS build is fully ad-hoc signed but not notarized with Apple Developer ID
 - **Visual consistency**: settings, sidebar, message area, and overlay controls share a unified desktop software style.
 - **Chat themes**: native light, pure white, native dark, CLI dark, and more. Follows system dark mode with a black-orange appearance.
 - **Typography**: defaults to `PingFang SC` / bundled `Noto Sans SC Variable` / `Microsoft YaHei UI` font chain for fuller Chinese rendering. Four independent font sizes for UI, chat, process status, and code.
-- **Provider management**: switch between multiple Codex configurations via card buttons with active status and URL display.
+- **Provider management**: switch between multiple Codex configurations via card buttons with active status and URL display. Provider switches keep the same local session library by default; Settings > Model Providers exposes independent session-preservation and `config.toml` sync controls plus redacted session-source diagnostics. Selecting the default Provider or disabling sync restores the original Provider/model fields while preserving unrelated config edits.
 - **Model-agnostic workflow**: CodexMonitor matches public skills, agents, project rules, and knowledge candidates. Shadow mode (no model context injection) is the default; toggle via Settings > Workflow.
 - **Usage display**: toggle Codex usage in the bottom-left, switch between used/remaining quota. Home page distinguishes cached reads from uncached input.
 - **Local session management**: total local session count, unified entry from session manager, cross-project return or context reference to create new sessions; spawned subagent sessions generate task titles in the parent conversation's primary language and fall back to assigned task names when generation is unavailable.
