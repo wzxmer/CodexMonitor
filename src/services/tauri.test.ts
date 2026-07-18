@@ -88,6 +88,10 @@ import {
   writeAgentMd,
 } from "./tauri";
 import type { TurnExecutionSummary } from "@/types";
+import {
+  armDevSendUserMessageThreadNotFoundOnce,
+  clearDevRuntimeFaults,
+} from "./devRuntimeFaults";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -108,6 +112,7 @@ vi.mock("@tauri-apps/plugin-notification", () => ({
 describe("tauri invoke wrappers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearDevRuntimeFaults();
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockImplementation(async (command: string) => {
       if (command === "is_macos_debug_build") {
@@ -620,6 +625,30 @@ describe("tauri invoke wrappers", () => {
       workspaceId: "ws-10",
       threadId: "thread-1",
     });
+  });
+
+  it("consumes the dev thread-not-found send fault exactly once", async () => {
+    const invokeMock = vi.mocked(invoke);
+
+    expect(armDevSendUserMessageThreadNotFoundOnce("runtime-e2e-probe")).toBe(true);
+
+    await expect(sendUserMessage("ws-1", "thread-1", "first")).resolves.toEqual({
+      error: {
+        code: -32600,
+        message: "thread not found: runtime-e2e-probe",
+      },
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "send_user_message",
+      expect.anything(),
+    );
+
+    await sendUserMessage("ws-1", "thread-1", "second");
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith(
+      "send_user_message",
+      expect.objectContaining({ text: "second" }),
+    );
   });
 
   it("maps workspaceId/threadId for get_thread_token_usage", async () => {

@@ -77,7 +77,12 @@ export type ThreadAction =
     }
   | { type: "markReviewing"; threadId: string; isReviewing: boolean }
   | { type: "markUnread"; threadId: string; hasUnread: boolean }
-  | { type: "addAssistantMessage"; threadId: string; text: string }
+  | {
+      type: "addAssistantMessage";
+      threadId: string;
+      text: string;
+      turnId?: string;
+    }
   | { type: "setThreadName"; workspaceId: string; threadId: string; name: string }
   | {
       type: "mergeThreadSummary";

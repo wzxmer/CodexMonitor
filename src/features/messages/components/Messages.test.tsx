@@ -634,12 +634,14 @@ describe("Messages", () => {
         role: "user",
         text: "重新打包后的没有问题了",
         images: ["data:image/png;base64,AAA"],
+        turnId: "turn-failed-1",
       },
       {
         id: "msg-edit-assistant-1",
         kind: "message",
         role: "assistant",
         text: "Turn failed: Service unavailable",
+        turnId: "turn-failed-1",
       },
     ];
 
@@ -671,6 +673,45 @@ describe("Messages", () => {
     });
   });
 
+  it("does not offer retry when a pre-turn failure follows completed history", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-completed-user",
+        kind: "message",
+        role: "user",
+        text: "原来的配置问题",
+        turnId: "turn-completed",
+      },
+      {
+        id: "msg-completed-assistant",
+        kind: "message",
+        role: "assistant",
+        text: "原来的问题已经处理完成",
+        turnId: "turn-completed",
+      },
+      {
+        id: "msg-pre-turn-error",
+        kind: "message",
+        role: "assistant",
+        text: "Turn failed to start: thread not found",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        onResendUserMessage={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "编辑并重新发送" })).toBeNull();
+  });
+
   it("shows retry progress immediately and preserves the draft when retry is blocked", async () => {
     let resolveResend: (result: SendMessageResult) => void = () => {};
     const onResendUserMessage = vi.fn(
@@ -685,12 +726,14 @@ describe("Messages", () => {
         kind: "message",
         role: "user",
         text: "原始消息",
+        turnId: "turn-failed-pending",
       },
       {
         id: "msg-edit-assistant-pending",
         kind: "message",
         role: "assistant",
         text: "Turn failed: Service unavailable",
+        turnId: "turn-failed-pending",
       },
     ];
 

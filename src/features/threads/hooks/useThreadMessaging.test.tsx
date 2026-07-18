@@ -809,10 +809,18 @@ describe("useThreadMessaging telemetry", () => {
     const upserts = dispatch.mock.calls
       .map(([action]) => action)
       .filter((action) => action.type === "upsertItem");
-    expect(upserts).toHaveLength(2);
+    expect(upserts).toHaveLength(3);
     expect(upserts[1]).toEqual(
       expect.objectContaining({
         item: expect.objectContaining({ id: upserts[0]?.item.id }),
+      }),
+    );
+    expect(upserts[2]).toEqual(
+      expect.objectContaining({
+        item: expect.objectContaining({
+          id: upserts[0]?.item.id,
+          turnId: "turn-1",
+        }),
       }),
     );
   });
@@ -926,6 +934,68 @@ describe("useThreadMessaging telemetry", () => {
       itemId: optimisticAction?.item.id,
     });
     expect(sendUserMessageService).not.toHaveBeenCalled();
+  });
+
+  it("does not roll back history when the server rejects a turn before creation", async () => {
+    vi.mocked(sendUserMessageService).mockResolvedValue({
+      error: {
+        code: -32600,
+        message: "thread not found: eb8cbfc2-1a24-4f91-a29d-058915de4192",
+      },
+    } as Awaited<ReturnType<typeof sendUserMessageService>>);
+    const dispatch = vi.fn();
+    const pushThreadErrorMessage = vi.fn();
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage,
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    let sendResult;
+    await act(async () => {
+      sendResult = await result.current.sendUserMessage("继续");
+    });
+
+    const optimisticAction = dispatch.mock.calls
+      .map(([action]) => action)
+      .find((action) => action.type === "upsertItem");
+    expect(sendResult).toEqual({ status: "blocked" });
+    expect(rollbackThreadService).not.toHaveBeenCalled();
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "thread-1",
+      "Turn failed to start: thread not found: eb8cbfc2-1a24-4f91-a29d-058915de4192",
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "removeItem",
+      threadId: "thread-1",
+      itemId: optimisticAction?.item.id,
+    });
   });
 
   it("reuses the original message id when resending an edited message", async () => {

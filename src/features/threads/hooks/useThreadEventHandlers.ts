@@ -41,7 +41,11 @@ type ThreadEventHandlersOptions = {
     threadId: string,
     text: string,
   ) => void | Promise<void>;
-  pushThreadErrorMessage: (threadId: string, message: string) => void;
+  pushThreadErrorMessage: (
+    threadId: string,
+    message: string,
+    turnId?: string,
+  ) => void;
   onDebug?: (entry: DebugEntry) => void;
   onWorkspaceConnected: (workspaceId: string) => void;
   applyCollabThreadLinks: (

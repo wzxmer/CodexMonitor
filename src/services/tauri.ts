@@ -65,6 +65,7 @@ import {
   normalizeThirdPartyUsagePayload,
 } from "@app/utils/thirdPartyKeyUsage";
 import type { ThirdPartyKeyUsageSnapshot } from "@app/utils/thirdPartyKeyUsage";
+import { consumeDevSendUserMessageThreadNotFound } from "./devRuntimeFaults";
 import type {
   GitFileDiff,
   GitFileStatus,
@@ -719,6 +720,10 @@ export async function sendUserMessage(
   }
   if (options?.additionalContext && Object.keys(options.additionalContext).length > 0) {
     payload.additionalContext = options.additionalContext;
+  }
+  const injectedFailure = consumeDevSendUserMessageThreadNotFound();
+  if (injectedFailure) {
+    return injectedFailure;
   }
   return invoke("send_user_message", payload);
 }

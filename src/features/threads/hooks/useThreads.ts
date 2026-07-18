@@ -362,11 +362,12 @@ export function useThreads({
   });
 
   const pushThreadErrorMessage = useCallback(
-    (threadId: string, message: string) => {
+    (threadId: string, message: string, turnId?: string) => {
       dispatch({
         type: "addAssistantMessage",
         threadId,
         text: message,
+        turnId,
       });
       if (threadId !== activeThreadId) {
         dispatch({ type: "markUnread", threadId, hasUnread: true });

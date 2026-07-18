@@ -320,6 +320,20 @@ describe("useComposerController", () => {
     expect(result.current.composerReferences).toHaveLength(1);
   });
 
+  it("restores the submitted text when the backend blocks a normal send", async () => {
+    const options = makeOptions({
+      activeThreadId: "thread-1",
+      sendUserMessage: vi.fn().mockResolvedValue({ status: "blocked" }),
+    });
+    const { result } = renderHook((props) => useComposerController(props), { initialProps: options });
+
+    await act(async () => {
+      await result.current.handleSend("继续");
+    });
+
+    expect(result.current.activeDraft).toBe("继续");
+  });
+
   it("restores an empty body when a reference-only send is blocked", async () => {
     const options = makeOptions({
       activeThreadId: "thread-1",

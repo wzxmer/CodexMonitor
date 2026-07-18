@@ -74,6 +74,7 @@ type OptimisticUserMessage = {
   timestamp: number;
   images: string[];
   attachments: string[];
+  turnId?: string;
 };
 
 async function workflowPreflightWithTimeout(
@@ -397,6 +398,7 @@ export function useThreadMessaging({
           createdAt: message.timestamp,
           images: message.images,
           attachments: message.attachments,
+          turnId: message.turnId,
         },
         replaceExisting,
         hasCustomName: Boolean(customThreadName),
@@ -862,6 +864,13 @@ export function useThreadMessaging({
           safeMessageActivity();
           return { status: "blocked" };
         }
+        upsertOptimisticUserMessage(
+          workspace,
+          threadId,
+          finalText,
+          { ...optimisticMessage, turnId },
+          false,
+        );
         setActiveTurnId(threadId, turnId);
         return { status: "sent" };
       } catch (error) {

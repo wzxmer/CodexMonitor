@@ -62,6 +62,7 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         role: "assistant",
         text: action.text,
         createdAt: Date.now(),
+        ...(action.turnId ? { turnId: action.turnId } : {}),
       };
       return {
         ...state,

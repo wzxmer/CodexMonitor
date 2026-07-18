@@ -166,18 +166,12 @@ export function getRetryableUserMessageId(
   interruptedStatus?: { timestamp: number } | null,
 ) {
   let lastUserMessageId: string | null = null;
-  let hasAssistantMessageAfterLastUser = false;
   for (const item of items) {
     if (item.kind !== "message") {
       continue;
     }
     if (item.role === "user") {
       lastUserMessageId = item.id;
-      hasAssistantMessageAfterLastUser = false;
-      continue;
-    }
-    if (lastUserMessageId) {
-      hasAssistantMessageAfterLastUser = true;
     }
   }
   if (!lastUserMessageId) {
@@ -186,18 +180,27 @@ export function getRetryableUserMessageId(
   if (interruptedStatus) {
     return lastUserMessageId;
   }
-  if (!hasAssistantMessageAfterLastUser) {
-    return null;
-  }
   const lastAssistantMessage = [...items]
     .reverse()
     .find(
       (item): item is Extract<ConversationItem, { kind: "message" }> =>
         item.kind === "message" && item.role === "assistant",
     );
-  return lastAssistantMessage?.text.trim().startsWith("Turn failed")
-    ? lastUserMessageId
-    : null;
+  if (
+    !lastAssistantMessage?.text.trim().startsWith("Turn failed") ||
+    !lastAssistantMessage.turnId
+  ) {
+    return null;
+  }
+  const failedTurnUserMessage = [...items]
+    .reverse()
+    .find(
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
+        item.kind === "message" &&
+        item.role === "user" &&
+        item.turnId === lastAssistantMessage.turnId,
+    );
+  return failedTurnUserMessage?.id ?? null;
 }
 
 export const Messages = memo(function Messages({

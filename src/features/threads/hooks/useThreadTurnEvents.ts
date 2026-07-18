@@ -33,7 +33,11 @@ type UseThreadTurnEventsOptions = {
   setActiveTurnId: (threadId: string, turnId: string | null) => void;
   getActiveTurnId: (threadId: string) => string | null;
   pendingInterruptsRef: MutableRefObject<Set<string>>;
-  pushThreadErrorMessage: (threadId: string, message: string) => void;
+  pushThreadErrorMessage: (
+    threadId: string,
+    message: string,
+    turnId?: string,
+  ) => void;
   safeMessageActivity: () => void;
   recordThreadActivity: (workspaceId: string, threadId: string, timestamp?: number) => void;
   shouldContinueAfterError?: (threadId: string, turnId: string) => boolean;
@@ -434,6 +438,7 @@ export function useThreadTurnEvents({
         pushThreadErrorMessage(
           threadId,
           "Turn failed: Codex app-server stopped unexpectedly.",
+          activeTurnId,
         );
         safeMessageActivity();
       }
@@ -560,7 +565,7 @@ export function useThreadTurnEvents({
       const message = payload.message
         ? `Turn failed: ${payload.message}`
         : "Turn failed.";
-      pushThreadErrorMessage(threadId, message);
+      pushThreadErrorMessage(threadId, message, terminalTurnId || undefined);
       safeMessageActivity();
     },
     [
