@@ -17,7 +17,9 @@ use crate::shared::provider_config_sync_core::{
 use crate::shared::provider_profiles_core::{
     active_profile_codex_args, active_profile_runtime_fingerprint,
 };
-use crate::shared::session_manager_core::runtime::SessionSourceRuntimePool;
+use crate::shared::session_manager_core::runtime::{
+    SessionSourceRuntimePool, SourceRuntimePurpose,
+};
 use crate::shared::turn_execution_summary_core::source_id_for_codex_home;
 use crate::types::{AppSettings, WorkspaceEntry};
 
@@ -76,6 +78,30 @@ async fn unique_sessions(
         }
     }
     unique
+}
+
+fn runtime_matches_target(
+    session: &WorkspaceSession,
+    codex_args: &Option<String>,
+    provider_runtime_fingerprint: &Option<String>,
+) -> bool {
+    session.codex_args == *codex_args
+        && session.provider_runtime_fingerprint == *provider_runtime_fingerprint
+}
+
+async fn source_runtimes_match_target(
+    source_runtimes: Option<&SessionSourceRuntimePool>,
+    codex_args: &Option<String>,
+    provider_runtime_fingerprint: &Option<String>,
+) -> bool {
+    let Some(source_runtimes) = source_runtimes else {
+        return true;
+    };
+    source_runtimes
+        .sessions_snapshot_for_purpose(SourceRuntimePurpose::Execution)
+        .await
+        .iter()
+        .all(|session| runtime_matches_target(session, codex_args, provider_runtime_fingerprint))
 }
 
 async fn ensure_all_runtimes_quiescent(
@@ -286,9 +312,19 @@ where
 
     let before_provider_runtime_fingerprint = current_session.provider_runtime_fingerprint.clone();
 
-    if current_session.codex_args == effective_target_args
-        && current_session.provider_runtime_fingerprint == provider_runtime_fingerprint
-    {
+    let current_runtime_matches = runtime_matches_target(
+        &current_session,
+        &effective_target_args,
+        &provider_runtime_fingerprint,
+    );
+    let source_runtimes_match = source_runtimes_match_target(
+        source_runtimes,
+        &effective_target_args,
+        &provider_runtime_fingerprint,
+    )
+    .await;
+
+    if current_runtime_matches && source_runtimes_match {
         let config_synced = sync_provider_config_if_current(
             app_settings,
             settings_snapshot,
@@ -300,6 +336,29 @@ where
         return Ok(WorkspaceRuntimeCodexArgsResult {
             applied_codex_args: target_args,
             respawned: false,
+            before_provider_runtime_fingerprint: before_provider_runtime_fingerprint.clone(),
+            after_provider_runtime_fingerprint: before_provider_runtime_fingerprint,
+            session_source_id,
+            config_synced,
+        });
+    }
+
+    if current_runtime_matches {
+        ensure_all_runtimes_quiescent(sessions, source_runtimes).await?;
+        let config_synced = sync_provider_config_if_current(
+            app_settings,
+            settings_snapshot,
+            &provider_runtime_fingerprint,
+            &session_source_id,
+            codex_home,
+        )
+        .await?;
+        if let Some(source_runtimes) = source_runtimes {
+            source_runtimes.close_all().await;
+        }
+        return Ok(WorkspaceRuntimeCodexArgsResult {
+            applied_codex_args: target_args,
+            respawned: true,
             before_provider_runtime_fingerprint: before_provider_runtime_fingerprint.clone(),
             after_provider_runtime_fingerprint: before_provider_runtime_fingerprint,
             session_source_id,
@@ -465,6 +524,44 @@ mod tests {
         let effective =
             active_profile_codex_args(settings, codex_args).expect("resolve effective test args");
         make_session_with_provider(effective, active_profile_runtime_fingerprint(settings))
+    }
+
+    async fn make_exited_session_with_provider(
+        codex_args: Option<String>,
+        provider_runtime_fingerprint: Option<String>,
+    ) -> WorkspaceSession {
+        let mut cmd = if cfg!(windows) {
+            let mut cmd = Command::new("cmd");
+            cmd.args(["/C", "exit", "0"]);
+            cmd
+        } else {
+            let mut cmd = Command::new("sh");
+            cmd.args(["-c", "true"]);
+            cmd
+        };
+        cmd.stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let mut child = cmd.spawn().expect("spawn exited dummy child");
+        let stdin = child.stdin.take().expect("dummy child stdin");
+        child.wait().await.expect("wait for dummy child");
+        WorkspaceSession::test_new(
+            codex_args,
+            provider_runtime_fingerprint,
+            child,
+            stdin,
+            "test-owner".to_string(),
+        )
+    }
+
+    async fn make_exited_session_for_settings(
+        codex_args: Option<String>,
+        settings: &AppSettings,
+    ) -> WorkspaceSession {
+        let effective =
+            active_profile_codex_args(settings, codex_args).expect("resolve effective test args");
+        make_exited_session_with_provider(effective, active_profile_runtime_fingerprint(settings))
+            .await
     }
 
     fn provider_settings(key: &str, sync_local_config: bool) -> AppSettings {
@@ -977,6 +1074,171 @@ mod tests {
             assert!(source_runtimes.sessions_snapshot().await.is_empty());
             let published = sessions.lock().await;
             assert!(Arc::ptr_eq(&published["ws-1"], &published["ws-2"]));
+        });
+    }
+
+    #[test]
+    fn matching_primary_runtime_invalidates_stale_source_runtimes() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let entry = make_workspace_entry("ws-1");
+            let target_settings = provider_settings("key-b", false);
+            let stale_settings = provider_settings("key-a", false);
+            let target_args = Some("--current".to_string());
+            let current = Arc::new(
+                make_exited_session_for_settings(target_args.clone(), &target_settings).await,
+            );
+            let source_session = Arc::new(
+                make_exited_session_for_settings(target_args.clone(), &stale_settings).await,
+            );
+            let source_runtimes = SessionSourceRuntimePool::for_workspace_sessions();
+            let source_session_for_pool = source_session.clone();
+            source_runtimes
+                .get_or_spawn(
+                    SourceRuntimeKey::new("C:/codex-source", "C:/workspace").unwrap(),
+                    || async move { Ok(source_session_for_pool) },
+                )
+                .await
+                .unwrap();
+            let workspaces = Mutex::new(HashMap::from([(entry.id.clone(), entry.clone())]));
+            let sessions = Mutex::new(HashMap::from([(entry.id.clone(), current.clone())]));
+            let app_settings = Mutex::new(target_settings);
+            let spawn_calls = Arc::new(AtomicUsize::new(0));
+            let spawn_calls_ref = spawn_calls.clone();
+
+            let result = set_workspace_runtime_codex_args_with_source_runtimes_core(
+                entry.id,
+                target_args,
+                &workspaces,
+                &sessions,
+                &app_settings,
+                &source_runtimes,
+                move |_entry, _bin, args, _home, settings| {
+                    let spawn_calls_ref = spawn_calls_ref.clone();
+                    async move {
+                        spawn_calls_ref.fetch_add(1, Ordering::SeqCst);
+                        Ok(Arc::new(make_session_for_settings(args, &settings)))
+                    }
+                },
+            )
+            .await
+            .expect("stale source runtime cleanup succeeds");
+
+            let source_pool_is_empty = source_runtimes.sessions_snapshot().await.is_empty();
+            let source_was_closed = source_session.output_closed.load(Ordering::SeqCst);
+
+            assert!(result.respawned);
+            assert_eq!(spawn_calls.load(Ordering::SeqCst), 0);
+            assert!(source_pool_is_empty);
+            assert!(source_was_closed);
+            assert!(!current.output_closed.load(Ordering::SeqCst));
+        });
+    }
+
+    #[test]
+    fn matching_primary_runtime_keeps_busy_stale_source_runtime() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let entry = make_workspace_entry("ws-1");
+            let target_settings = provider_settings("key-b", false);
+            let stale_settings = provider_settings("key-a", false);
+            let target_args = Some("--current".to_string());
+            let current = Arc::new(
+                make_exited_session_for_settings(target_args.clone(), &target_settings).await,
+            );
+            let source_session = Arc::new(
+                make_exited_session_for_settings(target_args.clone(), &stale_settings).await,
+            );
+            source_session
+                .active_turns
+                .lock()
+                .await
+                .insert("source-thread".to_string(), "source-turn".to_string());
+            let source_runtimes = SessionSourceRuntimePool::for_workspace_sessions();
+            let source_session_for_pool = source_session.clone();
+            source_runtimes
+                .get_or_spawn(
+                    SourceRuntimeKey::new("C:/codex-source", "C:/workspace").unwrap(),
+                    || async move { Ok(source_session_for_pool) },
+                )
+                .await
+                .unwrap();
+            let workspaces = Mutex::new(HashMap::from([(entry.id.clone(), entry.clone())]));
+            let sessions = Mutex::new(HashMap::from([(entry.id.clone(), current)]));
+            let app_settings = Mutex::new(target_settings);
+
+            let error = set_workspace_runtime_codex_args_with_source_runtimes_core(
+                entry.id,
+                target_args,
+                &workspaces,
+                &sessions,
+                &app_settings,
+                &source_runtimes,
+                |_entry, _bin, args, _home, settings| async move {
+                    Ok(Arc::new(make_session_for_settings(args, &settings)))
+                },
+            )
+            .await
+            .expect_err("busy stale source runtime blocks cleanup");
+
+            assert!(error.contains("another thread is processing"));
+            assert_eq!(source_runtimes.sessions_snapshot().await.len(), 1);
+            assert!(!source_session.output_closed.load(Ordering::SeqCst));
+        });
+    }
+
+    #[test]
+    fn matching_primary_runtime_ignores_history_runtime_identity() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let entry = make_workspace_entry("ws-1");
+            let target_settings = provider_settings("key-b", false);
+            let target_args = Some("--current".to_string());
+            let current = Arc::new(
+                make_exited_session_for_settings(target_args.clone(), &target_settings).await,
+            );
+            let history_session = Arc::new(
+                make_exited_session_with_provider(Some("--history".to_string()), None).await,
+            );
+            let source_runtimes = SessionSourceRuntimePool::for_workspace_sessions();
+            let history_session_for_pool = history_session.clone();
+            source_runtimes
+                .get_or_spawn(
+                    SourceRuntimeKey::for_purpose(
+                        "C:/codex-source",
+                        "C:/workspace",
+                        SourceRuntimePurpose::History,
+                    )
+                    .unwrap(),
+                    || async move { Ok(history_session_for_pool) },
+                )
+                .await
+                .unwrap();
+            let workspaces = Mutex::new(HashMap::from([(entry.id.clone(), entry.clone())]));
+            let sessions = Mutex::new(HashMap::from([(entry.id.clone(), current)]));
+            let app_settings = Mutex::new(target_settings);
+            let spawn_calls = Arc::new(AtomicUsize::new(0));
+            let spawn_calls_ref = spawn_calls.clone();
+
+            let result = set_workspace_runtime_codex_args_with_source_runtimes_core(
+                entry.id,
+                target_args,
+                &workspaces,
+                &sessions,
+                &app_settings,
+                &source_runtimes,
+                move |_entry, _bin, args, _home, settings| {
+                    let spawn_calls_ref = spawn_calls_ref.clone();
+                    async move {
+                        spawn_calls_ref.fetch_add(1, Ordering::SeqCst);
+                        Ok(Arc::new(make_session_for_settings(args, &settings)))
+                    }
+                },
+            )
+            .await
+            .expect("history runtime does not invalidate matching execution runtime");
+
+            assert!(!result.respawned);
+            assert_eq!(spawn_calls.load(Ordering::SeqCst), 0);
+            assert_eq!(source_runtimes.sessions_snapshot().await.len(), 1);
+            assert!(!history_session.output_closed.load(Ordering::SeqCst));
         });
     }
 
