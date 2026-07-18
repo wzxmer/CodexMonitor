@@ -1626,6 +1626,7 @@ export default function MainApp() {
     : null;
   const {
     homeAccount,
+    homeAccountWorkspaceId,
     homeRateLimits,
   } = useHomeAccount({
     showHome,
@@ -2345,6 +2346,7 @@ export default function MainApp() {
     activeAccount,
     homeRateLimits,
     homeAccount,
+    homeAccountWorkspaceId,
     accountSwitching,
     onSwitchAccount: handleSwitchAccount,
     onCancelSwitchAccount: handleCancelSwitchAccount,

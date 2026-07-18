@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getWorkspaceThirdPartyKeyUsage } from "@/services/tauri";
 import type { ThirdPartyKeyUsageSnapshot } from "../utils/thirdPartyKeyUsage";
 
@@ -7,34 +7,55 @@ const THIRD_PARTY_KEY_USAGE_REFRESH_MS = 60_000;
 type UseThirdPartyKeyUsageArgs = {
   enabled: boolean;
   workspaceId: string | null | undefined;
+  profileId?: string | null;
+  profileRevision?: number;
+};
+
+type UsageState = {
+  requestKey: string;
+  snapshot: ThirdPartyKeyUsageSnapshot | null;
 };
 
 export function useThirdPartyKeyUsage({
   enabled,
   workspaceId,
+  profileId,
+  profileRevision,
 }: UseThirdPartyKeyUsageArgs): ThirdPartyKeyUsageSnapshot | null {
-  const [snapshot, setSnapshot] = useState<ThirdPartyKeyUsageSnapshot | null>(null);
+  const [state, setState] = useState<UsageState | null>(null);
+  const snapshotCacheRef = useRef(
+    new Map<string, ThirdPartyKeyUsageSnapshot | null>(),
+  );
+  const trimmedWorkspaceId = workspaceId?.trim() ?? "";
+  const requestKey =
+    enabled && trimmedWorkspaceId
+      ? JSON.stringify([
+          profileId?.trim() || "__default__",
+          profileRevision ?? 0,
+          trimmedWorkspaceId,
+        ])
+      : null;
 
   useEffect(() => {
-    const trimmedWorkspaceId = workspaceId?.trim() ?? "";
-    if (!enabled || !trimmedWorkspaceId) {
-      setSnapshot(null);
+    if (!requestKey) {
+      setState(null);
       return;
     }
 
     let canceled = false;
+    const cachedSnapshot = snapshotCacheRef.current.get(requestKey) ?? null;
+    setState({ requestKey, snapshot: cachedSnapshot });
 
     const refresh = () => {
       getWorkspaceThirdPartyKeyUsage(trimmedWorkspaceId)
         .then((nextSnapshot) => {
           if (!canceled) {
-            setSnapshot(nextSnapshot);
+            snapshotCacheRef.current.set(requestKey, nextSnapshot);
+            setState({ requestKey, snapshot: nextSnapshot });
           }
         })
         .catch(() => {
-          if (!canceled) {
-            setSnapshot(null);
-          }
+          // Preserve only a trusted snapshot for this exact Profile/workspace identity.
         });
     };
 
@@ -45,7 +66,13 @@ export function useThirdPartyKeyUsage({
       canceled = true;
       window.clearInterval(intervalId);
     };
-  }, [enabled, workspaceId]);
+  }, [requestKey, trimmedWorkspaceId]);
 
-  return snapshot;
+  if (!requestKey) {
+    return null;
+  }
+  if (state?.requestKey === requestKey) {
+    return state.snapshot;
+  }
+  return snapshotCacheRef.current.get(requestKey) ?? null;
 }

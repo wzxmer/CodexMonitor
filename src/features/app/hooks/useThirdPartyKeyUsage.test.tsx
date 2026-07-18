@@ -74,4 +74,52 @@ describe("useThirdPartyKeyUsage", () => {
 
     expect(getWorkspaceThirdPartyKeyUsageMock).toHaveBeenCalledTimes(2);
   });
+
+  it("ignores a stale response after the active profile changes", async () => {
+    let resolveOldRequest: ((value: unknown) => void) | undefined;
+    getWorkspaceThirdPartyKeyUsageMock
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOldRequest = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        balanceUsd: 20,
+        todayCostUsd: 2,
+        averageLatencyMs: 200,
+      });
+
+    const { result, rerender } = renderHook(
+      ({ profileId }) =>
+        useThirdPartyKeyUsage({
+          enabled: true,
+          workspaceId: "ws-usage",
+          profileId,
+        }),
+      { initialProps: { profileId: "fk" } },
+    );
+
+    rerender({ profileId: "0.02" });
+    await flushPromises();
+    expect(result.current).toEqual({
+      balanceUsd: 20,
+      todayCostUsd: 2,
+      averageLatencyMs: 200,
+    });
+
+    resolveOldRequest?.({
+      balanceUsd: 13,
+      todayCostUsd: 3,
+      averageLatencyMs: 900,
+    });
+    await flushPromises();
+
+    expect(result.current).toEqual({
+      balanceUsd: 20,
+      todayCostUsd: 2,
+      averageLatencyMs: 200,
+    });
+    expect(getWorkspaceThirdPartyKeyUsageMock).toHaveBeenCalledTimes(2);
+  });
 });

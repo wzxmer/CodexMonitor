@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type RefObject } from "react";
+import { useMemo, type RefObject } from "react";
 import type {
   AppSettings,
   CodexProviderStatus,
@@ -9,9 +9,8 @@ import type {
   SendMessageResult,
   WorkspaceInfo,
 } from "@/types";
-import { getProviderStatus } from "@/services/tauri";
 import type { ThreadState } from "@/features/threads/hooks/useThreadsReducer";
-import { useThirdPartyKeyUsage } from "@app/hooks/useThirdPartyKeyUsage";
+import { useSidebarProviderUsage } from "@app/hooks/useSidebarProviderUsage";
 import type { ConversationAppearance } from "@app/utils/runtimeThemeAppearance";
 import type { WorkspaceLaunchScriptsState } from "@app/hooks/useWorkspaceLaunchScripts";
 import { REMOTE_THREAD_POLL_INTERVAL_MS } from "@app/hooks/useRemoteThreadRefreshOnFocus";
@@ -24,7 +23,6 @@ import type { useMainAppWorktreeState } from "@app/hooks/useMainAppWorktreeState
 import type { StartingDraftMessagePreview } from "@app/hooks/useNewAgentDraft";
 import type { LayoutNodesOptions } from "@/features/layout/hooks/layoutNodes/types";
 import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
-import { resolveCodexProviderBaseUrl } from "@/utils/providerProfiles";
 import { resolveSidebarRateLimits } from "@app/utils/sidebarUsageRateLimits";
 import type { MessageReferenceAction } from "@/features/messages/utils/messageReferences";
 import {
@@ -94,6 +92,7 @@ type UseMainAppLayoutSurfacesArgs = {
   activeAccount: SidebarProps["accountInfo"];
   homeRateLimits: LayoutNodesOptions["primary"]["homeProps"]["accountRateLimits"];
   homeAccount: LayoutNodesOptions["primary"]["homeProps"]["accountInfo"];
+  homeAccountWorkspaceId: string | null;
   accountSwitching: SidebarProps["accountSwitching"];
   onSwitchAccount: SidebarProps["onSwitchAccount"];
   onCancelSwitchAccount: SidebarProps["onCancelSwitchAccount"];
@@ -1196,6 +1195,7 @@ export function useMainAppLayoutSurfaces({
   activeAccount,
   homeRateLimits,
   homeAccount,
+  homeAccountWorkspaceId,
   accountSwitching,
   onSwitchAccount,
   onCancelSwitchAccount,
@@ -1338,65 +1338,14 @@ export function useMainAppLayoutSurfaces({
 }: UseMainAppLayoutSurfacesArgs): LayoutNodesOptions {
   const { t } = useI18n();
   const sidebarAccount = activeWorkspace ? activeAccount : homeAccount;
-  const activeCodexKeyProfile = useMemo(
-    () =>
-      appSettings.codexKeyProfiles.find(
-        (profile) => profile.id === appSettings.activeCodexKeyProfileId,
-      ) ?? null,
-    [appSettings.activeCodexKeyProfileId, appSettings.codexKeyProfiles],
-  );
-  const activeProfileBaseUrl = activeCodexKeyProfile
-    ? resolveCodexProviderBaseUrl(
-        activeCodexKeyProfile.providerKind,
-        activeCodexKeyProfile.baseUrl,
-      )
-    : null;
-  const [codexProviderStatus, setCodexProviderStatus] =
-    useState<CodexProviderStatus | null>(null);
-
-  useEffect(() => {
-    if (!activeWorkspaceId) {
-      setCodexProviderStatus(null);
-      return;
-    }
-    let canceled = false;
-    getProviderStatus(activeWorkspaceId)
-      .then((status) => {
-        if (!canceled) {
-          setCodexProviderStatus(status);
-        }
-      })
-      .catch((error) => {
-        if (!canceled) {
-          setCodexProviderStatus({
-            providerName: null,
-            baseUrl: null,
-            source: "error",
-            isConfigured: false,
-            isThirdParty: false,
-            autoCompactTokenLimit: null,
-            modelContextWindow: null,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      });
-    return () => {
-      canceled = true;
-    };
-  }, [
+  const {
+    codexProviderStatus,
+    thirdPartyProviderUsage,
+    contextCompactionTokenLimit,
+  } = useSidebarProviderUsage({
+    appSettings,
     activeWorkspaceId,
-    appSettings.codexHome,
-    appSettings.activeCodexKeyProfileId,
-    activeProfileBaseUrl,
-  ]);
-  const contextCompactionTokenLimit =
-    codexProviderStatus?.autoCompactTokenLimit ?? null;
-  const thirdPartyProviderUsage = useThirdPartyKeyUsage({
-    enabled:
-      Boolean(activeWorkspaceId) &&
-      codexProviderStatus?.isConfigured === true &&
-      codexProviderStatus.isThirdParty,
-    workspaceId: activeWorkspaceId,
+    homeAccountWorkspaceId,
   });
   const sidebarRateLimits = resolveSidebarRateLimits(
     activeRateLimits,
@@ -1467,6 +1416,7 @@ export function useMainAppLayoutSurfaces({
     activeAccount,
     homeRateLimits,
     homeAccount,
+    homeAccountWorkspaceId,
     accountSwitching,
     onSwitchAccount,
     onCancelSwitchAccount,
