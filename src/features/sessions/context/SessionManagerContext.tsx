@@ -23,6 +23,12 @@ type SessionManagerContextValue = {
   migrateToCurrentProject: () => void;
   cancelResumeChoice: () => void;
   deriveSession: (session: ManagedSession) => void;
+  deriveSessions: (sessions: ManagedSession[]) => void;
+  pendingPermanentDeleteSessions: ManagedSession[] | null;
+  pendingPermanentDeleteChildCount: number;
+  requestPermanentDelete: (sessions: ManagedSession[]) => Promise<void>;
+  confirmPermanentDelete: (cascadeRequested: boolean) => Promise<void>;
+  cancelPermanentDelete: () => void;
 };
 
 const SessionManagerContext = createContext<SessionManagerContextValue | null>(null);
@@ -32,6 +38,7 @@ type Props = {
   onActiveChange: (active: boolean) => void;
   onResumeSession: (session: ManagedSession) => Promise<boolean>;
   onDeriveSession: (session: ManagedSession) => void;
+  onDeriveSessions?: (sessions: ManagedSession[]) => void;
   currentWorkspace?: { name: string; path: string } | null;
   children: ReactNode;
 };
@@ -40,7 +47,7 @@ function normalizeProjectPath(path: string | null | undefined) {
   return (path ?? "").trim().replace(/\\/g, "/").replace(/\/+$/g, "").toLowerCase();
 }
 
-export function SessionManagerProvider({ active, onActiveChange, onResumeSession, onDeriveSession, currentWorkspace = null, children }: Props) {
+export function SessionManagerProvider({ active, onActiveChange, onResumeSession, onDeriveSession, onDeriveSessions, currentWorkspace = null, children }: Props) {
   const manager = useSessionManager(active);
   const [focusedSessionKey, setFocusedSessionKey] = useState<string | null>(null);
   const [sessionPreview, setSessionPreview] = useState<ManagedSessionPreviewResponse | null>(null);
@@ -49,6 +56,8 @@ export function SessionManagerProvider({ active, onActiveChange, onResumeSession
   const previewRequestRef = useRef(0);
   const [resumingKey, setResumingKey] = useState<string | null>(null);
   const [pendingResumeSession, setPendingResumeSession] = useState<ManagedSession | null>(null);
+  const [pendingPermanentDeleteSessions, setPendingPermanentDeleteSessions] = useState<ManagedSession[] | null>(null);
+  const [pendingPermanentDeleteChildCount, setPendingPermanentDeleteChildCount] = useState(0);
   const focusedSession = useMemo(
     () => manager.sessions.find((session) => session.key === focusedSessionKey) ?? manager.sessions[0] ?? null,
     [focusedSessionKey, manager.sessions],
@@ -111,6 +120,23 @@ export function SessionManagerProvider({ active, onActiveChange, onResumeSession
     setPendingResumeSession(null);
     onDeriveSession(session);
   }, [onDeriveSession, pendingResumeSession]);
+  const deriveSessions = useCallback((sessions: ManagedSession[]) => {
+    if (sessions.length === 0) return;
+    if (onDeriveSessions) onDeriveSessions(sessions);
+    else sessions.forEach(onDeriveSession);
+  }, [onDeriveSession, onDeriveSessions]);
+  const requestPermanentDelete = useCallback(async (sessions: ManagedSession[]) => {
+    if (sessions.length === 0) return;
+    const counts = await Promise.all(sessions.map((session) => manager.getPermanentDeleteChildCount(session)));
+    if (counts.some((count) => count == null)) return;
+    setPendingPermanentDeleteChildCount(counts.reduce<number>((total, count) => total + (count ?? 0), 0));
+    setPendingPermanentDeleteSessions(sessions);
+  }, [manager]);
+  const confirmPermanentDelete = useCallback(async (cascadeRequested: boolean) => {
+    if (!pendingPermanentDeleteSessions) return;
+    const response = await manager.permanentlyDeleteSessions(pendingPermanentDeleteSessions, cascadeRequested);
+    if (response) setPendingPermanentDeleteSessions(null);
+  }, [manager, pendingPermanentDeleteSessions]);
 
   const value = useMemo<SessionManagerContextValue>(() => ({
     active,
@@ -130,7 +156,13 @@ export function SessionManagerProvider({ active, onActiveChange, onResumeSession
     migrateToCurrentProject,
     cancelResumeChoice: () => setPendingResumeSession(null),
     deriveSession: onDeriveSession,
-  }), [active, currentWorkspace, focusSession, focusedSession, manager, migrateToCurrentProject, onActiveChange, onDeriveSession, pendingResumeSession, resumeInOriginalProject, resumeSession, resumingKey, sessionPreview, sessionPreviewError, sessionPreviewLoading]);
+    deriveSessions,
+    pendingPermanentDeleteSessions,
+    pendingPermanentDeleteChildCount,
+    requestPermanentDelete,
+    confirmPermanentDelete,
+    cancelPermanentDelete: () => setPendingPermanentDeleteSessions(null),
+  }), [active, confirmPermanentDelete, currentWorkspace, deriveSessions, focusSession, focusedSession, manager, migrateToCurrentProject, onActiveChange, onDeriveSession, pendingPermanentDeleteChildCount, pendingPermanentDeleteSessions, pendingResumeSession, requestPermanentDelete, resumeInOriginalProject, resumeSession, resumingKey, sessionPreview, sessionPreviewError, sessionPreviewLoading]);
 
   return <SessionManagerContext.Provider value={value}>{children}</SessionManagerContext.Provider>;
 }

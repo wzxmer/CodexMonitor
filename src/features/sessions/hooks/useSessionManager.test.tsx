@@ -11,6 +11,7 @@ const cancelSessionTask = vi.fn();
 const searchManagedSessions = vi.fn();
 const fetchSessionSearchResults = vi.fn();
 const archiveManagedSessions = vi.fn();
+const permanentlyDeleteManagedSession = vi.fn();
 
 vi.mock("@services/tauri", () => ({
   listSessionSources: (...args: unknown[]) => listSessionSources(...args),
@@ -20,6 +21,7 @@ vi.mock("@services/tauri", () => ({
   searchManagedSessions: (...args: unknown[]) => searchManagedSessions(...args),
   fetchSessionSearchResults: (...args: unknown[]) => fetchSessionSearchResults(...args),
   archiveManagedSessions: (...args: unknown[]) => archiveManagedSessions(...args),
+  permanentlyDeleteManagedSession: (...args: unknown[]) => permanentlyDeleteManagedSession(...args),
 }));
 
 const source: SessionSource = {
@@ -163,5 +165,101 @@ describe("useSessionManager", () => {
     });
     expect(result.current.archiveResult?.failureCount).toBe(1);
     expect([...result.current.selectedSessionKeys]).toEqual(["source-a:thread-b"]);
+  });
+
+  it("archives active sessions before permanently deleting them", async () => {
+    const active = session({});
+    listSessionSources.mockResolvedValue([source]);
+    scanManagedSessions.mockResolvedValue({ requestId: "scan", totalSessions: 1, diagnosticCount: 0, cancelled: false });
+    fetchManagedSessionsPage
+      .mockResolvedValueOnce({ requestId: "scan", items: [active], diagnostics: [], total: 1, nextOffset: null })
+      .mockResolvedValueOnce({ requestId: "scan", items: [{ ...active, isArchived: true, archivedAt: 10 }], diagnostics: [], total: 1, nextOffset: null })
+      .mockResolvedValueOnce({ requestId: "scan", items: [], diagnostics: [], total: 0, nextOffset: null });
+    archiveManagedSessions.mockResolvedValue({
+      results: [{ sourceId: "source-a", threadId: "thread-a", success: true, archivedAt: 10, error: null }],
+      successCount: 1,
+      failureCount: 0,
+    });
+    permanentlyDeleteManagedSession.mockResolvedValue({
+      results: [{ sourceId: "source-a", threadId: "thread-a", success: true, error: null }],
+      successCount: 1,
+      failureCount: 0,
+    });
+
+    const { result } = renderHook(() => useSessionManager(true));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.permanentlyDeleteSessions([active], true);
+    });
+
+    expect(archiveManagedSessions).toHaveBeenCalledWith({
+      items: [{ sourceId: "source-a", threadId: "thread-a" }],
+    });
+    expect(permanentlyDeleteManagedSession).toHaveBeenCalledWith({
+      sourceId: "source-a",
+      threadId: "thread-a",
+      archivedAt: 10,
+      cascadeRequested: true,
+    });
+  });
+
+  it("refreshes successful batch deletes and keeps transport failures selected", async () => {
+    const archivedA = session({ isArchived: true, archivedAt: 10 });
+    const archivedB = session({ key: "source-a:thread-b", threadId: "thread-b", title: "Beta", isArchived: true, archivedAt: 11 });
+    listSessionSources.mockResolvedValue([source]);
+    scanManagedSessions.mockResolvedValue({ requestId: "scan", totalSessions: 2, diagnosticCount: 0, cancelled: false });
+    fetchManagedSessionsPage
+      .mockResolvedValueOnce({ requestId: "scan", items: [archivedA, archivedB], diagnostics: [], total: 2, nextOffset: null })
+      .mockResolvedValueOnce({ requestId: "scan", items: [archivedB], diagnostics: [], total: 1, nextOffset: null });
+    permanentlyDeleteManagedSession
+      .mockResolvedValueOnce({ results: [{ sourceId: "source-a", threadId: "thread-a", success: true, error: null }], successCount: 1, failureCount: 0 })
+      .mockRejectedValueOnce(new Error("transport failed"));
+
+    const { result } = renderHook(() => useSessionManager(true));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.permanentlyDeleteSessions([archivedA, archivedB], false);
+    });
+
+    expect([...result.current.selectedSessionKeys]).toEqual(["source-a:thread-b"]);
+    expect(result.current.error).toBe("transport failed");
+  });
+
+  it("does not issue a duplicate child delete when cascading a selected parent", async () => {
+    const parent = session({ isArchived: true, archivedAt: 10 });
+    const child = session({
+      key: "source-a:thread-child",
+      threadId: "thread-child",
+      parentThreadId: "thread-a",
+      isArchived: true,
+      archivedAt: 11,
+    });
+    listSessionSources.mockResolvedValue([source]);
+    scanManagedSessions.mockResolvedValue({ requestId: "scan", totalSessions: 2, diagnosticCount: 0, cancelled: false });
+    fetchManagedSessionsPage
+      .mockResolvedValueOnce({ requestId: "scan", items: [parent, child], diagnostics: [], total: 2, nextOffset: null })
+      .mockResolvedValueOnce({ requestId: "scan", items: [], diagnostics: [], total: 0, nextOffset: null });
+    permanentlyDeleteManagedSession.mockResolvedValue({
+      results: [
+        { sourceId: "source-a", threadId: "thread-a", success: true, error: null },
+        { sourceId: "source-a", threadId: "thread-child", success: true, error: null },
+      ],
+      successCount: 2,
+      failureCount: 0,
+    });
+
+    const { result } = renderHook(() => useSessionManager(true));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.permanentlyDeleteSessions([parent, child], true);
+    });
+
+    expect(permanentlyDeleteManagedSession).toHaveBeenCalledTimes(1);
+    expect(permanentlyDeleteManagedSession).toHaveBeenCalledWith({
+      sourceId: "source-a",
+      threadId: "thread-a",
+      archivedAt: 10,
+      cascadeRequested: true,
+    });
   });
 });

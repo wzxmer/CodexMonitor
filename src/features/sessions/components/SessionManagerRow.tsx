@@ -1,10 +1,12 @@
 import type { ManagedSession, SessionSource } from "@/types";
 import { formatRelativeTimeShort } from "@/utils/time";
 import { useI18n } from "@/features/i18n/I18nProvider";
+import type { CSSProperties } from "react";
 
 type Props = {
   session: ManagedSession;
   source?: SessionSource;
+  depth?: number;
   selected: boolean;
   resuming: boolean;
   archiving: boolean;
@@ -17,12 +19,13 @@ type Props = {
   onArchive: () => void;
   onDerive: () => void;
   onPermanentDelete: () => void;
+  onContextMenu?: (event: React.MouseEvent, session: ManagedSession) => void;
 };
 
-export function SessionManagerRow({ session, source, selected, resuming, archiving, deleting, compact = false, focused = false, onToggleSelected, onFocus, onResume, onArchive, onDerive, onPermanentDelete }: Props) {
+export function SessionManagerRow({ session, source, depth = 0, selected, resuming, archiving, deleting, compact = false, focused = false, onToggleSelected, onFocus, onResume, onArchive, onDerive, onPermanentDelete, onContextMenu }: Props) {
   const { t } = useI18n();
   return (
-    <div className={`session-manager-row${selected ? " is-selected" : ""}${focused ? " is-focused" : ""}${compact ? " is-compact" : ""}`}>
+    <div className={`session-manager-row${selected ? " is-selected" : ""}${focused ? " is-focused" : ""}${compact ? " is-compact" : ""}${depth > 0 ? " is-child" : ""}`} style={{ "--session-manager-depth": depth } as CSSProperties} onContextMenu={(event) => onContextMenu?.(event, session)}>
       <button type="button" className="session-manager-row-select" onClick={onToggleSelected} aria-label={`${t("sessionManager.select")} ${session.title}`}>
         <input type="checkbox" checked={selected} readOnly tabIndex={-1} />
       </button>

@@ -8,7 +8,7 @@ export function SessionResumeChoicePrompt() {
   if (!pendingResumeSession || !currentWorkspace) return null;
   const busy = resumingKey === pendingResumeSession.key;
   return (
-    <ModalShell className="session-resume-choice-modal" onBackdropClick={busy ? undefined : cancelResumeChoice} ariaLabel={t("sessionManager.resumeChoiceTitle")}>
+    <ModalShell cardClassName="session-resume-choice-modal" onBackdropClick={busy ? undefined : cancelResumeChoice} ariaLabel={t("sessionManager.resumeChoiceTitle")}>
       <div className="ds-modal-title">{t("sessionManager.resumeChoiceTitle")}</div>
       <div className="session-resume-choice-copy">{t("sessionManager.resumeChoiceDescription")}</div>
       <div className="session-derivation-route">

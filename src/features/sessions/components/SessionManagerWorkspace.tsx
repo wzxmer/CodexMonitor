@@ -1,9 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Archive from "lucide-react/dist/esm/icons/archive";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import Play from "lucide-react/dist/esm/icons/play";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
-import type { ManagedSession } from "@/types";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { formatRelativeTimeShort } from "@/utils/time";
 import { useSessionManagerContext } from "../context/SessionManagerContext";
@@ -13,27 +12,13 @@ import { SessionPermanentDeletePrompt } from "./SessionPermanentDeletePrompt";
 
 export function SessionManagerWorkspace() {
   const { t } = useI18n();
-  const { manager, focusedSession, sessionPreview, sessionPreviewLoading, sessionPreviewError, resumingKey, resumeSession, deriveSession, currentWorkspace } = useSessionManagerContext();
-  const [permanentDeleteSession, setPermanentDeleteSession] = useState<ManagedSession | null>(null);
-  const [permanentDeleteChildCount, setPermanentDeleteChildCount] = useState(0);
+  const { manager, focusedSession, sessionPreview, sessionPreviewLoading, sessionPreviewError, resumingKey, resumeSession, deriveSession, currentWorkspace, pendingPermanentDeleteSessions, pendingPermanentDeleteChildCount, requestPermanentDelete, confirmPermanentDelete, cancelPermanentDelete } = useSessionManagerContext();
   const selectedSessions = useMemo(
     () => manager.indexedSessions.filter((session) => manager.selectedSessionKeys.has(session.key) && !session.isArchived),
     [manager.indexedSessions, manager.selectedSessionKeys],
   );
   const source = focusedSession ? manager.sources.find((candidate) => candidate.id === focusedSession.sourceId) : null;
 
-  const requestPermanentDelete = async (session: ManagedSession) => {
-    const childCount = await manager.getPermanentDeleteChildCount(session);
-    if (childCount == null) return;
-    setPermanentDeleteChildCount(childCount);
-    setPermanentDeleteSession(session);
-  };
-
-  const confirmPermanentDelete = async (cascadeRequested: boolean) => {
-    if (!permanentDeleteSession) return;
-    const response = await manager.permanentlyDeleteSession(permanentDeleteSession, cascadeRequested);
-    if (response) setPermanentDeleteSession(null);
-  };
 
   return (
     <section className="session-manager-workspace" aria-label={t("sessionManager.title")}>
@@ -112,17 +97,15 @@ export function SessionManagerWorkspace() {
               <button type="button" onClick={() => void manager.archiveSessions([focusedSession])} disabled={focusedSession.isArchived || manager.archivingKeys.has(focusedSession.key)}>
                 <Archive size={15} aria-hidden />{t("sessionManager.archive")}
               </button>
-              {focusedSession.isArchived && (
-                <button type="button" className="danger" onClick={() => void requestPermanentDelete(focusedSession)} disabled={manager.deletingKeys.has(focusedSession.key)}>
+              <button type="button" className="danger" onClick={() => void requestPermanentDelete([focusedSession])} disabled={manager.archivingKeys.has(focusedSession.key) || manager.deletingKeys.has(focusedSession.key)}>
                   <Trash2 size={15} aria-hidden />{t("sessionManager.permanentDelete")}
                 </button>
-              )}
             </div>
           </>
         )}
       </div>
-      {permanentDeleteSession && (
-        <SessionPermanentDeletePrompt session={permanentDeleteSession} source={manager.sources.find((candidate) => candidate.id === permanentDeleteSession.sourceId)} childCount={permanentDeleteChildCount} busy={manager.deletingKeys.has(permanentDeleteSession.key)} onCancel={() => setPermanentDeleteSession(null)} onConfirm={(cascade) => void confirmPermanentDelete(cascade)} />
+      {pendingPermanentDeleteSessions && (
+        <SessionPermanentDeletePrompt session={pendingPermanentDeleteSessions[0]} sessions={pendingPermanentDeleteSessions} source={manager.sources.find((candidate) => candidate.id === pendingPermanentDeleteSessions[0]?.sourceId)} childCount={pendingPermanentDeleteChildCount} busy={manager.archivingKeys.size > 0 || manager.deletingKeys.size > 0} onCancel={cancelPermanentDelete} onConfirm={(cascade) => void confirmPermanentDelete(cascade)} />
       )}
     </section>
   );

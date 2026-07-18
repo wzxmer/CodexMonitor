@@ -116,7 +116,15 @@ export function useSessionManager(enabled: boolean) {
     try {
       const page = await fetchManagedSessionsPage({ requestId, offset: nextOffset, limit: PAGE_LIMIT });
       if (scanRequestIdRef.current !== requestId) return;
-      setSessions((current) => [...current, ...page.items]);
+      setSessions((current) => {
+        const seen = new Set(current.map((session) => session.key));
+        const additions = page.items.filter((session) => {
+          if (seen.has(session.key)) return false;
+          seen.add(session.key);
+          return true;
+        });
+        return [...current, ...additions];
+      });
       setNextOffset(page.nextOffset);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -201,6 +209,75 @@ export function useSessionManager(enabled: boolean) {
     }
   }, [refresh]);
 
+  const permanentlyDeleteSessions = useCallback(async (targets: ManagedSession[], cascadeRequested: boolean) => {
+    const activeTargets = targets.filter((session) => !session.isArchived);
+    const readyToDelete = targets.filter((session) => session.isArchived && session.archivedAt != null);
+    const archiveFailedKeys = new Set<string>();
+    if (activeTargets.length > 0) {
+      const archiveResponse = await archiveSessions(activeTargets);
+      if (!archiveResponse) return null;
+      archiveResponse.results.forEach((result) => {
+        const session = activeTargets.find((candidate) => candidate.sourceId === result.sourceId && candidate.threadId === result.threadId);
+        if (session && result.success && result.archivedAt != null) {
+          readyToDelete.push({ ...session, isArchived: true, archivedAt: result.archivedAt });
+        } else if (session) {
+          archiveFailedKeys.add(session.key);
+        }
+      });
+    }
+    if (readyToDelete.length === 0) return null;
+    const readyTargetKeys = new Set(
+      readyToDelete.map((session) => `${session.sourceId}:${session.threadId}`),
+    );
+    const deleteRequests = cascadeRequested
+      ? readyToDelete.filter((session) => (
+        !session.parentThreadId ||
+        !readyTargetKeys.has(`${session.sourceId}:${session.parentThreadId}`)
+      ))
+      : readyToDelete;
+    setDeletingKeys(new Set(readyToDelete.map((session) => session.key)));
+    setError(null);
+    try {
+      const settledResponses = await Promise.allSettled(deleteRequests.map((session) => permanentlyDeleteManagedSession({
+        sourceId: session.sourceId,
+        threadId: session.threadId,
+        archivedAt: session.archivedAt as number,
+        cascadeRequested,
+      })));
+      const responses = settledResponses.flatMap((item) => item.status === "fulfilled" ? [item.value] : []);
+      const results = responses.flatMap((response) => response.results);
+      settledResponses.forEach((item, index) => {
+        if (item.status === "rejected") {
+          const session = deleteRequests[index];
+          results.push({
+            sourceId: session.sourceId,
+            threadId: session.threadId,
+            success: false,
+            error: item.reason instanceof Error ? item.reason.message : String(item.reason),
+          });
+        }
+      });
+      const response = {
+        results,
+        successCount: responses.reduce((count, item) => count + item.successCount, 0),
+        failureCount: responses.reduce((count, item) => count + item.failureCount, 0) + settledResponses.filter((item) => item.status === "rejected").length,
+      };
+      const failure = results.find((result) => result.error)?.error;
+      await refresh();
+      if (failure) setError(failure);
+      setSelectedSessionKeys(new Set([
+        ...archiveFailedKeys,
+        ...results.filter((result) => !result.success).map((result) => `${result.sourceId}:${result.threadId}`),
+      ]));
+      return response;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      return null;
+    } finally {
+      setDeletingKeys(new Set());
+    }
+  }, [archiveSessions, refresh]);
+
   const getPermanentDeleteChildCount = useCallback(async (session: ManagedSession) => {
     try {
       const requestId = scanRequestIdRef.current;
@@ -222,5 +299,5 @@ export function useSessionManager(enabled: boolean) {
     }
   }, [nextOffset, sessions]);
 
-  return { sources, sessions: filteredSessions, indexedSessions: sessions, totalSessionCount, diagnostics, query, setQuery, showSubagents, setShowSubagents, statusFilter, setStatusFilter, sourceFilter, setSourceFilter, selectedSessionKeys, toggleSelected, nextOffset: query.trim().length >= 2 ? null : nextOffset, loading, loadingMore, error, refresh, loadMore, scrollOffset, setScrollOffset, searchProgress, archiveResult, dismissArchiveResult: () => setArchiveResult(null), archivingKeys, archiveSessions, deletingKeys, permanentlyDeleteSession, getPermanentDeleteChildCount };
+  return { sources, sessions: filteredSessions, indexedSessions: sessions, totalSessionCount, diagnostics, query, setQuery, showSubagents, setShowSubagents, statusFilter, setStatusFilter, sourceFilter, setSourceFilter, selectedSessionKeys, toggleSelected, nextOffset: query.trim().length >= 2 ? null : nextOffset, loading, loadingMore, error, refresh, loadMore, scrollOffset, setScrollOffset, searchProgress, archiveResult, dismissArchiveResult: () => setArchiveResult(null), archivingKeys, archiveSessions, deletingKeys, permanentlyDeleteSession, permanentlyDeleteSessions, getPermanentDeleteChildCount };
 }

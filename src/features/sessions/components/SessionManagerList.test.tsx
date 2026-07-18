@@ -48,4 +48,52 @@ describe("SessionManagerList", () => {
     fireEvent.click(screen.getByRole("button", { name: "引用" }));
     expect(onDerive).toHaveBeenCalledWith(managedSession);
   });
+
+  it("uses a single right-click target for an unselected row and keeps batch selection for a selected row", () => {
+    const onArchive = vi.fn();
+    const active = { ...managedSession, key: "source-a:active", threadId: "active", title: "Active", isArchived: false, archivedAt: null, projectExists: true };
+    const archived = { ...managedSession, key: "source-a:archived", threadId: "archived", title: "Archived", projectExists: true };
+    render(<SessionManagerList sessions={[active, archived]} sources={[source]} selected={new Set([archived.key])} resumingKey={null} archivingKeys={new Set()} loading={false} loadingMore={false} error={null} hasMore={false} onToggleSelected={vi.fn()} onResume={vi.fn()} onArchive={onArchive} onDerive={vi.fn()} onLoadMore={vi.fn()} />);
+    fireEvent.contextMenu(screen.getByText("Active"));
+    expect(screen.getByRole("menu").querySelector(".ds-popover-item")).toBeTruthy();
+    expect(screen.getByRole("menu").textContent).toContain("永久删除");
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.contextMenu(screen.getByText("Archived"));
+    expect(screen.getByRole("menu").textContent).toContain("永久删除");
+  });
+
+  it("renders child sessions immediately below their visible parent", () => {
+    const parent = { ...managedSession, key: "source-a:parent", threadId: "parent", title: "Parent", parentThreadId: null, isSubagent: false, isArchived: false, archivedAt: null };
+    const child = { ...managedSession, key: "source-a:child", threadId: "child", title: "Child", parentThreadId: "parent" };
+    const unrelated = { ...managedSession, key: "source-a:other", threadId: "other", title: "Other", parentThreadId: null, isSubagent: false, isArchived: false, archivedAt: null };
+    const { container } = render(<SessionManagerList sessions={[parent, unrelated, child]} sources={[source]} selected={new Set()} resumingKey={null} archivingKeys={new Set()} loading={false} loadingMore={false} error={null} hasMore={false} onToggleSelected={vi.fn()} onResume={vi.fn()} onArchive={vi.fn()} onDerive={vi.fn()} onLoadMore={vi.fn()} />);
+    const titles = Array.from(container.querySelectorAll(".session-manager-row-title"), (node) => node.textContent);
+    expect(titles).toEqual(["Parent", "Child", "Other"]);
+    expect(screen.getByText("Child").closest(".session-manager-row")?.classList.contains("is-child")).toBe(true);
+    expect((screen.getByText("Child").closest(".session-manager-row") as HTMLElement).style.getPropertyValue("--session-manager-depth")).toBe("1");
+    expect(screen.queryByRole("region", { name: "已归档" })).toBeNull();
+  });
+
+  it("applies batch context actions to the selected collection", () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const onArchiveSelected = vi.fn();
+    const onDeriveSelected = vi.fn();
+    const onPermanentDelete = vi.fn();
+    const active = { ...managedSession, key: "source-a:active", threadId: "active", title: "Active", isArchived: false, archivedAt: null, projectExists: true };
+    const archived = { ...managedSession, key: "source-a:archived", threadId: "archived", title: "Archived", projectExists: true };
+    render(<SessionManagerList sessions={[active, archived]} sources={[source]} selected={new Set([active.key, archived.key])} resumingKey={null} archivingKeys={new Set()} loading={false} loadingMore={false} error={null} hasMore={false} onToggleSelected={vi.fn()} onResume={vi.fn()} onArchive={vi.fn()} onArchiveSelected={onArchiveSelected} onDerive={vi.fn()} onDeriveSelected={onDeriveSelected} onPermanentDelete={onPermanentDelete} onLoadMore={vi.fn()} />);
+    fireEvent.contextMenu(screen.getByText("Active"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "派生所选到当前项目" }));
+    expect(onDeriveSelected).toHaveBeenCalledWith([active, archived]);
+    fireEvent.contextMenu(screen.getByText("Active"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "归档所选" }));
+    expect(onArchiveSelected).toHaveBeenCalledWith([active]);
+    fireEvent.contextMenu(screen.getByText("Archived"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "永久删除所选" }));
+    expect(onPermanentDelete).toHaveBeenCalledWith([active, archived]);
+    fireEvent.contextMenu(screen.getByText("Active"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "复制所选会话 ID" }));
+    expect(writeText).toHaveBeenCalledWith("active\narchived");
+  });
 });
