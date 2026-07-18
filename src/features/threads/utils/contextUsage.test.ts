@@ -4,6 +4,7 @@ import type { ThreadTokenUsage } from "@/types";
 import {
   getCompactionCyclePercent,
   getContextUsedPercent,
+  isContextCompactionInProgress,
 } from "./contextUsage";
 
 function usage(
@@ -51,6 +52,14 @@ describe("contextUsage", () => {
     expect(getCompactionCyclePercent(usage(1_000, 50, 1_000), 200)).toBe(25);
   });
 
+  it("caps the configured compaction threshold at the runtime context window", () => {
+    expect(getCompactionCyclePercent(usage(0, 318_060, 353_400), 900_000)).toBe(90);
+  });
+
+  it("keeps a configured compaction threshold below the runtime context window", () => {
+    expect(getCompactionCyclePercent(usage(0, 180_000, 353_400), 200_000)).toBe(90);
+  });
+
   it("does not use total token usage for compaction cycle progress", () => {
     expect(getCompactionCyclePercent(usage(1_000, 50, 1_000), 200)).toBe(25);
   });
@@ -63,5 +72,24 @@ describe("contextUsage", () => {
     expect(getCompactionCyclePercent(usage(0, 400, 1_000), 200)).toBe(100);
     expect(getCompactionCyclePercent(usage(0, -20, 1_000), 200)).toBe(0);
     expect(getCompactionCyclePercent(usage(0, 20, 1_000), 0)).toBeNull();
+  });
+
+  it("detects only an in-progress context compaction item", () => {
+    const item = {
+      id: "compact-1",
+      kind: "tool" as const,
+      toolType: "contextCompaction",
+      title: "Compacting context",
+      detail: "",
+      status: "inProgress",
+    };
+
+    expect(isContextCompactionInProgress([item])).toBe(true);
+    expect(
+      isContextCompactionInProgress([{ ...item, status: "completed" }]),
+    ).toBe(false);
+    expect(
+      isContextCompactionInProgress([{ ...item, toolType: "commandExecution" }]),
+    ).toBe(false);
   });
 });

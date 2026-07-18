@@ -202,6 +202,10 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
 - `skills/list`
 - `app/list`
 
+Runtime ownership:
+- `thread/list` and read-only `thread/read` use a Provider-neutral session-source history runtime for the target `CODEX_HOME` and workspace.
+- `thread/resume` and turn execution use the execution runtime selected by the active Provider. History and execution runtimes have distinct pool identities, so a custom Provider cannot replace or hide the local history index.
+
 Notes:
 - `turn/start` now forwards the optional `serviceTier` override (`"fast"` for `/fast`, `null` for default/off) alongside `model`, `effort`, and `collaborationMode`.
 - `turn/start` and `turn/steer` forward CM workflow rules, matched skills/agents, and bounded knowledge excerpts through experimental `additionalContext` entries. CM initializes app-server with `experimentalApi: true`; this context is separate from persisted user input.

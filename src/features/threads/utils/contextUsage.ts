@@ -1,4 +1,4 @@
-import type { ThreadTokenUsage } from "@/types";
+import type { ConversationItem, ThreadTokenUsage } from "@/types";
 
 function getContextUsedRawPercent(contextUsage?: ThreadTokenUsage | null) {
   const contextWindow = contextUsage?.modelContextWindow ?? null;
@@ -28,5 +28,23 @@ export function getCompactionCyclePercent(
   if (lastTokens === null) {
     return null;
   }
-  return Math.round(Math.min(Math.max((lastTokens / threshold) * 100, 0), 100));
+  const contextWindow = contextUsage?.modelContextWindow ?? null;
+  const effectiveThreshold =
+    typeof contextWindow === "number" &&
+    Number.isFinite(contextWindow) &&
+    contextWindow > 0
+      ? Math.min(threshold, contextWindow)
+      : threshold;
+  return Math.round(
+    Math.min(Math.max((lastTokens / effectiveThreshold) * 100, 0), 100),
+  );
+}
+
+export function isContextCompactionInProgress(items: ConversationItem[]) {
+  return items.some(
+    (item) =>
+      item.kind === "tool" &&
+      item.toolType === "contextCompaction" &&
+      item.status === "inProgress",
+  );
 }

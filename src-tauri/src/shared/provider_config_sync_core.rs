@@ -438,7 +438,14 @@ pub(crate) fn sync_active_provider_profile_to_local_config(
         let Some(state) = existing_state else {
             return Ok(ProviderConfigSyncOutcome::NoActiveProfile);
         };
-        ensure_sync_state_matches_current(&state, &current)?;
+        if ensure_sync_state_matches_current(&state, &current).is_err() {
+            remove_provider_sync_state(codex_home)?;
+            return Ok(if settings.sync_provider_profile_to_local_config {
+                ProviderConfigSyncOutcome::NoActiveProfile
+            } else {
+                ProviderConfigSyncOutcome::Disabled
+            });
+        }
         let mut document = snapshot.document.clone();
         state.original.restore_into(&mut document)?;
         config_toml_core::persist_global_config_document_if_unchanged(
@@ -794,7 +801,7 @@ wire_api = "responses"
     }
 
     #[test]
-    fn restoring_default_rejects_external_edits_to_provider_owned_fields() {
+    fn restoring_default_relinquishes_external_edits_without_overwriting_them() {
         let codex_home = temp_dir("restore-default-external-owned");
         let config_path = codex_home.join("config.toml");
         fs::write(&config_path, "model_provider = \"codex_local_access\"\n")
@@ -810,15 +817,16 @@ wire_api = "responses"
 
         let mut default_settings = profile_settings;
         default_settings.active_codex_key_profile_id = None;
-        let error = sync_active_provider_profile_to_local_config(&codex_home, &default_settings)
-            .expect_err("owned external edit must block restoration");
+        let outcome =
+            sync_active_provider_profile_to_local_config(&codex_home, &default_settings)
+                .expect("external Provider config must remain authoritative");
 
-        assert!(error.contains("changed outside CodexMonitor"));
+        assert_eq!(outcome, ProviderConfigSyncOutcome::NoActiveProfile);
         assert_eq!(
             fs::read_to_string(&config_path).expect("read preserved external config"),
             externally_edited
         );
-        assert!(provider_sync_state_path(&codex_home).exists());
+        assert!(!provider_sync_state_path(&codex_home).exists());
         let _ = fs::remove_dir_all(codex_home);
     }
 

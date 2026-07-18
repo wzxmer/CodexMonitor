@@ -1104,6 +1104,19 @@ export type QueuedMessage = {
   createdAt: number;
   images?: string[];
   appMentions?: AppMention[];
+  references?: ComposerReference[];
+};
+
+export type ComposerReference = {
+  id: string;
+  sourceTitle: string;
+  sourceRole: "user" | "assistant";
+  content: string;
+  prompt: string;
+  mode: "smart" | "full";
+  referenceId?: string;
+  path?: string;
+  collapsed: boolean;
 };
 
 export type AppMention = {
@@ -1247,6 +1260,110 @@ export type CandidateMatch = {
   thread_key: TaskCoordinationThreadKey;
   reason: string;
   strength: CandidateStrength;
+};
+
+export type ShadowTaskComplexity = "low" | "medium" | "high";
+export type ShadowTaskRisk = "low" | "medium" | "high";
+export type ShadowSpawnOutcome = "not_attempted" | "succeeded" | "failed";
+
+export type ShadowTaskSignals = {
+  complexity: ShadowTaskComplexity;
+  risk: ShadowTaskRisk;
+  parallelizable: boolean;
+  requiresWrite: boolean;
+  requiresIndependentReview?: boolean;
+  requiresUserDecision?: boolean;
+};
+
+export type ShadowVerifiedModelCapability = {
+  providerId: string;
+  modelId: string;
+  verified: boolean;
+  supportedReasoningEfforts?: string[];
+};
+
+export type ShadowProviderContext = {
+  activeProviderId: string;
+  selectedProviderId: string;
+  selectedModelId: string;
+  selectedReasoningEffort: string | null;
+  models?: ShadowVerifiedModelCapability[];
+};
+
+export type ShadowResourceRequest = {
+  kind: ResourceKind;
+  resourceKey: string;
+  access: AccessLevel;
+};
+
+export type ShadowCoordinationContext = {
+  groupId: string;
+  owner: TaskCoordinationThreadKey;
+  resources?: ShadowResourceRequest[];
+};
+
+export type ShadowRuntimeState = {
+  activeSlots: number;
+  depth: number;
+  rootTokensUsed: number;
+  subtaskTokensEstimate: number;
+  elapsedMs: number;
+  retryCount: number;
+  fallbackCount: number;
+  spawnOutcome?: ShadowSpawnOutcome;
+};
+
+export type ShadowRouteRequest = {
+  task: ShadowTaskSignals;
+  provider: ShadowProviderContext;
+  runtime: ShadowRuntimeState;
+  coordination: ShadowCoordinationContext | null;
+};
+
+export type ShadowRouteRecommendation =
+  | "direct"
+  | "delegate"
+  | "review"
+  | "decision-gate";
+
+export type ShadowRouteReasonCode =
+  | "low_complexity"
+  | "low_risk"
+  | "coordination_cost_exceeds_benefit"
+  | "complex_task"
+  | "parallelizable"
+  | "delegation_benefit_exceeds_coordination_cost"
+  | "independent_review_required"
+  | "high_risk"
+  | "user_decision_required"
+  | "provider_mismatch"
+  | "unknown_model"
+  | "unverified_model"
+  | "unsupported_effort"
+  | "input_limit_exceeded"
+  | "slot_limit_reached"
+  | "depth_limit_reached"
+  | "root_token_budget_exhausted"
+  | "subtask_token_budget_exceeded"
+  | "timeout_reached"
+  | "retry_limit_reached"
+  | "fallback_limit_reached"
+  | "spawn_failed"
+  | "coordination_group_missing"
+  | "coordination_group_inactive"
+  | "owner_missing"
+  | "owner_inactive"
+  | "owner_lease_inactive"
+  | "owner_lease_expired"
+  | "claim_missing"
+  | "claim_invalid"
+  | "claim_conflict"
+  | "coordination_clear"
+  | "model_capability_verified";
+
+export type ShadowRouteAdvice = {
+  recommendation: ShadowRouteRecommendation;
+  reasonCodes: ShadowRouteReasonCode[];
 };
 
 export type WorkflowCapabilityProfile = Record<

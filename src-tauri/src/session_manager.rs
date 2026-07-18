@@ -6,7 +6,9 @@ use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 use crate::remote_backend;
-use crate::shared::session_manager_core::runtime::SourceThreadRuntimeBinding;
+use crate::shared::session_manager_core::runtime::{
+    SourceRuntimePurpose, SourceThreadRuntimeBinding,
+};
 use crate::shared::session_manager_core::service::{
     cancel_session_task_core, fetch_managed_session_preview_core, fetch_managed_sessions_page_core,
     fetch_session_search_results_core, list_session_sources_core, scan_managed_sessions_core,
@@ -105,6 +107,86 @@ pub(crate) async fn source_runtime_for_workspace(
             },
         )
         .await
+}
+
+async fn history_runtime_for_workspace(
+    source: SessionSource,
+    entry: WorkspaceEntry,
+    state: &AppState,
+    app: AppHandle,
+) -> Result<Arc<crate::codex::WorkspaceSession>, String> {
+    let (default_codex_bin, codex_args) = {
+        let settings = state.app_settings.lock().await;
+        (
+            settings.codex_bin.clone(),
+            crate::codex::args::resolve_workspace_codex_args(&entry, None, Some(&settings)),
+        )
+    };
+    state.session_source_runtimes.close_idle().await;
+    let workspace_context = entry.path.clone();
+    state
+        .session_source_runtimes
+        .get_or_spawn_workspace_session_for_source_purpose(
+            &source,
+            &workspace_context,
+            SourceRuntimePurpose::History,
+            move |codex_home| {
+                crate::codex::spawn_history_workspace_session(
+                    entry,
+                    default_codex_bin,
+                    codex_args,
+                    app,
+                    codex_home,
+                )
+            },
+        )
+        .await
+}
+
+async fn current_history_source_and_workspace(
+    workspace_id: &str,
+    state: &AppState,
+) -> Result<(SessionSource, WorkspaceEntry), String> {
+    let entry = state
+        .workspaces
+        .lock()
+        .await
+        .get(workspace_id)
+        .cloned()
+        .ok_or_else(|| "Workspace not found".to_string())?;
+    let codex_home = {
+        let settings = state.app_settings.lock().await;
+        crate::codex::home::resolve_settings_codex_home(&settings)
+            .ok_or_else(|| "Unable to resolve CODEX_HOME for session history".to_string())?
+    };
+    let source =
+        crate::shared::session_manager_core::sources::session_source_for_codex_home(&codex_home)?;
+    Ok((source, entry))
+}
+
+pub(crate) async fn history_runtime_for_workspace_id(
+    workspace_id: &str,
+    state: &AppState,
+    app: AppHandle,
+) -> Result<Arc<crate::codex::WorkspaceSession>, String> {
+    let (source, entry) = current_history_source_and_workspace(workspace_id, state).await?;
+    history_runtime_for_workspace(source, entry, state, app).await
+}
+
+pub(crate) async fn history_runtime_for_thread(
+    workspace_id: &str,
+    thread_id: &str,
+    state: &AppState,
+    app: AppHandle,
+) -> Result<Arc<crate::codex::WorkspaceSession>, String> {
+    if let Some(binding) = state
+        .source_thread_runtimes
+        .get(workspace_id, thread_id)
+        .await
+    {
+        return history_runtime_for_workspace(binding.source, binding.workspace, state, app).await;
+    }
+    history_runtime_for_workspace_id(workspace_id, state, app).await
 }
 
 pub(crate) async fn source_runtime_for_bound_thread(

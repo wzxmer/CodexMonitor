@@ -25,6 +25,7 @@ import {
   getGitLog,
   getGitStatus,
   getOpenAppIcon,
+  getThreadTokenUsage,
   getWorkspaceThirdPartyKeyUsage,
   listThreads,
   listSessionSources,
@@ -56,6 +57,7 @@ import {
   setTraySessionUsage,
   startThread,
   workflowPreflightPreview,
+  executionRouterShadowPreview,
   startReview,
   setThreadName,
   updateSessionSource,
@@ -180,6 +182,48 @@ describe("tauri invoke wrappers", () => {
       providerKind: "opencode",
       model: "minimax-m3",
       mode: "shadow",
+    });
+  });
+
+  it("forwards shadow router input without activating dispatch", async () => {
+    const invokeMock = vi.mocked(invoke);
+    const input = {
+      task: {
+        complexity: "low" as const,
+        risk: "low" as const,
+        parallelizable: false,
+        requiresWrite: false,
+      },
+      provider: {
+        activeProviderId: "provider-a",
+        selectedProviderId: "provider-a",
+        selectedModelId: "model-a",
+        selectedReasoningEffort: "high",
+        models: [
+          {
+            providerId: "provider-a",
+            modelId: "model-a",
+            verified: true,
+            supportedReasoningEfforts: ["high"],
+          },
+        ],
+      },
+      runtime: {
+        activeSlots: 0,
+        depth: 0,
+        rootTokensUsed: 0,
+        subtaskTokensEstimate: 1_000,
+        elapsedMs: 0,
+        retryCount: 0,
+        fallbackCount: 0,
+      },
+      coordination: null,
+    };
+
+    await executionRouterShadowPreview(input);
+
+    expect(invokeMock).toHaveBeenCalledWith("execution_router_shadow_preview", {
+      input,
     });
   });
 
@@ -573,6 +617,18 @@ describe("tauri invoke wrappers", () => {
     await readThread("ws-10", "thread-1");
 
     expect(invokeMock).toHaveBeenCalledWith("read_thread", {
+      workspaceId: "ws-10",
+      threadId: "thread-1",
+    });
+  });
+
+  it("maps workspaceId/threadId for get_thread_token_usage", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce(null);
+
+    await getThreadTokenUsage("ws-10", "thread-1");
+
+    expect(invokeMock).toHaveBeenCalledWith("get_thread_token_usage", {
       workspaceId: "ws-10",
       threadId: "thread-1",
     });

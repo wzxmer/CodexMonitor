@@ -228,7 +228,9 @@ pub(crate) fn scan_session_source(source: &SessionSource) -> SourceSessionScanRe
             title,
             preview: None,
             created_at: candidate.metadata.created_at,
-            updated_at: index_entry.updated_at.or(candidate.modified_at),
+            // File mtime is an implementation detail, not session usage time.
+            // Keep the explicit index timestamp, then creation time as the stable fallback.
+            updated_at: index_entry.updated_at.or(candidate.metadata.created_at),
             archived_at: index_entry.archived_at,
             is_archived: candidate.is_archived,
             parent_thread_id: candidate.metadata.parent_thread_id,
@@ -419,14 +421,14 @@ fn validate_filename_mapping(
     mapping
 }
 
-fn fallback_title(metadata: &ParsedSessionMetadata, thread_id: &str) -> String {
+fn fallback_title(metadata: &ParsedSessionMetadata, _thread_id: &str) -> String {
     metadata
         .cwd
         .as_deref()
         .and_then(|cwd| Path::new(cwd).file_name())
         .and_then(|value| value.to_str())
         .filter(|value| !value.is_empty())
-        .unwrap_or(thread_id)
+        .unwrap_or("Untitled session")
         .to_string()
 }
 
@@ -447,5 +449,26 @@ fn diagnostic(
         source_id: source.id.clone(),
         path,
         error: error.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fallback_title;
+    use crate::shared::session_manager_core::parser::ParsedSessionMetadata;
+
+    #[test]
+    fn fallback_title_never_uses_thread_id() {
+        let metadata = ParsedSessionMetadata {
+            thread_id: "thread-123".to_string(),
+            cwd: None,
+            created_at: None,
+            source_kind: None,
+            parent_thread_id: None,
+            is_subagent: false,
+            subagent_nickname: None,
+            subagent_role: None,
+        };
+        assert_eq!(fallback_title(&metadata, "thread-123"), "Untitled session");
     }
 }

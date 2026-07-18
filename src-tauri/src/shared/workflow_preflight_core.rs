@@ -17,6 +17,8 @@ const MAX_KNOWLEDGE_FILES: usize = 400;
 const MAX_KNOWLEDGE_FILE_BYTES: u64 = 256 * 1024;
 const MAX_KNOWLEDGE_TOTAL_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_KNOWLEDGE_CANDIDATES: usize = 8;
+// Require multiple strong matches so generic verbs do not flood context.
+const MIN_KNOWLEDGE_MATCH_SCORE: u32 = 16;
 const MAX_KNOWLEDGE_CACHE_ENTRIES: usize = 8;
 const MAX_MATCH_TERMS: usize = 5;
 const MAX_TASK_CHARS: usize = 8_000;
@@ -459,9 +461,15 @@ fn task_terms(task: &str) -> Vec<String> {
         .chars()
         .filter(|character| matches!(*character as u32, 0x3400..=0x9fff))
         .collect::<Vec<_>>();
-    for size in [2usize, 3, 4] {
-        for window in cjk.windows(size) {
-            terms.insert(window.iter().collect::<String>());
+    if cjk.len() <= 4 {
+        if !cjk.is_empty() {
+            terms.insert(cjk.iter().collect::<String>());
+        }
+    } else {
+        for size in [2usize, 3, 4] {
+            for window in cjk.windows(size) {
+                terms.insert(window.iter().collect::<String>());
+            }
         }
     }
     let mut terms = terms.into_iter().collect::<Vec<_>>();
@@ -531,7 +539,7 @@ fn rank_knowledge(
                 }
             }
         }
-        if score > 0 {
+        if score >= MIN_KNOWLEDGE_MATCH_SCORE {
             candidates.push(WorkflowKnowledgeCandidate {
                 path: document.path.clone(),
                 title: document.title.clone(),
@@ -995,7 +1003,7 @@ fn knowledge_excerpt(candidate: &WorkflowKnowledgeCandidate) -> Option<String> {
     (!excerpt.trim().is_empty()).then(|| {
         truncate_chars(
             &format!(
-                "CM knowledge candidate: {}\nTitle: {}\n{}",
+                "CM knowledge reference (context only; not an execution task): {}\nTitle: {}\n{}",
                 candidate.path, candidate.title, excerpt
             ),
             MAX_CONTEXT_FRAGMENT_CHARS,
@@ -1220,6 +1228,75 @@ mod tests {
             .any(|source| source.kind == "knowledge"));
         let serialized = serde_json::to_string(&preview).expect("preview json");
         assert!(!serialized.contains(task));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn ignores_generic_fix_requests_but_keeps_specific_knowledge_matches() {
+        let root = temp_root("knowledge-confidence");
+        let workspace = root.join("CodexMonitor");
+        let knowledge = root
+            .join("knowledge")
+            .join("20-项目知识")
+            .join("CodexMonitor")
+            .join("BUG");
+        fs::create_dir_all(&workspace).expect("workspace");
+        fs::create_dir_all(&knowledge).expect("knowledge dir");
+        for (name, title) in [
+            ("session-layout.md", "会话管理切换首次加载与布局修复"),
+            ("session-shadow.md", "本机历史会话阴影修复被覆盖"),
+            ("session-scroll.md", "会话滚动 UI 字号与附件体验修复"),
+        ] {
+            fs::write(
+                knowledge.join(name),
+                format!("# {title}\n该条目记录一个已验证的修复。"),
+            )
+            .expect("knowledge note");
+        }
+
+        let generic = build_preview(
+            "CodexMonitor",
+            &workspace,
+            "开始修复",
+            "active".to_string(),
+            "opencode".to_string(),
+            None,
+            Some(&root.join("knowledge")),
+        );
+        assert!(generic.knowledge_candidates.is_empty());
+        assert!(!generic
+            .context_fragments
+            .iter()
+            .any(|fragment| fragment.source_id.starts_with("cm.knowledge.")));
+
+        let broad_domain = build_preview(
+            "CodexMonitor",
+            &workspace,
+            "会话管理",
+            "active".to_string(),
+            "opencode".to_string(),
+            None,
+            Some(&root.join("knowledge")),
+        );
+        assert!(broad_domain.knowledge_candidates.is_empty());
+
+        let specific = build_preview(
+            "CodexMonitor",
+            &workspace,
+            "排查会话管理切换首次加载与布局修复",
+            "active".to_string(),
+            "opencode".to_string(),
+            None,
+            Some(&root.join("knowledge")),
+        );
+        assert_eq!(
+            specific.knowledge_candidates[0].title,
+            "会话管理切换首次加载与布局修复"
+        );
+        assert!(specific.context_fragments.iter().any(|fragment| {
+            fragment.source_id.starts_with("cm.knowledge.")
+                && fragment.value.contains("not an execution task")
+        }));
         let _ = fs::remove_dir_all(root);
     }
 

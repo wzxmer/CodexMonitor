@@ -74,13 +74,16 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, Mutex, Semaphore};
 
-use backend::app_server::{spawn_workspace_session, WorkspaceSession};
+use backend::app_server::{
+    spawn_history_workspace_session, spawn_workspace_session, WorkspaceSession,
+};
 use backend::events::{AppServerEvent, EventSink, TerminalExit, TerminalOutput};
 use shared::codex_core::CodexLoginCancelState;
 use shared::process_core::kill_child_process_tree;
 use shared::prompts_core::{self, CustomPromptEntry};
 use shared::session_manager_core::runtime::{
-    SessionSourceRuntimePool, SourceThreadRuntimeBinding, SourceThreadRuntimeBindings,
+    SessionSourceRuntimePool, SourceRuntimePurpose, SourceThreadRuntimeBinding,
+    SourceThreadRuntimeBindings,
 };
 use shared::session_manager_core::service::SessionManagerRuntime;
 use shared::{
@@ -264,6 +267,88 @@ impl DaemonState {
                 },
             )
             .await
+    }
+
+    async fn history_runtime_for_workspace(
+        &self,
+        source: SessionSource,
+        entry: WorkspaceEntry,
+    ) -> Result<Arc<WorkspaceSession>, String> {
+        let (default_codex_bin, codex_args) = {
+            let settings = self.app_settings.lock().await;
+            (
+                settings.codex_bin.clone(),
+                codex_args::resolve_workspace_codex_args(&entry, None, Some(&settings)),
+            )
+        };
+        self.session_source_runtimes.close_idle().await;
+        let workspace_context = entry.path.clone();
+        let event_sink = self.event_sink.clone();
+        self.session_source_runtimes
+            .get_or_spawn_workspace_session_for_source_purpose(
+                &source,
+                &workspace_context,
+                SourceRuntimePurpose::History,
+                move |codex_home| {
+                    spawn_history_workspace_session(
+                        entry,
+                        default_codex_bin,
+                        codex_args,
+                        codex_home,
+                        env!("CARGO_PKG_VERSION").to_string(),
+                        event_sink,
+                    )
+                },
+            )
+            .await
+    }
+
+    async fn current_history_source_and_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> Result<(SessionSource, WorkspaceEntry), String> {
+        let entry = self
+            .workspaces
+            .lock()
+            .await
+            .get(workspace_id)
+            .cloned()
+            .ok_or_else(|| "Workspace not found".to_string())?;
+        let codex_home = {
+            let settings = self.app_settings.lock().await;
+            codex_home::resolve_settings_codex_home(&settings)
+                .ok_or_else(|| "Unable to resolve CODEX_HOME for session history".to_string())?
+        };
+        let source =
+            shared::session_manager_core::sources::session_source_for_codex_home(&codex_home)?;
+        Ok((source, entry))
+    }
+
+    async fn history_runtime_for_workspace_id(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Arc<WorkspaceSession>, String> {
+        let (source, entry) = self
+            .current_history_source_and_workspace(workspace_id)
+            .await?;
+        self.history_runtime_for_workspace(source, entry).await
+    }
+
+    async fn history_runtime_for_thread(
+        &self,
+        workspace_id: &str,
+        thread_id: &str,
+    ) -> Result<Arc<WorkspaceSession>, String> {
+        if let Some(binding) = self
+            .source_thread_runtimes
+            .get(workspace_id, thread_id)
+            .await
+        {
+            return self
+                .history_runtime_for_workspace(binding.source, binding.workspace)
+                .await;
+        }
+        self.history_runtime_for_workspace_id(workspace_id).await
     }
 
     async fn source_runtime_for_bound_thread(
@@ -1275,42 +1360,33 @@ impl DaemonState {
         workspace_id: String,
         thread_id: String,
     ) -> Result<Value, String> {
-        let mut response = if let Some(session) = self
-            .source_runtime_for_bound_thread(&workspace_id, &thread_id)
-            .await?
-        {
-            codex_core::resume_thread_with_session_core(
-                &session,
-                workspace_id.clone(),
-                thread_id.clone(),
-            )
-            .await?
-        } else {
-            codex_core::resume_thread_core(&self.sessions, workspace_id.clone(), thread_id.clone())
-                .await?
-        };
-        if let Some(token_usage) =
-            local_usage_core::thread_token_usage_core(&self.workspaces, workspace_id, thread_id)
-                .await
-        {
-            if let Some(thread) = response.pointer_mut("/result/thread") {
-                if let Some(thread) = thread.as_object_mut() {
-                    thread.insert("tokenUsage".to_string(), token_usage);
-                }
-            }
-        }
-        Ok(response)
-    }
-
-    async fn read_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
         if let Some(session) = self
             .source_runtime_for_bound_thread(&workspace_id, &thread_id)
             .await?
         {
-            return codex_core::read_thread_with_session_core(&session, workspace_id, thread_id)
+            return codex_core::resume_thread_with_session_core(&session, workspace_id, thread_id)
                 .await;
         }
-        codex_core::read_thread_core(&self.sessions, workspace_id, thread_id).await
+        codex_core::resume_thread_core(&self.sessions, workspace_id, thread_id).await
+    }
+
+    async fn get_thread_token_usage(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+    ) -> Result<Value, String> {
+        Ok(
+            local_usage_core::thread_token_usage_core(&self.workspaces, workspace_id, thread_id)
+                .await
+                .unwrap_or(Value::Null),
+        )
+    }
+
+    async fn read_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
+        let session = self
+            .history_runtime_for_thread(&workspace_id, &thread_id)
+            .await?;
+        codex_core::read_thread_with_session_core(&session, workspace_id, thread_id).await
     }
 
     async fn turn_execution_summary_get(
@@ -1448,8 +1524,9 @@ impl DaemonState {
         sort_key: Option<String>,
         archived: Option<bool>,
     ) -> Result<Value, String> {
-        codex_core::list_threads_core(
-            &self.sessions,
+        let session = self.history_runtime_for_workspace_id(&workspace_id).await?;
+        codex_core::list_threads_with_session_core(
+            &session,
             workspace_id,
             cursor,
             limit,
@@ -2626,7 +2703,59 @@ mod tests {
     }
 
     #[test]
-    fn resume_thread_restores_local_token_usage() {
+    fn rpc_shadow_router_returns_read_only_advice_contract() {
+        run_async_test(async {
+            let tmp = make_temp_dir("shadow-router-rpc");
+            let state = test_state(&tmp);
+            let result = rpc::handle_rpc_request(
+                &state,
+                "execution_router_shadow_preview",
+                json!({
+                    "input": {
+                        "task": {
+                            "complexity": "low",
+                            "risk": "low",
+                            "parallelizable": false,
+                            "requiresWrite": false
+                        },
+                        "provider": {
+                            "activeProviderId": "provider-a",
+                            "selectedProviderId": "provider-a",
+                            "selectedModelId": "model-a",
+                            "selectedReasoningEffort": "high",
+                            "models": [{
+                                "providerId": "provider-a",
+                                "modelId": "model-a",
+                                "verified": true,
+                                "supportedReasoningEfforts": ["high"]
+                            }]
+                        },
+                        "runtime": {
+                            "activeSlots": 0,
+                            "depth": 0,
+                            "rootTokensUsed": 0,
+                            "subtaskTokensEstimate": 1000,
+                            "elapsedMs": 0,
+                            "retryCount": 0,
+                            "fallbackCount": 0
+                        },
+                        "coordination": null
+                    }
+                }),
+                "daemon-test".to_string(),
+            )
+            .await
+            .expect("shadow router preview");
+
+            assert_eq!(result["recommendation"], "direct");
+            assert!(result["reasonCodes"].is_array());
+            assert_eq!(result.as_object().map(|object| object.len()), Some(2));
+            let _ = std::fs::remove_dir_all(tmp);
+        });
+    }
+
+    #[test]
+    fn rpc_get_thread_token_usage_restores_local_snapshot() {
         let _env_lock = CODEX_HOME_ENV_LOCK.lock().expect("lock CODEX_HOME");
         let tmp = make_temp_dir("resume-thread-token-usage");
         let codex_home = tmp.join("codex-home");
@@ -2674,55 +2803,18 @@ mod tests {
 
             let state = test_state(&tmp);
             insert_workspace(&state, workspace_id, &workspace_dir.to_string_lossy()).await;
-            let session = make_session(make_workspace_entry(
-                workspace_id,
-                &workspace_dir.to_string_lossy(),
-            ));
-            state
-                .sessions
-                .lock()
-                .await
-                .insert(workspace_id.to_string(), session.clone());
+            let response = rpc::handle_rpc_request(
+                &state,
+                "get_thread_token_usage",
+                json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+                "daemon-test".to_string(),
+            )
+            .await
+            .expect("get thread token usage");
 
-            let resume = state.resume_thread(workspace_id.to_string(), thread_id.to_string());
-            let reply = async {
-                tokio::time::timeout(Duration::from_secs(2), async {
-                    loop {
-                        if let Some(sender) = session.pending.lock().await.remove(&0) {
-                            sender
-                                .send(json!({
-                                    "id": 0,
-                                    "result": { "thread": { "id": thread_id } }
-                                }))
-                                .expect("send resume response");
-                            break;
-                        }
-                        tokio::task::yield_now().await;
-                    }
-                })
-                .await
-                .expect("resume request should be pending");
-            };
-            let (response, ()) = futures_util::future::join(resume, reply).await;
-            let response = response.expect("resume thread");
-
-            assert_eq!(
-                response["result"]["thread"]["tokenUsage"]["last"]["input_tokens"],
-                12
-            );
-            assert_eq!(
-                response["result"]["thread"]["tokenUsage"]["total"]["output_tokens"],
-                30
-            );
-            assert_eq!(
-                response["result"]["thread"]["tokenUsage"]["model_context_window"],
-                200000
-            );
-
-            if let Some(session) = state.sessions.lock().await.remove(workspace_id) {
-                let mut child = session.child.lock().await;
-                kill_child_process_tree(&mut child).await;
-            };
+            assert_eq!(response["last"]["input_tokens"], 12);
+            assert_eq!(response["total"]["output_tokens"], 30);
+            assert_eq!(response["model_context_window"], 200000);
         });
 
         let _ = std::fs::remove_dir_all(&tmp);

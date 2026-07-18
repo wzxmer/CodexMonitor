@@ -1359,6 +1359,29 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
     Ok(session)
 }
 
+pub(crate) async fn spawn_history_workspace_session<E: EventSink>(
+    entry: WorkspaceEntry,
+    default_codex_bin: Option<String>,
+    codex_args: Option<String>,
+    codex_home: PathBuf,
+    client_version: String,
+    event_sink: E,
+) -> Result<Arc<WorkspaceSession>, String> {
+    spawn_workspace_session(
+        entry,
+        default_codex_bin,
+        codex_args,
+        None,
+        Vec::new(),
+        None,
+        None,
+        Some(codex_home),
+        client_version,
+        event_sink,
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

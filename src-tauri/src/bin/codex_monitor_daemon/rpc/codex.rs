@@ -143,6 +143,17 @@ pub(super) async fn try_handle(
             };
             Some(state.resume_thread(workspace_id, thread_id).await)
         }
+        "get_thread_token_usage" => {
+            let workspace_id = match parse_string(params, "workspaceId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let thread_id = match parse_string(params, "threadId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(state.get_thread_token_usage(workspace_id, thread_id).await)
+        }
         "read_thread" => {
             let workspace_id = match parse_string(params, "workspaceId") {
                 Ok(value) => value,
@@ -562,6 +573,29 @@ pub(super) async fn try_handle(
                 state
                     .workflow_preflight_preview(workspace_id, task, mode, provider_kind, model)
                     .await,
+            )
+        }
+        "execution_router_shadow_preview" => {
+            let input = match parse_input::<crate::shared::execution_router_core::ShadowRouteRequest>(
+                params,
+            ) {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                async move {
+                    let now_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+                    let lock = state.task_coordination_ledger.lock().await;
+                    let ledger = lock.clone().unwrap_or_default();
+                    serde_json::to_value(crate::shared::execution_router_core::shadow_route(
+                        &input, &ledger, now_ms,
+                    ))
+                    .map_err(|error| error.to_string())
+                }
+                .await,
             )
         }
         "task_coordination_release_claim" => {

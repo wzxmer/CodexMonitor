@@ -17,10 +17,30 @@ pub(crate) const DEFAULT_SOURCE_RUNTIME_IDLE_TIMEOUT: Duration = Duration::from_
 pub(crate) struct SourceRuntimeKey {
     pub(crate) source_identity: String,
     pub(crate) workspace_context: String,
+    pub(crate) purpose: SourceRuntimePurpose,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum SourceRuntimePurpose {
+    Execution,
+    History,
 }
 
 impl SourceRuntimeKey {
+    #[cfg(test)]
     pub(crate) fn new(source_path: &str, workspace_context: &str) -> Result<Self, String> {
+        Self::for_purpose(
+            source_path,
+            workspace_context,
+            SourceRuntimePurpose::Execution,
+        )
+    }
+
+    pub(crate) fn for_purpose(
+        source_path: &str,
+        workspace_context: &str,
+        purpose: SourceRuntimePurpose,
+    ) -> Result<Self, String> {
         let source_identity = source_identity_key(source_path);
         if source_identity.is_empty() {
             return Err("Session source path is required".to_string());
@@ -32,6 +52,7 @@ impl SourceRuntimeKey {
         Ok(Self {
             source_identity,
             workspace_context: workspace_context.to_lowercase(),
+            purpose,
         })
     }
 }
@@ -185,21 +206,6 @@ impl<T> SourceRuntimePool<T> {
         Ok(runtime)
     }
 
-    pub(crate) async fn get_or_spawn_for_source<F, Fut>(
-        &self,
-        source: &SessionSource,
-        workspace_context: &str,
-        spawn: F,
-    ) -> Result<Arc<T>, String>
-    where
-        F: FnOnce(PathBuf) -> Fut,
-        Fut: Future<Output = Result<Arc<T>, String>>,
-    {
-        let key = SourceRuntimeKey::new(&source.codex_home_path, workspace_context)?;
-        let codex_home = PathBuf::from(&source.codex_home_path);
-        self.get_or_spawn(key, || spawn(codex_home)).await
-    }
-
     pub(crate) async fn touch(&self, key: &SourceRuntimeKey) -> bool {
         let mut entries = self.entries.lock().await;
         let Some(entry) = entries.get_mut(key) else {
@@ -305,7 +311,49 @@ impl SourceRuntimePool<WorkspaceSession> {
         F: FnOnce(PathBuf) -> Fut,
         Fut: Future<Output = Result<Arc<WorkspaceSession>, String>>,
     {
-        let key = SourceRuntimeKey::new(&source.codex_home_path, workspace_context)?;
+        self.get_or_spawn_workspace_session_for_source_purpose_with_status(
+            source,
+            workspace_context,
+            SourceRuntimePurpose::Execution,
+            spawn,
+        )
+        .await
+    }
+
+    pub(crate) async fn get_or_spawn_workspace_session_for_source_purpose<F, Fut>(
+        &self,
+        source: &SessionSource,
+        workspace_context: &str,
+        purpose: SourceRuntimePurpose,
+        spawn: F,
+    ) -> Result<Arc<WorkspaceSession>, String>
+    where
+        F: FnOnce(PathBuf) -> Fut,
+        Fut: Future<Output = Result<Arc<WorkspaceSession>, String>>,
+    {
+        self.get_or_spawn_workspace_session_for_source_purpose_with_status(
+            source,
+            workspace_context,
+            purpose,
+            spawn,
+        )
+        .await
+        .map(|(runtime, _)| runtime)
+    }
+
+    async fn get_or_spawn_workspace_session_for_source_purpose_with_status<F, Fut>(
+        &self,
+        source: &SessionSource,
+        workspace_context: &str,
+        purpose: SourceRuntimePurpose,
+        spawn: F,
+    ) -> Result<(Arc<WorkspaceSession>, bool), String>
+    where
+        F: FnOnce(PathBuf) -> Fut,
+        Fut: Future<Output = Result<Arc<WorkspaceSession>, String>>,
+    {
+        let key =
+            SourceRuntimeKey::for_purpose(&source.codex_home_path, workspace_context, purpose)?;
         if let Some(runtime) = self.get(&key).await {
             if runtime.is_process_alive().await {
                 return Ok((runtime, false));
@@ -397,6 +445,37 @@ mod tests {
     }
 
     #[test]
+    fn keeps_history_and_execution_runtimes_isolated() {
+        let executor = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        executor.block_on(async {
+            let pool = SourceRuntimePool::<usize>::new(Duration::from_secs(60));
+            let execution_key = SourceRuntimeKey::new(r"C:\A", r"D:\Project").unwrap();
+            let history_key = SourceRuntimeKey::for_purpose(
+                r"C:\A",
+                r"D:\Project",
+                SourceRuntimePurpose::History,
+            )
+            .unwrap();
+
+            let execution = pool
+                .get_or_spawn(execution_key, || async { Ok(Arc::new(1)) })
+                .await
+                .unwrap();
+            let history = pool
+                .get_or_spawn(history_key, || async { Ok(Arc::new(2)) })
+                .await
+                .unwrap();
+
+            assert!(!Arc::ptr_eq(&execution, &history));
+            assert_eq!(*execution, 1);
+            assert_eq!(*history, 2);
+        });
+    }
+
+    #[test]
     fn only_reclaims_idle_unborrowed_runtimes() {
         let executor = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -480,12 +559,11 @@ mod tests {
         executor.block_on(async {
             let pool = SourceRuntimePool::<PathBuf>::default();
             let selected_source = source("source-a", r"C:\Users\Test\alternate-codex");
+            let codex_home = PathBuf::from(&selected_source.codex_home_path);
+            let key = SourceRuntimeKey::new(&selected_source.codex_home_path, r"D:\Project\Alpha")
+                .unwrap();
             let runtime = pool
-                .get_or_spawn_for_source(
-                    &selected_source,
-                    r"D:\Project\Alpha",
-                    |codex_home| async move { Ok(Arc::new(codex_home)) },
-                )
+                .get_or_spawn(key, || async move { Ok(Arc::new(codex_home)) })
                 .await
                 .unwrap();
 

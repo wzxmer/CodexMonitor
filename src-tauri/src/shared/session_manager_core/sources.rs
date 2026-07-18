@@ -9,6 +9,23 @@ use super::types::{normalize_source_path, source_identity_key};
 const CURRENT_SOURCE_NAME: &str = "Current CODEX_HOME";
 const DEFAULT_SOURCE_NAME: &str = "Default CODEX_HOME";
 
+pub(crate) fn session_source_for_codex_home(path: &Path) -> Result<SessionSource, String> {
+    let normalized_path = normalized_path_string(path)
+        .ok_or_else(|| "Current CODEX_HOME path is required".to_string())?;
+    Ok(SessionSource {
+        id: source_id_for_path(&normalized_path),
+        name: CURRENT_SOURCE_NAME.to_string(),
+        codex_home_path: normalized_path.clone(),
+        enabled: true,
+        is_current: true,
+        is_default: false,
+        discovered_at: 0,
+        last_scan_at: None,
+        status: status_for_path(Path::new(&normalized_path)),
+        error: None,
+    })
+}
+
 pub(crate) fn reconcile_session_sources(
     sources: Vec<SessionSource>,
     current_path: Option<&Path>,
@@ -268,7 +285,7 @@ mod tests {
 
     use super::{
         add_session_source, reconcile_session_sources, remove_session_source,
-        rename_session_source, set_session_source_enabled,
+        rename_session_source, session_source_for_codex_home, set_session_source_enabled,
     };
     use crate::types::{SessionSource, SessionSourceStatus};
 
@@ -285,6 +302,18 @@ mod tests {
             status: SessionSourceStatus::Ready,
             error: None,
         }
+    }
+
+    #[test]
+    fn builds_stable_current_source_from_codex_home() {
+        let left =
+            session_source_for_codex_home(Path::new(r"C:\Users\Test\.codex\")).expect("source");
+        let right =
+            session_source_for_codex_home(Path::new(r"c:/users/test/.codex")).expect("source");
+
+        assert_eq!(left.id, right.id);
+        assert!(left.is_current);
+        assert_eq!(left.codex_home_path, r"C:\Users\Test\.codex");
     }
 
     #[test]

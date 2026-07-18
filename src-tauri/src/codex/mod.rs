@@ -15,6 +15,7 @@ use crate::event_sink::TauriEventSink;
 use crate::remote_backend;
 use crate::shared::agents_config_core;
 use crate::shared::codex_core::{self, insert_optional_nullable_string};
+use crate::shared::execution_router_core::{self, ShadowRouteRequest};
 use crate::shared::provider_profiles_core::{self, active_codex_key_runtime};
 use crate::shared::turn_execution_summary_core::{
     runtime_id_for_data_dir, source_id_for_codex_home, TurnExecutionSummaryQuery,
@@ -80,6 +81,26 @@ pub(crate) async fn spawn_workspace_session(
         app_handle,
         codex_home,
         settings,
+    )
+    .await
+}
+
+pub(crate) async fn spawn_history_workspace_session(
+    entry: WorkspaceEntry,
+    default_codex_bin: Option<String>,
+    codex_args: Option<String>,
+    app_handle: AppHandle,
+    codex_home: PathBuf,
+) -> Result<Arc<WorkspaceSession>, String> {
+    let client_version = app_handle.package_info().version.to_string();
+    let event_sink = TauriEventSink::new(app_handle);
+    crate::backend::app_server::spawn_history_workspace_session(
+        entry,
+        default_codex_bin,
+        codex_args,
+        codex_home,
+        client_version,
+        event_sink,
     )
     .await
 }
@@ -176,39 +197,44 @@ pub(crate) async fn resume_thread(
         .await;
     }
 
-    let mut response = if let Some(session) =
-        crate::session_manager::source_runtime_for_bound_thread(
-            &workspace_id,
-            &thread_id,
-            &state,
-            app.clone(),
-        )
-        .await?
+    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+        &workspace_id,
+        &thread_id,
+        &state,
+        app.clone(),
+    )
+    .await?
     {
-        codex_core::resume_thread_with_session_core(
-            &session,
-            workspace_id.clone(),
-            thread_id.clone(),
+        return codex_core::resume_thread_with_session_core(&session, workspace_id, thread_id)
+            .await;
+    }
+    codex_core::resume_thread_core(&state.sessions, workspace_id, thread_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn get_thread_token_usage(
+    workspace_id: String,
+    thread_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "get_thread_token_usage",
+            json!({ "workspaceId": workspace_id, "threadId": thread_id }),
         )
-        .await?
-    } else {
-        codex_core::resume_thread_core(&state.sessions, workspace_id.clone(), thread_id.clone())
-            .await?
-    };
-    if let Some(token_usage) = crate::shared::local_usage_core::thread_token_usage_core(
+        .await;
+    }
+
+    Ok(crate::shared::local_usage_core::thread_token_usage_core(
         &state.workspaces,
         workspace_id,
         thread_id,
     )
     .await
-    {
-        if let Some(thread) = response.pointer_mut("/result/thread") {
-            if let Some(thread) = thread.as_object_mut() {
-                thread.insert("tokenUsage".to_string(), token_usage);
-            }
-        }
-    }
-    Ok(response)
+    .unwrap_or(Value::Null))
 }
 
 #[tauri::command]
@@ -228,17 +254,14 @@ pub(crate) async fn read_thread(
         .await;
     }
 
-    if let Some(session) = crate::session_manager::source_runtime_for_bound_thread(
+    let session = crate::session_manager::history_runtime_for_thread(
         &workspace_id,
         &thread_id,
         &state,
         app.clone(),
     )
-    .await?
-    {
-        return codex_core::read_thread_with_session_core(&session, workspace_id, thread_id).await;
-    }
-    codex_core::read_thread_core(&state.sessions, workspace_id, thread_id).await
+    .await?;
+    codex_core::read_thread_with_session_core(&session, workspace_id, thread_id).await
 }
 
 #[tauri::command]
@@ -484,8 +507,11 @@ pub(crate) async fn list_threads(
         .await;
     }
 
-    codex_core::list_threads_core(
-        &state.sessions,
+    let session =
+        crate::session_manager::history_runtime_for_workspace_id(&workspace_id, &state, app)
+            .await?;
+    codex_core::list_threads_with_session_core(
+        &session,
         workspace_id,
         cursor,
         limit,
@@ -1228,6 +1254,32 @@ pub(crate) async fn workflow_preflight_preview(
         model,
     )
     .await
+}
+
+#[tauri::command]
+pub(crate) async fn execution_router_shadow_preview(
+    input: ShadowRouteRequest,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "execution_router_shadow_preview",
+            json!({ "input": input }),
+        )
+        .await;
+    }
+
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let lock = state.task_coordination_ledger.lock().await;
+    let ledger = lock.clone().unwrap_or_default();
+    serde_json::to_value(execution_router_core::shadow_route(&input, &ledger, now_ms))
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

@@ -175,6 +175,7 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "get_codex_status"
             | "get_config_model"
             | "get_provider_status"
+            | "get_thread_token_usage"
             | "provider_model_list"
             | "third_party_key_usage"
             | "workspace_third_party_key_usage"
@@ -210,6 +211,7 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "thread_live_subscribe"
             | "thread_live_unsubscribe"
             | "skills_list"
+            | "execution_router_shadow_preview"
             | "workflow_preflight_preview"
             | "worktree_setup_status"
     )
@@ -297,6 +299,7 @@ mod tests {
     #[test]
     fn retries_only_retry_safe_methods_after_disconnect() {
         assert!(can_retry_after_disconnect("resume_thread"));
+        assert!(can_retry_after_disconnect("get_thread_token_usage"));
         assert!(can_retry_after_disconnect("list_threads"));
         assert!(can_retry_after_disconnect("list_session_sources"));
         assert!(can_retry_after_disconnect("verify_session_threads"));
@@ -304,6 +307,9 @@ mod tests {
         assert!(can_retry_after_disconnect("search_managed_sessions"));
         assert!(can_retry_after_disconnect("fetch_session_search_results"));
         assert!(can_retry_after_disconnect("local_usage_snapshot"));
+        assert!(can_retry_after_disconnect(
+            "execution_router_shadow_preview"
+        ));
         assert!(!can_retry_after_disconnect("send_user_message"));
         assert!(!can_retry_after_disconnect("start_thread"));
         assert!(!can_retry_after_disconnect("remove_workspace"));

@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::oneshot::error::TryRecvError;
 use tokio::sync::{oneshot, Mutex};
 use tokio::time::timeout;
@@ -376,6 +377,111 @@ fn build_read_thread_params(thread_id: String) -> Value {
     json!({ "threadId": thread_id, "includeTurns": true })
 }
 
+type RolloutMessageTimestamps = HashMap<String, Vec<(String, String)>>;
+
+fn collect_rollout_message_timestamp_line(
+    line: &str,
+    current_turn_id: &mut Option<String>,
+    timestamps: &mut RolloutMessageTimestamps,
+) {
+    let Ok(value) = serde_json::from_str::<Value>(line) else {
+        return;
+    };
+    match value.get("type").and_then(Value::as_str) {
+        Some("turn_context") => {
+            *current_turn_id = value
+                .pointer("/payload/turn_id")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+        }
+        Some("response_item") => {
+            let Some(turn_id) = current_turn_id.as_ref() else {
+                return;
+            };
+            if value.pointer("/payload/type").and_then(Value::as_str) != Some("message") {
+                return;
+            }
+            let Some(role @ ("user" | "assistant")) =
+                value.pointer("/payload/role").and_then(Value::as_str)
+            else {
+                return;
+            };
+            let Some(timestamp) = value.get("timestamp").and_then(Value::as_str) else {
+                return;
+            };
+            timestamps
+                .entry(turn_id.clone())
+                .or_default()
+                .push((role.to_string(), timestamp.to_string()));
+        }
+        _ => {}
+    }
+}
+
+fn apply_rollout_message_timestamps(response: &mut Value, timestamps: &RolloutMessageTimestamps) {
+    let Some(turns) = response
+        .pointer_mut("/result/thread/turns")
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    for turn in turns {
+        let Some(turn_id) = turn.get("id").and_then(Value::as_str).map(str::to_string) else {
+            continue;
+        };
+        let Some(turn_timestamps) = timestamps.get(&turn_id) else {
+            continue;
+        };
+        let Some(items) = turn.get_mut("items").and_then(Value::as_array_mut) else {
+            continue;
+        };
+        let mut timestamp_index = 0;
+        for item in items {
+            let expected_role = match item.get("type").and_then(Value::as_str) {
+                Some("userMessage") => "user",
+                Some("agentMessage") => "assistant",
+                _ => continue,
+            };
+            let Some(relative_index) = turn_timestamps[timestamp_index..]
+                .iter()
+                .position(|(role, _)| role == expected_role)
+            else {
+                continue;
+            };
+            timestamp_index += relative_index;
+            if item.get("createdAt").is_none() {
+                if let Some(object) = item.as_object_mut() {
+                    object.insert(
+                        "createdAt".to_string(),
+                        Value::String(turn_timestamps[timestamp_index].1.clone()),
+                    );
+                }
+            }
+            timestamp_index += 1;
+        }
+    }
+}
+
+async fn enrich_thread_read_message_timestamps(response: &mut Value) {
+    let Some(path) = response
+        .pointer("/result/thread/path")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+    else {
+        return;
+    };
+    let Ok(file) = tokio::fs::File::open(path).await else {
+        return;
+    };
+    let mut lines = BufReader::new(file).lines();
+    let mut current_turn_id = None;
+    let mut timestamps = RolloutMessageTimestamps::new();
+    while let Ok(Some(line)) = lines.next_line().await {
+        collect_rollout_message_timestamp_line(&line, &mut current_turn_id, &mut timestamps);
+    }
+    apply_rollout_message_timestamps(response, &timestamps);
+}
+
 fn build_thread_list_params(
     cursor: Option<String>,
     limit: Option<u32>,
@@ -451,24 +557,17 @@ pub(crate) async fn resume_thread_with_session_core(
         .await
 }
 
-pub(crate) async fn read_thread_core(
-    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
-    workspace_id: String,
-    thread_id: String,
-) -> Result<Value, String> {
-    let session = get_session_clone(sessions, &workspace_id).await?;
-    read_thread_with_session_core(&session, workspace_id, thread_id).await
-}
-
 pub(crate) async fn read_thread_with_session_core(
     session: &WorkspaceSession,
     workspace_id: String,
     thread_id: String,
 ) -> Result<Value, String> {
     let params = build_read_thread_params(thread_id);
-    session
+    let mut response = session
         .send_request_for_workspace(&workspace_id, "thread/read", params)
-        .await
+        .await?;
+    enrich_thread_read_message_timestamps(&mut response).await;
+    Ok(response)
 }
 
 pub(crate) async fn thread_live_subscribe_core(
@@ -523,15 +622,14 @@ pub(crate) async fn rollback_thread_core(
         .await
 }
 
-pub(crate) async fn list_threads_core(
-    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+pub(crate) async fn list_threads_with_session_core(
+    session: &WorkspaceSession,
     workspace_id: String,
     cursor: Option<String>,
     limit: Option<u32>,
     sort_key: Option<String>,
     archived: Option<bool>,
 ) -> Result<Value, String> {
-    let session = get_session_clone(sessions, &workspace_id).await?;
     let params = build_thread_list_params(cursor, limit, sort_key, archived);
     session
         .send_request_for_workspace(&workspace_id, "thread/list", params)
@@ -1564,6 +1662,46 @@ base_url = "{base_url}"
 
         assert_eq!(params["threadId"], json!("thread-1"));
         assert_eq!(params["includeTurns"], json!(true));
+    }
+
+    #[test]
+    fn rollout_message_timestamps_are_applied_to_matching_thread_items() {
+        let mut current_turn_id = None;
+        let mut timestamps = RolloutMessageTimestamps::new();
+        for line in [
+            r#"{"type":"turn_context","payload":{"turn_id":"turn-1"}}"#,
+            r#"{"timestamp":"2026-07-18T12:00:00.000Z","type":"response_item","payload":{"type":"message","role":"user"}}"#,
+            r#"{"timestamp":"2026-07-18T12:00:05.000Z","type":"response_item","payload":{"type":"reasoning"}}"#,
+            r#"{"timestamp":"2026-07-18T12:00:10.000Z","type":"response_item","payload":{"type":"message","role":"assistant"}}"#,
+            r#"{"timestamp":"2026-07-18T12:00:20.000Z","type":"response_item","payload":{"type":"message","role":"assistant"}}"#,
+        ] {
+            collect_rollout_message_timestamp_line(line, &mut current_turn_id, &mut timestamps);
+        }
+        let mut response = json!({
+            "result": {
+                "thread": {
+                    "turns": [{
+                        "id": "turn-1",
+                        "items": [
+                            { "type": "userMessage", "id": "item-1" },
+                            { "type": "reasoning", "id": "item-2" },
+                            { "type": "agentMessage", "id": "item-3" },
+                            { "type": "agentMessage", "id": "item-4" }
+                        ]
+                    }]
+                }
+            }
+        });
+
+        apply_rollout_message_timestamps(&mut response, &timestamps);
+
+        let items = response["result"]["thread"]["turns"][0]["items"]
+            .as_array()
+            .expect("thread items");
+        assert_eq!(items[0]["createdAt"], json!("2026-07-18T12:00:00.000Z"));
+        assert!(items[1].get("createdAt").is_none());
+        assert_eq!(items[2]["createdAt"], json!("2026-07-18T12:00:10.000Z"));
+        assert_eq!(items[3]["createdAt"], json!("2026-07-18T12:00:20.000Z"));
     }
 
     #[test]

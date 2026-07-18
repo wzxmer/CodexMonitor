@@ -56,6 +56,8 @@ import type {
   AppMention,
   WorkspaceSettings,
   CandidateMatch,
+  ShadowRouteAdvice,
+  ShadowRouteRequest,
   TurnExecutionSummary,
 } from "../types";
 import {
@@ -1042,6 +1044,12 @@ export async function taskCoordinationListGroups() {
   return invoke<any>("task_coordination_list_groups");
 }
 
+export async function executionRouterShadowPreview(
+  input: ShadowRouteRequest,
+): Promise<ShadowRouteAdvice> {
+  return invoke<ShadowRouteAdvice>("execution_router_shadow_preview", { input });
+}
+
 export async function taskCoordinationCreateGroup(group: unknown) {
   return invoke<any>("task_coordination_create_group", { group });
 }
@@ -1538,6 +1546,16 @@ export async function listMcpServerStatus(
 
 export async function resumeThread(workspaceId: string, threadId: string) {
   return invoke<any>("resume_thread", { workspaceId, threadId });
+}
+
+export async function getThreadTokenUsage(
+  workspaceId: string,
+  threadId: string,
+): Promise<Record<string, unknown> | null> {
+  return invoke<Record<string, unknown> | null>("get_thread_token_usage", {
+    workspaceId,
+    threadId,
+  });
 }
 
 export async function resumeManagedSession(
