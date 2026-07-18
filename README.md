@@ -31,12 +31,13 @@ macOS 版本当前采用完整 ad-hoc 签名，但尚未使用 Apple Developer I
 - 模型服务商管理：以卡片按钮切换多组配置，展示启用状态与 URL，并支持独立模型和上下文参数；默认在切换服务商时保留同一套本机会话，可在“设置 > 模型服务商”独立控制会话保留和 `config.toml` 同步，并通过脱敏诊断确认当前会话来源。
 - 模型无关工作流：CodexMonitor 统一匹配公共 skills、agents、项目规则和知识候选；默认使用不注入模型上下文的影子模式，可在“设置 > 工作流”切换关闭、影子或启用模式，并刷新 Registry、查看脱敏诊断。
 - 用量显示：左下角 Codex 用量可开关，支持已用/剩余额度切换；首页区分缓存读取和未缓存输入，不把缓存读取直接等同于已节省 token。
-- 本机会话管理：显示本机会话总数，历史统一从会话管理进入；默认选中当前列表首项，右侧展示最初需求和最近有效对话；跨项目可返回原项目或引用上下文到当前项目创建新会话。
+- 本机会话管理：显示本机会话总数，历史统一从会话管理进入；默认选中当前列表首项，右侧展示最初需求和最近有效对话；跨项目可返回原项目或引用上下文到当前项目创建新会话。列表支持按当前选择右键继续会话、派生到当前项目、归档、永久删除和复制会话 ID；永久删除 active 会话时会先安全归档再删除。
 - 消息体验：编辑失败消息后重发会覆盖原消息，避免重复堆积；“自动重连”默认关闭，手动开启后仅对当前会话有效，在任务非主动中止时持续尝试恢复连接并继续，且不占用 Codex 当前任务的尝试次数；图片粘贴、拖放和预览支持悬浮复制、应用内大图查看，内部生成图片使用紧凑显示名；达到 4,000 字符或 80 行的大量文本粘贴会自动转为可预览、可恢复的 TXT 附件。
 - 执行结果摘要：任务结束后保留匹配执行的文件新增/删除行数和 Working 用时；切换会话或重启应用后仍可恢复本机已记录摘要，旧会话缺少记录时不会补造统计。
 - Git 工作流：查看改动、Diff、日志、分支、提交、推送/拉取，并支持 GitHub Issues/PR 列表与 PR 上下文提问。
 - 远程后端：支持桌面 daemon、TCP/Tailscale 连接和 iOS 远程模式。
 - 多会话任务协调：创建协调组绑定相关会话，声明文件/目录/逻辑资源 Ownership，阻止同一目录双写和已确认资源双写；候选检测用确定性关键词匹配并 shadow 记录已探测对，断线时保守保留写租约，不自动释放；计划面板空闲时显示协调面板。
+- Shadow Router：只给出 `direct`、`delegate`、`review`、`decision-gate` 建议和原因码，不会自动派发、切换模型或修改 reasoning effort。建议仅使用当前 Provider 内已验证的模型能力，并复用任务协调的 owner、claim、lease 和冲突门；slot、depth、Token、timeout、retry、fallback 达到硬上限，模型未知或 effort 不受支持时转入 `decision-gate`。
 
 ## 功能概览
 
@@ -45,7 +46,7 @@ macOS 版本当前采用完整 ad-hoc 签名，但尚未使用 Apple Developer I
 - 添加、分组、排序和连接多个工作区。
 - 启动或恢复 Codex `app-server` 会话，显示运行中、未读、审批和用户输入状态。
 - 长会话按设置数量分批显示；滚动到顶部或底部可继续加载，当前会话搜索会自动展开并定位隐藏历史，避免一次性渲染全部内容。
-- 消息支持引用选中内容或整条消息到当前/新会话；引用先进入目标会话输入框草稿，由用户确认后发送；长内容可用智能引用保存为后端只读快照，按需读取，避免把全文重复塞入上下文。
+- 消息支持引用选中内容或整条消息到当前/新会话；引用先进入目标会话输入框草稿，由用户确认后发送；Composer 可折叠长引用、展开预览、单条移除和调整多条引用顺序；长内容可用智能引用保存为后端只读快照，按需读取，避免把全文重复塞入上下文。
 - 大型文本附件、日志和 diff 会优先保存为内容寻址快照并发送轻量引用；小文件或旧版远程端继续按原方式内联。
 - 新建普通 Agent、worktree Agent 和副本 Agent，隔离实验性改动。
 - 子会话根据父会话主要语言生成任务标题，生成不可用时回退下发任务名；并可按“仅最终结果 / 关键检查点 / 持续同步”向父会话反馈进展，父会话运行中使用 steer 实时注入，空闲时等待下一轮，不会自动启动新 turn，已同步内容在会话中显示为轻量系统条目。
@@ -75,7 +76,7 @@ macOS 版本当前采用完整 ad-hoc 签名，但尚未使用 Apple Developer I
 - 会话设置可按 30/60/90/180 天管理归档会话永久清理；功能默认关闭，开启和立即清理都需明确二次确认，自动检查最多每 24 小时一次，并保护当前、运行中和置顶会话。
 - UI 缩放、字体、字号、字重、透明效果、消息文件路径、工具折叠、Diff 预加载等可配置。
 - 侧栏、右侧面板、计划面板、终端和调试面板尺寸持久化。
-- 通知声音、系统通知、更新提示、调试日志复制和清空。
+- 通知声音、长任务完成系统通知（窗口聚焦或后台均显示）、更新提示、调试日志复制和清空。
 - 应用更新默认使用 GitHub；发布者配置腾讯 COS / 阿里 OSS 后，检查或下载失败会按 COS、OSS 顺序自动切换，并校验安装包大小与 SHA-256。
 - 桌面/平板/手机响应式布局，iOS 走远程后端模式。
 
@@ -281,13 +282,14 @@ The macOS build is fully ad-hoc signed but not notarized with Apple Developer ID
 - **Provider management**: switch between multiple Codex configurations via card buttons with active status and URL display. Provider switches keep the same local session library by default; Settings > Model Providers exposes independent session-preservation and `config.toml` sync controls plus redacted session-source diagnostics. Selecting the default Provider or disabling sync restores the original Provider/model fields while preserving unrelated config edits.
 - **Model-agnostic workflow**: CodexMonitor matches public skills, agents, project rules, and knowledge candidates. Shadow mode (no model context injection) is the default; toggle via Settings > Workflow.
 - **Usage display**: toggle Codex usage in the bottom-left, switch between used/remaining quota. Home page distinguishes cached reads from uncached input.
-- **Local session management**: total local session count, unified entry from session manager, cross-project return or context reference to create new sessions; spawned subagent sessions generate task titles in the parent conversation's primary language and fall back to assigned task names when generation is unavailable.
+- **Local session management**: total local session count, unified entry from session manager, cross-project return or context reference to create new sessions; list context menus support continuing the original workspace/thread, deriving to the current project, archiving, permanently deleting sessions, and copying session IDs. Active sessions are safely archived before permanent deletion; spawned subagent sessions generate task titles in the parent conversation's primary language and fall back to assigned task names when generation is unavailable.
 - **Subagent result summaries**: parent conversations show compact child-result summaries, while long outputs open in a dedicated detail panel for reading, copying, or opening the child thread without burying the parent conclusion.
-- **Message experience**: references to the current or a new conversation enter the target composer as a draft and require explicit send; failed message re-send overwrites the original, auto-reconnect per session, large paste auto-converts to a previewable and restorable TXT attachment at 4,000 chars or 80 lines, image paste/drag/drop with hover copy and in-app large view.
+- **Message experience**: references to the current or a new conversation enter the target composer as a draft and require explicit send; long references can be collapsed or previewed, individual references removed, and multiple references reordered; failed message re-send overwrites the original, auto-reconnect per session, large paste auto-converts to a previewable and restorable TXT attachment at 4,000 chars or 80 lines, image paste/drag/drop with hover copy and in-app large view.
 - **Execution summaries**: completed runs retain their matching added/deleted line counts and Working duration across thread switches and app restarts; older sessions without local summary data are left unchanged.
 - **Git workflow**: view changes, diffs, logs, branches, commit, push/pull, plus GitHub Issues/PR lists and PR context questions.
 - **Remote backend**: desktop daemon, TCP/Tailscale connection, and iOS remote mode.
 - **Task coordination**: create coordination groups, declare resource ownership, block double-write conflicts; deterministic candidate detection with shadow recording; coordination panel in plan area when idle; leases kept on disconnect.
+- **Shadow Router**: returns only `direct`, `delegate`, `review`, or `decision-gate` advice with reason codes. It never dispatches work or changes model/effort, stays within the active Provider's verified capabilities, reuses coordination ownership/claim/lease/conflict gates, and fails closed when bounded execution limits or capability checks are exhausted.
 
 ## More Details
 
