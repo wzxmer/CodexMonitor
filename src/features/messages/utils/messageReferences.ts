@@ -12,6 +12,29 @@ export type MessageReferenceAction = {
 
 export const SMART_REFERENCE_TOKEN_THRESHOLD = 2_000;
 export const SMART_CONTENT_REFERENCE_TOKEN_THRESHOLD = 1_000;
+export const LONG_REFERENCE_CHARACTER_THRESHOLD = 1_200;
+export const REFERENCE_PREVIEW_CHARACTER_LIMIT = 240;
+
+export function composeReferenceText(prompts: readonly string[], body = "") {
+  const referenceText = prompts.reduce(
+    (result, prompt) => result
+      ? `${result}${result.endsWith("\n\n") ? "" : "\n\n"}${prompt}`
+      : prompt,
+    "",
+  );
+  if (!referenceText) return body;
+  if (!body) return referenceText;
+  return `${referenceText}${referenceText.endsWith("\n\n") ? "" : "\n\n"}${body}`;
+}
+
+export function stripReferenceText(text: string, prompts: readonly string[]) {
+  const referenceText = composeReferenceText(prompts);
+  if (!referenceText) return text;
+  if (text.startsWith(referenceText)) {
+    return text.slice(referenceText.length).replace(/^\n\n/, "");
+  }
+  return text === referenceText.trimEnd() ? "" : text;
+}
 
 export function estimateReferenceTokens(text: string) {
   const normalized = text.trim();
@@ -30,11 +53,10 @@ export function defaultReferenceMode(text: string): MessageReferenceMode {
 }
 
 export function toMarkdownQuote(text: string) {
-  const trimmed = text.trim();
-  if (!trimmed) {
+  if (!text.trim()) {
     return "";
   }
-  return trimmed
+  return text
     .split(/\r?\n/)
     .map((line) => `> ${line}`)
     .join("\n")

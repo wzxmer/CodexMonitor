@@ -495,6 +495,86 @@ function FileReferenceLink({
   );
 }
 
+function containsSelectionPoint(element: HTMLElement, node: Node | null) {
+  return Boolean(node && (node === element || element.contains(node)));
+}
+
+function constrainSelectionToCodeBlock(selection: Selection, code: HTMLElement) {
+  if (selection.isCollapsed || selection.rangeCount === 0) {
+    return;
+  }
+  const anchorNode = selection.anchorNode;
+  // Preserve deliberate cross-message selections unless the drag began in this code block.
+  if (
+    !containsSelectionPoint(code, anchorNode) ||
+    containsSelectionPoint(code, selection.focusNode)
+  ) {
+    return;
+  }
+
+  const selectedRange = selection.getRangeAt(0);
+  if (!selectedRange.intersectsNode(code) || !anchorNode) {
+    return;
+  }
+
+  const anchorStartsSelection =
+    selectedRange.startContainer === anchorNode &&
+    selectedRange.startOffset === selection.anchorOffset;
+  const boundedRange = document.createRange();
+  boundedRange.selectNodeContents(code);
+  if (anchorStartsSelection) {
+    boundedRange.setStart(anchorNode, selection.anchorOffset);
+  } else {
+    boundedRange.setEnd(anchorNode, selection.anchorOffset);
+  }
+  selection.removeAllRanges();
+  selection.addRange(boundedRange);
+}
+
+function SelectableCode({
+  className,
+  preClassName,
+  value,
+}: {
+  className?: string;
+  preClassName?: string;
+  value: string;
+}) {
+  const codeRef = useRef<HTMLElement | null>(null);
+  const selectionCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => selectionCleanupRef.current?.(), []);
+
+  const handleCodeMouseDown = (event: MouseEvent<HTMLElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+    const code = codeRef.current;
+    if (!code || !(event.target instanceof Node) || !code.contains(event.target)) {
+      return;
+    }
+
+    selectionCleanupRef.current?.();
+    const handleMouseUp = () => {
+      selectionCleanupRef.current = null;
+      const selection = window.getSelection();
+      if (selection && code.isConnected) {
+        constrainSelectionToCodeBlock(selection, code);
+      }
+    };
+    window.addEventListener("mouseup", handleMouseUp, { once: true });
+    selectionCleanupRef.current = () => window.removeEventListener("mouseup", handleMouseUp);
+  };
+
+  return (
+    <pre className={preClassName} onMouseDown={handleCodeMouseDown}>
+      <code ref={codeRef} className={className}>
+        {value}
+      </code>
+    </pre>
+  );
+}
+
 function CodeBlock({ className, value, copyUseModifier }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<number | null>(null);
@@ -541,9 +621,7 @@ function CodeBlock({ className, value, copyUseModifier }: CodeBlockProps) {
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre>
-        <code className={className}>{value}</code>
-      </pre>
+      <SelectableCode className={className} value={value} />
     </div>
   );
 }
@@ -560,9 +638,11 @@ function PreBlock({ node, children, copyUseModifier }: PreProps) {
   const isSingleLine = !value.includes("\n");
   if (isSingleLine) {
     return (
-      <pre className="markdown-codeblock-single">
-        <code className={className}>{value}</code>
-      </pre>
+      <SelectableCode
+        className={className}
+        preClassName="markdown-codeblock-single"
+        value={value}
+      />
     );
   }
   return (

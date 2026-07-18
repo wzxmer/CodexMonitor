@@ -290,10 +290,6 @@ type UseThreadMessagingOptions = {
     workspaceId: string,
     threadId: string | null,
   ) => Promise<void>;
-  shouldPreflightRuntimeCodexArgsForSend?: (
-    workspaceId: string,
-    threadId: string,
-  ) => boolean;
   threadStatusById: ThreadState["threadStatusById"];
   activeTurnIdByThread: ThreadState["activeTurnIdByThread"];
   tokenUsageByThread?: Record<string, ThreadTokenUsage>;
@@ -314,6 +310,10 @@ type UseThreadMessagingOptions = {
   pushThreadErrorMessage: (threadId: string, message: string) => void;
   ensureThreadForActiveWorkspace: () => Promise<string | null>;
   ensureThreadForWorkspace: (workspaceId: string) => Promise<string | null>;
+  ensureThreadRuntimeForWorkspace?: (
+    workspaceId: string,
+    threadId: string,
+  ) => Promise<string | null>;
   refreshThread: (workspaceId: string, threadId: string) => Promise<string | null>;
   forkThreadForWorkspace: (
     workspaceId: string,
@@ -351,7 +351,6 @@ export function useThreadMessaging({
   steerEnabled,
   customPrompts,
   ensureWorkspaceRuntimeCodexArgs,
-  shouldPreflightRuntimeCodexArgsForSend,
   threadStatusById,
   activeTurnIdByThread,
   tokenUsageByThread = {},
@@ -368,6 +367,7 @@ export function useThreadMessaging({
   pushThreadErrorMessage,
   ensureThreadForActiveWorkspace,
   ensureThreadForWorkspace,
+  ensureThreadRuntimeForWorkspace,
   refreshThread,
   forkThreadForWorkspace,
   updateThreadParent,
@@ -468,6 +468,59 @@ export function useThreadMessaging({
         }
         finalText = promptExpansion?.expanded ?? messageText;
       }
+      const isProcessing = threadStatusById[threadId]?.isProcessing ?? false;
+      const activeTurnId = activeTurnIdByThread[threadId] ?? null;
+      const {
+        resolvedModel,
+        resolvedEffort,
+        resolvedServiceTier,
+        sanitizedCollaborationMode,
+        resolvedAccessMode,
+        appMentions,
+        sendIntent,
+        shouldSteer,
+        requestMode,
+      } = resolveSendMessageOptions({
+        options,
+        defaults: {
+          accessMode,
+          model,
+          effort,
+          serviceTier,
+          collaborationMode,
+          steerEnabled,
+          isProcessing,
+          activeTurnId,
+        },
+      });
+      if (!shouldSteer && ensureWorkspaceRuntimeCodexArgs) {
+        try {
+          await ensureWorkspaceRuntimeCodexArgs(workspace.id, threadId);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          onDebug?.({
+            id: `${Date.now()}-client-turn-runtime-preflight-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "turn/runtime preflight error",
+            payload: errorMessage,
+          });
+          pushThreadErrorMessage(threadId, errorMessage);
+          safeMessageActivity();
+          return { status: "blocked" };
+        }
+      }
+      if (!shouldSteer && ensureThreadRuntimeForWorkspace) {
+        const resumedThreadId = await ensureThreadRuntimeForWorkspace(
+          workspace.id,
+          threadId,
+        );
+        if (!resumedThreadId) {
+          pushThreadErrorMessage(threadId, t("threads.runtimeResumeFailed"));
+          safeMessageActivity();
+          return { status: "blocked" };
+        }
+      }
       const optimisticMessage = existingOptimisticMessage ??
         insertOptimisticUserMessage(
           workspace,
@@ -556,31 +609,6 @@ export function useThreadMessaging({
           Boolean(options?.replaceMessageId),
         );
       }
-      const isProcessing = threadStatusById[threadId]?.isProcessing ?? false;
-      const activeTurnId = activeTurnIdByThread[threadId] ?? null;
-      const {
-        resolvedModel,
-        resolvedEffort,
-        resolvedServiceTier,
-        sanitizedCollaborationMode,
-        resolvedAccessMode,
-        appMentions,
-        sendIntent,
-        shouldSteer,
-        requestMode,
-      } = resolveSendMessageOptions({
-        options,
-        defaults: {
-          accessMode,
-          model,
-          effort,
-          serviceTier,
-          collaborationMode,
-          steerEnabled,
-          isProcessing,
-          activeTurnId,
-        },
-      });
       const workflowEnabled = workflowRuntimeMode !== "off";
       const workflowPreview = workflowEnabled
         ? buildWorkflowPreflightPreview({
@@ -655,15 +683,6 @@ export function useThreadMessaging({
         },
       });
       try {
-        const shouldPreflightRuntimeCodexArgs =
-          shouldPreflightRuntimeCodexArgsForSend?.(workspace.id, threadId) ?? true;
-        if (
-          !shouldSteer &&
-          shouldPreflightRuntimeCodexArgs &&
-          ensureWorkspaceRuntimeCodexArgs
-        ) {
-          await ensureWorkspaceRuntimeCodexArgs(workspace.id, threadId);
-        }
         let hostPreview: WorkflowHostPreflightPreview | null = null;
         const hostPreviewResult = await hostPreviewPromise;
         if (hostPreviewResult.preview) {
@@ -886,7 +905,7 @@ export function useThreadMessaging({
       effort,
       serviceTier,
       ensureWorkspaceRuntimeCodexArgs,
-      shouldPreflightRuntimeCodexArgsForSend,
+      ensureThreadRuntimeForWorkspace,
       activeTurnIdByThread,
       getCustomName,
       insertOptimisticUserMessage,
@@ -969,12 +988,16 @@ export function useThreadMessaging({
         discardOptimisticMessage();
         return { status: "blocked" };
       }
-      return sendMessageToThread(activeWorkspace, threadId, finalText, images, {
+      const result = await sendMessageToThread(activeWorkspace, threadId, finalText, images, {
         skipPromptExpansion: true,
         appMentions,
         sendIntent: options?.sendIntent,
         replaceMessageId: options?.replaceMessageId,
       }, optimisticMessage);
+      if (result.status === "blocked") {
+        discardOptimisticMessage();
+      }
+      return result;
     },
     [
       activeThreadId,

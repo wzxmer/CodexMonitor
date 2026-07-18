@@ -1521,3 +1521,74 @@
     font-size: 12px;
   }
 }
+.composer-references {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px 0;
+}
+
+.composer-reference {
+  overflow: hidden;
+  border: 1px solid var(--cm-border-emphasis);
+  border-radius: 7px;
+  background: var(--cm-surface-panel-active);
+}
+
+.composer-reference-header {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 30px;
+  padding: 2px 4px 2px 8px;
+}
+
+.composer-reference-toggle {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  gap: 5px;
+  text-align: left;
+}
+
+.composer-reference-toggle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-reference-size {
+  margin-right: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.composer-reference-preview {
+  overflow: auto;
+  max-height: 180px;
+  padding: 0 10px 9px 27px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+  .composer-references {
+    padding-inline: 8px;
+  }
+
+  .composer-reference-size {
+    display: none;
+  }
+
+  .composer-reference-header > button:not(.composer-reference-toggle) {
+    width: 28px;
+    min-width: 28px;
+    padding-inline: 0;
+  }
+
+  .composer-reference-preview {
+    padding-left: 10px;
+  }
+}

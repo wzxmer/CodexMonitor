@@ -21,7 +21,7 @@ import X from "lucide-react/dist/esm/icons/x";
 import { exportMarkdownFile } from "@services/tauri";
 import { pushErrorToast } from "@services/toasts";
 import { useI18n } from "@/features/i18n/I18nProvider";
-import type { ConversationItem } from "../../../types";
+import type { ConversationItem, SendMessageResult } from "../../../types";
 import { attachmentDisplayName } from "../../../utils/attachments";
 import type { ParsedFileLocation } from "../../../utils/fileLinks";
 import { PierreDiffBlock } from "../../git/components/PierreDiffBlock";
@@ -82,7 +82,7 @@ type MessageRowProps = MarkdownFileLinkProps & {
   onResendUserMessage?: (
     item: Extract<ConversationItem, { kind: "message" }>,
     text: string,
-  ) => void;
+  ) => Promise<SendMessageResult>;
   interrupted?: { label: string } | null;
   codeBlockCopyUseModifier?: boolean;
   suppressCliTimestamp?: boolean;
@@ -489,12 +489,13 @@ export const MessageRow = memo(function MessageRow({
   const { t } = useI18n();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [editText, setEditText] = useState(item.text);
   const [referenceMenuOpen, setReferenceMenuOpen] = useState(false);
   const [referenceMode, setReferenceMode] = useState<MessageReferenceMode>("full");
-  const fallbackCreatedAtRef = useRef<number>(Date.now());
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const resendInFlightRef = useRef(false);
   const selectionSnapshotRef = useRef<string | null>(null);
   const hasText = item.text.trim().length > 0;
   const attachments = item.attachments ?? [];
@@ -522,15 +523,12 @@ export const MessageRow = memo(function MessageRow({
     item.role === "user" &&
     (item.text.trim().length > 180 || imageItems.length > 0 || attachments.length > 0);
   const canEditUserMessage = item.role === "user" && Boolean(onResendUserMessage);
-  const cliTimestamp = useMemo(
-    () =>
-      formatCliTimestamp(
-        item.createdAt ??
-          extractTimestampFromMessageId(item.id) ??
-          fallbackCreatedAtRef.current,
-      ),
-    [item.createdAt, item.id],
-  );
+  const cliTimestamp = useMemo(() => {
+    const timestamp = item.createdAt ?? extractTimestampFromMessageId(item.id);
+    return timestamp === null || timestamp === undefined
+      ? ""
+      : formatCliTimestamp(timestamp);
+  }, [item.createdAt, item.id]);
 
   useEffect(() => {
     setIsEditing(false);
@@ -621,13 +619,24 @@ export const MessageRow = memo(function MessageRow({
     setIsEditing(false);
   }, [item.text]);
 
-  const submitEdit = useCallback(() => {
+  const submitEdit = useCallback(async () => {
     const trimmed = editText.trim();
-    if (!trimmed || !onResendUserMessage) {
+    if (!trimmed || !onResendUserMessage || resendInFlightRef.current) {
       return;
     }
-    onResendUserMessage(item, trimmed);
-    setIsEditing(false);
+    resendInFlightRef.current = true;
+    setIsResending(true);
+    try {
+      const result = await onResendUserMessage(item, trimmed);
+      if (result.status === "sent") {
+        setIsEditing(false);
+      }
+    } catch {
+      // The messaging owner reports failures; keep the draft available for retry.
+    } finally {
+      resendInFlightRef.current = false;
+      setIsResending(false);
+    }
   }, [editText, item, onResendUserMessage]);
 
   return (
@@ -660,6 +669,7 @@ export const MessageRow = memo(function MessageRow({
               className="message-edit-textarea"
               value={editText}
               rows={Math.min(8, Math.max(2, editText.split(/\r?\n/).length))}
+              disabled={isResending}
               onChange={(event) => setEditText(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Escape") {
@@ -669,22 +679,31 @@ export const MessageRow = memo(function MessageRow({
                 }
                 if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                   event.preventDefault();
-                  submitEdit();
+                  void submitEdit();
                 }
               }}
               aria-label={t("messages.editMessage")}
             />
             <div className="message-edit-actions">
-              <button type="button" className="ghost" onClick={cancelEdit}>
+              <button
+                type="button"
+                className="ghost"
+                onClick={cancelEdit}
+                disabled={isResending}
+              >
                 {t("messages.cancel")}
               </button>
               <button
                 type="button"
-                className="primary"
-                onClick={submitEdit}
-                disabled={!editText.trim()}
+                className="primary message-edit-resend-button"
+                onClick={() => void submitEdit()}
+                disabled={!editText.trim() || isResending}
+                aria-busy={isResending}
               >
-                {t("messages.resend")}
+                {isResending && (
+                  <span className="working-spinner message-edit-resend-spinner" aria-hidden />
+                )}
+                {t(isResending ? "messages.resending" : "messages.resend")}
               </button>
             </div>
           </div>
@@ -956,6 +975,54 @@ function processSummary(item: Extract<ConversationItem, { kind: "process" }>) {
   return { icon: Users, label: "Using agent" };
 }
 
+const SUBAGENT_CHECKPOINT_PREVIEW_LENGTH = 360;
+
+type SubagentCheckpointContentProps = MarkdownFileLinkProps & {
+  text: string;
+};
+
+function SubagentCheckpointContent({
+  text,
+  showMessageFilePath,
+  workspacePath,
+  onOpenFileLink,
+  onOpenFileLinkMenu,
+  onOpenThreadLink,
+}: SubagentCheckpointContentProps) {
+  const { t } = useI18n();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isLong = text.length > SUBAGENT_CHECKPOINT_PREVIEW_LENGTH;
+  if (!isLong || isExpanded) {
+    return (
+      <Markdown
+        value={text}
+        className="tool-inline-detail markdown"
+        showFilePath={showMessageFilePath}
+        workspacePath={workspacePath}
+        onOpenFileLink={onOpenFileLink}
+        onOpenFileLinkMenu={onOpenFileLinkMenu}
+        onOpenThreadLink={onOpenThreadLink}
+      />
+    );
+  }
+
+  const preview = text.replace(/\s+/g, " ").trim().slice(0, SUBAGENT_CHECKPOINT_PREVIEW_LENGTH);
+  return (
+    <div className="tool-inline-detail subagent-checkpoint-preview">
+      <span>{preview}...</span>
+      <button
+        type="button"
+        className="ghost icon-button"
+        onClick={() => setIsExpanded(true)}
+        aria-label={t("common.show")}
+        title={t("common.show")}
+      >
+        <ChevronRight size={14} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
 export const ProcessRow = memo(function ProcessRow({ item }: ProcessRowProps) {
   const summary = processSummary(item);
   const Icon = summary.icon;
@@ -1011,10 +1078,9 @@ export const SubagentCheckpointRow = memo(function SubagentCheckpointRow({
                 </span>
                 <span className="tool-inline-status">#{checkpoint.sequence}</span>
               </div>
-              <Markdown
-                value={checkpoint.text}
-                className="tool-inline-detail markdown"
-                showFilePath={showMessageFilePath}
+              <SubagentCheckpointContent
+                text={checkpoint.text}
+                showMessageFilePath={showMessageFilePath}
                 workspacePath={workspacePath}
                 onOpenFileLink={onOpenFileLink}
                 onOpenFileLinkMenu={onOpenFileLinkMenu}

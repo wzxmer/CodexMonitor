@@ -21,6 +21,7 @@ import type {
   OpenAppTarget,
   RequestUserInputRequest,
   RequestUserInputResponse,
+  SendMessageResult,
   ThemeAccentPreference,
   ThemePreference,
   TurnExecutionSummary,
@@ -157,7 +158,7 @@ type MessagesProps = {
     text: string,
     images?: string[],
     options?: { replaceMessageId?: string },
-  ) => void;
+  ) => Promise<SendMessageResult>;
 };
 
 export function getRetryableUserMessageId(
@@ -781,14 +782,13 @@ export const Messages = memo(function Messages({
 
   return (
     <div
-      className={`messages messages-full messages-reading-${messageReadingStyle}`}
-      ref={containerRef}
-      onScroll={updateAutoScroll}
+      className={`messages-view messages-reading-${messageReadingStyle}`}
       style={messagesStyle}
     >
-      <div className="messages-inner">
-        {isSearchActiveForThread && (
-          <div className="messages-session-search" role="search">
+      <div className="messages-control-layer">
+        <div className="messages-control-inner">
+          {isSearchActiveForThread && (
+            <div className="messages-session-search" role="search">
             <Search size={14} aria-hidden />
             <input
               ref={searchInputRef}
@@ -837,9 +837,9 @@ export const Messages = memo(function Messages({
             >
               <X size={14} />
             </button>
-          </div>
-        )}
-        <div className="messages-tool-controls" aria-label={t("messages.readingStyle")}>
+            </div>
+          )}
+          <div className="messages-tool-controls" aria-label={t("messages.readingStyle")}>
             <div
               className="messages-reading-segmented"
               role="group"
@@ -1050,7 +1050,15 @@ export const Messages = memo(function Messages({
                 </div>
               )}
             </div>
+          </div>
         </div>
+      </div>
+      <div
+        className="messages messages-full"
+        ref={containerRef}
+        onScroll={updateAutoScroll}
+      >
+        <div className="messages-inner">
         <SubagentResultSummary
           results={subagentResults}
           workspaceId={workspaceId}
@@ -1293,6 +1301,7 @@ export const Messages = memo(function Messages({
           <span>{t("messages.latest")}</span>
         </button>
       )}
+      </div>
     </div>
   );
 });

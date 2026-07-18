@@ -6,6 +6,7 @@ import type {
   AppMention,
   AppSettings,
   ComposerSendIntent,
+  ComposerReference,
   ServiceTier,
 } from "@/types";
 import { normalizeCodexArgsInput } from "@/utils/codexArgsInput";
@@ -84,6 +85,8 @@ type SendOrQueueHandler = (
   images: string[],
   appMentions?: AppMention[],
   submitIntent?: ComposerSendIntent,
+  options?: { replaceMessageId?: string },
+  references?: ComposerReference[],
 ) => Promise<void>;
 
 type UseThreadUiOrchestrationParams = {
@@ -444,12 +447,15 @@ export function useThreadUiOrchestration({
       images: string[],
       appMentions?: AppMention[],
       submitIntent?: ComposerSendIntent,
+      references?: ComposerReference[],
     ) => {
       rememberPendingNewThreadSeed();
       return runWithDraftStart(() =>
-        appMentions && appMentions.length > 0
-          ? handleComposerSend(text, images, appMentions, submitIntent)
-          : handleComposerSend(text, images, undefined, submitIntent),
+        references && references.length > 0
+          ? handleComposerSend(text, images, appMentions, submitIntent, undefined, references)
+          : appMentions && appMentions.length > 0
+            ? handleComposerSend(text, images, appMentions, submitIntent)
+            : handleComposerSend(text, images, undefined, submitIntent),
         { text, images },
       );
     },

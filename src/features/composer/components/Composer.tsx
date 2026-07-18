@@ -18,6 +18,7 @@ import type {
   ComposerEditorSettings,
   CustomPromptOption,
   DictationTranscript,
+  ComposerReference,
   FollowUpMessageBehavior,
   QueuedMessage,
   ServiceTier,
@@ -46,6 +47,8 @@ import { useComposerPasteUndo } from "../hooks/useComposerPasteUndo";
 import { useComposerSuggestionStyle } from "../hooks/useComposerSuggestionStyle";
 import { usePromptHistory } from "../hooks/usePromptHistory";
 import { ComposerInput } from "./ComposerInput";
+import { ComposerReferences } from "./ComposerReferences";
+import { composeReferenceText } from "@/features/messages/utils/messageReferences";
 import { ComposerMetaBar } from "./ComposerMetaBar";
 import { ComposerQueue } from "./ComposerQueue";
 import { useI18n } from "@/features/i18n/I18nProvider";
@@ -70,6 +73,7 @@ type ComposerProps = {
     images: string[],
     appMentions?: AppMention[],
     submitIntent?: ComposerSendIntent,
+    references?: ComposerReference[],
   ) => void;
   onStop: () => void;
   canStop: boolean;
@@ -111,6 +115,7 @@ type ComposerProps = {
   contextUsage?: ThreadTokenUsage | null;
   contextCompactionTokenLimit?: number | null;
   contextCompactionCount?: number;
+  contextCompactionInProgress?: boolean;
   queuedMessages?: QueuedMessage[];
   queuePausedReason?: string | null;
   canSteerQueued?: boolean;
@@ -180,6 +185,12 @@ type ComposerProps = {
     disabled?: boolean;
     onSelect: () => void | Promise<void>;
   }[];
+  references?: ComposerReference[];
+  onToggleReference?: (id: string) => void;
+  onRemoveReference?: (id: string) => void;
+  onMoveReference?: (from: number, to: number) => void;
+  onUndoReference?: () => boolean;
+  onRedoReference?: () => boolean;
 };
 
 const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
@@ -237,6 +248,7 @@ export const Composer = memo(function Composer({
   contextUsage = null,
   contextCompactionTokenLimit = null,
   contextCompactionCount = 0,
+  contextCompactionInProgress = false,
   queuedMessages = [],
   queuePausedReason = null,
   canSteerQueued = false,
@@ -294,12 +306,17 @@ export const Composer = memo(function Composer({
   onReviewPromptConfirmCustom,
   onFileAutocompleteActiveChange,
   contextActions = [],
+  references = [],
+  onToggleReference,
+  onRemoveReference,
+  onMoveReference,
+  onUndoReference,
+  onRedoReference,
 }: ComposerProps) {
   const { t } = useI18n();
-  const contextCyclePercent = getCompactionCyclePercent(
-    contextUsage,
-    contextCompactionTokenLimit,
-  );
+  const contextCyclePercent = contextCompactionInProgress
+    ? 100
+    : getCompactionCyclePercent(contextUsage, contextCompactionTokenLimit);
   const [text, setText] = useState(draftText);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [appMentionBindings, setAppMentionBindings] = useState<AppMentionBinding[]>([]);
@@ -307,7 +324,7 @@ export const Composer = memo(function Composer({
   const textareaRef = externalTextareaRef ?? internalRef;
   const editorSettings = editorSettingsProp ?? DEFAULT_EDITOR_SETTINGS;
   const isDictationBusy = dictationState !== "idle";
-  const canSend = text.trim().length > 0 || attachedImages.length > 0;
+  const canSend = text.trim().length > 0 || attachedImages.length > 0 || references.length > 0;
   const isMac = isMacPlatform();
   const effectiveFollowUpBehavior: FollowUpMessageBehavior =
     followUpMessageBehavior === "steer" && steerAvailable ? "steer" : "queue";
@@ -471,7 +488,11 @@ export const Composer = memo(function Composer({
       return;
     }
     const trimmed = text.trim();
-    if (!trimmed && attachedImages.length === 0) {
+    const submittedText = composeReferenceText(
+      references.map((reference) => reference.prompt),
+      trimmed,
+    );
+    if (!submittedText && attachedImages.length === 0) {
       return;
     }
     if (trimmed) {
@@ -479,9 +500,17 @@ export const Composer = memo(function Composer({
     }
     const resolvedMentions = resolveBoundAppMentions(trimmed, appMentionBindings);
     if (resolvedMentions.length > 0) {
-      onSend(trimmed, attachedImages, resolvedMentions, submitIntent);
+      if (references.length > 0) {
+        onSend(submittedText, attachedImages, resolvedMentions, submitIntent, references);
+      } else {
+        onSend(trimmed, attachedImages, resolvedMentions, submitIntent);
+      }
     } else {
-      onSend(trimmed, attachedImages, undefined, submitIntent);
+      if (references.length > 0) {
+        onSend(submittedText, attachedImages, undefined, submitIntent, references);
+      } else {
+        onSend(trimmed, attachedImages, undefined, submitIntent);
+      }
     }
     clearPasteUndoHistory();
     resetHistoryNavigation();
@@ -774,9 +803,20 @@ export const Composer = memo(function Composer({
       if (handlePasteUndoKeyDown(event)) {
         return;
       }
+      const isReferenceHistory =
+        event.key.toLowerCase() === "z" &&
+        !event.altKey &&
+        (event.ctrlKey || event.metaKey);
+      if (isReferenceHistory) {
+        const handled = event.shiftKey ? onRedoReference?.() : onUndoReference?.();
+        if (handled) {
+          event.preventDefault();
+          return;
+        }
+      }
       baseHandleKeyDown(event);
     },
-    [baseHandleKeyDown, handlePasteUndoKeyDown],
+    [baseHandleKeyDown, handlePasteUndoKeyDown, onRedoReference, onUndoReference],
   );
 
 
@@ -833,6 +873,7 @@ export const Composer = memo(function Composer({
           </button>
         </div>
       ) : null}
+      <ComposerReferences references={references} onToggle={onToggleReference ?? (() => undefined)} onRemove={onRemoveReference ?? (() => undefined)} onMove={onMoveReference ?? (() => undefined)} />
       <ComposerInput
         text={text}
         disabled={disabled}

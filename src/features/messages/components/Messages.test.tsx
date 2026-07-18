@@ -2,7 +2,7 @@
 import { useCallback, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConversationItem } from "../../../types";
+import type { ConversationItem, SendMessageResult } from "../../../types";
 import type { SubagentResultSummary } from "../utils/subagentResults";
 import { expectOpenedFileTarget } from "../test/fileLinkAssertions";
 import { Messages } from "./Messages";
@@ -625,8 +625,8 @@ describe("Messages", () => {
     selection?.removeAllRanges();
   });
 
-  it("edits a user message in place and resends it", () => {
-    const onResendUserMessage = vi.fn();
+  it("edits a user message in place and resends it", async () => {
+    const onResendUserMessage = vi.fn(async () => ({ status: "sent" as const }));
     const items: ConversationItem[] = [
       {
         id: "msg-edit-user-1",
@@ -666,7 +666,73 @@ describe("Messages", () => {
       "重新打包后的现在还有问题吗？",
       ["data:image/png;base64,AAA"],
     );
-    expect(screen.queryByLabelText("编辑消息")).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByLabelText("编辑消息")).toBeNull();
+    });
+  });
+
+  it("shows retry progress immediately and preserves the draft when retry is blocked", async () => {
+    let resolveResend: (result: SendMessageResult) => void = () => {};
+    const onResendUserMessage = vi.fn(
+      () =>
+        new Promise<SendMessageResult>((resolve) => {
+          resolveResend = resolve;
+        }),
+    );
+    const items: ConversationItem[] = [
+      {
+        id: "msg-edit-user-pending",
+        kind: "message",
+        role: "user",
+        text: "原始消息",
+      },
+      {
+        id: "msg-edit-assistant-pending",
+        kind: "message",
+        role: "assistant",
+        text: "Turn failed: Service unavailable",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        onResendUserMessage={onResendUserMessage}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑并重新发送" }));
+    const textarea = screen.getByLabelText("编辑消息") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "修改后的消息" } });
+    fireEvent.click(screen.getByRole("button", { name: "重新发送" }));
+
+    const pendingButton = screen.getByRole("button", { name: "正在重新发送" });
+    expect((pendingButton as HTMLButtonElement).disabled).toBe(true);
+    expect(pendingButton.getAttribute("aria-busy")).toBe("true");
+    expect(textarea.disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "取消" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    fireEvent.click(pendingButton);
+    expect(onResendUserMessage).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveResend({ status: "blocked" });
+    });
+
+    await waitFor(() => {
+      expect(
+        (screen.getByRole("button", { name: "重新发送" }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+    });
+    expect((screen.getByLabelText("编辑消息") as HTMLTextAreaElement).value).toBe(
+      "修改后的消息",
+    );
   });
 
   it("marks user search matches so the highlight can follow the bubble", async () => {
@@ -2892,6 +2958,7 @@ describe("Messages", () => {
   });
 
   it("pins to the latest batch when history arrives after a thread switch", () => {
+    const onUpdateConversationStyle = vi.fn();
     const { container, rerender } = render(
       <Messages
         items={[]}
@@ -2901,6 +2968,7 @@ describe("Messages", () => {
         openTargets={[]}
         selectedOpenAppId=""
         chatHistoryScrollbackItems={20}
+        onUpdateConversationStyle={onUpdateConversationStyle}
       />,
     );
 
@@ -2928,12 +2996,59 @@ describe("Messages", () => {
         openTargets={[]}
         selectedOpenAppId=""
         chatHistoryScrollbackItems={20}
+        onUpdateConversationStyle={onUpdateConversationStyle}
       />,
     );
 
     expect(screen.queryByText("Async message 0")).toBeNull();
     expect(screen.getByText("Async message 59")).toBeTruthy();
     expect(scrollNode.scrollTop).toBe(1200);
+
+    const controlLayer = container.querySelector(".messages-control-layer");
+    const controls = screen.getByLabelText("对话阅读样式");
+    expect(controlLayer).toBeTruthy();
+    expect(controlLayer?.contains(controls)).toBe(true);
+    expect(scrollNode.contains(controls)).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "原生" }));
+    expect(onUpdateConversationStyle).toHaveBeenCalledWith({
+      messageReadingStyle: "native",
+    });
+
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    fireEvent.click(screen.getByRole("button", { name: "样式" }));
+
+    const search = screen.getByRole("search");
+    const styleDialog = screen.getByRole("dialog", { name: "对话样式" });
+    expect(controlLayer?.contains(search)).toBe(true);
+    expect(controlLayer?.contains(styleDialog)).toBe(true);
+    expect(scrollNode.contains(search)).toBe(false);
+    expect(scrollNode.contains(styleDialog)).toBe(false);
+  });
+
+  it("does not invent a CLI timestamp when a historical message has no trusted time", () => {
+    const { container } = render(
+      <Messages
+        items={[
+          {
+            id: "historical-message-without-time",
+            kind: "message",
+            role: "assistant",
+            text: "Historical response.",
+          },
+        ]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        messageReadingStyle="cli"
+      />,
+    );
+
+    expect(
+      container.querySelector(".message-bubble")?.getAttribute("data-cli-timestamp"),
+    ).toBe("");
   });
 
   it("keeps the latest content pinned when message layout grows after opening", () => {

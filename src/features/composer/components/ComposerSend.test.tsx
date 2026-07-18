@@ -9,8 +9,10 @@ import type {
   AppMention,
   ComposerSendIntent,
   ComposerSendShortcut,
+  ComposerReference,
   CustomPromptOption,
   FollowUpMessageBehavior,
+  ThreadTokenUsage,
 } from "../../../types";
 
 vi.mock("../../../services/dragDrop", () => ({
@@ -53,6 +55,10 @@ type HarnessProps = {
   autoReconnectPhase?: "idle" | "waiting" | "sending" | "running";
   autoReconnectAttempt?: number;
   onAutoReconnectChange?: (enabled: boolean) => void;
+  references?: ComposerReference[];
+  contextUsage?: ThreadTokenUsage | null;
+  contextCompactionTokenLimit?: number | null;
+  contextCompactionInProgress?: boolean;
 };
 
 function ComposerHarness({
@@ -72,6 +78,10 @@ function ComposerHarness({
   autoReconnectPhase,
   autoReconnectAttempt,
   onAutoReconnectChange,
+  references = [],
+  contextUsage,
+  contextCompactionTokenLimit,
+  contextCompactionInProgress,
 }: HarnessProps) {
   const [draftText, setDraftText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -111,11 +121,29 @@ function ComposerHarness({
       onDraftChange={controlledDraft ? setDraftText : undefined}
       textareaRef={textareaRef}
       dictationEnabled={false}
+      references={references}
+      contextUsage={contextUsage}
+      contextCompactionTokenLimit={contextCompactionTokenLimit}
+      contextCompactionInProgress={contextCompactionInProgress}
     />
   );
 }
 
 describe("Composer send triggers", () => {
+  it("shows a full danger ring while context compaction is in progress", () => {
+    render(
+      <ComposerHarness
+        onSend={vi.fn()}
+        contextCompactionInProgress={true}
+      />,
+    );
+
+    const status = screen.getByLabelText(/压缩周期 100%/);
+    const inputArea = status.closest(".composer-input-area") as HTMLElement;
+    expect(inputArea.classList.contains("is-context-danger")).toBe(true);
+    expect(inputArea.style.getPropertyValue("--composer-context-used")).toBe("100");
+  });
+
   it("renders the per-conversation auto reconnect switch", () => {
     const onAutoReconnectChange = vi.fn();
     render(
@@ -152,6 +180,24 @@ describe("Composer send triggers", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith("hello world", [], undefined, "default");
+  });
+
+  it("serializes references in card order before the untouched body", () => {
+    const onSend = vi.fn();
+    const references: ComposerReference[] = [
+      { id: "two", sourceTitle: "two", sourceRole: "assistant", content: "two", prompt: "> two\n\n", mode: "full", collapsed: false },
+      { id: "one", sourceTitle: "one", sourceRole: "user", content: "one", prompt: "> one\n\n", mode: "full", collapsed: false },
+    ];
+    render(<ComposerHarness onSend={onSend} references={references} />);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "body" } });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    expect(onSend).toHaveBeenCalledWith(
+      "> two\n\n> one\n\nbody",
+      [],
+      undefined,
+      "default",
+      references,
+    );
   });
 
   it("sends once on Ctrl+Enter when enabled", () => {

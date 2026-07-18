@@ -691,6 +691,66 @@ describe("Markdown file-like href behavior", () => {
     });
   });
 
+  it("keeps a mouse selection that starts in a code block inside that block", () => {
+    const { container } = render(
+      <Markdown
+        value={["Before", "```text", "alpha beta", "gamma", "```", "After"].join("\n")}
+        className="markdown"
+        codeBlockStyle="message"
+      />,
+    );
+
+    const code = container.querySelector<HTMLElement>(".markdown-codeblock code");
+    const after = screen.getByText("After");
+    const codeText = code?.firstChild;
+    const afterText = after.firstChild;
+    if (!code || !(codeText instanceof Text) || !(afterText instanceof Text)) {
+      throw new Error("Expected code block and adjacent text nodes");
+    }
+
+    fireEvent.mouseDown(code, { button: 0 });
+    const range = document.createRange();
+    range.setStart(codeText, 6);
+    range.setEnd(afterText, 5);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    fireEvent.mouseUp(window);
+
+    expect(selection?.toString()).toBe("beta\ngamma");
+    selection?.removeAllRanges();
+  });
+
+  it("keeps a single-line fenced code selection inside its block", () => {
+    const { container } = render(
+      <Markdown
+        value={["Before", "```text", "alpha beta", "```", "After"].join("\n")}
+        className="markdown"
+        codeBlockStyle="message"
+      />,
+    );
+
+    const code = container.querySelector<HTMLElement>(".markdown-codeblock-single code");
+    const after = screen.getByText("After");
+    const codeText = code?.firstChild;
+    const afterText = after.firstChild;
+    if (!code || !(codeText instanceof Text) || !(afterText instanceof Text)) {
+      throw new Error("Expected single-line code block and adjacent text nodes");
+    }
+
+    fireEvent.mouseDown(code, { button: 0 });
+    const range = document.createRange();
+    range.setStart(codeText, 6);
+    range.setEnd(afterText, 5);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    fireEvent.mouseUp(window);
+
+    expect(selection?.toString()).toBe("beta");
+    selection?.removeAllRanges();
+  });
+
   it("copies code block markdown fences with Ctrl when modifier copy is enabled", async () => {
     const writeText = vi.fn();
     Object.defineProperty(navigator, "clipboard", {

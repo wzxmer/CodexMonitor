@@ -16,6 +16,7 @@ type UseUiScaleShortcutsResult = {
   scaleShortcutTitle: string;
   scaleShortcutText: string;
   queueSaveSettings: (next: AppSettings) => Promise<AppSettings>;
+  waitForPendingSettingsSaves: () => Promise<void>;
 };
 
 export function useUiScaleShortcuts({
@@ -53,6 +54,10 @@ export function useUiScaleShortcuts({
       return queued;
     },
     [saveSettings],
+  );
+  const waitForPendingSettingsSaves = useCallback(
+    () => saveQueueRef.current,
+    [],
   );
 
   const handleScaleDelta = useCallback(
@@ -120,5 +125,6 @@ export function useUiScaleShortcuts({
     scaleShortcutTitle,
     scaleShortcutText,
     queueSaveSettings,
+    waitForPendingSettingsSaves,
   };
 }

@@ -19,6 +19,7 @@ import {
 } from "../utils/messageRenderUtils";
 import { useMessageHistoryWindow } from "./useMessageHistoryWindow";
 import { toMarkdownQuote } from "../utils/messageReferences";
+import { dedupeSubagentCheckpointItems } from "../utils/subagentCheckpointDisplay";
 
 function baseEntryContainsItem(entry: MessageListBaseEntry, itemId: string) {
   return entry.kind === "toolGroup"
@@ -51,6 +52,7 @@ export function useMessagesViewState({
   onPlanSubmitChanges,
   onQuoteMessage,
 }: UseMessagesViewStateArgs) {
+  const displayItems = useMemo(() => dedupeSubagentCheckpointItems(items), [items]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const autoScrollRef = useRef(true);
@@ -80,13 +82,13 @@ export function useMessagesViewState({
     revealItemAtIndex,
     showLatest,
   } = useMessageHistoryWindow({
-    items,
+    items: displayItems,
     threadId,
     batchSize: chatHistoryScrollbackItems,
     containerRef,
   });
 
-  const scrollKey = `${scrollKeyForItems(items)}-${activeUserInputRequestId ?? "no-input"}`;
+  const scrollKey = `${scrollKeyForItems(displayItems)}-${activeUserInputRequestId ?? "no-input"}`;
 
   const isNearBottom = useCallback(
     (node: HTMLDivElement) =>

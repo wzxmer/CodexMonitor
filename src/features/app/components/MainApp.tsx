@@ -164,7 +164,7 @@ export default function MainApp() {
   const [managedSessionSourceByThread, setManagedSessionSourceByThread] = useState<Record<string, string>>({});
   const [threadDerivations, setThreadDerivations] = useState(loadThreadDerivations);
   const [managedSessionDerivation, setManagedSessionDerivation] = useState<{
-    preview: ManagedSessionDerivationPreview;
+    previews: ManagedSessionDerivationPreview[];
     destination: WorkspaceInfo;
     error: string | null;
     isBusy: boolean;
@@ -193,6 +193,7 @@ export default function MainApp() {
     scaleShortcutTitle,
     scaleShortcutText,
     queueSaveSettings,
+    waitForPendingSettingsSaves,
     dictationModel,
     dictationState,
     dictationLevel,
@@ -683,13 +684,18 @@ export default function MainApp() {
   );
   const ensureWorkspaceRuntimeCodexArgsWithContinuity = useCallback(
     async (workspaceId: string, threadId: string | null) => {
+      await waitForPendingSettingsSaves();
       const runtimeResult = await ensureWorkspaceRuntimeCodexArgs(
         workspaceId,
         threadId,
       );
       applyThreadListRuntimeResult(runtimeResult);
     },
-    [applyThreadListRuntimeResult, ensureWorkspaceRuntimeCodexArgs],
+    [
+      applyThreadListRuntimeResult,
+      ensureWorkspaceRuntimeCodexArgs,
+      waitForPendingSettingsSaves,
+    ],
   );
   const getThreadListRuntimeContext = useCallback(
     () => threadListRuntimeContextRef.current,
@@ -1092,6 +1098,7 @@ export default function MainApp() {
       setThreadListSortKey,
       workspaces,
       refreshWorkspaces,
+      connectWorkspace,
       listThreadsForWorkspaces,
       resetWorkspaceThreads,
     });
@@ -1347,6 +1354,7 @@ export default function MainApp() {
       if (!restoredThreadId) {
         throw new Error("thread/resume returned no thread");
       }
+      renameThread(result.workspace.id, restoredThreadId, session.title);
       setManagedSessionSourceByThread((current) => ({
         ...current,
         [`${result.workspace.id}:${restoredThreadId}`]: result.sourceName,
@@ -1360,19 +1368,20 @@ export default function MainApp() {
       alertError(error instanceof Error ? error.message : String(error));
       return false;
     }
-  }, [alertError, exitDiffView, isCompact, markWorkspaceConnected, refreshWorkspaces, resumeThreadById, selectWorkspace, setActiveTab, setActiveThreadId]);
-  const handleDeriveManagedSession = useCallback(async (session: ManagedSession) => {
+  }, [alertError, exitDiffView, isCompact, markWorkspaceConnected, refreshWorkspaces, renameThread, resumeThreadById, selectWorkspace, setActiveTab, setActiveThreadId]);
+  const handleDeriveManagedSessions = useCallback(async (sessions: ManagedSession[]) => {
+    if (sessions.length === 0) return;
     if (!activeWorkspace) {
       alertError(t("sessionManager.deriveNeedsWorkspace"));
       return;
     }
     try {
-      const preview = await prepareManagedSessionDerivation({
+      const previews = await Promise.all(sessions.map((session) => prepareManagedSessionDerivation({
         sourceId: session.sourceId,
         threadId: session.threadId,
-      });
+      })));
       setManagedSessionDerivation({
-        preview,
+        previews,
         destination: activeWorkspace,
         error: null,
         isBusy: false,
@@ -1381,33 +1390,43 @@ export default function MainApp() {
       alertError(error instanceof Error ? error.message : String(error));
     }
   }, [activeWorkspace, alertError, t]);
+  const handleDeriveManagedSession = useCallback((session: ManagedSession) => {
+    void handleDeriveManagedSessions([session]);
+  }, [handleDeriveManagedSessions]);
   const confirmManagedSessionDerivation = useCallback(async () => {
     if (!managedSessionDerivation || managedSessionDerivation.isBusy) return;
-    const { destination, preview } = managedSessionDerivation;
+    const { destination, previews } = managedSessionDerivation;
     setManagedSessionDerivation((current) => current ? { ...current, error: null, isBusy: true } : current);
+    let remainingPreviews = previews;
+    let latestThreadId: string | null = null;
+    let nextDerivations = threadDerivations;
     try {
-      let nextDerivations = threadDerivations;
-      const threadId = await deriveManagedSessionIntoWorkspace({
-        destination,
-        preview,
-        connectWorkspace,
-        startThreadForWorkspace,
-        sendUserMessageToThread,
-        persistDerivation: (workspaceId, derivedThreadId, metadata) => {
-          nextDerivations = saveThreadDerivation(workspaceId, derivedThreadId, metadata);
-        },
-        startError: t("sessionManager.deriveStartFailed"),
-        sendError: t("sessionManager.deriveSendFailed"),
-      });
+      for (const preview of previews) {
+        latestThreadId = await deriveManagedSessionIntoWorkspace({
+          destination,
+          preview,
+          connectWorkspace,
+          startThreadForWorkspace,
+          sendUserMessageToThread,
+          persistDerivation: (workspaceId, derivedThreadId, metadata) => {
+            nextDerivations = saveThreadDerivation(workspaceId, derivedThreadId, metadata);
+          },
+          startError: t("sessionManager.deriveStartFailed"),
+          sendError: t("sessionManager.deriveSendFailed"),
+        });
+        remainingPreviews = remainingPreviews.slice(1);
+      }
       setThreadDerivations(nextDerivations);
       exitDiffView();
       selectWorkspace(destination.id);
-      setActiveThreadId(threadId, destination.id);
+      if (latestThreadId) setActiveThreadId(latestThreadId, destination.id);
       if (isCompact) setActiveTab("codex");
       setManagedSessionDerivation(null);
     } catch (error) {
+      setThreadDerivations(nextDerivations);
       setManagedSessionDerivation((current) => current ? {
         ...current,
+        previews: remainingPreviews,
         error: error instanceof Error ? error.message : String(error),
         isBusy: false,
       } : current);
@@ -1780,22 +1799,25 @@ export default function MainApp() {
   });
   const handleMessageReference = useCallback(async (action: MessageReferenceAction) => {
     if (!activeWorkspace || !activeThreadId) return;
+    const sourceThreadId = activeThreadId;
     try {
       let nextDerivations = threadDerivations;
       const threadId = await applyMessageReference({
         action,
         workspace: activeWorkspace,
-        sourceThreadId: activeThreadId,
+        sourceThreadId,
         createSnapshot: (content, sourceTitle) => createMessageReference({
           workspaceId: activeWorkspace.id,
-          sourceThreadId: activeThreadId,
+          sourceThreadId,
           sourceMessageId: action.messageId,
           sourceRole: action.sourceRole,
           sourceTitle,
           content,
         }),
-        insertCurrent: composerWorkspaceState.handleInsertComposerText,
-        insertNew: composerWorkspaceState.insertDraftForThread,
+        insertCurrent: () => undefined,
+        onReferenceCreated: (reference) => composerWorkspaceState.addComposerReferenceForDraft(sourceThreadId, reference),
+        insertNew: () => undefined,
+        onNewReferenceCreated: composerWorkspaceState.addComposerReferenceForDraft,
         startThreadForWorkspace,
         persistDerivation: (workspaceId, derivedThreadId, metadata) => {
           nextDerivations = saveThreadDerivation(workspaceId, derivedThreadId, metadata);
@@ -1811,7 +1833,7 @@ export default function MainApp() {
     } catch (error) {
       alertError(error instanceof Error ? error.message : String(error));
     }
-  }, [activeThreadId, activeWorkspace, alertError, composerWorkspaceState.handleInsertComposerText, composerWorkspaceState.insertDraftForThread, exitDiffView, isCompact, selectWorkspace, setActiveTab, setActiveThreadId, startThreadForWorkspace, t, threadDerivations]);
+  }, [activeThreadId, activeWorkspace, alertError, composerWorkspaceState.addComposerReferenceForDraft, exitDiffView, isCompact, selectWorkspace, setActiveTab, setActiveThreadId, startThreadForWorkspace, t, threadDerivations]);
 
   const handleInstallManagedCodex = useCallback(async () => {
     setCodexInstallStage("downloading");
@@ -2602,7 +2624,7 @@ export default function MainApp() {
 
   return (
     <I18nProvider preference={appSettings.appLanguage}>
-      <SessionManagerProvider active={sessionManagerOpen} onActiveChange={setSessionManagerOpen} onResumeSession={handleResumeManagedSession} onDeriveSession={handleDeriveManagedSession} currentWorkspace={projectActiveWorkspace ? { name: projectActiveWorkspace.name, path: projectActiveWorkspace.path } : null}>
+      <SessionManagerProvider active={sessionManagerOpen} onActiveChange={setSessionManagerOpen} onResumeSession={handleResumeManagedSession} onDeriveSession={handleDeriveManagedSession} onDeriveSessions={handleDeriveManagedSessions} currentWorkspace={projectActiveWorkspace ? { name: projectActiveWorkspace.name, path: projectActiveWorkspace.path } : null}>
         <MainAppShell {...mainAppShellProps} />
         <CodexInstallPrompt
           open={codexInstallPromptOpen}
@@ -2619,7 +2641,7 @@ export default function MainApp() {
         <SessionResumeChoicePrompt />
         {managedSessionDerivation && (
           <SessionDerivationPrompt
-            preview={managedSessionDerivation.preview}
+            previews={managedSessionDerivation.previews}
             destination={managedSessionDerivation.destination}
             error={managedSessionDerivation.error}
             isBusy={managedSessionDerivation.isBusy}

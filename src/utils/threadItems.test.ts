@@ -980,6 +980,43 @@ describe("threadItems", () => {
     });
   });
 
+  it("uses trusted turn boundaries when historical message item timestamps are absent", () => {
+    const items = buildItemsFromThread({
+      turns: [
+        {
+          id: "turn-1",
+          startedAt: 1_700_000_000,
+          completedAt: 1_700_000_030,
+          items: [
+            {
+              type: "userMessage",
+              id: "user-1",
+              content: [{ type: "text", text: "Question" }],
+            },
+            {
+              type: "agentMessage",
+              id: "assistant-progress-1",
+              phase: "commentary",
+              text: "Working",
+            },
+            {
+              type: "agentMessage",
+              id: "assistant-final-1",
+              phase: "final_answer",
+              text: "Done",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(items).toMatchObject([
+      { id: "user-1", createdAt: 1_700_000_000_000 },
+      { id: "assistant-progress-1", createdAt: undefined },
+      { id: "assistant-final-1", createdAt: 1_700_000_030_000 },
+    ]);
+  });
+
   it("keeps incomplete checkpoint-like user text as a user message", () => {
     const text =
       '<subagent_checkpoint child_thread_id="child" priority="normal">\nUser-authored example\n</subagent_checkpoint>';

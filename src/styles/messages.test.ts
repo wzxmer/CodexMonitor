@@ -37,13 +37,29 @@ describe("message tool group interaction styles", () => {
     );
   });
 
+  it("keeps edited-message retry progress aligned without shifting actions", () => {
+    expect(messagesCss).toMatch(
+      /\.message-edit-resend-button\s*\{[^}]*display:\s*inline-flex;[^}]*align-items:\s*center;[^}]*justify-content:\s*center;[^}]*min-width:\s*112px;/s,
+    );
+    expect(messagesCss).toMatch(
+      /\.message-edit-resend-spinner\s*\{[^}]*width:\s*12px;[^}]*height:\s*12px;[^}]*border-top-color:\s*currentColor;/s,
+    );
+  });
+
   it("keeps reading controls in document flow so they cannot cover messages", () => {
     const controlsRule = messagesCss.match(
       /\.messages-tool-controls\s*\{([\s\S]*?)\n\}/,
     );
+    const stylePopoverRule = messagesCss.match(
+      /\.messages-style-popover\s*\{([\s\S]*?)\n\}/,
+    );
 
     expect(controlsRule?.[1]).not.toMatch(/position:\s*(?:sticky|fixed|absolute)/);
     expect(controlsRule?.[1]).not.toMatch(/\btop:/);
+    expect(stylePopoverRule?.[1]).not.toMatch(
+      /position:\s*(?:sticky|fixed|absolute)/,
+    );
+    expect(stylePopoverRule?.[1]).toContain("flex: 1 1 100%");
   });
 
   it("keeps horizontal scrolling inside wide content instead of the conversation pane", () => {
@@ -53,6 +69,21 @@ describe("message tool group interaction styles", () => {
     expect(messagesRule?.[1]).toContain("overflow-x: hidden");
     expect(messagesCss).toMatch(
       /\.markdown-table-wrap\s*\{[^}]*overflow-x:\s*auto;/s,
+    );
+  });
+
+  it("lets CLI conversations grow on wide windows without misaligning expanded groups", () => {
+    expect(messagesCss).toMatch(
+      /\.messages-reading-cli \.messages-inner\s*\{[^}]*--messages-cli-end-gutter:\s*54px;[^}]*max-width:\s*min\(100%, clamp\(980px, 76vw, 1240px\)\);/s,
+    );
+    expect(messagesCss).toMatch(
+      /\.messages-reading-cli \.tool-group\s*\{[^}]*max-width:\s*calc\(100% - var\(--messages-cli-end-gutter\)\);/s,
+    );
+    expect(messagesCss).toMatch(
+      /\.messages-reading-cli \.tool-group-body > \.message\.assistant\s*\{[^}]*padding-right:\s*0;/s,
+    );
+    expect(messagesCss).toMatch(
+      /\.messages-reading-cli \.tool-group-body \.tool-inline\s*\{[^}]*max-width:\s*100%;/s,
     );
   });
 
@@ -121,6 +152,19 @@ describe("markdown table layout styles", () => {
     );
     expect(messagesCss).toMatch(
       /\.markdown \.markdown-table \.markdown-table-cell-center\s*\{[^}]*text-align:\s*center;/s,
+    );
+  });
+});
+
+describe("markdown code block selection styles", () => {
+  const messagesCss = readFileSync(new URL("./messages.css", import.meta.url), "utf8");
+
+  it("keeps code block chrome out of manual text selections", () => {
+    expect(messagesCss).toMatch(
+      /\.message \.markdown-codeblock-header\s*\{[^}]*user-select:\s*none;/s,
+    );
+    expect(messagesCss).toMatch(
+      /\.message \.markdown-codeblock pre\s*\{[^}]*user-select:\s*text;/s,
     );
   });
 });

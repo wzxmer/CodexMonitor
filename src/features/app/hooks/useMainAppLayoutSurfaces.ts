@@ -6,6 +6,7 @@ import type {
   ComposerSendShortcut,
   ComposerTriggerMode,
   ConversationItem,
+  SendMessageResult,
   WorkspaceInfo,
 } from "@/types";
 import { getProviderStatus } from "@/services/tauri";
@@ -24,12 +25,14 @@ import type { StartingDraftMessagePreview } from "@app/hooks/useNewAgentDraft";
 import type { LayoutNodesOptions } from "@/features/layout/hooks/layoutNodes/types";
 import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 import { resolveCodexProviderBaseUrl } from "@/utils/providerProfiles";
+import { resolveSidebarRateLimits } from "@app/utils/sidebarUsageRateLimits";
 import type { MessageReferenceAction } from "@/features/messages/utils/messageReferences";
 import {
   buildSubagentResultSummaries,
   type SubagentResultSummary,
 } from "@/features/messages/utils/subagentResults";
 import { useI18n } from "@/features/i18n/I18nProvider";
+import { isContextCompactionInProgress } from "@/features/threads/utils/contextUsage";
 
 type SidebarProps = LayoutNodesOptions["primary"]["sidebarProps"];
 type ComposerProps = NonNullable<LayoutNodesOptions["primary"]["composerProps"]>;
@@ -235,7 +238,7 @@ type UseMainAppLayoutSurfacesArgs = {
   confirmCustom: ComposerProps["onReviewPromptConfirmCustom"];
   handleComposerSendWithDraftStart: ComposerProps["onSend"];
   interruptTurn: () => void;
-  retryEditedUserMessage: (text: string, images?: string[]) => Promise<unknown>;
+  retryEditedUserMessage: (text: string, images?: string[]) => Promise<SendMessageResult>;
   terminalOpen: boolean;
   debugOpen: boolean;
   debugEntries: LayoutNodesOptions["secondary"]["debugPanelProps"]["entries"];
@@ -596,7 +599,7 @@ function buildPrimarySurface({
         : undefined,
       onReferenceMessage,
       onResendUserMessage: (text, images) => {
-        void retryEditedUserMessage(text, images);
+        return retryEditedUserMessage(text, images);
       },
       isThinking: composerWorkspaceState.isProcessing,
       isLoadingMessages: activeThreadId
@@ -627,6 +630,13 @@ function buildPrimarySurface({
           contextUsage: activeTokenUsage,
           contextCompactionTokenLimit,
           contextCompactionCount: countContextCompactions(activeItems),
+          contextCompactionInProgress: isContextCompactionInProgress(activeItems),
+          references: composerWorkspaceState.composerReferences,
+          onToggleReference: composerWorkspaceState.toggleComposerReference,
+          onRemoveReference: composerWorkspaceState.removeComposerReference,
+          onMoveReference: composerWorkspaceState.reorderComposerReferences,
+          onUndoReference: composerWorkspaceState.undoComposerReference,
+          onRedoReference: composerWorkspaceState.redoComposerReference,
           queuedMessages: composerWorkspaceState.activeQueue,
           queuePausedReason: composerWorkspaceState.queuePausedReason,
           canSteerQueued: composerWorkspaceState.steerAvailable,
@@ -1327,7 +1337,6 @@ export function useMainAppLayoutSurfaces({
   onUpdateAppSettings,
 }: UseMainAppLayoutSurfacesArgs): LayoutNodesOptions {
   const { t } = useI18n();
-  const sidebarRateLimits = activeWorkspace ? activeRateLimits : homeRateLimits;
   const sidebarAccount = activeWorkspace ? activeAccount : homeAccount;
   const activeCodexKeyProfile = useMemo(
     () =>
@@ -1389,6 +1398,12 @@ export function useMainAppLayoutSurfaces({
       codexProviderStatus.isThirdParty,
     workspaceId: activeWorkspaceId,
   });
+  const sidebarRateLimits = resolveSidebarRateLimits(
+    activeRateLimits,
+    homeRateLimits,
+    codexProviderStatus?.isConfigured === true &&
+      !codexProviderStatus.isThirdParty,
+  );
   const subagentResults = useMemo(
     () =>
       activeWorkspaceId && activeThreadId

@@ -168,6 +168,9 @@ describe("useThreadMessaging telemetry", () => {
 
   it("records prompt_sent once for one message send", async () => {
     const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => undefined);
+    const ensureThreadRuntimeForWorkspace = vi.fn(
+      async () => "thread-1",
+    );
     const onDebug = vi.fn();
     const { result } = renderHook(() =>
       useThreadMessaging({
@@ -206,6 +209,7 @@ describe("useThreadMessaging telemetry", () => {
         pushThreadErrorMessage: vi.fn(),
         ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
         ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadRuntimeForWorkspace,
         refreshThread: vi.fn(async () => null),
         forkThreadForWorkspace: vi.fn(async () => null),
         updateThreadParent: vi.fn(),
@@ -236,6 +240,16 @@ describe("useThreadMessaging telemetry", () => {
     );
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledTimes(1);
     expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", "thread-1");
+    expect(ensureThreadRuntimeForWorkspace).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+    );
+    expect(
+      ensureWorkspaceRuntimeCodexArgs.mock.invocationCallOrder[0],
+    ).toBeLessThan(ensureThreadRuntimeForWorkspace.mock.invocationCallOrder[0]);
+    expect(
+      ensureThreadRuntimeForWorkspace.mock.invocationCallOrder[0],
+    ).toBeLessThan(vi.mocked(sendUserMessageService).mock.invocationCallOrder[0]);
     expect(onDebug).toHaveBeenCalledWith(
       expect.objectContaining({
         label: "workflow/preflight",

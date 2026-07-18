@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildSmartReferencePrompt,
   buildContentReferencePrompt,
+  composeReferenceText,
   defaultReferenceMode,
   estimateReferenceTokens,
+  stripReferenceText,
   toMarkdownQuote,
 } from "./messageReferences";
 
@@ -32,6 +34,20 @@ describe("messageReferences", () => {
     expect(prompt).toContain("Read the referenced Markdown file only when");
     expect(prompt).not.toContain("x".repeat(1_000));
     expect(prompt).toContain("Continue the design.");
+  });
+
+  it("preserves leading, trailing, and blank lines in full references", () => {
+    expect(toMarkdownQuote("\n  exact body  \n")).toBe("> \n>   exact body  \n> \n\n");
+  });
+
+  it("serializes ordered references without trimming or duplicating separators", () => {
+    expect(composeReferenceText(["> first\n\n", "> second\n\n"], "  body  ")).toBe(
+      "> first\n\n> second\n\n  body  ",
+    );
+  });
+
+  it("restores an empty body after a reference-only send is trimmed", () => {
+    expect(stripReferenceText("> quoted", ["> quoted\n\n"])).toBe("");
   });
 
   it("formats lightweight content references without inline content", () => {

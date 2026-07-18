@@ -5,6 +5,7 @@ import type {
   ComposerTriggerMode,
   FollowUpMessageBehavior,
   QueuedMessage,
+  ComposerReference,
   SendMessageResult,
   WorkspaceInfo,
 } from "@/types";
@@ -53,6 +54,8 @@ type UseQueuedSendOptions = {
     token: { draftKey: string; generation: number },
     images: readonly string[],
   ) => void;
+  onReferencesAccepted?: (references: ComposerReference[]) => void;
+  onMessageRejected?: (text: string, references: ComposerReference[]) => void;
 };
 
 type UseQueuedSendResult = {
@@ -64,11 +67,13 @@ type UseQueuedSendResult = {
     appMentions?: AppMention[],
     submitIntent?: ComposerSendIntent,
     options?: { replaceMessageId?: string },
+    references?: ComposerReference[],
   ) => Promise<void>;
   queueMessage: (
     text: string,
     images?: string[],
     appMentions?: AppMention[],
+    references?: ComposerReference[],
   ) => Promise<void>;
   removeQueuedMessage: (threadId: string, messageId: string) => void;
   clearQueuedMessages: (threadId?: string | null) => void;
@@ -162,6 +167,8 @@ export function useQueuedSend({
   clearActiveImages,
   transferActiveImages,
   restoreImagesForDraft,
+  onReferencesAccepted,
+  onMessageRejected,
 }: UseQueuedSendOptions): UseQueuedSendResult {
   const [queuedByThread, setQueuedByThread] = useState<
     Record<string, QueuedMessage[]>
@@ -271,12 +278,13 @@ export function useQueuedSend({
   );
 
   const createQueuedItem = useCallback(
-    (text: string, images: string[], appMentions: AppMention[]): QueuedMessage => ({
+    (text: string, images: string[], appMentions: AppMention[], references: ComposerReference[] = []): QueuedMessage => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       text,
       createdAt: Date.now(),
       images,
       ...(appMentions.length > 0 ? { appMentions } : {}),
+      ...(references.length > 0 ? { references } : {}),
     }),
     [],
   );
@@ -347,6 +355,7 @@ export function useQueuedSend({
       appMentions: AppMention[] = [],
       submitIntent: ComposerSendIntent = "default",
       options?: { replaceMessageId?: string },
+      references: ComposerReference[] = [],
     ) => {
       const trimmed = text.trim();
       const command = parseSlashCommand(trimmed, appsEnabled, composerTriggerMode);
@@ -372,9 +381,10 @@ export function useQueuedSend({
         return;
       }
       if (isProcessing && activeThreadId && effectiveIntent === "queue") {
-        const item = createQueuedItem(trimmed, nextImages, nextMentions);
+        const item = createQueuedItem(trimmed, nextImages, nextMentions, references);
         enqueueMessage(activeThreadId, item);
         clearActiveImages();
+        onReferencesAccepted?.(references);
         return;
       }
       if (command) {
@@ -383,6 +393,7 @@ export function useQueuedSend({
         }
         await runSlashCommand(command, trimmed);
         clearActiveImages();
+        onReferencesAccepted?.(references);
         return;
       }
       const submittedImages = [...nextImages];
@@ -423,8 +434,13 @@ export function useQueuedSend({
       ) {
         enqueueMessage(
           activeThreadId,
-          createQueuedItem(trimmed, submittedImages, submittedMentions),
+          createQueuedItem(trimmed, submittedImages, submittedMentions, references),
         );
+      }
+      if (sendResult.status === "sent" || sendResult.status === "steer_failed") {
+        onReferencesAccepted?.(references);
+      } else if (sendResult.status === "blocked") {
+        onMessageRejected?.(trimmed, references);
       }
     },
     [
@@ -441,6 +457,8 @@ export function useQueuedSend({
       isProcessing,
       isReviewing,
       restoreImagesForDraft,
+      onReferencesAccepted,
+      onMessageRejected,
       steerEnabled,
       transferActiveImages,
       runSlashCommand,
@@ -453,6 +471,7 @@ export function useQueuedSend({
       text: string,
       images: string[] = [],
       appMentions: AppMention[] = [],
+      references: ComposerReference[] = [],
     ) => {
       const trimmed = text.trim();
       const command = parseSlashCommand(trimmed, appsEnabled, composerTriggerMode);
@@ -467,7 +486,7 @@ export function useQueuedSend({
       if (!activeThreadId) {
         return;
       }
-      const item = createQueuedItem(trimmed, nextImages, nextMentions);
+      const item = createQueuedItem(trimmed, nextImages, nextMentions, references);
       enqueueMessage(activeThreadId, item);
       clearActiveImages();
     },

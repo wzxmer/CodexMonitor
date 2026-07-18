@@ -427,13 +427,29 @@ export function buildItemsFromThread(thread: Record<string, unknown>) {
   turns.forEach((turn) => {
     const turnRecord = turn as Record<string, unknown>;
     const turnId = asString(turnRecord.id).trim() || undefined;
+    const turnStartedAt = extractCreatedAt({ timestamp: turnRecord.startedAt });
+    const turnCompletedAt = extractCreatedAt({ timestamp: turnRecord.completedAt });
     const turnItems = Array.isArray(turnRecord.items)
       ? (turnRecord.items as Record<string, unknown>[])
       : [];
     turnItems.forEach((item) => {
       const converted = buildConversationItemFromThreadItem(item);
       if (converted) {
-        items.push({ ...converted, turnId });
+        const fallbackCreatedAt =
+          converted.kind === "message" && converted.createdAt === undefined
+            ? converted.role === "user"
+              ? turnStartedAt
+              : asString(item.phase) === "final_answer"
+                ? turnCompletedAt
+                : undefined
+            : undefined;
+        items.push({
+          ...converted,
+          ...(fallbackCreatedAt !== undefined
+            ? { createdAt: fallbackCreatedAt }
+            : {}),
+          turnId,
+        });
       }
     });
   });
