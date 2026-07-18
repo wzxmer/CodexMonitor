@@ -228,9 +228,9 @@ pub(crate) fn scan_session_source(source: &SessionSource) -> SourceSessionScanRe
             title,
             preview: None,
             created_at: candidate.metadata.created_at,
-            // File mtime is an implementation detail, not session usage time.
-            // Keep the explicit index timestamp, then creation time as the stable fallback.
-            updated_at: index_entry.updated_at.or(candidate.metadata.created_at),
+            // File mtime and index writes are implementation details, not session usage time.
+            // Only persisted rollout activity owns the last-used timestamp.
+            updated_at: candidate.metadata.last_activity_at,
             archived_at: index_entry.archived_at,
             is_archived: candidate.is_archived,
             parent_thread_id: candidate.metadata.parent_thread_id,
@@ -463,6 +463,7 @@ mod tests {
             thread_id: "thread-123".to_string(),
             cwd: None,
             created_at: None,
+            last_activity_at: None,
             source_kind: None,
             parent_thread_id: None,
             is_subagent: false,

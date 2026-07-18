@@ -10,6 +10,7 @@ pub(crate) struct ParsedSessionMetadata {
     pub(crate) thread_id: String,
     pub(crate) cwd: Option<String>,
     pub(crate) created_at: Option<i64>,
+    pub(crate) last_activity_at: Option<i64>,
     pub(crate) source_kind: Option<String>,
     pub(crate) parent_thread_id: Option<String>,
     pub(crate) is_subagent: bool,
@@ -21,7 +22,9 @@ pub(crate) fn parse_session_metadata(path: &Path) -> Result<ParsedSessionMetadat
     let file = File::open(path).map_err(|error| error.to_string())?;
     let reader = BufReader::new(file);
     let mut parse_error = None;
-    for line in reader.lines().take(16) {
+    let mut metadata = None;
+    let mut last_activity_at = None;
+    for line in reader.lines() {
         let line = line.map_err(|error| error.to_string())?;
         let value: Value = match serde_json::from_str(&line) {
             Ok(value) => value,
@@ -30,12 +33,28 @@ pub(crate) fn parse_session_metadata(path: &Path) -> Result<ParsedSessionMetadat
                 continue;
             }
         };
-        if value.get("type").and_then(Value::as_str) != Some("session_meta") {
-            continue;
+        if value
+            .get("type")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            if let Some(timestamp) =
+                parse_timestamp_ms(value.get("timestamp").and_then(Value::as_str))
+            {
+                last_activity_at = Some(timestamp);
+            }
         }
-        return parse_session_meta_value(&value);
+        if metadata.is_none() && value.get("type").and_then(Value::as_str) == Some("session_meta") {
+            let parsed = parse_session_meta_value(&value)?;
+            last_activity_at = last_activity_at.or(parsed.created_at);
+            metadata = Some(parsed);
+        }
     }
-    Err(parse_error.unwrap_or_else(|| "Session metadata record not found".to_string()))
+    let mut metadata = metadata.ok_or_else(|| {
+        parse_error.unwrap_or_else(|| "Session metadata record not found".to_string())
+    })?;
+    metadata.last_activity_at = last_activity_at;
+    Ok(metadata)
 }
 
 fn parse_session_meta_value(value: &Value) -> Result<ParsedSessionMetadata, String> {
@@ -66,15 +85,18 @@ fn parse_session_meta_value(value: &Value) -> Result<ParsedSessionMetadata, Stri
     let is_subagent = thread_source.is_some_and(|value| value.eq_ignore_ascii_case("subagent"))
         || subagent.is_some();
 
+    let created_at = parse_timestamp_ms(
+        payload
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .or_else(|| value.get("timestamp").and_then(Value::as_str)),
+    );
+
     Ok(ParsedSessionMetadata {
         thread_id,
         cwd: optional_string(payload.get("cwd")),
-        created_at: parse_timestamp_ms(
-            payload
-                .get("timestamp")
-                .and_then(Value::as_str)
-                .or_else(|| value.get("timestamp").and_then(Value::as_str)),
-        ),
+        created_at,
+        last_activity_at: created_at,
         source_kind: parse_source_kind(source, thread_source),
         parent_thread_id: thread_spawn
             .and_then(|value| optional_string(value.get("parent_thread_id"))),
@@ -140,6 +162,7 @@ mod tests {
             parsed.created_at,
             parse_timestamp_ms(Some("2026-07-10T08:00:00Z"))
         );
+        assert_eq!(parsed.last_activity_at, parsed.created_at);
     }
 
     #[test]
@@ -182,6 +205,53 @@ mod tests {
 
         let parsed = super::parse_session_metadata(&path).unwrap();
         assert_eq!(parsed.thread_id, "thread-a");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn metadata_parser_uses_the_last_valid_persisted_record_timestamp() {
+        let root =
+            std::env::temp_dir().join(format!("codex-monitor-parser-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("rollout-thread-a.jsonl");
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"timestamp\":\"2026-07-10T08:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-a\"}}\n",
+                "{\"timestamp\":\"2026-07-10T09:00:00Z\",\"type\":\"response_item\"}\n",
+                "not-json\n",
+                "{\"timestamp\":\"invalid\",\"type\":\"event_msg\"}\n",
+                "{\"timestamp\":\"2026-07-10T10:30:00Z\",\"type\":\"event_msg\"}\n",
+                "{\"timestamp\":\"2026-07-10T12:00:00Z\",\"corrupt\":true}\n"
+            ),
+        )
+        .unwrap();
+
+        let parsed = super::parse_session_metadata(&path).unwrap();
+
+        assert_eq!(
+            parsed.last_activity_at,
+            parse_timestamp_ms(Some("2026-07-10T10:30:00Z"))
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn metadata_parser_does_not_invent_activity_time() {
+        let root =
+            std::env::temp_dir().join(format!("codex-monitor-parser-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("rollout-thread-a.jsonl");
+        std::fs::write(
+            &path,
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-a\"}}\n",
+        )
+        .unwrap();
+
+        let parsed = super::parse_session_metadata(&path).unwrap();
+
+        assert_eq!(parsed.created_at, None);
+        assert_eq!(parsed.last_activity_at, None);
         std::fs::remove_dir_all(root).unwrap();
     }
 }

@@ -4,7 +4,7 @@ import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import Play from "lucide-react/dist/esm/icons/play";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { useI18n } from "@/features/i18n/I18nProvider";
-import { formatRelativeTimeShort } from "@/utils/time";
+import { formatLocalDateTime, formatRelativeTimeShort } from "@/utils/time";
 import { useSessionManagerContext } from "../context/SessionManagerContext";
 import { SessionArchiveResultSummary } from "./SessionArchiveResultSummary";
 import { SessionManagerToolbar } from "./SessionManagerToolbar";
@@ -18,6 +18,12 @@ export function SessionManagerWorkspace() {
     [manager.indexedSessions, manager.selectedSessionKeys],
   );
   const source = focusedSession ? manager.sources.find((candidate) => candidate.id === focusedSession.sourceId) : null;
+  const focusedAbsoluteTime = focusedSession?.updatedAt
+    ? formatLocalDateTime(focusedSession.updatedAt, { includeSeconds: true })
+    : null;
+  const focusedRelativeTime = focusedSession?.updatedAt
+    ? formatRelativeTimeShort(focusedSession.updatedAt)
+    : null;
 
 
   return (
@@ -54,7 +60,9 @@ export function SessionManagerWorkspace() {
             <div className="session-manager-detail-meta">
               <span>{source?.name ?? focusedSession.sourceId}</span>
               <span>{focusedSession.isArchived ? t("sessionManager.archived") : t("sessionManager.active")}</span>
-              <span>{focusedSession.updatedAt ? formatRelativeTimeShort(focusedSession.updatedAt) : "—"}</span>
+              <span title={focusedRelativeTime ?? undefined}>
+                {t("sessionManager.lastUsed")} {focusedAbsoluteTime ?? "—"}
+              </span>
             </div>
             <div className="session-manager-detail-path">{focusedSession.cwd ?? t("sessionManager.unknownProject")}</div>
             <div className="session-manager-conversation-preview">

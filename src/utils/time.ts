@@ -56,3 +56,30 @@ export function formatRelativeTimeShort(timestamp: number) {
   }
   return `${Math.max(1, Math.round(absSeconds / (60 * 60 * 24 * 365)))}y`;
 }
+
+function padLocalDatePart(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+export function formatLocalDateTime(
+  timestamp: number,
+  options: { includeSeconds?: boolean } = {},
+) {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(timestamp) || Number.isNaN(date.getTime())) {
+    return null;
+  }
+  const datePart = [
+    date.getFullYear(),
+    padLocalDatePart(date.getMonth() + 1),
+    padLocalDatePart(date.getDate()),
+  ].join("-");
+  const timeParts = [
+    padLocalDatePart(date.getHours()),
+    padLocalDatePart(date.getMinutes()),
+  ];
+  if (options.includeSeconds) {
+    timeParts.push(padLocalDatePart(date.getSeconds()));
+  }
+  return `${datePart} ${timeParts.join(":")}`;
+}

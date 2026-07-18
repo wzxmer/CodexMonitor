@@ -112,6 +112,44 @@ describe("SessionManagerList", () => {
     });
   });
 
+  it("shows the local absolute last-used time and keeps relative time auxiliary", () => {
+    const updatedAt = new Date(2026, 6, 19, 9, 5).getTime();
+    const active = {
+      ...managedSession,
+      title: "Timed session",
+      updatedAt,
+      isArchived: false,
+      archivedAt: null,
+      projectExists: true,
+    };
+
+    render(
+      <SessionManagerList sessions={[active]} sources={[source]} selected={new Set()} resumingKey={null} archivingKeys={new Set()} loading={false} loadingMore={false} error={null} hasMore={false} onToggleSelected={vi.fn()} onResume={vi.fn()} onArchive={vi.fn()} onDerive={vi.fn()} onLoadMore={vi.fn()} />,
+    );
+
+    const row = screen.getByText("Timed session").closest(".session-manager-row");
+    const time = row?.querySelector<HTMLElement>(".session-manager-row-time");
+    expect(time?.textContent).toBe("2026-07-19 09:05");
+    expect(time?.title).toMatch(/^(now|\d+(m|h|d|w|mo|y))$/);
+  });
+
+  it("shows an explicit empty value when last-used time is unknown", () => {
+    const session = {
+      ...managedSession,
+      title: "Unknown time",
+      updatedAt: null,
+    };
+
+    render(
+      <SessionManagerList sessions={[session]} sources={[source]} selected={new Set()} resumingKey={null} archivingKeys={new Set()} loading={false} loadingMore={false} error={null} hasMore={false} onToggleSelected={vi.fn()} onResume={vi.fn()} onArchive={vi.fn()} onDerive={vi.fn()} onLoadMore={vi.fn()} />,
+    );
+
+    const row = screen.getByText("Unknown time").closest(".session-manager-row");
+    const time = row?.querySelector<HTMLElement>(".session-manager-row-time");
+    expect(time?.textContent).toBe("—");
+    expect(time?.getAttribute("title")).toBeNull();
+  });
+
   it("closes the context menu when the session manager boundary scrolls", () => {
     const active = { ...managedSession, isArchived: false, archivedAt: null, projectExists: true };
     const { container } = render(

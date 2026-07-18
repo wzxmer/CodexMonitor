@@ -1,5 +1,5 @@
 import type { ManagedSession, SessionSource } from "@/types";
-import { formatRelativeTimeShort } from "@/utils/time";
+import { formatLocalDateTime, formatRelativeTimeShort } from "@/utils/time";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import type { CSSProperties } from "react";
 
@@ -24,6 +24,12 @@ type Props = {
 
 export function SessionManagerRow({ session, source, depth = 0, selected, resuming, archiving, deleting, compact = false, focused = false, onToggleSelected, onFocus, onResume, onArchive, onDerive, onPermanentDelete, onContextMenu }: Props) {
   const { t } = useI18n();
+  const absoluteTime = session.updatedAt
+    ? formatLocalDateTime(session.updatedAt)
+    : null;
+  const relativeTime = session.updatedAt
+    ? formatRelativeTimeShort(session.updatedAt)
+    : null;
   return (
     <div className={`session-manager-row${selected ? " is-selected" : ""}${focused ? " is-focused" : ""}${compact ? " is-compact" : ""}${depth > 0 ? " is-child" : ""}`} style={{ "--session-manager-depth": depth } as CSSProperties} onContextMenu={(event) => onContextMenu?.(event, session)}>
       <button type="button" className="session-manager-row-select" onClick={onToggleSelected} aria-label={`${t("sessionManager.select")} ${session.title}`}>
@@ -40,7 +46,9 @@ export function SessionManagerRow({ session, source, depth = 0, selected, resumi
           {session.isSubagent && <span>{session.subagentNickname ?? t("sessionManager.subagent")}</span>}
         </span>}
       </button>
-      <span className="session-manager-row-time">{session.updatedAt ? formatRelativeTimeShort(session.updatedAt) : "—"}</span>
+      <span className="session-manager-row-time" title={relativeTime ?? undefined}>
+        {absoluteTime ?? "—"}
+      </span>
       {!compact && <span className="session-manager-row-actions">
         <button type="button" className="session-manager-row-resume" onClick={onResume} disabled={resuming || archiving || !session.projectExists}>
           {resuming ? t("sessionManager.resuming") : t("sessionManager.resume")}

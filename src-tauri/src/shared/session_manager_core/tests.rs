@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use serde_json::json;
@@ -125,6 +126,55 @@ fn scans_archived_missing_project_and_subagent_metadata() {
 }
 
 #[test]
+fn source_scan_uses_persisted_activity_instead_of_index_or_file_time() {
+    let fixture = SessionFixture::new();
+    let source_root = fixture.root.join("home");
+    create_session(
+        &source_root,
+        false,
+        "thread-active",
+        None,
+        json!("vscode"),
+        Some("user"),
+    );
+    write_index(&source_root, "thread-active", "Indexed title");
+    let path = session_path(&source_root, false, "thread-active");
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&path)
+        .unwrap()
+        .write_all(b"{\"timestamp\":\"2026-07-10T11:30:00Z\",\"type\":\"event_msg\"}\n")
+        .unwrap();
+
+    let first = scan_session_source(&source("source-a", &source_root));
+    let first_updated_at = first.sessions[0].updated_at;
+    let contents = fs::read(&path).unwrap();
+    fs::write(&path, contents).unwrap();
+    let second = scan_session_source(&source("source-a", &source_root));
+
+    assert_eq!(first_updated_at, Some(1_783_683_000_000));
+    assert_eq!(second.sessions[0].updated_at, first_updated_at);
+}
+
+#[test]
+fn source_scan_does_not_fall_back_to_index_when_rollout_has_no_time() {
+    let fixture = SessionFixture::new();
+    let source_root = fixture.root.join("home");
+    let path = session_path(&source_root, false, "thread-unknown");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        &path,
+        "{\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-unknown\"}}\n",
+    )
+    .unwrap();
+    write_index(&source_root, "thread-unknown", "Indexed title");
+
+    let result = scan_session_source(&source("source-a", &source_root));
+
+    assert_eq!(result.sessions[0].updated_at, None);
+}
+
+#[test]
 fn isolates_malformed_files_and_marks_same_source_duplicates_ambiguous() {
     let fixture = SessionFixture::new();
     let source_root = fixture.root.join("home");
@@ -216,17 +266,8 @@ fn create_session(
     source: serde_json::Value,
     thread_source: Option<&str>,
 ) {
-    let directory = if archived {
-        source_root.join("archived_sessions")
-    } else {
-        source_root
-            .join("sessions")
-            .join("2026")
-            .join("07")
-            .join("10")
-    };
-    fs::create_dir_all(&directory).unwrap();
-    let path = directory.join(format!("rollout-2026-07-10T08-00-00-{thread_id}.jsonl"));
+    let path = session_path(source_root, archived, thread_id);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
     let record = json!({
         "timestamp": "2026-07-10T08:00:00Z",
         "type": "session_meta",
@@ -239,6 +280,19 @@ fn create_session(
         }
     });
     fs::write(path, format!("{record}\n")).unwrap();
+}
+
+fn session_path(source_root: &Path, archived: bool, thread_id: &str) -> PathBuf {
+    let directory = if archived {
+        source_root.join("archived_sessions")
+    } else {
+        source_root
+            .join("sessions")
+            .join("2026")
+            .join("07")
+            .join("10")
+    };
+    directory.join(format!("rollout-2026-07-10T08-00-00-{thread_id}.jsonl"))
 }
 
 fn write_index(source_root: &Path, thread_id: &str, title: &str) {

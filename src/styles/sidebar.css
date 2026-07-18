@@ -2861,6 +2861,11 @@
   font-size: 10px;
 }
 
+.session-manager-row-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .session-manager-row-tags {
   display: flex;
   flex-wrap: wrap;
