@@ -657,11 +657,11 @@ describe("threadReducer", () => {
     });
 
     expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "thread-parent",
       "thread-child",
       "thread-new",
-      "thread-active",
       "thread-processing",
-      "thread-parent",
+      "thread-active",
     ]);
     expect(
       next.threadsByWorkspace["ws-1"]?.find((thread) => thread.id === "thread-child")
@@ -791,6 +791,115 @@ describe("threadReducer", () => {
     expect(duringTurn.activeThreadIdByWorkspace["ws-1"]).toBe("thread-resumed");
   });
 
+  it("keeps a missing active processing thread in updated order", () => {
+    const base: ThreadState = {
+      ...initialState,
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "thread-now", name: "Now", updatedAt: 1_000 },
+          { id: "thread-active", name: "Active", updatedAt: 940 },
+          { id: "thread-two-hours", name: "Two hours", updatedAt: 800 },
+          { id: "thread-one-day", name: "One day", updatedAt: 100 },
+        ],
+      },
+      activeThreadIdByWorkspace: { "ws-1": "thread-active" },
+      threadStatusById: {
+        "thread-active": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 950,
+          lastDurationMs: null,
+        },
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      sortKey: "updated_at",
+      preserveAnchors: true,
+      threads: [
+        { id: "thread-now", name: "Now", updatedAt: 1_000 },
+        { id: "thread-two-hours", name: "Two hours", updatedAt: 800 },
+        { id: "thread-one-day", name: "One day", updatedAt: 100 },
+      ],
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "thread-now",
+      "thread-active",
+      "thread-two-hours",
+      "thread-one-day",
+    ]);
+    expect(next.threadsByWorkspace["ws-1"]?.[1]?.updatedAt).toBe(950);
+  });
+
+  it("keeps a missing in-flight active thread in updated order on replacement", () => {
+    const base: ThreadState = {
+      ...initialState,
+      threadsByWorkspace: {
+        "ws-1": [{ id: "thread-active", name: "Active", updatedAt: 940 }],
+      },
+      activeThreadIdByWorkspace: { "ws-1": "thread-active" },
+      threadResumeLoadingById: { "thread-active": true },
+      lastAgentMessageByThread: {
+        "thread-active": { text: "Working", timestamp: 950 },
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      sortKey: "updated_at",
+      threads: [
+        { id: "thread-now", name: "Now", updatedAt: 1_000 },
+        { id: "thread-old", name: "Old", updatedAt: 100 },
+      ],
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "thread-now",
+      "thread-active",
+      "thread-old",
+    ]);
+    expect(next.threadsByWorkspace["ws-1"]?.[1]?.updatedAt).toBe(950);
+  });
+
+  it("inserts missing anchors by created time when created_at sorting is active", () => {
+    const base: ThreadState = {
+      ...initialState,
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "thread-active",
+            name: "Active",
+            createdAt: 900,
+            updatedAt: 950,
+          },
+        ],
+      },
+      activeThreadIdByWorkspace: { "ws-1": "thread-active" },
+      threadResumeLoadingById: { "thread-active": true },
+    };
+
+    const next = threadReducer(base, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      sortKey: "created_at",
+      threads: [
+        { id: "thread-new", name: "New", createdAt: 1_000, updatedAt: 1_000 },
+        { id: "thread-old", name: "Old", createdAt: 100, updatedAt: 980 },
+      ],
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "thread-new",
+      "thread-active",
+      "thread-old",
+    ]);
+  });
+
   it("removes an optimistic user message by id", () => {
     const next = threadReducer(
       {
@@ -867,11 +976,15 @@ describe("threadReducer", () => {
     });
 
     expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "thread-processing",
       "thread-fresh",
       "thread-active",
-      "thread-processing",
     ]);
-    expect(next.threadsByWorkspace["ws-1"]?.[0]).toEqual({
+    expect(
+      next.threadsByWorkspace["ws-1"]?.find(
+        (thread) => thread.id === "thread-fresh",
+      ),
+    ).toEqual({
       id: "thread-fresh",
       name: "Fresh",
       updatedAt: 200,

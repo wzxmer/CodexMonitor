@@ -1,4 +1,5 @@
 import type { ThreadSummary } from "@/types";
+import { insertThreadSummaryBySort } from "@threads/utils/threadSummaryOrder";
 import type { ThreadAction, ThreadState } from "../useThreadsReducer";
 import { prefersUpdatedSort } from "./common";
 
@@ -466,6 +467,24 @@ export function reduceThreadLifecycle(
       const visibleThreads = dedupeThreadSummaries(
         action.threads.filter((thread) => !hidden[thread.id]),
       );
+      const freshenAnchorSummary = (summary: ThreadSummary) => {
+        const lastMessageTimestamp =
+          state.lastAgentMessageByThread[summary.id]?.timestamp ?? 0;
+        const processingStartedAt =
+          state.threadStatusById[summary.id]?.processingStartedAt ?? 0;
+        const nextUpdatedAt = Math.max(
+          summary.updatedAt ?? 0,
+          lastMessageTimestamp,
+          processingStartedAt,
+        );
+        if (nextUpdatedAt <= (summary.updatedAt ?? 0)) {
+          return summary;
+        }
+        return {
+          ...summary,
+          updatedAt: nextUpdatedAt,
+        };
+      };
       const preserveAnchors = action.preserveAnchors === true;
       if (!preserveAnchors) {
         const currentActiveThreadId =
@@ -478,15 +497,19 @@ export function reduceThreadLifecycle(
             (state.threadResumeLoadingById[currentActiveThreadId] ||
               state.threadStatusById[currentActiveThreadId]?.isProcessing),
         );
-        const nextThreads =
-          activeThreadStillVisible || !activeThreadIsInFlight
-            ? visibleThreads
-            : [
-                ...visibleThreads,
-                ...(state.threadsByWorkspace[action.workspaceId] ?? []).filter(
-                  (thread) => thread.id === currentActiveThreadId,
-                ),
-              ];
+        const nextThreads = [...visibleThreads];
+        if (!activeThreadStillVisible && activeThreadIsInFlight) {
+          const activeSummary = (
+            state.threadsByWorkspace[action.workspaceId] ?? []
+          ).find((thread) => thread.id === currentActiveThreadId);
+          if (activeSummary) {
+            insertThreadSummaryBySort(
+              nextThreads,
+              freshenAnchorSummary(activeSummary),
+              action.sortKey,
+            );
+          }
+        }
         return {
           ...state,
           threadsByWorkspace: {
@@ -514,24 +537,6 @@ export function reduceThreadLifecycle(
       );
       const reconciled = [...visibleThreads];
       const includedIds = new Set(reconciled.map((thread) => thread.id));
-      const freshenAnchorSummary = (summary: ThreadSummary) => {
-        const lastMessageTimestamp =
-          state.lastAgentMessageByThread[summary.id]?.timestamp ?? 0;
-        const processingStartedAt =
-          state.threadStatusById[summary.id]?.processingStartedAt ?? 0;
-        const nextUpdatedAt = Math.max(
-          summary.updatedAt ?? 0,
-          lastMessageTimestamp,
-          processingStartedAt,
-        );
-        if (nextUpdatedAt <= (summary.updatedAt ?? 0)) {
-          return summary;
-        }
-        return {
-          ...summary,
-          updatedAt: nextUpdatedAt,
-        };
-      };
       const appendExistingAnchor = (threadId: string | null | undefined) => {
         if (!threadId || hidden[threadId] || includedIds.has(threadId)) {
           return;
@@ -540,7 +545,11 @@ export function reduceThreadLifecycle(
         if (!summary) {
           return;
         }
-        reconciled.push(freshenAnchorSummary(summary));
+        insertThreadSummaryBySort(
+          reconciled,
+          freshenAnchorSummary(summary),
+          action.sortKey,
+        );
         includedIds.add(threadId);
       };
 

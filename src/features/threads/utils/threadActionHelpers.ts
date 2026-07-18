@@ -12,6 +12,7 @@ import {
   mergeThreadItems,
 } from "@utils/threadItems";
 import { getThreadDisplayTitle } from "@threads/utils/threadSummary";
+import { insertThreadSummaryBySort } from "@threads/utils/threadSummaryOrder";
 import { asString, normalizeRootPath } from "./threadNormalize";
 import { getResumedTurnState } from "./threadRpc";
 
@@ -33,7 +34,10 @@ export type WorkspacePathLookup = {
 };
 
 type ThreadRecord = Record<string, unknown>;
-type ThreadStatusLookup = Record<string, { isProcessing?: boolean } | undefined>;
+type ThreadStatusLookup = Record<
+  string,
+  { isProcessing?: boolean; processingStartedAt?: number | null } | undefined
+>;
 
 export type ResumeHydrationPlan = {
   keepLocalProcessing: boolean;
@@ -243,6 +247,12 @@ export function buildWorkspaceThreadListState({
       didChangeActivity = true;
     }
   });
+  const getEffectiveActivity = (threadId: string, timestamp: number) =>
+    Math.max(
+      nextActivityByThread[threadId] ?? 0,
+      threadStatusById[threadId]?.processingStartedAt ?? 0,
+      timestamp,
+    );
 
   if (requestedSortKey === "updated_at") {
     uniqueThreads.sort((a, b) => {
@@ -250,8 +260,8 @@ export function buildWorkspaceThreadListState({
       const bId = String(b.id ?? "");
       const aCreated = getThreadTimestamp(a);
       const bCreated = getThreadTimestamp(b);
-      const aActivity = Math.max(nextActivityByThread[aId] ?? 0, aCreated);
-      const bActivity = Math.max(nextActivityByThread[bId] ?? 0, bCreated);
+      const aActivity = getEffectiveActivity(aId, aCreated);
+      const bActivity = getEffectiveActivity(bId, bCreated);
       return bActivity - aActivity;
     });
   } else {
@@ -272,7 +282,13 @@ export function buildWorkspaceThreadListState({
     if (!summary) {
       return;
     }
-    summaryById.set(summary.id, summary);
+    const effectiveUpdatedAt = getEffectiveActivity(summary.id, summary.updatedAt);
+    summaryById.set(
+      summary.id,
+      effectiveUpdatedAt > summary.updatedAt
+        ? { ...summary, updatedAt: effectiveUpdatedAt }
+        : summary,
+    );
   });
 
   const summaries = uniqueThreads
@@ -288,7 +304,7 @@ export function buildWorkspaceThreadListState({
     if (!summary) {
       return;
     }
-    summaries.push(summary);
+    insertThreadSummaryBySort(summaries, summary, requestedSortKey);
     includedIds.add(threadId);
   };
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConversationItem, WorkspaceInfo } from "@/types";
+import type { ConversationItem, ThreadSummary, WorkspaceInfo } from "@/types";
 import {
   archiveThread,
   forkThread,
@@ -2061,6 +2061,66 @@ describe("useThreadActions", () => {
     expect(setThreadsAction.threads[20]?.id).toBe("thread-21");
     expect(setThreadsAction.threads[20]?.name).toBe("Thread 21 fresh");
     expect(setThreadsAction.threads[20]?.updatedAt).toBe(4980);
+  });
+
+  it("keeps processing activity fresh while rebuilding thread summaries", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-processing",
+            cwd: workspace.path,
+            preview: "Processing",
+            updated_at: 100,
+          },
+          {
+            id: "thread-old",
+            cwd: workspace.path,
+            preview: "Old",
+            updated_at: 800,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions({
+      activeThreadIdByWorkspace: { "ws-1": "thread-processing" },
+      threadStatusById: {
+        "thread-processing": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 950,
+          lastDurationMs: null,
+        },
+      },
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    const setThreadsAction = dispatch.mock.calls
+      .map(([action]) => action)
+      .find(
+        (action) => action.type === "setThreads" && action.workspaceId === "ws-1",
+      );
+    expect(setThreadsAction).toBeTruthy();
+    if (!setThreadsAction || setThreadsAction.type !== "setThreads") {
+      return;
+    }
+    expect(
+      setThreadsAction.threads.map((thread: ThreadSummary) => thread.id),
+    ).toEqual([
+      "thread-processing",
+      "thread-old",
+    ]);
+    expect(setThreadsAction.threads[0]?.updatedAt).toBe(950);
   });
 
   it("lists threads once and distributes results across workspaces", async () => {
