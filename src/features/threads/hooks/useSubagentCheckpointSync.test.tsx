@@ -66,6 +66,52 @@ describe("useSubagentCheckpointSync", () => {
     );
   });
 
+  it("does not resend an identical final result after progress was delivered", async () => {
+    const { hook } = setup();
+    act(() => {
+      hook.result.current.onTurnStarted("ws", "child", "child-turn");
+      hook.result.current.onAgentMessageCompleted({
+        workspaceId: "ws",
+        threadId: "child",
+        itemId: "item-1",
+        text: "Final answer",
+      });
+    });
+    await waitFor(() => expect(steerTurnMock).toHaveBeenCalledTimes(1));
+
+    act(() => hook.result.current.onTurnCompleted("ws", "child", "child-turn"));
+    await waitFor(() => expect(steerTurnMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("replaces pending progress with final when the final text changes", async () => {
+    const { hook, threadStatusByIdRef, activeTurnIdByThreadRef } = setup();
+    threadStatusByIdRef.current.parent.isProcessing = false;
+    activeTurnIdByThreadRef.current.parent = null;
+    act(() => {
+      hook.result.current.onTurnStarted("ws", "child", "child-turn");
+      hook.result.current.onAgentMessageCompleted({
+        workspaceId: "ws",
+        threadId: "child",
+        itemId: "item-1",
+        text: "Progress answer",
+      });
+      hook.result.current.onAgentMessageCompleted({
+        workspaceId: "ws",
+        threadId: "child",
+        itemId: "item-1",
+        text: "Final answer",
+      });
+      hook.result.current.onTurnCompleted("ws", "child", "child-turn");
+    });
+
+    threadStatusByIdRef.current.parent.isProcessing = true;
+    activeTurnIdByThreadRef.current.parent = "parent-turn-2";
+    act(() => hook.result.current.onTurnStarted("ws", "parent", "parent-turn-2"));
+    await waitFor(() => expect(steerTurnMock).toHaveBeenCalledTimes(1));
+    expect(steerTurnMock.mock.calls[0]?.[3]).toContain('priority="final"');
+    expect(steerTurnMock.mock.calls[0]?.[3]).toContain("Final answer");
+  });
+
   it("queues while parent is idle and flushes after its next turn starts", async () => {
     const { hook, threadStatusByIdRef, activeTurnIdByThreadRef, onStatusChange } = setup();
     threadStatusByIdRef.current.parent.isProcessing = false;

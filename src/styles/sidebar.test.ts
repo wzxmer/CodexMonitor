@@ -30,4 +30,21 @@ describe("sidebar interaction styles", () => {
     expect(interactionRule?.[1]).toContain("!important");
     expect(interactionRule?.[1]).toContain("transform: none !important");
   });
+
+  it("responds to the session manager content width instead of the window width", () => {
+    const sidebarCss = readFileSync(new URL("./sidebar.css", import.meta.url), "utf8");
+    const workspaceRule = sidebarCss.match(
+      /\.session-manager-workspace\s*\{([\s\S]*?)\n\}/,
+    );
+    const containerRule = sidebarCss.match(
+      /@container session-manager-workspace \(max-width: 760px\)\s*\{([\s\S]*?)\n\}/,
+    );
+
+    expect(workspaceRule?.[1]).toContain("container-name: session-manager-workspace");
+    expect(workspaceRule?.[1]).toContain("container-type: inline-size");
+    expect(containerRule?.[1]).toContain(
+      ".session-manager-workspace .session-manager-toolbar",
+    );
+    expect(containerRule?.[1]).toContain("grid-template-columns: minmax(0, 1fr)");
+  });
 });

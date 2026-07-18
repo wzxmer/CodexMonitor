@@ -11,6 +11,7 @@ type UseThreadListActionsOptions = {
   setThreadListSortKey: (sortKey: ThreadListSortKey) => void;
   workspaces: WorkspaceInfo[];
   refreshWorkspaces: () => Promise<WorkspaceInfo[] | undefined>;
+  connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   listThreadsForWorkspaces: (
     workspaces: WorkspaceInfo[],
     options?: ListThreadsOptions,
@@ -23,6 +24,7 @@ export function useThreadListActions({
   setThreadListSortKey,
   workspaces,
   refreshWorkspaces,
+  connectWorkspace,
   listThreadsForWorkspaces,
   resetWorkspaceThreads,
 }: UseThreadListActionsOptions) {
@@ -49,14 +51,32 @@ export function useThreadListActions({
       refreshed && localCodexWorkspace
         ? [...refreshed, localCodexWorkspace]
         : refreshed ?? workspaces;
-    const connectedWorkspaces = source.filter((workspace) => workspace.connected);
+    const connectedWorkspaces: WorkspaceInfo[] = [];
+    for (const workspace of source) {
+      if (workspace.connected || workspace.id === LOCAL_CODEX_WORKSPACE_ID) {
+        connectedWorkspaces.push(workspace);
+        continue;
+      }
+      try {
+        await connectWorkspace(workspace);
+        connectedWorkspaces.push({ ...workspace, connected: true });
+      } catch {
+        // The workspace is still unavailable; preserve any current thread state.
+      }
+    }
     connectedWorkspaces.forEach((workspace) => {
       resetWorkspaceThreads(workspace.id);
     });
     if (connectedWorkspaces.length > 0) {
       await listThreadsForWorkspaces(connectedWorkspaces);
     }
-  }, [refreshWorkspaces, workspaces, resetWorkspaceThreads, listThreadsForWorkspaces]);
+  }, [
+    refreshWorkspaces,
+    workspaces,
+    connectWorkspace,
+    resetWorkspaceThreads,
+    listThreadsForWorkspaces,
+  ]);
 
   return {
     handleSetThreadListSortKey,

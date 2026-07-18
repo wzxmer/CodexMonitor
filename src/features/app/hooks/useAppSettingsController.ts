@@ -22,6 +22,7 @@ export function useAppSettingsController() {
     scaleShortcutTitle,
     scaleShortcutText,
     queueSaveSettings,
+    waitForPendingSettingsSaves,
   } = useUiScaleShortcuts({
     settings: appSettings,
     setSettings: setAppSettings,
@@ -43,5 +44,6 @@ export function useAppSettingsController() {
     uiScale,
     scaleShortcutTitle,
     scaleShortcutText,
+    waitForPendingSettingsSaves,
   };
 }

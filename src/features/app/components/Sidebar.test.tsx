@@ -135,6 +135,25 @@ describe("Sidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: "本地会话管理" }));
     expect((screen.getByLabelText("搜索会话") as HTMLInputElement).value).toBe("alpha");
   });
+  it("clears the local session search from its clear button", () => {
+    render(<Sidebar {...baseProps} />);
+
+    const sessionManagerToggle = document.querySelector<HTMLButtonElement>(".sidebar-title-group button[aria-pressed]");
+    expect(sessionManagerToggle).not.toBeNull();
+    fireEvent.click(sessionManagerToggle!);
+    const input = document.querySelector<HTMLInputElement>(".session-manager-sidebar-search .sidebar-search-input");
+    expect(input).not.toBeNull();
+    expect(document.querySelector(".session-manager-search-clear")).toBeNull();
+
+    fireEvent.change(input!, { target: { value: "019f6eb8" } });
+    const clearButton = document.querySelector<HTMLButtonElement>(".session-manager-search-clear");
+    expect(clearButton).not.toBeNull();
+    fireEvent.click(clearButton!);
+
+    expect(input!.value).toBe("");
+    expect(document.querySelector(".session-manager-search-clear")).toBeNull();
+  });
+
   it("keeps session manager open when a thread is already active", () => {
     render(
       <Sidebar

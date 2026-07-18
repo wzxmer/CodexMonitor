@@ -28,6 +28,17 @@ export type SubagentCheckpoint = {
   lastError: string | null;
 };
 
+/** Groups progress/final envelopes that describe the same child result item. */
+export function checkpointResultKey(
+  checkpoint: Pick<SubagentCheckpoint, "childThreadId" | "sourceItemId">,
+) {
+  return `${checkpoint.childThreadId}:${checkpoint.sourceItemId}`;
+}
+
+export function checkpointTextEquivalent(left: string, right: string) {
+  return left.replace(/\s+/g, " ").trim() === right.replace(/\s+/g, " ").trim();
+}
+
 export const SUBAGENT_CHECKPOINT_PROGRESS_LIMIT = 8;
 
 export function checkpointThrottleMs(mode: SubagentCheckpointSyncMode) {

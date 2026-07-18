@@ -7,6 +7,8 @@ import {
   buildCheckpointInjection,
   checkpointThrottleMs,
   createSubagentCheckpoint,
+  checkpointResultKey,
+  checkpointTextEquivalent,
   shouldCreateCheckpoint,
   type SubagentCheckpoint,
 } from "@threads/utils/subagentCheckpoints";
@@ -61,6 +63,7 @@ export function useSubagentCheckpointSync({
   const modeRef = useRef(mode);
   const pendingByParentRef = useRef<Record<string, SubagentCheckpoint[]>>({});
   const deliveredIdsRef = useRef(new Set<string>());
+  const deliveredByResultKeyRef = useRef(new Map<string, SubagentCheckpoint>());
   const progressCountByTurnRef = useRef<Record<string, number>>({});
   const sequenceByChildRef = useRef<Record<string, number>>({});
   const activeTurnByChildRef = useRef<Record<string, string | null>>({});
@@ -86,10 +89,28 @@ export function useSubagentCheckpointSync({
 
   const enqueue = useCallback((checkpoint: SubagentCheckpoint) => {
     const pending = pendingByParentRef.current[checkpoint.parentThreadId] ?? [];
-    if (pending.some((item) => item.id === checkpoint.id)) {
+    const resultKey = checkpointResultKey(checkpoint);
+    const existingIndex = pending.findIndex(
+      (item) => checkpointResultKey(item) === resultKey,
+    );
+    if (existingIndex < 0) {
+      pendingByParentRef.current[checkpoint.parentThreadId] = [...pending, checkpoint];
       return;
     }
-    pendingByParentRef.current[checkpoint.parentThreadId] = [...pending, checkpoint];
+    const existing = pending[existingIndex];
+    if (
+      existing.id === checkpoint.id ||
+      existing.kind === "final" ||
+      (existing.kind === "progress" && checkpoint.kind === "progress")
+    ) {
+      pendingByParentRef.current[checkpoint.parentThreadId] = pending.map((item, index) =>
+        index === existingIndex && checkpoint.kind === "progress" ? checkpoint : item,
+      );
+      return;
+    }
+    pendingByParentRef.current[checkpoint.parentThreadId] = pending.map((item, index) =>
+      index === existingIndex ? checkpoint : item,
+    );
   }, []);
 
   const flushParent = useCallback(
@@ -140,7 +161,10 @@ export function useSubagentCheckpointSync({
         .join("\n\n");
       try {
         await steerTurn(batch[0].workspaceId, parentThreadId, turnId, text);
-        batch.forEach((checkpoint) => deliveredIdsRef.current.add(checkpoint.id));
+        batch.forEach((checkpoint) => {
+          deliveredIdsRef.current.add(checkpoint.id);
+          deliveredByResultKeyRef.current.set(checkpointResultKey(checkpoint), checkpoint);
+        });
         lastDeliveredAtByParentRef.current[parentThreadId] = Date.now();
         onStatusChange?.(
           batch[0].workspaceId,
@@ -202,6 +226,16 @@ export function useSubagentCheckpointSync({
   const submitCheckpoint = useCallback(
     (checkpoint: SubagentCheckpoint | null) => {
       if (!checkpoint || deliveredIdsRef.current.has(checkpoint.id)) {
+        return;
+      }
+      const resultKey = checkpointResultKey(checkpoint);
+      const delivered = deliveredByResultKeyRef.current.get(resultKey);
+      if (
+        delivered &&
+        (delivered.kind === "final" ||
+          (checkpoint.kind === "final" &&
+            checkpointTextEquivalent(delivered.text, checkpoint.text)))
+      ) {
         return;
       }
       enqueue(checkpoint);
@@ -308,6 +342,11 @@ export function useSubagentCheckpointSync({
         parentThreadId
       ].filter((checkpoint) => checkpoint.childThreadId !== threadId);
     });
+    deliveredByResultKeyRef.current.forEach((checkpoint, key) => {
+      if (checkpoint.childThreadId === threadId) {
+        deliveredByResultKeyRef.current.delete(key);
+      }
+    });
   }, []);
 
   const clearWorkspace = useCallback((workspaceId: string) => {
@@ -315,6 +354,11 @@ export function useSubagentCheckpointSync({
       pendingByParentRef.current[parentThreadId] = pendingByParentRef.current[
         parentThreadId
       ].filter((checkpoint) => checkpoint.workspaceId !== workspaceId);
+    });
+    deliveredByResultKeyRef.current.forEach((checkpoint, key) => {
+      if (checkpoint.workspaceId === workspaceId) {
+        deliveredByResultKeyRef.current.delete(key);
+      }
     });
   }, []);
 

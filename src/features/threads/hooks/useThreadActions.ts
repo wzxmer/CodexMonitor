@@ -11,9 +11,11 @@ import type {
 import {
   archiveThread as archiveThreadService,
   forkThread as forkThreadService,
+  getThreadTokenUsage as getThreadTokenUsageService,
   listSessionSources as listSessionSourcesService,
   listThreads as listThreadsService,
   listWorkspaces as listWorkspacesService,
+  readThread as readThreadService,
   resumeThread as resumeThreadService,
   startThread as startThreadService,
   verifySessionThreads as verifySessionThreadsService,
@@ -148,6 +150,8 @@ export function useThreadActions({
   const resumeInFlightByThreadRef = useRef<Record<string, number>>({});
   const resumeGenerationByThreadRef = useRef<Record<string, number>>({});
   const resumeAppliedGenerationByThreadRef = useRef<Record<string, number>>({});
+  const readOnlyLoadedThreadsRef = useRef<Record<string, true>>({});
+  const tokenUsageHydrationInFlightRef = useRef<Record<string, true>>({});
   const threadStatusByIdRef = useRef(threadStatusById);
   const activeTurnIdByThreadRef = useRef(activeTurnIdByThread);
   threadStatusByIdRef.current = threadStatusById;
@@ -227,6 +231,7 @@ export function useThreadActions({
             dispatch({ type: "setActiveThreadId", workspaceId, threadId });
           }
           loadedThreadsRef.current[threadId] = true;
+          delete readOnlyLoadedThreadsRef.current[threadId];
           return threadId;
         }
         return null;
@@ -251,15 +256,25 @@ export function useThreadActions({
       force = false,
       replaceLocal = false,
       requireThreadResponse = false,
+      readOnly = false,
     ) => {
       if (!threadId) {
         return null;
       }
-      if (!force && loadedThreadsRef.current[threadId]) {
+      if (
+        !force &&
+        loadedThreadsRef.current[threadId] &&
+        (readOnly || !readOnlyLoadedThreadsRef.current[threadId])
+      ) {
         return threadId;
       }
       const status = threadStatusByIdRef.current[threadId];
-      if (status?.isProcessing && loadedThreadsRef.current[threadId] && !force) {
+      if (
+        status?.isProcessing &&
+        loadedThreadsRef.current[threadId] &&
+        (readOnly || !readOnlyLoadedThreadsRef.current[threadId]) &&
+        !force
+      ) {
         onDebug?.({
           id: `${Date.now()}-client-thread-resume-skipped`,
           timestamp: Date.now(),
@@ -269,11 +284,12 @@ export function useThreadActions({
         });
         return threadId;
       }
+      const requestLabel = readOnly ? "thread/read" : "thread/resume";
       onDebug?.({
         id: `${Date.now()}-client-thread-resume`,
         timestamp: Date.now(),
         source: "client",
-        label: "thread/resume",
+        label: requestLabel,
         payload: { workspaceId, threadId },
       });
       const resumeKey = `${workspaceId}:${threadId}`;
@@ -289,28 +305,36 @@ export function useThreadActions({
       }
       try {
         const response =
-          (await resumeThreadService(workspaceId, threadId)) as
+          (await (readOnly ? readThreadService : resumeThreadService)(
+            workspaceId,
+            threadId,
+          )) as
             | Record<string, unknown>
             | null;
         onDebug?.({
           id: `${Date.now()}-server-thread-resume`,
           timestamp: Date.now(),
           source: "server",
-          label: "thread/resume response",
+          label: `${requestLabel} response`,
           payload: response,
         });
+        if (readOnly) {
+          readOnlyLoadedThreadsRef.current[threadId] = true;
+        } else {
+          delete readOnlyLoadedThreadsRef.current[threadId];
+        }
         const thread = extractThreadFromResponse(response);
         if (!thread && requireThreadResponse) {
           return null;
         }
         if (thread) {
-          await hydrateTurnExecutionSummary(workspaceId, threadId, thread);
           if (
             resumeGeneration <
             (resumeAppliedGenerationByThreadRef.current[resumeKey] ?? 0)
           ) {
             return threadId;
           }
+          void hydrateTurnExecutionSummary(workspaceId, threadId, thread);
           dispatch({ type: "ensureThread", workspaceId, threadId });
           const tokenUsage = extractTokenUsageFromResponse(response, thread);
           if (
@@ -325,6 +349,45 @@ export function useThreadActions({
               threadId,
               tokenUsage: normalizeTokenUsage(tokenUsage),
             });
+          } else if (
+            !tokenUsage &&
+            !tokenUsageHydrationInFlightRef.current[resumeKey]
+          ) {
+            tokenUsageHydrationInFlightRef.current[resumeKey] = true;
+            void getThreadTokenUsageService(workspaceId, threadId)
+              .then((restoredTokenUsage) => {
+                if (
+                  !restoredTokenUsage ||
+                  (tokenUsageRevisionByThreadRef.current[resumeKey] ?? 0) !==
+                    tokenUsageRevisionAtStart
+                ) {
+                  return;
+                }
+                tokenUsageRevisionByThreadRef.current[resumeKey] =
+                  tokenUsageRevisionAtStart + 1;
+                dispatch({
+                  type: "setThreadTokenUsage",
+                  threadId,
+                  tokenUsage: normalizeTokenUsage(restoredTokenUsage),
+                });
+              })
+              .catch((error) => {
+                onDebug?.({
+                  id: `${Date.now()}-client-thread-token-usage-hydrate-error`,
+                  timestamp: Date.now(),
+                  source: "error",
+                  label: "thread/token-usage hydrate error",
+                  payload: {
+                    workspaceId,
+                    threadId,
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                  },
+                });
+              })
+              .finally(() => {
+                delete tokenUsageHydrationInFlightRef.current[resumeKey];
+              });
           }
           applyThreadMetadata(workspaceId, threadId, thread, {
             notifySubagent: true,
@@ -418,7 +481,7 @@ export function useThreadActions({
           id: `${Date.now()}-client-thread-resume-error`,
           timestamp: Date.now(),
           source: "error",
-          label: "thread/resume error",
+          label: `${requestLabel} error`,
           payload: error instanceof Error ? error.message : String(error),
         });
         return null;
@@ -449,6 +512,30 @@ export function useThreadActions({
       replaceOnResumeRef,
       tokenUsageRevisionByThreadRef,
     ],
+  );
+
+  const readThreadForWorkspace = useCallback(
+    async (
+      workspaceId: string,
+      threadId: string,
+      force = false,
+      replaceLocal = false,
+    ) =>
+      resumeThreadForWorkspace(
+        workspaceId,
+        threadId,
+        force,
+        replaceLocal,
+        false,
+        true,
+      ),
+    [resumeThreadForWorkspace],
+  );
+
+  const ensureThreadRuntimeForWorkspace = useCallback(
+    async (workspaceId: string, threadId: string) =>
+      resumeThreadForWorkspace(workspaceId, threadId),
+    [resumeThreadForWorkspace],
   );
 
   const forkThreadForWorkspace = useCallback(
@@ -518,9 +605,9 @@ export function useThreadActions({
         return null;
       }
       replaceOnResumeRef.current[threadId] = true;
-      return resumeThreadForWorkspace(workspaceId, threadId, true, true);
+      return readThreadForWorkspace(workspaceId, threadId, true, true);
     },
-    [replaceOnResumeRef, resumeThreadForWorkspace],
+    [readThreadForWorkspace, replaceOnResumeRef],
   );
 
   const resumeThreadById = useCallback(
@@ -556,6 +643,7 @@ export function useThreadActions({
       }
       threadIds.forEach((threadId) => {
         loadedThreadsRef.current[threadId] = false;
+        delete readOnlyLoadedThreadsRef.current[threadId];
       });
     },
     [activeThreadIdByWorkspace, loadedThreadsRef, threadsByWorkspace],
@@ -1618,6 +1706,8 @@ export function useThreadActions({
     startThreadForWorkspace,
     forkThreadForWorkspace,
     resumeThreadForWorkspace,
+    readThreadForWorkspace,
+    ensureThreadRuntimeForWorkspace,
     resumeThreadById,
     refreshThread,
     resetWorkspaceThreads,

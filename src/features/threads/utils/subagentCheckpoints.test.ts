@@ -3,12 +3,21 @@ import {
   SUBAGENT_CHECKPOINT_MAX_TEXT_LENGTH,
   buildCheckpointInjection,
   checkpointThrottleMs,
+  checkpointResultKey,
+  checkpointTextEquivalent,
   createSubagentCheckpoint,
   shouldCreateCheckpoint,
 } from "./subagentCheckpoints";
 import { parseSubagentCheckpointEnvelopes } from "@utils/subagentCheckpointEnvelope";
 
 describe("subagent checkpoints", () => {
+  it("shares a logical result key across progress and final envelopes", () => {
+    expect(
+      checkpointResultKey({ childThreadId: "child", sourceItemId: "item-1" }),
+    ).toBe("child:item-1");
+    expect(checkpointTextEquivalent("Final\nanswer", " Final answer ")).toBe(true);
+  });
+
   it("applies mode throttles and preserves final checkpoints", () => {
     expect(checkpointThrottleMs("continuous")).toBe(3_000);
     expect(checkpointThrottleMs("checkpoints")).toBe(10_000);

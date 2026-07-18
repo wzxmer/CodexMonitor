@@ -5,9 +5,11 @@ import type { ConversationItem, WorkspaceInfo } from "@/types";
 import {
   archiveThread,
   forkThread,
+  getThreadTokenUsage,
   listSessionSources,
   listThreads,
   listWorkspaces,
+  readThread,
   resumeThread,
   startThread,
   verifySessionThreads,
@@ -26,10 +28,12 @@ import { useThreadActions } from "./useThreadActions";
 vi.mock("@services/tauri", () => ({
   startThread: vi.fn(),
   forkThread: vi.fn(),
+  getThreadTokenUsage: vi.fn(),
   listSessionSources: vi.fn(),
   resumeThread: vi.fn(),
   listThreads: vi.fn(),
   listWorkspaces: vi.fn(),
+  readThread: vi.fn(),
   archiveThread: vi.fn(),
   verifySessionThreads: vi.fn(),
 }));
@@ -72,6 +76,7 @@ describe("useThreadActions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(listWorkspaces).mockResolvedValue([]);
+    vi.mocked(getThreadTokenUsage).mockResolvedValue(null);
     vi.mocked(listSessionSources).mockResolvedValue([
       {
         id: "source-a",
@@ -291,7 +296,7 @@ describe("useThreadActions", () => {
   });
 
   it("clears local history when a forced refresh returns an empty rolled-back thread", async () => {
-    vi.mocked(resumeThread).mockResolvedValue({
+    vi.mocked(readThread).mockResolvedValue({
       result: { thread: { id: "thread-1", turns: [] } },
     });
     vi.mocked(buildItemsFromThread).mockReturnValue([]);
@@ -690,6 +695,89 @@ describe("useThreadActions", () => {
 
     await act(async () => {
       await result.current.resumeThreadForWorkspace("ws-1", "thread-without-usage");
+    });
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "setThreadTokenUsage" }),
+    );
+  });
+
+  it("hydrates missing token usage after resume completes", async () => {
+    let resolveUsage!: (value: Record<string, unknown> | null) => void;
+    vi.mocked(getThreadTokenUsage).mockReturnValue(
+      new Promise((resolve) => {
+        resolveUsage = resolve;
+      }),
+    );
+    vi.mocked(readThread).mockResolvedValue({
+      result: { thread: { id: "thread-restored-usage" } },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(mergeThreadItems).mockReturnValue([]);
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace(
+        "ws-1",
+        "thread-restored-usage",
+      );
+    });
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "setThreadTokenUsage" }),
+    );
+
+    await act(async () => {
+      resolveUsage({
+        total: { total_tokens: 42000 },
+        last: { total_tokens: 1200 },
+        model_context_window: 100000,
+      });
+      await Promise.resolve();
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadTokenUsage",
+      threadId: "thread-restored-usage",
+      tokenUsage: expect.objectContaining({
+        total: expect.objectContaining({ totalTokens: 42000 }),
+        last: expect.objectContaining({ totalTokens: 1200 }),
+        modelContextWindow: 100000,
+      }),
+    });
+  });
+
+  it("does not overwrite live token usage during async restoration", async () => {
+    let resolveUsage!: (value: Record<string, unknown> | null) => void;
+    vi.mocked(getThreadTokenUsage).mockReturnValue(
+      new Promise((resolve) => {
+        resolveUsage = resolve;
+      }),
+    );
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: { thread: { id: "thread-restored-usage" } },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(mergeThreadItems).mockReturnValue([]);
+    const tokenUsageRevisionByThreadRef = {
+      current: { "ws-1:thread-restored-usage": 0 } as Record<string, number>,
+    };
+    const { result, dispatch } = renderActions({
+      tokenUsageRevisionByThreadRef,
+    });
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace(
+        "ws-1",
+        "thread-restored-usage",
+      );
+    });
+    tokenUsageRevisionByThreadRef.current["ws-1:thread-restored-usage"] = 1;
+
+    await act(async () => {
+      resolveUsage({ total: { total_tokens: 42000 } });
+      await Promise.resolve();
     });
 
     expect(dispatch).not.toHaveBeenCalledWith(

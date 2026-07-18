@@ -29,6 +29,7 @@ describe("useThreadListActions", () => {
         setThreadListSortKey: vi.fn(),
         workspaces: stale,
         refreshWorkspaces,
+        connectWorkspace: vi.fn().mockRejectedValue(new Error("offline")),
         listThreadsForWorkspaces,
         resetWorkspaceThreads,
       }),
@@ -58,6 +59,7 @@ describe("useThreadListActions", () => {
         setThreadListSortKey: vi.fn(),
         workspaces: current,
         refreshWorkspaces,
+        connectWorkspace: vi.fn().mockRejectedValue(new Error("offline")),
         listThreadsForWorkspaces,
         resetWorkspaceThreads,
       }),
@@ -72,5 +74,35 @@ describe("useThreadListActions", () => {
     expect(resetWorkspaceThreads).toHaveBeenCalledWith("one");
     expect(listThreadsForWorkspaces).toHaveBeenCalledTimes(1);
     expect(listThreadsForWorkspaces).toHaveBeenCalledWith([current[0]]);
+  });
+
+  it("reconnects disconnected workspaces before listing their threads", async () => {
+    const disconnected = workspace("one", false);
+    const refreshWorkspaces = vi.fn(async () => [disconnected]);
+    const connectWorkspace = vi.fn(async () => {});
+    const listThreadsForWorkspaces = vi.fn(async () => {});
+    const resetWorkspaceThreads = vi.fn();
+
+    const { result } = renderHook(() =>
+      useThreadListActions({
+        threadListSortKey: "updated_at",
+        setThreadListSortKey: vi.fn(),
+        workspaces: [disconnected],
+        refreshWorkspaces,
+        connectWorkspace,
+        listThreadsForWorkspaces,
+        resetWorkspaceThreads,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleRefreshAllWorkspaceThreads();
+    });
+
+    expect(connectWorkspace).toHaveBeenCalledWith(disconnected);
+    expect(resetWorkspaceThreads).toHaveBeenCalledWith("one");
+    expect(listThreadsForWorkspaces).toHaveBeenCalledWith([
+      { ...disconnected, connected: true },
+    ]);
   });
 });
