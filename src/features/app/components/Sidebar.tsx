@@ -1170,6 +1170,7 @@ export const Sidebar = memo(function Sidebar({
         className={`sidebar-body${scrollFade.top ? " fade-top" : ""}${
           scrollFade.bottom ? " fade-bottom" : ""
         }`}
+        data-session-manager-menu-boundary={sidebarMode === "sessionManager" ? "true" : undefined}
         onScroll={handleSidebarScroll}
         ref={sidebarBodyRef}
       >

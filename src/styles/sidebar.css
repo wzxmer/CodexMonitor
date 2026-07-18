@@ -2349,7 +2349,7 @@
 .session-manager-context-menu {
   position: fixed;
   z-index: 1000;
-  min-width: 220px;
+  min-width: 0;
   padding: 5px;
   border-radius: 9px;
 }

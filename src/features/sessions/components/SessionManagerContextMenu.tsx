@@ -12,6 +12,7 @@ type Props = {
   sessions: ManagedSession[];
   x: number;
   y: number;
+  boundary: ContextMenuBoundary;
   busy: boolean;
   onClose: () => void;
   onResume: (session: ManagedSession) => void;
@@ -20,10 +21,38 @@ type Props = {
   onPermanentDelete: (sessions: ManagedSession[]) => void;
 };
 
-export function SessionManagerContextMenu({ sessions, x, y, busy, onClose, onResume, onDerive, onArchive, onPermanentDelete }: Props) {
+export type ContextMenuBoundary = Pick<DOMRect, "left" | "top" | "right" | "bottom">;
+
+const MENU_MARGIN = 8;
+const PREFERRED_MENU_WIDTH = 220;
+
+function resolveMenuPosition(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  boundary: ContextMenuBoundary,
+) {
+  const minX = boundary.left + MENU_MARGIN;
+  const maxX = Math.max(minX, boundary.right - width - MENU_MARGIN);
+  const minY = boundary.top + MENU_MARGIN;
+  const maxY = Math.max(minY, boundary.bottom - height - MENU_MARGIN);
+  const preferredX = x + width + MENU_MARGIN > boundary.right ? x - width : x;
+
+  return {
+    x: Math.max(minX, Math.min(preferredX, maxX)),
+    y: Math.max(minY, Math.min(y, maxY)),
+  };
+}
+
+export function SessionManagerContextMenu({ sessions, x, y, boundary, busy, onClose, onResume, onDerive, onArchive, onPermanentDelete }: Props) {
   const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x, y });
+  const menuWidth = Math.min(
+    PREFERRED_MENU_WIDTH,
+    Math.max(0, boundary.right - boundary.left - MENU_MARGIN * 2),
+  );
   const target = sessions[0];
   const active = sessions.filter((session) => !session.isArchived);
   useEffect(() => {
@@ -34,23 +63,34 @@ export function SessionManagerContextMenu({ sessions, x, y, busy, onClose, onRes
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
+    const closeOnViewportChange = () => onClose();
     window.addEventListener("pointerdown", close, true);
     window.addEventListener("keydown", keydown);
+    window.addEventListener("scroll", closeOnViewportChange, true);
+    window.addEventListener("resize", closeOnViewportChange);
+    window.visualViewport?.addEventListener("scroll", closeOnViewportChange);
+    window.visualViewport?.addEventListener("resize", closeOnViewportChange);
     return () => {
       window.removeEventListener("pointerdown", close, true);
       window.removeEventListener("keydown", keydown);
+      window.removeEventListener("scroll", closeOnViewportChange, true);
+      window.removeEventListener("resize", closeOnViewportChange);
+      window.visualViewport?.removeEventListener("scroll", closeOnViewportChange);
+      window.visualViewport?.removeEventListener("resize", closeOnViewportChange);
     };
   }, [onClose]);
   useLayoutEffect(() => {
     const surface = ref.current;
     if (!surface) return;
-    const rect = surface.getBoundingClientRect();
-    const next = {
-      x: Math.max(8, Math.min(x, window.innerWidth - rect.width - 8)),
-      y: Math.max(8, Math.min(y, window.innerHeight - rect.height - 8)),
-    };
+    const next = resolveMenuPosition(
+      x,
+      y,
+      surface.offsetWidth,
+      surface.offsetHeight,
+      boundary,
+    );
     setPosition((current) => current.x === next.x && current.y === next.y ? current : next);
-  }, [sessions, x, y]);
+  }, [boundary, sessions, x, y]);
   if (!target) return null;
   const run = (action: () => void) => {
     onClose();
@@ -61,7 +101,7 @@ export function SessionManagerContextMenu({ sessions, x, y, busy, onClose, onRes
       ref={ref}
       className="session-manager-context-menu"
       role="menu"
-      style={{ left: position.x, top: position.y }}
+      style={{ left: position.x, top: position.y, width: menuWidth }}
       onContextMenu={(event) => event.preventDefault()}
     >
       {sessions.length === 1 && (

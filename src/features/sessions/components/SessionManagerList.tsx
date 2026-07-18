@@ -1,7 +1,7 @@
 import type { ManagedSession, SessionSearchProgress, SessionSource } from "@/types";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { SessionManagerRow } from "./SessionManagerRow";
-import { SessionManagerContextMenu } from "./SessionManagerContextMenu";
+import { SessionManagerContextMenu, type ContextMenuBoundary } from "./SessionManagerContextMenu";
 import { useCallback, useState } from "react";
 import { buildManagedSessionTrees, type ManagedSessionTree } from "../utils/sessionHierarchy";
 
@@ -9,13 +9,20 @@ type Props = { sessions: ManagedSession[]; sources: SessionSource[]; selected: S
 
 export function SessionManagerList(props: Props) {
   const { t } = useI18n();
-  const [contextMenu, setContextMenu] = useState<{ sessions: ManagedSession[]; x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ sessions: ManagedSession[]; x: number; y: number; boundary: ContextMenuBoundary } | null>(null);
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
   const showContextMenu = useCallback((event: React.MouseEvent, session: ManagedSession) => {
     event.preventDefault();
     props.onFocus?.(session);
     const targets = props.selected.has(session.key) ? props.sessions.filter((candidate) => props.selected.has(candidate.key)) : [session];
-    setContextMenu({ sessions: targets, x: event.clientX, y: event.clientY });
+    const boundaryElement = event.currentTarget.closest<HTMLElement>("[data-session-manager-menu-boundary]");
+    const boundary = boundaryElement?.getBoundingClientRect() ?? {
+      left: 0,
+      top: 0,
+      right: window.innerWidth,
+      bottom: window.innerHeight,
+    };
+    setContextMenu({ sessions: targets, x: event.clientX, y: event.clientY, boundary });
   }, [props]);
   const sourceById = new Map(props.sources.map((source) => [source.id, source]));
   if (props.loading && props.sessions.length === 0) return <div className="session-manager-state">{t("sidebar.loading")}</div>;
@@ -33,7 +40,7 @@ export function SessionManagerList(props: Props) {
   if (props.error && props.sessions.length === 0) return <div className="session-manager-state is-error">{props.error}</div>;
   return (
     <div className="session-manager-list">
-      {contextMenu && <SessionManagerContextMenu sessions={contextMenu.sessions} x={contextMenu.x} y={contextMenu.y} busy={props.loading || props.loadingMore || props.resumingKey !== null || props.archivingKeys.size > 0 || Boolean(props.deletingKeys?.size)} onClose={closeContextMenu} onResume={props.onResume} onDerive={(sessions) => { if (props.onDeriveSelected) props.onDeriveSelected(sessions); else sessions.forEach(props.onDerive); }} onArchive={(sessions) => { if (props.onArchiveSelected) props.onArchiveSelected(sessions); else sessions.forEach(props.onArchive); }} onPermanentDelete={props.onPermanentDelete ?? (() => {})} />}
+      {contextMenu && <SessionManagerContextMenu sessions={contextMenu.sessions} x={contextMenu.x} y={contextMenu.y} boundary={contextMenu.boundary} busy={props.loading || props.loadingMore || props.resumingKey !== null || props.archivingKeys.size > 0 || Boolean(props.deletingKeys?.size)} onClose={closeContextMenu} onResume={props.onResume} onDerive={(sessions) => { if (props.onDeriveSelected) props.onDeriveSelected(sessions); else sessions.forEach(props.onDerive); }} onArchive={(sessions) => { if (props.onArchiveSelected) props.onArchiveSelected(sessions); else sessions.forEach(props.onArchive); }} onPermanentDelete={props.onPermanentDelete ?? (() => {})} />}
       {props.searchProgress && !props.searchProgress.completed && <div className="session-manager-search-progress">{t("sessionManager.searching")}</div>}
       {props.searchProgress?.incomplete && <div className="session-manager-search-progress is-warning">{t("sessionManager.searchIncomplete")}</div>}
       {props.loading && props.sessions.length > 0 && <div className="session-manager-search-progress">{t("sidebar.loading")}</div>}

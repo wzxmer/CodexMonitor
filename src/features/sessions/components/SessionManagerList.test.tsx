@@ -1,10 +1,27 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ManagedSession, SessionSource } from "@/types";
 import { SessionManagerList } from "./SessionManagerList";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+function rect(left: number, top: number, width: number, height: number): DOMRect {
+  return {
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
+    x: left,
+    y: top,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
 
 const source: SessionSource = { id: "source-a", name: "Primary", codexHomePath: "C:/Users/test/.codex", enabled: true, isCurrent: true, isDefault: true, discoveredAt: 1, lastScanAt: null, status: "ready", error: null };
 const managedSession: ManagedSession = { key: "source-a:thread-a", sourceId: "source-a", threadId: "thread-a", sourceKind: "cli", cwd: "C:/missing/project", title: "Archived child", preview: null, createdAt: 1, updatedAt: 2, archivedAt: 2, isArchived: true, parentThreadId: "parent", isSubagent: true, subagentNickname: "worker", subagentRole: null, projectExists: false, fileStatus: "mapped", fileConfidence: "exact" };
@@ -60,6 +77,53 @@ describe("SessionManagerList", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     fireEvent.contextMenu(screen.getByText("Archived"));
     expect(screen.getByRole("menu").textContent).toContain("永久删除");
+  });
+
+  it("keeps the context menu inside the session manager boundary", async () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.hasAttribute("data-session-manager-menu-boundary")) return rect(0, 0, 300, 600);
+      return rect(0, 0, 0, 0);
+    });
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.getAttribute("role") === "menu" ? 220 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.getAttribute("role") === "menu" ? 180 : 0;
+    });
+
+    const active = { ...managedSession, isArchived: false, archivedAt: null, projectExists: true };
+    render(
+      <div data-session-manager-menu-boundary>
+        <SessionManagerList sessions={[active]} sources={[source]} selected={new Set()} resumingKey={null} archivingKeys={new Set()} loading={false} loadingMore={false} error={null} hasMore={false} onToggleSelected={vi.fn()} onResume={vi.fn()} onArchive={vi.fn()} onDerive={vi.fn()} onLoadMore={vi.fn()} />
+      </div>,
+    );
+
+    fireEvent.contextMenu(screen.getByText(active.title), { clientX: 270, clientY: 580 });
+    const menu = screen.getByRole("menu");
+
+    await waitFor(() => {
+      const left = Number.parseFloat(menu.style.left);
+      const top = Number.parseFloat(menu.style.top);
+      expect(menu.style.width).toBe("220px");
+      expect(left).toBeGreaterThanOrEqual(8);
+      expect(left + 220).toBeLessThanOrEqual(292);
+      expect(top).toBeGreaterThanOrEqual(8);
+      expect(top + 180).toBeLessThanOrEqual(592);
+    });
+  });
+
+  it("closes the context menu when the session manager boundary scrolls", () => {
+    const active = { ...managedSession, isArchived: false, archivedAt: null, projectExists: true };
+    const { container } = render(
+      <div data-session-manager-menu-boundary>
+        <SessionManagerList sessions={[active]} sources={[source]} selected={new Set()} resumingKey={null} archivingKeys={new Set()} loading={false} loadingMore={false} error={null} hasMore={false} onToggleSelected={vi.fn()} onResume={vi.fn()} onArchive={vi.fn()} onDerive={vi.fn()} onLoadMore={vi.fn()} />
+      </div>,
+    );
+
+    fireEvent.contextMenu(screen.getByText(active.title));
+    expect(screen.getByRole("menu")).toBeTruthy();
+    fireEvent.scroll(container.firstElementChild as HTMLElement);
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("renders child sessions immediately below their visible parent", () => {
