@@ -86,6 +86,34 @@ describe("useAgentSystemNotifications", () => {
     });
   });
 
+  it("notifies for completed turns while the window is focused", async () => {
+    renderHook(() =>
+      useAgentSystemNotifications({
+        enabled: true,
+        isWindowFocused: true,
+        minDurationMs: 0,
+      }),
+    );
+
+    const handlers = useAppServerEventsMock.mock.calls[
+      useAppServerEventsMock.mock.calls.length - 1
+    ]?.[0] as {
+      onTurnStarted?: (workspaceId: string, threadId: string, turnId: string) => void;
+      onTurnCompleted?: (workspaceId: string, threadId: string, turnId: string) => void;
+    };
+
+    act(() => {
+      handlers.onTurnStarted?.("ws-1", "thread-1", "turn-1");
+      handlers.onTurnCompleted?.("ws-1", "thread-1", "turn-1");
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+  });
+
   it("allows explicit opt-in for subagent completion notifications", async () => {
     renderHook(() =>
       useAgentSystemNotifications({

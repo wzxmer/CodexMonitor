@@ -33,7 +33,6 @@ function truncateText(text: string, maxLength: number): string {
 
 export function useAgentSystemNotifications({
   enabled,
-  isWindowFocused,
   minDurationMs = DEFAULT_MIN_DURATION_MS,
   subagentNotificationsEnabled = false,
   isSubagentThread,
@@ -134,9 +133,6 @@ export function useAgentSystemNotifications({
       if (durationMs < minDurationMs) {
         return false;
       }
-      if (isWindowFocused) {
-        return false;
-      }
       const lastNotifiedAt = lastNotifiedAtByThread.current.get(threadKey);
       if (lastNotifiedAt && Date.now() - lastNotifiedAt < 1500) {
         return false;
@@ -147,7 +143,6 @@ export function useAgentSystemNotifications({
     [
       enabled,
       isSubagentThread,
-      isWindowFocused,
       minDurationMs,
       subagentNotificationsEnabled,
     ],
