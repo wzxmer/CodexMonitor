@@ -32,17 +32,34 @@ pub(crate) fn reconcile_session_sources(
     default_path: Option<&Path>,
     now_ms: i64,
 ) -> Vec<SessionSource> {
-    let mut normalized_sources = Vec::new();
-    let mut source_index_by_identity = HashMap::new();
+    let mut normalized_sources: Vec<SessionSource> = Vec::new();
+    let mut source_index_by_identity: HashMap<String, usize> = HashMap::new();
+    let current = current_path.and_then(normalized_path_string);
+    let default = default_path.and_then(normalized_path_string);
 
-    for source in sources {
-        let path = normalize_source_path(&source.codex_home_path);
+    for mut source in sources {
+        let migrated_path =
+            migrated_legacy_system_source_path(&source, current.as_deref(), default.as_deref());
+        let path = migrated_path
+            .clone()
+            .unwrap_or_else(|| normalize_source_path(&source.codex_home_path));
         if path.is_empty() {
             continue;
+        }
+        if migrated_path.is_some() {
+            source.last_scan_at = None;
+            source.status = status_for_path(Path::new(&path));
+            source.error = None;
         }
         let identity = source_identity_key(&path);
         if let Some(index) = source_index_by_identity.get(&identity).copied() {
             merge_duplicate_source(&mut normalized_sources[index], source);
+            if migrated_path.is_some() {
+                let target = &mut normalized_sources[index];
+                target.last_scan_at = None;
+                target.status = status_for_path(Path::new(&path));
+                target.error = None;
+            }
             continue;
         }
 
@@ -59,8 +76,6 @@ pub(crate) fn reconcile_session_sources(
         normalized_sources.push(normalized);
     }
 
-    let current = current_path.and_then(normalized_path_string);
-    let default = default_path.and_then(normalized_path_string);
     upsert_system_source(
         &mut normalized_sources,
         &mut source_index_by_identity,
@@ -81,6 +96,41 @@ pub(crate) fn reconcile_session_sources(
     );
 
     normalized_sources
+}
+
+#[cfg(not(windows))]
+fn migrated_legacy_system_source_path(
+    source: &SessionSource,
+    current_path: Option<&str>,
+    default_path: Option<&str>,
+) -> Option<String> {
+    [
+        (source.is_current, current_path),
+        (source.is_default, default_path),
+    ]
+    .into_iter()
+    .find_map(|(is_system_source, expected)| {
+        let expected = is_system_source.then_some(expected).flatten()?;
+        legacy_windows_normalized_unix_path_matches(&source.codex_home_path, expected)
+            .then(|| expected.to_string())
+    })
+}
+
+#[cfg(windows)]
+fn migrated_legacy_system_source_path(
+    _source: &SessionSource,
+    _current_path: Option<&str>,
+    _default_path: Option<&str>,
+) -> Option<String> {
+    None
+}
+
+#[cfg(not(windows))]
+fn legacy_windows_normalized_unix_path_matches(saved: &str, expected: &str) -> bool {
+    let Some(expected) = expected.strip_prefix('/') else {
+        return false;
+    };
+    saved.trim().trim_end_matches(['\\', '/']) == expected.replace('/', "\\").trim_end_matches('\\')
 }
 
 pub(crate) fn add_session_source(
@@ -304,6 +354,7 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
     #[test]
     fn builds_stable_current_source_from_codex_home() {
         let left =
@@ -316,6 +367,7 @@ mod tests {
         assert_eq!(left.codex_home_path, r"C:\Users\Test\.codex");
     }
 
+    #[cfg(windows)]
     #[test]
     fn reconcile_preserves_history_and_upserts_system_sources() {
         let sources = vec![source(r"D:\Profiles\Old", "Old profile", 10)];
@@ -332,6 +384,7 @@ mod tests {
         assert!(reconciled.iter().any(|source| source.is_default));
     }
 
+    #[cfg(windows)]
     #[test]
     fn reconcile_deduplicates_paths_case_insensitively() {
         let mut saved = source(r"C:\Users\Lenovo\.CODEX", "Saved name", 10);
@@ -352,6 +405,75 @@ mod tests {
         assert!(!reconciled[0].enabled);
     }
 
+    #[cfg(not(windows))]
+    #[test]
+    fn builds_stable_current_source_from_unix_codex_home() {
+        let source =
+            session_source_for_codex_home(Path::new("/Users/test/.codex/")).expect("source");
+
+        assert!(source.is_current);
+        assert_eq!(source.codex_home_path, "/Users/test/.codex");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn reconcile_migrates_legacy_malformed_unix_system_source() {
+        let mut saved = source(r"Users\test\.codex", "Current CODEX_HOME", 10);
+        saved.is_current = true;
+        saved.is_default = true;
+        saved.last_scan_at = Some(20);
+        saved.status = SessionSourceStatus::Invalid;
+        saved.error = Some("Unable to access session source".to_string());
+
+        let reconciled = reconcile_session_sources(
+            vec![saved],
+            Some(Path::new("/Users/test/.codex")),
+            Some(Path::new("/Users/test/.codex")),
+            30,
+        );
+
+        assert_eq!(reconciled.len(), 1);
+        assert_eq!(reconciled[0].codex_home_path, "/Users/test/.codex");
+        assert!(reconciled[0].is_current);
+        assert!(reconciled[0].is_default);
+        assert_eq!(reconciled[0].last_scan_at, None);
+        assert_eq!(reconciled[0].error, None);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn reconcile_migration_clears_errors_on_an_existing_native_duplicate() {
+        let mut native = source("/Users/test/.codex", "Native", 10);
+        native.status = SessionSourceStatus::Invalid;
+        native.error = Some("stale scan error".to_string());
+        let mut legacy = source(r"Users\test\.codex", "Current CODEX_HOME", 20);
+        legacy.is_current = true;
+
+        let reconciled = reconcile_session_sources(
+            vec![native, legacy],
+            Some(Path::new("/Users/test/.codex")),
+            None,
+            30,
+        );
+
+        assert_eq!(reconciled.len(), 1);
+        assert!(reconciled[0].is_current);
+        assert_eq!(reconciled[0].last_scan_at, None);
+        assert_eq!(reconciled[0].error, None);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn reconcile_keeps_case_distinct_unix_sources() {
+        let sources = vec![
+            source("/Users/test/.CODEX", "Upper", 10),
+            source("/Users/test/.codex", "Lower", 20),
+        ];
+        let reconciled = reconcile_session_sources(sources, None, None, 30);
+
+        assert_eq!(reconciled.len(), 2);
+    }
+
     #[test]
     fn reconcile_keeps_stable_ids_and_scan_errors() {
         let mut saved = source(r"D:\Profiles\Work", "Work", 10);
@@ -366,6 +488,7 @@ mod tests {
         assert!(matches!(second[0].status, SessionSourceStatus::Invalid));
     }
 
+    #[cfg(windows)]
     #[test]
     fn management_operations_never_touch_disk() {
         let missing = Path::new(r"Z:\Missing\Codex");
@@ -383,6 +506,7 @@ mod tests {
         assert!(!missing.exists());
     }
 
+    #[cfg(windows)]
     #[test]
     fn system_sources_cannot_be_removed() {
         let mut sources = reconcile_session_sources(

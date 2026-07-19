@@ -15,6 +15,7 @@ import type {
   WorkspaceInfo,
   SubagentCheckpointSyncMode,
   TurnExecutionSummary,
+  ExecutionBindingObserveInput,
 } from "@/types";
 import { CHAT_SCROLLBACK_DEFAULT } from "@utils/chatScrollback";
 import { useAppServerEvents } from "@app/hooks/useAppServerEvents";
@@ -42,6 +43,7 @@ import {
   readThread as readThreadService,
   getTurnExecutionSummaries,
   upsertTurnExecutionSummary,
+  observeExecutionBinding,
   setThreadName as setThreadNameService,
 } from "@services/tauri";
 import { getThreadTimestamp } from "@utils/threadItems";
@@ -179,6 +181,7 @@ export function useThreads({
     dispatch({ type: "setMaxItemsPerThread", maxItemsPerThread });
   }, [dispatch, maxItemsPerThread]);
   const loadedThreadsRef = useRef<Record<string, boolean>>({});
+  const loadedThreadRuntimeKeyRef = useRef<Record<string, string>>({});
   const replaceOnResumeRef = useRef<Record<string, boolean>>({});
   const pendingInterruptsRef = useRef<Set<string>>(new Set());
   const planByThreadRef = useRef(state.planByThread);
@@ -229,6 +232,9 @@ export function useThreads({
   } = useThreadStorage();
 
   const activeWorkspaceId = activeWorkspace?.id ?? null;
+  const activeWorkspaceIdRef = useRef(activeWorkspaceId);
+  const threadSelectionRevisionByWorkspaceRef = useRef<Record<string, number>>({});
+  activeWorkspaceIdRef.current = activeWorkspaceId;
   const getWorkspaceForAutoContinue = useCallback(
     (workspaceId: string) =>
       workspacesRef.current.find((workspace) => workspace.id === workspaceId) ?? null,
@@ -343,6 +349,26 @@ export function useThreads({
       });
   }, [onDebug, state.turnExecutionSummariesByThread]);
 
+  const handleExecutionBindingObserved = useCallback(
+    (input: ExecutionBindingObserveInput) => {
+      void observeExecutionBinding(input).catch((error) => {
+        onDebug?.({
+          id: `${Date.now()}-client-execution-binding-observe-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "execution binding observe error",
+          payload: {
+            workspaceId: input.workspaceId,
+            parentThreadId: input.parentThreadId,
+            collabToolCallId: input.collabToolCallId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      });
+    },
+    [onDebug],
+  );
+
   const { refreshAccountRateLimits } = useThreadRateLimits({
     activeWorkspaceId,
     activeWorkspaceConnected: activeWorkspace?.connected,
@@ -392,6 +418,9 @@ export function useThreads({
 
   const setThreadLoaded = useCallback((threadId: string, isLoaded: boolean) => {
     loadedThreadsRef.current[threadId] = isLoaded;
+    if (!isLoaded) {
+      delete loadedThreadRuntimeKeyRef.current[threadId];
+    }
   }, []);
 
   const renameThread = useCallback(
@@ -686,6 +715,7 @@ export function useThreads({
     applyCollabThreadLinks,
     hydrateSubagentThreads,
     onReviewExited: handleReviewExited,
+    onExecutionBindingObserved: handleExecutionBindingObserved,
     approvalAllowlistRef,
     pendingInterruptsRef,
   });
@@ -937,6 +967,7 @@ export function useThreads({
     getCustomName,
     threadActivityRef,
     loadedThreadsRef,
+    loadedThreadRuntimeKeyRef,
     replaceOnResumeRef,
     tokenUsageRevisionByThreadRef,
     applyCollabThreadLinksFromThread,
@@ -1216,9 +1247,20 @@ export function useThreads({
     }
     let threadId = activeThreadId;
     if (!threadId) {
-      threadId = await startThreadForWorkspace(activeWorkspace.id);
+      const workspaceId = activeWorkspace.id;
+      const selectionRevision =
+        threadSelectionRevisionByWorkspaceRef.current[workspaceId] ?? 0;
+      threadId = await startThreadForWorkspace(workspaceId, { activate: false });
       if (!threadId) {
         return null;
+      }
+      const selectionStayedOnDraft =
+        activeWorkspaceIdRef.current === workspaceId &&
+        (activeThreadIdByWorkspaceRef.current[workspaceId] ?? null) === null &&
+        (threadSelectionRevisionByWorkspaceRef.current[workspaceId] ?? 0) ===
+          selectionRevision;
+      if (selectionStayedOnDraft) {
+        dispatch({ type: "setActiveThreadId", workspaceId, threadId });
       }
     } else if (!loadedThreadsRef.current[threadId]) {
       await readThreadForWorkspace(activeWorkspace.id, threadId);
@@ -1227,6 +1269,7 @@ export function useThreads({
   }, [
     activeWorkspace,
     activeThreadId,
+    dispatch,
     readThreadForWorkspace,
     startThreadForWorkspace,
   ]);
@@ -1370,6 +1413,8 @@ export function useThreads({
       if (!targetId) {
         return;
       }
+      threadSelectionRevisionByWorkspaceRef.current[targetId] =
+        (threadSelectionRevisionByWorkspaceRef.current[targetId] ?? 0) + 1;
       const currentThreadId = state.activeThreadIdByWorkspace[targetId] ?? null;
       dispatch({ type: "setActiveThreadId", workspaceId: targetId, threadId });
       if (threadId && currentThreadId !== threadId) {

@@ -1,7 +1,10 @@
 import { useCallback } from "react";
 import type { Dispatch } from "react";
-import { buildConversationItem } from "@utils/threadItems";
-import type { CollabAgentRef } from "@/types";
+import {
+  buildCollabActualBinding,
+  buildConversationItem,
+} from "@utils/threadItems";
+import type { CollabAgentRef, ExecutionBindingObserveInput } from "@/types";
 import {
   buildItemForDisplay,
   handleConvertedItemEffects,
@@ -36,6 +39,7 @@ type UseThreadItemEventsOptions = {
     text: string,
   ) => void | Promise<void>;
   onReviewExited?: (workspaceId: string, threadId: string) => void;
+  onExecutionBindingObserved?: (input: ExecutionBindingObserveInput) => void;
 };
 
 export function useThreadItemEvents({
@@ -51,6 +55,7 @@ export function useThreadItemEvents({
   hydrateSubagentThreads,
   onUserMessageCreated,
   onReviewExited,
+  onExecutionBindingObserved,
 }: UseThreadItemEventsOptions) {
   const handleItemUpdate = useCallback(
     (
@@ -76,6 +81,37 @@ export function useThreadItemEvents({
       }
       const itemForDisplay = buildItemForDisplay(item, shouldMarkProcessing);
       const converted = buildConversationItem(itemForDisplay);
+      if (
+        converted?.kind === "tool" &&
+        converted.toolType === "collabToolCall" &&
+        converted.id.trim()
+      ) {
+        const actual = buildCollabActualBinding(converted);
+        const parentThreadId = converted.collabSender?.threadId.trim() || threadId;
+        const receiverThreadIds = Array.from(
+          new Set(
+            (converted.collabReceivers ??
+              (converted.collabReceiver ? [converted.collabReceiver] : []))
+              .map((receiver) => receiver.threadId.trim())
+              .filter(Boolean),
+          ),
+        );
+        if (actual) {
+          try {
+            onExecutionBindingObserved?.({
+              workspaceId,
+              parentThreadId,
+              collabToolCallId: converted.id.trim(),
+              senderThreadId: parentThreadId,
+              receiverThreadIds,
+              actual,
+              observedAtMs: Date.now(),
+            });
+          } catch {
+            // Observation must not block app-server item rendering.
+          }
+        }
+      }
       handleConvertedItemEffects({
         converted,
         workspaceId,
@@ -105,6 +141,7 @@ export function useThreadItemEvents({
       markProcessing,
       markReviewing,
       onReviewExited,
+      onExecutionBindingObserved,
       onUserMessageCreated,
       hydrateSubagentThreads,
       safeMessageActivity,

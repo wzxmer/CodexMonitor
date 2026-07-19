@@ -420,7 +420,24 @@ export function useMessagesViewState({
 
     baseGroupedItems.forEach((entry) => {
       const entryId = entryTurnId(entry);
-      if (turnEntries.length > 0 && entryId && turnId && entryId !== turnId) {
+      const startsUnscopedAssistantAfterCompletedTurn =
+        entryId === null &&
+        turnId !== null &&
+        entry.kind === "item" &&
+        entry.item.kind === "message" &&
+        entry.item.role === "assistant" &&
+        turnEntries.some(
+          (candidate) =>
+            candidate.kind === "item" &&
+            candidate.item.kind === "message" &&
+            candidate.item.role === "assistant" &&
+            candidate.item.turnId === turnId,
+        );
+      if (
+        turnEntries.length > 0 &&
+        ((entryId && turnId && entryId !== turnId) ||
+          startsUnscopedAssistantAfterCompletedTurn)
+      ) {
         flushTurn();
       }
       if (

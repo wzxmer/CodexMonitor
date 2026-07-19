@@ -6,7 +6,6 @@ import {
   useState,
   type RefObject,
 } from "react";
-import type { ConversationItem } from "@/types";
 import { CHAT_SCROLLBACK_DEFAULT } from "@utils/chatScrollback";
 
 const HISTORY_SCROLL_THRESHOLD_PX = 24;
@@ -51,13 +50,13 @@ function normalizeRange(
   return { start, end };
 }
 
-export function useMessageHistoryWindow({
+export function useMessageHistoryWindow<T>({
   items,
   threadId,
   batchSize: batchSizeValue,
   containerRef,
 }: {
-  items: ConversationItem[];
+  items: T[];
   threadId: string | null;
   batchSize?: number | null;
   containerRef: RefObject<HTMLDivElement | null>;

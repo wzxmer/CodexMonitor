@@ -1,9 +1,11 @@
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
 use chrono::DateTime;
 use serde_json::Value;
+
+const TAIL_SCAN_CHUNK_BYTES: u64 = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ParsedSessionMetadata {
@@ -23,7 +25,6 @@ pub(crate) fn parse_session_metadata(path: &Path) -> Result<ParsedSessionMetadat
     let reader = BufReader::new(file);
     let mut parse_error = None;
     let mut metadata = None;
-    let mut last_activity_at = None;
     for line in reader.lines() {
         let line = line.map_err(|error| error.to_string())?;
         let value: Value = match serde_json::from_str(&line) {
@@ -33,28 +34,71 @@ pub(crate) fn parse_session_metadata(path: &Path) -> Result<ParsedSessionMetadat
                 continue;
             }
         };
-        if value
-            .get("type")
-            .and_then(Value::as_str)
-            .is_some_and(|value| !value.trim().is_empty())
-        {
-            if let Some(timestamp) =
-                parse_timestamp_ms(value.get("timestamp").and_then(Value::as_str))
-            {
-                last_activity_at = Some(timestamp);
-            }
-        }
-        if metadata.is_none() && value.get("type").and_then(Value::as_str) == Some("session_meta") {
-            let parsed = parse_session_meta_value(&value)?;
-            last_activity_at = last_activity_at.or(parsed.created_at);
-            metadata = Some(parsed);
+        if value.get("type").and_then(Value::as_str) == Some("session_meta") {
+            metadata = Some(parse_session_meta_value(&value)?);
+            break;
         }
     }
     let mut metadata = metadata.ok_or_else(|| {
         parse_error.unwrap_or_else(|| "Session metadata record not found".to_string())
     })?;
-    metadata.last_activity_at = last_activity_at;
+    metadata.last_activity_at = read_last_activity_at(path)?.or(metadata.created_at);
     Ok(metadata)
+}
+
+fn read_last_activity_at(path: &Path) -> Result<Option<i64>, String> {
+    let mut file = File::open(path).map_err(|error| error.to_string())?;
+    let mut end = file.metadata().map_err(|error| error.to_string())?.len();
+    let mut pending_suffix = Vec::new();
+
+    while end > 0 {
+        let start = end.saturating_sub(TAIL_SCAN_CHUNK_BYTES);
+        let starts_at_line_boundary = if start == 0 {
+            true
+        } else {
+            file.seek(SeekFrom::Start(start - 1))
+                .map_err(|error| error.to_string())?;
+            let mut previous = [0_u8; 1];
+            file.read_exact(&mut previous)
+                .map_err(|error| error.to_string())?;
+            previous[0] == b'\n'
+        };
+        file.seek(SeekFrom::Start(start))
+            .map_err(|error| error.to_string())?;
+        let mut chunk = vec![0_u8; (end - start) as usize];
+        file.read_exact(&mut chunk)
+            .map_err(|error| error.to_string())?;
+        chunk.extend_from_slice(&pending_suffix);
+
+        let mut lines = chunk.split(|byte| *byte == b'\n');
+        let first = lines.next().unwrap_or_default();
+        let complete_lines = lines.collect::<Vec<_>>();
+        for line in complete_lines.into_iter().rev() {
+            if let Some(timestamp) = activity_timestamp_from_line(line) {
+                return Ok(Some(timestamp));
+            }
+        }
+        if starts_at_line_boundary {
+            if let Some(timestamp) = activity_timestamp_from_line(first) {
+                return Ok(Some(timestamp));
+            }
+            pending_suffix.clear();
+        } else {
+            pending_suffix = first.to_vec();
+        }
+        end = start;
+    }
+
+    Ok(None)
+}
+
+fn activity_timestamp_from_line(line: &[u8]) -> Option<i64> {
+    let value: Value = serde_json::from_slice(line).ok()?;
+    value
+        .get("type")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())?;
+    parse_timestamp_ms(value.get("timestamp").and_then(Value::as_str))
 }
 
 fn parse_session_meta_value(value: &Value) -> Result<ParsedSessionMetadata, String> {
@@ -136,6 +180,8 @@ fn non_empty(value: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use serde_json::json;
 
     use super::{parse_session_meta_value, parse_timestamp_ms};
@@ -229,6 +275,32 @@ mod tests {
 
         let parsed = super::parse_session_metadata(&path).unwrap();
 
+        assert_eq!(
+            parsed.last_activity_at,
+            parse_timestamp_ms(Some("2026-07-10T10:30:00Z"))
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn metadata_parser_ignores_large_unreadable_middle_content() {
+        let root =
+            std::env::temp_dir().join(format!("codex-monitor-parser-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("rollout-thread-a.jsonl");
+        let mut file = std::fs::File::create(&path).unwrap();
+        file.write_all(
+            b"{\"timestamp\":\"2026-07-10T08:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-a\"}}\n",
+        )
+        .unwrap();
+        file.write_all(&vec![0xff; 2 * 1024 * 1024]).unwrap();
+        file.write_all(b"\n{\"timestamp\":\"2026-07-10T10:30:00Z\",\"type\":\"event_msg\"}\n")
+            .unwrap();
+        drop(file);
+
+        let parsed = super::parse_session_metadata(&path).unwrap();
+
+        assert_eq!(parsed.thread_id, "thread-a");
         assert_eq!(
             parsed.last_activity_at,
             parse_timestamp_ms(Some("2026-07-10T10:30:00Z"))

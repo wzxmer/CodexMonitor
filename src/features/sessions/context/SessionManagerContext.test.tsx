@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ManagedSession } from "@/types";
 
@@ -18,7 +18,10 @@ vi.mock("@services/tauri", () => ({
 
 import { SessionManagerProvider, useSessionManagerContext } from "./SessionManagerContext";
 
-afterEach(cleanup);
+afterEach(() => {
+  vi.useRealTimers();
+  cleanup();
+});
 
 beforeEach(() => {
   managerMock.indexedSessions = [];
@@ -59,13 +62,18 @@ function Probe() {
 function PreviewProbe() {
   const context = useSessionManagerContext();
   return <>
+    {context.manager.sessions.map((candidate) => (
+      <button key={candidate.key} type="button" onClick={() => context.focusSession(candidate)}>
+        focus {candidate.title}
+      </button>
+    ))}
     <span>{context.focusedSession?.title ?? "no focus"}</span>
     <span>{context.sessionPreview?.items[0]?.text ?? "no preview"}</span>
   </>;
 }
 
 describe("SessionManagerProvider", () => {
-  it("focuses the first visible session and loads its latest preview", async () => {
+  it("loads full content only after explicitly focusing one session", async () => {
     managerMock.indexedSessions = [session];
     managerMock.sessions = [session];
     fetchPreviewMock.mockResolvedValue({
@@ -76,13 +84,62 @@ describe("SessionManagerProvider", () => {
 
     render(<SessionManagerProvider active onActiveChange={vi.fn()} onResumeSession={vi.fn()} onDeriveSession={vi.fn()}><PreviewProbe /></SessionManagerProvider>);
 
-    expect(screen.getByText("B session")).toBeTruthy();
+    expect(screen.getByText("no focus")).toBeTruthy();
+    expect(fetchPreviewMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "focus B session" }));
+
     expect(await screen.findByText("latest result")).toBeTruthy();
     expect(fetchPreviewMock).toHaveBeenCalledWith({
       sourceId: "source",
       threadId: "thread",
-      limit: 6,
+      full: true,
     });
+  });
+
+  it("ignores full-content responses from a previously focused session", async () => {
+    const second = { ...session, key: "source:thread-2", threadId: "thread-2", title: "C session" };
+    managerMock.indexedSessions = [session, second];
+    managerMock.sessions = [session, second];
+    let resolveFirst: ((value: unknown) => void) | undefined;
+    let resolveSecond: ((value: unknown) => void) | undefined;
+    fetchPreviewMock.mockImplementation(({ threadId }: { threadId: string }) => new Promise((resolve) => {
+      if (threadId === session.threadId) resolveFirst = resolve;
+      else resolveSecond = resolve;
+    }));
+
+    render(<SessionManagerProvider active onActiveChange={vi.fn()} onResumeSession={vi.fn()} onDeriveSession={vi.fn()}><PreviewProbe /></SessionManagerProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "focus B session" }));
+    await waitFor(() => expect(fetchPreviewMock).toHaveBeenCalledWith({ sourceId: "source", threadId: "thread", full: true }));
+    fireEvent.click(screen.getByRole("button", { name: "focus C session" }));
+    await waitFor(() => expect(fetchPreviewMock).toHaveBeenCalledWith({ sourceId: "source", threadId: "thread-2", full: true }));
+    await act(async () => {
+      resolveSecond?.({ openingMessage: "second", items: [{ role: "assistant", text: "second result" }], incomplete: false });
+    });
+
+    expect(await screen.findByText("second result")).toBeTruthy();
+
+    await act(async () => {
+      resolveFirst?.({ openingMessage: "first", items: [{ role: "assistant", text: "stale result" }], incomplete: false });
+    });
+    expect(screen.queryByText("stale result")).toBeNull();
+    expect(screen.getByText("second result")).toBeTruthy();
+  });
+
+  it("starts only the final full-content request during rapid selection", async () => {
+    vi.useFakeTimers();
+    const second = { ...session, key: "source:thread-2", threadId: "thread-2", title: "C session" };
+    managerMock.indexedSessions = [session, second];
+    managerMock.sessions = [session, second];
+    fetchPreviewMock.mockResolvedValue({ openingMessage: null, items: [], incomplete: false });
+
+    render(<SessionManagerProvider active onActiveChange={vi.fn()} onResumeSession={vi.fn()} onDeriveSession={vi.fn()}><PreviewProbe /></SessionManagerProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "focus B session" }));
+    fireEvent.click(screen.getByRole("button", { name: "focus C session" }));
+    await act(async () => vi.advanceTimersByTime(80));
+
+    expect(fetchPreviewMock).toHaveBeenCalledTimes(1);
+    expect(fetchPreviewMock).toHaveBeenCalledWith({ sourceId: "source", threadId: "thread-2", full: true });
   });
 
   it("resumes directly when the current project matches", async () => {

@@ -272,6 +272,22 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
           nextPendingUserMessageReplacementByThread,
       };
     }
+    case "setItemTurnId": {
+      const list = state.itemsByThread[action.threadId] ?? [];
+      const index = list.findIndex((item) => item.id === action.itemId);
+      if (index < 0 || list[index].turnId === action.turnId) {
+        return state;
+      }
+      const nextList = [...list];
+      nextList[index] = { ...nextList[index], turnId: action.turnId };
+      return {
+        ...state,
+        itemsByThread: {
+          ...state.itemsByThread,
+          [action.threadId]: prepareLiveThreadItems(nextList),
+        },
+      };
+    }
     case "removeItem": {
       const list = state.itemsByThread[action.threadId] ?? [];
       const nextList = list.filter((item) => item.id !== action.itemId);

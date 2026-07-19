@@ -307,7 +307,7 @@ export const Sidebar = memo(function Sidebar({
   const { active: sessionManagerActive, setActive: setSessionManagerActive, manager: sessionManager, focusedSessionKey, focusSession, resumingKey, resumeSession, deriveSession, deriveSessions, requestPermanentDelete } = useSessionManagerContext();
   const sidebarMode = sessionManagerActive ? "sessionManager" : "workspaces";
   const {
-    scrollOffset: sessionManagerScrollOffset,
+    getScrollOffset: getSessionManagerScrollOffset,
     setScrollOffset: setSessionManagerScrollOffset,
   } = sessionManager;
   const workspaceScrollOffsetRef = useRef(0);
@@ -1089,12 +1089,17 @@ export const Sidebar = memo(function Sidebar({
       const node = sidebarBodyRef.current;
       if (!node) return;
       node.scrollTop = sidebarMode === "sessionManager"
-        ? sessionManagerScrollOffset
+        ? getSessionManagerScrollOffset()
         : workspaceScrollOffsetRef.current;
-      updateScrollFade();
+      if (sidebarMode === "workspaces") updateScrollFade();
     });
     return () => cancelAnimationFrame(frame);
-  }, [sessionManagerScrollOffset, sidebarBodyRef, sidebarMode, updateScrollFade]);
+  }, [
+    getSessionManagerScrollOffset,
+    sidebarBodyRef,
+    sidebarMode,
+    updateScrollFade,
+  ]);
 
   const handleSidebarScroll = useCallback(() => {
     const node = sidebarBodyRef.current;
@@ -1102,7 +1107,7 @@ export const Sidebar = memo(function Sidebar({
       if (sidebarMode === "workspaces") workspaceScrollOffsetRef.current = node.scrollTop;
       else setSessionManagerScrollOffset(node.scrollTop);
     }
-    updateScrollFade();
+    if (sidebarMode === "workspaces") updateScrollFade();
   }, [setSessionManagerScrollOffset, sidebarBodyRef, sidebarMode, updateScrollFade]);
 
   const handleSelectHome = () => {
@@ -1167,14 +1172,16 @@ export const Sidebar = memo(function Sidebar({
         </div>
       </div>
       <div
-        className={`sidebar-body${scrollFade.top ? " fade-top" : ""}${
-          scrollFade.bottom ? " fade-bottom" : ""
+        className={`sidebar-body${sidebarMode === "sessionManager" ? " is-session-manager" : ""}${
+          sidebarMode === "workspaces" && scrollFade.top ? " fade-top" : ""
+        }${
+          sidebarMode === "workspaces" && scrollFade.bottom ? " fade-bottom" : ""
         }`}
         data-session-manager-menu-boundary={sidebarMode === "sessionManager" ? "true" : undefined}
         onScroll={handleSidebarScroll}
         ref={sidebarBodyRef}
       >
-        {sidebarMode === "sessionManager" ? <SessionManagerList sessions={sessionManager.sessions} sources={sessionManager.sources} selected={sessionManager.selectedSessionKeys} focusedKey={focusedSessionKey} compact resumingKey={resumingKey} archivingKeys={sessionManager.archivingKeys} deletingKeys={sessionManager.deletingKeys} loading={sessionManager.loading} loadingMore={sessionManager.loadingMore} error={sessionManager.error} searchProgress={sessionManager.searchProgress} hasMore={sessionManager.nextOffset !== null} onToggleSelected={sessionManager.toggleSelected} onFocus={focusSession} onResume={(session) => void resumeSession(session)} onArchive={(session) => void sessionManager.archiveSessions([session])} onArchiveSelected={(sessions) => void sessionManager.archiveSessions(sessions)} onDerive={deriveSession} onDeriveSelected={deriveSessions} onPermanentDelete={(sessions) => void requestPermanentDelete(sessions)} onLoadMore={sessionManager.loadMore}/> : <div className="workspace-list">
+        {sidebarMode === "sessionManager" ? <SessionManagerList sessions={sessionManager.sessions} sources={sessionManager.sources} selected={sessionManager.selectedSessionKeys} focusedKey={focusedSessionKey} compact resumingKey={resumingKey} archivingKeys={sessionManager.archivingKeys} deletingKeys={sessionManager.deletingKeys} loading={sessionManager.loading} loadingMore={sessionManager.loadingMore} error={sessionManager.error} searchProgress={sessionManager.searchProgress} hasMore={sessionManager.nextOffset !== null} onToggleSelected={sessionManager.toggleSelected} onSelectSingle={sessionManager.selectSingle} onFocus={focusSession} onResume={(session) => void resumeSession(session)} onArchive={(session) => void sessionManager.archiveSessions([session])} onArchiveSelected={(sessions) => void sessionManager.archiveSessions(sessions)} onDerive={deriveSession} onDeriveSelected={deriveSessions} onPermanentDelete={(sessions) => void requestPermanentDelete(sessions)} onLoadMore={sessionManager.loadMore}/> : <div className="workspace-list">
           {pinnedThreadRows.length > 0 && (
             <div className="pinned-section">
               <div className="sidebar-section-header">

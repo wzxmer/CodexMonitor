@@ -72,6 +72,12 @@ describe("message tool group interaction styles", () => {
     );
   });
 
+  it("shows complete image attachments inside square thumbnails", () => {
+    expect(messagesCss).toMatch(
+      /\.message-image-thumb img\s*\{[^}]*object-fit:\s*contain;/s,
+    );
+  });
+
   it("lets CLI conversations grow on wide windows without misaligning expanded groups", () => {
     expect(messagesCss).toMatch(
       /\.messages-reading-cli \.messages-inner\s*\{[^}]*--messages-cli-end-gutter:\s*54px;[^}]*max-width:\s*min\(100%, clamp\(980px, 76vw, 1240px\)\);/s,

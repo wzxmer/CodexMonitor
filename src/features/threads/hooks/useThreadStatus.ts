@@ -8,12 +8,12 @@ type UseThreadStatusOptions = {
 
 export function useThreadStatus({ dispatch }: UseThreadStatusOptions) {
   const markProcessing = useCallback(
-    (threadId: string, isProcessing: boolean) => {
+    (threadId: string, isProcessing: boolean, timestamp = Date.now()) => {
       dispatch({
         type: "markProcessing",
         threadId,
         isProcessing,
-        timestamp: Date.now(),
+        timestamp,
       });
     },
     [dispatch],

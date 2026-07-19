@@ -32,6 +32,7 @@ type SessionManagerContextValue = {
 };
 
 const SessionManagerContext = createContext<SessionManagerContextValue | null>(null);
+const SESSION_CONTENT_LOAD_DELAY_MS = 80;
 
 type Props = {
   active: boolean;
@@ -59,37 +60,45 @@ export function SessionManagerProvider({ active, onActiveChange, onResumeSession
   const [pendingPermanentDeleteSessions, setPendingPermanentDeleteSessions] = useState<ManagedSession[] | null>(null);
   const [pendingPermanentDeleteChildCount, setPendingPermanentDeleteChildCount] = useState(0);
   const focusedSession = useMemo(
-    () => manager.sessions.find((session) => session.key === focusedSessionKey) ?? manager.sessions[0] ?? null,
+    () => manager.sessions.find((session) => session.key === focusedSessionKey) ?? null,
     [focusedSessionKey, manager.sessions],
   );
+  const focusedSourceId = focusedSession?.sourceId ?? null;
+  const focusedThreadId = focusedSession?.threadId ?? null;
   const focusSession = useCallback((session: ManagedSession) => setFocusedSessionKey(session.key), []);
+  useEffect(() => {
+    if (!active) setFocusedSessionKey(null);
+  }, [active]);
   useEffect(() => {
     const requestId = previewRequestRef.current + 1;
     previewRequestRef.current = requestId;
     setSessionPreview(null);
     setSessionPreviewError(null);
-    if (!active || !focusedSession) {
+    if (!active || !focusedSourceId || !focusedThreadId) {
       setSessionPreviewLoading(false);
       return;
     }
     setSessionPreviewLoading(true);
-    void fetchManagedSessionPreview({
-      sourceId: focusedSession.sourceId,
-      threadId: focusedSession.threadId,
-      limit: 6,
-    })
-      .then((preview) => {
-        if (previewRequestRef.current === requestId) setSessionPreview(preview);
+    const timer = window.setTimeout(() => {
+      void fetchManagedSessionPreview({
+        sourceId: focusedSourceId,
+        threadId: focusedThreadId,
+        full: true,
       })
-      .catch((caught) => {
-        if (previewRequestRef.current === requestId) {
-          setSessionPreviewError(caught instanceof Error ? caught.message : String(caught));
-        }
-      })
-      .finally(() => {
-        if (previewRequestRef.current === requestId) setSessionPreviewLoading(false);
-      });
-  }, [active, focusedSession]);
+        .then((preview) => {
+          if (previewRequestRef.current === requestId) setSessionPreview(preview);
+        })
+        .catch((caught) => {
+          if (previewRequestRef.current === requestId) {
+            setSessionPreviewError(caught instanceof Error ? caught.message : String(caught));
+          }
+        })
+        .finally(() => {
+          if (previewRequestRef.current === requestId) setSessionPreviewLoading(false);
+        });
+    }, SESSION_CONTENT_LOAD_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [active, focusedSourceId, focusedThreadId]);
   const resumeDirectly = useCallback(async (session: ManagedSession) => {
     setResumingKey(session.key);
     try {

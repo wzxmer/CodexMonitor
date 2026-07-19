@@ -1,4 +1,4 @@
-# App-Server Events Reference (Codex `8aae85895809601a055902f1b85647620e01a523`)
+# App-Server Events Reference (Codex `87db9bc18ba5bc82c1cb4e4381b44f693ee35623` / `rust-v0.144.5`)
 
 This document helps agents quickly answer:
 - Which app-server events CodexMonitor supports right now.
@@ -8,7 +8,7 @@ This document helps agents quickly answer:
 
 When updating this document:
 1. Confirm the intended Codex baseline. This revision is pinned to
-   `8aae85895809601a055902f1b85647620e01a523`; do not replace it with
+   `87db9bc18ba5bc82c1cb4e4381b44f693ee35623` (`rust-v0.144.5`); do not replace it with
    `origin/main` unless the baseline is intentionally advanced.
 2. Compare Codex events vs CodexMonitor routing.
 3. Compare Codex client request methods vs CodexMonitor outgoing request methods.
@@ -19,10 +19,11 @@ Related project skill:
 - `.codex/skills/app-server-events-sync/SKILL.md`
 
 Multi-agent schema notes:
-- Upstream `spawn_agent` can expose per-spawn `model`, `reasoning_effort`, `service_tier`, and `fork_turns`. Model overrides depend on the effective `expose_spawn_agent_model_overrides` configuration.
-- The currently observed Codex tool surface exposes only `task_name`, `message`, and `fork_turns`; CodexMonitor must inspect the active runtime schema before enabling automatic model or effort routing.
-- `fork_turns` accepts `none`, `all`, or a positive recent-turn count. Upstream has no generic per-spawn metadata or token-level context budget field, and full-history forks cannot override agent type, model, or reasoning effort.
-- The upstream `collabAgentToolCall` item carries optional `model` and `reasoningEffort`, but CodexMonitor's normalized `ConversationItem` currently drops them. Execution routing must retain and compare these fields before claiming planned-versus-actual verification.
+- Upstream `spawn_agent` can expose per-spawn `model`, `reasoning_effort`, `service_tier`, and `fork_turns`.
+- In Codex 0.144.5, `features.multi_agent_v2.hide_spawn_agent_metadata` defaults to `true`; when enabled, the tool schema removes `agent_type`, `model`, `reasoning_effort`, and `service_tier`. Automatic routing must inspect the effective runtime schema before using overrides.
+- `fork_turns` accepts `none`, `all`, or a positive recent-turn count and defaults to `all`. Full-history forks cannot override agent type, model, or reasoning effort; heterogeneous children require `none` or a bounded recent-turn count.
+- Upstream validates requested model IDs and reasoning efforts against the current model catalog. It has no generic per-spawn metadata or token-level context budget field.
+- The upstream `collabAgentToolCall` item carries a stable tool-call `id`, sender/receiver thread IDs, optional `model` and `reasoningEffort`, but no portable plan ID, node ID, task name, or correlation metadata. CodexMonitor retains the model/effort as actual binding evidence; they are not planned routing values.
 
 ## Where To Look In CodexMonitor
 
@@ -128,7 +129,7 @@ CodexMonitor status:
 Compared against Codex app-server protocol v2 notifications, the following
 events are currently not routed:
 
-At the baseline hash, upstream defines 70 server notifications; CM routes 28 and leaves 42 below unsupported.
+At the baseline hash, upstream defines 69 server notifications; CM routes 28 and leaves 41 below unsupported.
 
 - `command/exec/outputDelta`
 - `configWarning`
@@ -150,7 +151,6 @@ At the baseline hash, upstream defines 70 server notifications; CM routes 28 and
 - `model/verification`
 - `process/exited` (experimental)
 - `process/outputDelta` (experimental)
-- `rawResponse/completed` (internal-only)
 - `rawResponseItem/completed` (internal-only)
 - `remoteControl/status/changed`
 - `serverRequest/resolved`
@@ -205,17 +205,22 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
 Runtime ownership:
 - `thread/list` and read-only `thread/read` use a Provider-neutral session-source history runtime for the target `CODEX_HOME` and workspace.
 - `thread/resume` and turn execution use the execution runtime selected by the active Provider. History and execution runtimes have distinct pool identities, so a custom Provider cannot replace or hide the local history index.
+- When an active CodexMonitor Provider profile exists, `thread/start` and `thread/resume` explicitly send `modelProvider: "codex_monitor"`; this rebinds threads created under an older Provider instead of allowing persisted `model_provider: "openai"` metadata to route turns to the official endpoint.
 
 Notes:
 - `turn/start` now forwards the optional `serviceTier` override (`"fast"` for `/fast`, `null` for default/off) alongside `model`, `effort`, and `collaborationMode`.
 - `turn/start` and `turn/steer` forward CM workflow rules, matched skills/agents, and bounded knowledge excerpts through experimental `additionalContext` entries. CM initializes app-server with `experimentalApi: true`; this context is separate from persisted user input.
-- `spawn_agent` is an internal Codex collaboration tool, not a CodexMonitor-to-app-server request. Its raw `collabAgentToolCall` result includes optional `model` and `reasoningEffort`; the current normalized CM item does not retain them.
+- `spawn_agent` is an internal Codex collaboration tool, not a CodexMonitor-to-app-server request. Its raw `collabAgentToolCall` result includes optional `model` and `reasoningEffort`; CM retains them only as actual binding evidence.
+- `execution_router_shadow_preview` accepts an optional approved-plan reference plus expected and actual bindings. The shared core validates plan-reference shape, checks the expected model/effort against the observed model catalog, and returns `bindingAudit`; missing evidence or mismatch produces `decision-gate` advice without dispatching, switching models, or mutating runtime configuration.
+- CM automatically observes `item/started` and `item/completed` collab items and persists actual bindings in an app/daemon sidecar keyed by source, runtime, workspace, parent thread, and collab tool-call ID. Started events may lack model metadata; completed events enrich the same record. Exact retries are idempotent, and sender/actual conflicts or expired/stale registrations fail closed.
+- Portable workflow remains the source of approved expected bindings. Its adapter must explicitly register the approved expected envelope against the same collab tool-call ID; expected-first and actual-first arrival are both supported across restart. CM does not derive expected model/effort from free-form text, event order, prompt similarity, or model/effort coincidence.
+- Because the upstream item has no portable node correlation metadata, CM cannot safely infer which concurrent plan node produced a call. Fully automatic plan-node correlation remains blocked pending upstream metadata or a controlled adapter hook. This sidecar does not enable Active Router, spawn children, or replace the portable Root Task Ledger.
 
 ## Missing Client Requests (Codex v2 ClientRequest Methods)
 
 Compared against Codex v2 request methods, CodexMonitor currently does not send:
 
-At the baseline hash, upstream defines 119 non-deprecated client requests; CM sends 24 including `initialize`, leaving 95 below unsupported.
+At the baseline hash, upstream defines 118 non-deprecated client requests; CM sends 24 including `initialize`, leaving 94 below unsupported.
 
 - `account/logout`
 - `account/rateLimitResetCredit/consume`
@@ -233,7 +238,6 @@ At the baseline hash, upstream defines 119 non-deprecated client requests; CM se
 - `configRequirements/read`
 - `environment/add` (experimental)
 - `environment/info` (experimental)
-- `environment/status` (experimental)
 - `experimentalFeature/enablement/set`
 - `externalAgentConfig/detect`
 - `externalAgentConfig/import`
@@ -346,7 +350,7 @@ Deprecated server requests `applyPatchApproval` and `execCommandApproval` are de
 
 ## Upstream Classification
 
-Classifications above are from Codex `8aae85895809601a055902f1b85647620e01a523`:
+Classifications above are from Codex `87db9bc18ba5bc82c1cb4e4381b44f693ee35623` (`rust-v0.144.5`):
 
 - `experimental`: the protocol declaration carries `#[experimental(...)]`.
 - `deprecated`: the declaration or adjacent upstream documentation explicitly

@@ -66,6 +66,58 @@ afterEach(() => vi.clearAllMocks());
 cancelSessionTask.mockResolvedValue(undefined);
 
 describe("useSessionManager", () => {
+  it("starts source discovery and the initial scan concurrently", async () => {
+    let resolveSources: ((sources: SessionSource[]) => void) | undefined;
+    listSessionSources.mockReturnValue(new Promise<SessionSource[]>((resolve) => {
+      resolveSources = resolve;
+    }));
+    scanManagedSessions.mockResolvedValue({ requestId: "scan", totalSessions: 0, diagnosticCount: 0, cancelled: false });
+    fetchManagedSessionsPage.mockResolvedValue({ requestId: "scan", items: [], diagnostics: [], total: 0, nextOffset: null });
+
+    const { result } = renderHook(() => useSessionManager(true));
+    await act(async () => Promise.resolve());
+
+    expect(listSessionSources).toHaveBeenCalledTimes(1);
+    expect(scanManagedSessions).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveSources?.([source]);
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+  });
+
+  it("stores scroll position without rerendering the session manager", () => {
+    let renderCount = 0;
+    const { result } = renderHook(() => {
+      renderCount += 1;
+      return useSessionManager(false);
+    });
+
+    expect(renderCount).toBe(1);
+    act(() => result.current.setScrollOffset(320));
+
+    expect(renderCount).toBe(1);
+    expect(result.current.getScrollOffset()).toBe(320);
+  });
+
+  it("replaces batch selection when selecting a row directly", () => {
+    const { result } = renderHook(() => useSessionManager(false));
+
+    act(() => {
+      result.current.toggleSelected("source-a:thread-a");
+      result.current.toggleSelected("source-a:thread-b");
+    });
+    expect(Array.from(result.current.selectedSessionKeys)).toEqual([
+      "source-a:thread-a",
+      "source-a:thread-b",
+    ]);
+
+    act(() => result.current.selectSingle("source-a:thread-b"));
+    expect(Array.from(result.current.selectedSessionKeys)).toEqual([
+      "source-a:thread-b",
+    ]);
+  });
+
   it("keeps filters local and hides subagents by default", async () => {
     listSessionSources.mockResolvedValue([source]);
     scanManagedSessions.mockResolvedValue({ requestId: "scan", totalSessions: 3, diagnosticCount: 0, cancelled: false });

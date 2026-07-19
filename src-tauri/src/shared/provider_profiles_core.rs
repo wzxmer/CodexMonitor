@@ -16,7 +16,7 @@ pub(crate) struct CodexKeyRuntime {
     pub(crate) gateway_shutdown: Option<ProviderGatewayShutdown>,
 }
 
-const CODEX_MONITOR_PROVIDER_ID: &str = "codex_monitor";
+pub(crate) const CODEX_MONITOR_PROVIDER_ID: &str = "codex_monitor";
 const CODEX_MONITOR_PROVIDER_KEY_ENV: &str = "CODEX_MONITOR_PROVIDER_KEY";
 
 fn normalize_http_url(

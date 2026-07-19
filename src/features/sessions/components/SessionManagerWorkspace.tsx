@@ -9,6 +9,7 @@ import { useSessionManagerContext } from "../context/SessionManagerContext";
 import { SessionArchiveResultSummary } from "./SessionArchiveResultSummary";
 import { SessionManagerToolbar } from "./SessionManagerToolbar";
 import { SessionPermanentDeletePrompt } from "./SessionPermanentDeletePrompt";
+import { SessionManagerConversation } from "./SessionManagerConversation";
 
 export function SessionManagerWorkspace() {
   const { t } = useI18n();
@@ -66,34 +67,14 @@ export function SessionManagerWorkspace() {
             </div>
             <div className="session-manager-detail-path">{focusedSession.cwd ?? t("sessionManager.unknownProject")}</div>
             <div className="session-manager-conversation-preview">
-              {sessionPreview?.openingMessage && (
-                <section className="session-manager-opening-preview">
-                  <h2>{t("sessionManager.openingMessage")}</h2>
-                  <p>{sessionPreview.openingMessage}</p>
-                </section>
-              )}
-              <section className="session-manager-latest-preview">
-                <h2>{t("sessionManager.latestMessages")}</h2>
-                {sessionPreviewLoading ? (
-                  <div className="session-manager-preview-state">{t("sessionManager.previewLoading")}</div>
-                ) : sessionPreviewError ? (
-                  <div className="session-manager-preview-state is-error">{t("sessionManager.previewUnavailable")}</div>
-                ) : sessionPreview?.items.length ? (
-                  <div className="session-manager-preview-items">
-                    {sessionPreview.items.map((item, index) => (
-                      <article key={index} className={"session-manager-preview-item is-" + item.role}>
-                        <span>{item.role === "user" ? t("sessionManager.previewUser") : t("sessionManager.previewAssistant")}</span>
-                        <p>{item.text}</p>
-                      </article>
-                    ))}
-                  </div>
-                ) : focusedSession.preview ? (
-                  <div className="session-manager-detail-preview">{focusedSession.preview}</div>
-                ) : (
-                  <div className="session-manager-preview-state">{t("sessionManager.previewEmpty")}</div>
-                )}
-                {sessionPreview?.incomplete && <div className="session-manager-preview-note">{t("sessionManager.previewIncomplete")}</div>}
-              </section>
+              <SessionManagerConversation
+                sessionKey={focusedSession.key}
+                items={sessionPreview?.items ?? []}
+                loading={sessionPreviewLoading}
+                error={sessionPreviewError}
+                incomplete={sessionPreview?.incomplete ?? false}
+                fallback={focusedSession.preview}
+              />
             </div>
             <div className="session-manager-detail-actions">
               <button type="button" className="primary" onClick={() => void resumeSession(focusedSession)} disabled={resumingKey === focusedSession.key || !focusedSession.projectExists}>

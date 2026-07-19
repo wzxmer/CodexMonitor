@@ -77,6 +77,7 @@ type UseThreadActionsOptions = {
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
   threadActivityRef: MutableRefObject<Record<string, Record<string, number>>>;
   loadedThreadsRef: MutableRefObject<Record<string, boolean>>;
+  loadedThreadRuntimeKeyRef: MutableRefObject<Record<string, string>>;
   replaceOnResumeRef: MutableRefObject<Record<string, boolean>>;
   tokenUsageRevisionByThreadRef: MutableRefObject<Record<string, number>>;
   applyCollabThreadLinksFromThread: (
@@ -127,6 +128,7 @@ export function useThreadActions({
   getCustomName,
   threadActivityRef,
   loadedThreadsRef,
+  loadedThreadRuntimeKeyRef,
   replaceOnResumeRef,
   tokenUsageRevisionByThreadRef,
   applyCollabThreadLinksFromThread,
@@ -154,6 +156,10 @@ export function useThreadActions({
   const tokenUsageHydrationInFlightRef = useRef<Record<string, true>>({});
   const threadStatusByIdRef = useRef(threadStatusById);
   const activeTurnIdByThreadRef = useRef(activeTurnIdByThread);
+  const getCurrentThreadRuntimeKey = useCallback(() => {
+    const context = getThreadListRuntimeContext();
+    return `${context.sourceId ?? ""}:${context.runtimeGeneration}`;
+  }, [getThreadListRuntimeContext]);
   threadStatusByIdRef.current = threadStatusById;
   activeTurnIdByThreadRef.current = activeTurnIdByThread;
 
@@ -208,6 +214,7 @@ export function useThreadActions({
   const startThreadForWorkspace = useCallback(
     async (workspaceId: string, options?: { activate?: boolean }) => {
       const shouldActivate = options?.activate !== false;
+      const requestRuntimeKey = getCurrentThreadRuntimeKey();
       onDebug?.({
         id: `${Date.now()}-client-thread-start`,
         timestamp: Date.now(),
@@ -231,6 +238,7 @@ export function useThreadActions({
             dispatch({ type: "setActiveThreadId", workspaceId, threadId });
           }
           loadedThreadsRef.current[threadId] = true;
+          loadedThreadRuntimeKeyRef.current[threadId] = requestRuntimeKey;
           delete readOnlyLoadedThreadsRef.current[threadId];
           return threadId;
         }
@@ -246,7 +254,15 @@ export function useThreadActions({
         throw error;
       }
     },
-    [dispatch, extractThreadId, loadedThreadsRef, onDebug, tokenEfficiencyMode],
+    [
+      dispatch,
+      extractThreadId,
+      getCurrentThreadRuntimeKey,
+      loadedThreadRuntimeKeyRef,
+      loadedThreadsRef,
+      onDebug,
+      tokenEfficiencyMode,
+    ],
   );
 
   const resumeThreadForWorkspace = useCallback(
@@ -261,9 +277,13 @@ export function useThreadActions({
       if (!threadId) {
         return null;
       }
+      const requestRuntimeKey = getCurrentThreadRuntimeKey();
+      const loadedInCurrentRuntime =
+        loadedThreadsRef.current[threadId] &&
+        loadedThreadRuntimeKeyRef.current[threadId] === requestRuntimeKey;
       if (
         !force &&
-        loadedThreadsRef.current[threadId] &&
+        loadedInCurrentRuntime &&
         (readOnly || !readOnlyLoadedThreadsRef.current[threadId])
       ) {
         return threadId;
@@ -271,7 +291,7 @@ export function useThreadActions({
       const status = threadStatusByIdRef.current[threadId];
       if (
         status?.isProcessing &&
-        loadedThreadsRef.current[threadId] &&
+        loadedInCurrentRuntime &&
         (readOnly || !readOnlyLoadedThreadsRef.current[threadId]) &&
         !force
       ) {
@@ -419,6 +439,7 @@ export function useThreadActions({
           });
           if (!hydrationPlan.shouldHydrate) {
             loadedThreadsRef.current[threadId] = true;
+            loadedThreadRuntimeKeyRef.current[threadId] = requestRuntimeKey;
             return threadId;
           }
           if (hydrationPlan.keepLocalProcessing) {
@@ -475,6 +496,7 @@ export function useThreadActions({
           resumeAppliedGenerationByThreadRef.current[resumeKey] = resumeGeneration;
         }
         loadedThreadsRef.current[threadId] = true;
+        loadedThreadRuntimeKeyRef.current[threadId] = requestRuntimeKey;
         return threadId;
       } catch (error) {
         onDebug?.({
@@ -507,6 +529,8 @@ export function useThreadActions({
       hydrateSubagentThreads,
       hydrateTurnExecutionSummary,
       itemsByThread,
+      getCurrentThreadRuntimeKey,
+      loadedThreadRuntimeKeyRef,
       loadedThreadsRef,
       onDebug,
       replaceOnResumeRef,
@@ -577,6 +601,7 @@ export function useThreadActions({
           });
         }
         loadedThreadsRef.current[forkedThreadId] = false;
+        delete loadedThreadRuntimeKeyRef.current[forkedThreadId];
         await resumeThreadForWorkspace(workspaceId, forkedThreadId, true, true);
         return forkedThreadId;
       } catch (error) {
@@ -593,6 +618,7 @@ export function useThreadActions({
     [
       dispatch,
       extractThreadId,
+      loadedThreadRuntimeKeyRef,
       loadedThreadsRef,
       onDebug,
       resumeThreadForWorkspace,
@@ -643,10 +669,16 @@ export function useThreadActions({
       }
       threadIds.forEach((threadId) => {
         loadedThreadsRef.current[threadId] = false;
+        delete loadedThreadRuntimeKeyRef.current[threadId];
         delete readOnlyLoadedThreadsRef.current[threadId];
       });
     },
-    [activeThreadIdByWorkspace, loadedThreadsRef, threadsByWorkspace],
+    [
+      activeThreadIdByWorkspace,
+      loadedThreadRuntimeKeyRef,
+      loadedThreadsRef,
+      threadsByWorkspace,
+    ],
   );
 
   const buildThreadSummary = useCallback(

@@ -47,4 +47,43 @@ describe("sidebar interaction styles", () => {
     );
     expect(containerRule?.[1]).toContain("grid-template-columns: minmax(0, 1fr)");
   });
+
+  it("keeps session rows flat and gives selected rows a stable accent surface", () => {
+    const sidebarCss = readFileSync(new URL("./sidebar.css", import.meta.url), "utf8");
+    const contentRule = sidebarCss.match(
+      /\.session-manager-row-content\s*\{([\s\S]*?)\n\}/,
+    );
+    const selectedRule = sidebarCss.match(
+      /\.session-manager-row\.is-selected\s*\{([\s\S]*?)\n\}/,
+    );
+    const selectedFocusedRule = sidebarCss.match(
+      /\.session-manager-row\.is-selected\.is-focused\s*\{([\s\S]*?)\n\}/,
+    );
+
+    expect(contentRule?.[1]).toContain("padding: 0");
+    expect(contentRule?.[1]).toContain("border-radius: 0");
+    expect(selectedRule?.[1]).toContain("var(--accent) 16%");
+    expect(selectedFocusedRule?.[1]).toContain("var(--accent) 20%");
+  });
+
+  it("keeps the session manager scrollbar stable without a compositor mask", () => {
+    const sidebarCss = readFileSync(new URL("./sidebar.css", import.meta.url), "utf8");
+    const managerScrollerRule = sidebarCss.match(
+      /\.sidebar-body\.is-session-manager\s*\{([\s\S]*?)\n\}/,
+    );
+
+    expect(managerScrollerRule?.[1]).toContain("scrollbar-gutter: stable");
+    expect(managerScrollerRule?.[1]).toContain("-webkit-mask-image: none");
+    expect(managerScrollerRule?.[1]).toContain("mask-image: none");
+  });
+
+  it("shows complete selected-session message text without line clamping", () => {
+    const sidebarCss = readFileSync(new URL("./sidebar.css", import.meta.url), "utf8");
+    const messageRule = sidebarCss.match(
+      /\.session-manager-preview-item p\s*\{([\s\S]*?)\n\}/,
+    );
+
+    expect(messageRule?.[1]).toContain("white-space: pre-wrap");
+    expect(messageRule?.[1]).not.toContain("-webkit-line-clamp");
+  });
 });

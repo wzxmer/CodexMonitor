@@ -55,6 +55,9 @@ vi.mock("@services/tauri", () => ({
     knowledgeCacheHit: false,
     contextFragments: [],
   }),
+  promoteComposerImages: vi.fn(async (_workspaceId, _threadId, images: string[]) =>
+    images.map((_image, index) => `C:\\promoted\\image-${index + 1}.png`),
+  ),
   steerTurn: vi.fn(),
   startReview: vi.fn(),
   startThread: vi.fn(),
@@ -304,6 +307,126 @@ describe("useThreads UX integration", () => {
     expect(ensureCallOrder).toBeLessThan(startThreadCallOrder);
   });
 
+  it("does not reactivate a first-send thread after the user switches away", async () => {
+    let resolveStart!: (value: Awaited<ReturnType<typeof startThread>>) => void;
+    vi.mocked(startThread).mockReturnValue(
+      new Promise((resolve) => {
+        resolveStart = resolve;
+      }),
+    );
+    vi.mocked(readThread).mockResolvedValue({
+      result: { thread: { id: "thread-other", turns: [] } },
+    });
+    vi.mocked(sendUserMessageService).mockResolvedValue({
+      result: { turn: { id: "turn-background" } },
+    } as Awaited<ReturnType<typeof sendUserMessageService>>);
+
+    const { result } = renderHook(() =>
+      useThreads({ activeWorkspace: workspace, onWorkspaceConnected: vi.fn() }),
+    );
+
+    let sendPromise!: Promise<unknown>;
+    act(() => {
+      sendPromise = result.current.sendUserMessage("start in background");
+    });
+    await waitFor(() => {
+      expect(startThread).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      result.current.setActiveThreadId("thread-other");
+    });
+    await waitFor(() => {
+      expect(result.current.activeThreadId).toBe("thread-other");
+    });
+
+    resolveStart({
+      result: { thread: { id: "thread-first-send" } },
+    } as Awaited<ReturnType<typeof startThread>>);
+    await act(async () => {
+      await sendPromise;
+    });
+
+    expect(result.current.activeThreadId).toBe("thread-other");
+    expect(sendUserMessageService).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-first-send",
+      "start in background",
+      expect.any(Object),
+    );
+  });
+
+  it("does not resurrect an optimistic user message when the echo precedes turn/start", async () => {
+    let resolveSend!: (
+      value: Awaited<ReturnType<typeof sendUserMessageService>>,
+    ) => void;
+    vi.mocked(readThread).mockResolvedValue({
+      result: { thread: { id: "thread-race", turns: [] } },
+    });
+    vi.mocked(sendUserMessageService).mockReturnValue(
+      new Promise((resolve) => {
+        resolveSend = resolve;
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useThreads({ activeWorkspace: workspace, onWorkspaceConnected: vi.fn() }),
+    );
+    act(() => {
+      result.current.setActiveThreadId("thread-race");
+    });
+    await waitFor(() => {
+      expect(result.current.activeThreadId).toBe("thread-race");
+      expect(readThread).toHaveBeenCalledWith("ws-1", "thread-race");
+    });
+
+    let sendPromise!: Promise<unknown>;
+    act(() => {
+      sendPromise = result.current.sendUserMessage("single optimistic message", [
+        "data:image/png;base64,ORIGINAL",
+      ]);
+    });
+    await waitFor(() => {
+      expect(sendUserMessageService).toHaveBeenCalledTimes(1);
+      expect(
+        result.current.activeItems.filter(
+          (item) => item.kind === "message" && item.role === "user",
+        ),
+      ).toHaveLength(1);
+    });
+
+    act(() => {
+      handlers?.onItemStarted?.("ws-1", "thread-race", {
+        type: "userMessage",
+        id: "server-user-race",
+        content: [
+          { type: "text", text: "single optimistic message" },
+          { type: "image", path: "C:\\promoted\\image-1.png" },
+        ],
+      });
+    });
+    await waitFor(() => {
+      expect(
+        result.current.activeItems.filter(
+          (item) => item.kind === "message" && item.role === "user",
+        ),
+      ).toEqual([expect.objectContaining({ id: "server-user-race" })]);
+    });
+
+    resolveSend({
+      result: { turn: { id: "turn-race" } },
+    } as Awaited<ReturnType<typeof sendUserMessageService>>);
+    await act(async () => {
+      await sendPromise;
+    });
+
+    expect(
+      result.current.activeItems.filter(
+        (item) => item.kind === "message" && item.role === "user",
+      ),
+    ).toEqual([expect.objectContaining({ id: "server-user-race" })]);
+  });
+
   it("reads selected thread without invoking a failing runtime preflight", async () => {
     const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => {
       throw new Error("runtime sync failed");
@@ -523,6 +646,64 @@ describe("useThreads UX integration", () => {
     expect(sendCall?.[0]).toBe("ws-1");
     expect(sendCall?.[1]).toBe("thread-target");
     expect(sendCall?.[2]).toBe("hello target");
+  });
+
+  it("resumes a loaded thread after the runtime generation advances before sending", async () => {
+    let runtimeContext = {
+      sourceId: "source-a",
+      runtimeGeneration: 3,
+    };
+    const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => undefined);
+    const threadResponse = async (_workspaceId: string, threadId: string) => ({
+      result: {
+        thread: {
+          id: threadId,
+          preview: `Thread ${threadId}`,
+          updated_at: 9999,
+          turns: [],
+        },
+      },
+    });
+    vi.mocked(resumeThread).mockImplementation(threadResponse);
+    vi.mocked(sendUserMessageService).mockResolvedValue({
+      result: { turn: { id: "turn-after-provider-switch" } },
+    } as Awaited<ReturnType<typeof sendUserMessageService>>);
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        ensureWorkspaceRuntimeCodexArgs,
+        getThreadListRuntimeContext: () => runtimeContext,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.resumeThreadById("ws-1", "thread-provider-switch");
+    });
+    expect(resumeThread).toHaveBeenCalledTimes(1);
+
+    vi.mocked(resumeThread).mockClear();
+    runtimeContext = {
+      sourceId: "source-a",
+      runtimeGeneration: 4,
+    };
+
+    await act(async () => {
+      await result.current.sendUserMessage("continue after provider switch");
+    });
+
+    expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-provider-switch",
+    );
+    expect(resumeThread).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-provider-switch",
+    );
+    expect(vi.mocked(resumeThread).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(sendUserMessageService).mock.invocationCallOrder[0],
+    );
   });
 
   it("blocks a send when the runtime cannot switch away from a busy Provider", async () => {

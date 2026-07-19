@@ -135,6 +135,35 @@ describe("Sidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: "本地会话管理" }));
     expect((screen.getByLabelText("搜索会话") as HTMLInputElement).value).toBe("alpha");
   });
+
+  it("restores the session manager scroll position after switching modes", async () => {
+    render(<Sidebar {...baseProps} />);
+
+    const toggle = screen.getByRole("button", { name: "本地会话管理" });
+    fireEvent.click(toggle);
+    const body = document.querySelector<HTMLElement>(".sidebar-body");
+    expect(body).not.toBeNull();
+
+    body!.scrollTop = 320;
+    fireEvent.scroll(body!);
+    fireEvent.click(toggle);
+    await waitFor(() => expect(body!.scrollTop).toBe(0));
+
+    fireEvent.click(toggle);
+    await waitFor(() => expect(body!.scrollTop).toBe(320));
+  });
+
+  it("keeps the session manager scrollbar on an unmasked stable layer", () => {
+    render(<Sidebar {...baseProps} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "本地会话管理" }));
+    const body = document.querySelector<HTMLElement>(".sidebar-body");
+
+    expect(body?.classList.contains("is-session-manager")).toBe(true);
+    expect(body?.classList.contains("fade-top")).toBe(false);
+    expect(body?.classList.contains("fade-bottom")).toBe(false);
+  });
+
   it("clears the local session search from its clear button", () => {
     render(<Sidebar {...baseProps} />);
 

@@ -248,6 +248,8 @@ pub(crate) struct ManagedSessionPreviewRequest {
     pub(crate) thread_id: String,
     #[serde(default = "default_managed_session_preview_limit")]
     pub(crate) limit: usize,
+    #[serde(default)]
+    pub(crate) full: bool,
 }
 
 fn default_managed_session_preview_limit() -> usize {

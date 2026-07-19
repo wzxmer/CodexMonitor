@@ -519,6 +519,12 @@
   );
 }
 
+.sidebar-body.is-session-manager {
+  scrollbar-gutter: stable;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
 .workspace-list {
   display: flex;
   flex-direction: column;
@@ -2385,6 +2391,11 @@
   color: var(--text-primary);
   background: transparent;
   text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .session-manager-row.is-child {
@@ -2410,8 +2421,14 @@
   cursor: pointer;
 }
 
+.session-manager-row-select {
+  padding: 0;
+}
+
 .session-manager-row-content {
   min-width: 0;
+  padding: 0;
+  border-radius: 0;
   text-align: left;
   cursor: pointer;
 }
@@ -2556,13 +2573,23 @@
 }
 
 .session-manager-row.is-selected {
-  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border-subtle));
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-raised));
 }
 
 .session-manager-row.is-focused {
   border-color: color-mix(in srgb, var(--accent) 52%, var(--border-subtle));
   background: color-mix(in srgb, var(--accent) 12%, var(--surface-hover));
+}
+
+.session-manager-row.is-selected.is-focused {
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 20%, var(--surface-raised));
+}
+
+.session-manager-row.is-selected .session-manager-row-title {
+  color: var(--accent-strong);
 }
 
 .session-manager-row.is-compact {
@@ -2742,16 +2769,24 @@
 }
 
 .session-manager-preview-item p {
-  display: -webkit-box;
+  display: block;
   margin: 0;
-  overflow: hidden;
   color: var(--text-primary);
   font-size: 13px;
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 8;
+}
+
+.session-manager-preview-load-earlier {
+  justify-self: center;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  cursor: pointer;
+  font-size: 11px;
 }
 
 .session-manager-preview-state,

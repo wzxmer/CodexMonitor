@@ -71,6 +71,46 @@ pub(crate) fn read_session_conversation_preview(
     })
 }
 
+pub(crate) fn read_session_conversation(path: &Path) -> Result<SessionConversationPreview, String> {
+    let file = File::open(path).map_err(|error| error.to_string())?;
+    let reader = BufReader::new(file);
+    let mut opening_message = None;
+    let mut items = Vec::new();
+    let mut incomplete = false;
+
+    for line in reader.lines() {
+        let line = match line {
+            Ok(line) => line,
+            Err(_) => {
+                incomplete = true;
+                continue;
+            }
+        };
+        let value: Value = match serde_json::from_str(&line) {
+            Ok(value) => value,
+            Err(_) => {
+                incomplete = true;
+                continue;
+            }
+        };
+        let Some(item) = extract_preview_item(&value) else {
+            continue;
+        };
+        if opening_message.is_none() && item.role == ManagedSessionPreviewRole::User {
+            opening_message = Some(item.text.clone());
+        }
+        if items.last() != Some(&item) {
+            items.push(item);
+        }
+    }
+
+    Ok(SessionConversationPreview {
+        opening_message,
+        items,
+        incomplete,
+    })
+}
+
 fn read_opening_message(path: &Path) -> Result<Option<String>, String> {
     let file = File::open(path).map_err(|error| error.to_string())?;
     let reader = BufReader::new(file.take(HEAD_PREVIEW_BYTES));
@@ -160,7 +200,7 @@ mod tests {
     use serde_json::{json, Value};
     use uuid::Uuid;
 
-    use super::read_session_conversation_preview;
+    use super::{read_session_conversation, read_session_conversation_preview};
     use crate::types::ManagedSessionPreviewRole;
 
     #[test]
@@ -217,6 +257,49 @@ mod tests {
             preview.items.last().map(|item| item.text.as_str()),
             Some("latest utf8 result")
         );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn reads_all_visible_messages_for_one_selected_session() {
+        let path = std::env::temp_dir().join(format!("session-full-{}.jsonl", Uuid::new_v4()));
+        let mut records = (0..20)
+            .map(|index| {
+                if index % 2 == 0 {
+                    json!({"type":"event_msg","payload":{"type":"user_message","message":format!("request {index}")}})
+                } else {
+                    json!({"type":"event_msg","payload":{"type":"agent_message","message":format!("answer {index}"),"phase":"final_answer"}})
+                }
+            })
+            .collect::<Vec<_>>();
+        records.insert(4, json!({"type":"response_item","payload":{"type":"function_call_output","output":"tool noise"}}));
+        fs::write(
+            &path,
+            records
+                .iter()
+                .map(Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .unwrap();
+
+        let conversation = read_session_conversation(&path).unwrap();
+
+        assert_eq!(conversation.items.len(), 20);
+        assert_eq!(conversation.opening_message.as_deref(), Some("request 0"));
+        assert_eq!(
+            conversation.items.first().map(|item| item.text.as_str()),
+            Some("request 0")
+        );
+        assert_eq!(
+            conversation.items.last().map(|item| item.text.as_str()),
+            Some("answer 19")
+        );
+        assert!(!conversation.incomplete);
+        assert!(!conversation
+            .items
+            .iter()
+            .any(|item| item.text.contains("tool noise")));
         let _ = fs::remove_file(path);
     }
 }

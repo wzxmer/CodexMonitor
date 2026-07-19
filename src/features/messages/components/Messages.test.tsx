@@ -1595,6 +1595,32 @@ describe("Messages", () => {
     expect(container.querySelector(".reasoning-inline")).toBeNull();
   });
 
+  it("advances the working timer while a first thread is still being created", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_700_000_000_000);
+    try {
+      const { container } = render(
+        <Messages
+          items={[]}
+          threadId={null}
+          workspaceId="ws-1"
+          isThinking
+          processingStartedAt={null}
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+
+      expect(container.querySelector(".working-timer-clock")?.textContent).toBe("0:00");
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+      expect(container.querySelector(".working-timer-clock")?.textContent).toBe("0:02");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows polling fetch countdown text instead of done duration when requested", () => {
     vi.useFakeTimers();
     try {
@@ -1917,6 +1943,62 @@ describe("Messages", () => {
       const exploreBlocks = container.querySelectorAll(".explore-inline");
       expect(exploreBlocks.length).toBe(2);
     });
+  });
+
+  it("keeps the last historical assistant message visible when a local turn-start error follows", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "historical-user",
+        kind: "message",
+        role: "user",
+        text: "Run the checks",
+        turnId: "historical-turn",
+      },
+      {
+        id: "historical-tool",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: npm test",
+        detail: "/repo",
+        status: "completed",
+        output: "",
+        turnId: "historical-turn",
+      },
+      {
+        id: "historical-final",
+        kind: "message",
+        role: "assistant",
+        text: "Historical final response",
+        turnId: "historical-turn",
+      },
+      {
+        id: "local-turn-start-error",
+        kind: "message",
+        role: "assistant",
+        text: "Failed to resume the old session",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-old-session"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Historical final response")).toBeTruthy();
+    });
+    expect(screen.getByText("Failed to resume the old session")).toBeTruthy();
+    expect(
+      container
+        .querySelector(".process-group")
+        ?.textContent?.includes("Historical final response") ?? false,
+    ).toBe(false);
   });
 
   it("counts explore entry steps in the tool group summary", async () => {

@@ -181,6 +181,8 @@ export type ConversationItem = (
       collabReceiver?: CollabAgentRef;
       collabReceivers?: CollabAgentRef[];
       collabStatuses?: CollabAgentStatus[];
+      collabModel?: string;
+      collabReasoningEffort?: string;
     }
 ) & { turnId?: string };
 
@@ -366,6 +368,7 @@ export type ManagedSessionPreviewRequest = {
   sourceId: string;
   threadId: string;
   limit?: number;
+  full?: boolean;
 };
 
 export type ManagedSessionPreviewItem = {
@@ -1313,11 +1316,102 @@ export type ShadowRuntimeState = {
   spawnOutcome?: ShadowSpawnOutcome;
 };
 
+export type ShadowApprovedPlanRef = {
+  planId: string;
+  planRevision: number;
+  planHash: string;
+  approvalReceiptId: string;
+  nodeId: string;
+  taskFingerprint: string;
+};
+
+export type ShadowExpectedBinding = {
+  modelId: string;
+  reasoningEffort: string;
+};
+
+export type ShadowActualBinding = {
+  modelId: string | null;
+  reasoningEffort: string | null;
+};
+
+export type ExecutionBindingStatus =
+  | "awaiting_expected"
+  | "awaiting_actual"
+  | "matched"
+  | "mismatch"
+  | "invalid_expected"
+  | "stale"
+  | "conflict";
+
+export type ExecutionBindingReasonCode =
+  | "binding_expired"
+  | "plan_revision_stale"
+  | "registration_conflict"
+  | "actual_binding_conflict"
+  | "sender_thread_mismatch";
+
+export type ExecutionBindingRecord = {
+  schemaVersion: number;
+  workspaceId: string;
+  parentThreadId: string;
+  collabToolCallId: string;
+  receiverThreadIds: string[];
+  activePlanRevision: number | null;
+  approvedPlan: ShadowApprovedPlanRef | null;
+  expected: ShadowExpectedBinding | null;
+  provider: ShadowProviderContext | null;
+  actual: ShadowActualBinding | null;
+  audit: ShadowBindingAudit | null;
+  status: ExecutionBindingStatus;
+  reasonCodes: ExecutionBindingReasonCode[];
+  registeredAtMs: number | null;
+  observedAtMs: number | null;
+  expiresAtMs: number | null;
+  recordRevision: number;
+  updatedAtMs: number;
+};
+
+export type ExecutionBindingRegisterInput = {
+  workspaceId: string;
+  parentThreadId: string;
+  collabToolCallId: string;
+  activePlanRevision: number;
+  approvedPlan: ShadowApprovedPlanRef;
+  expected: ShadowExpectedBinding;
+  provider: ShadowProviderContext;
+  registeredAtMs: number;
+  expiresAtMs: number;
+};
+
+export type ExecutionBindingObserveInput = {
+  workspaceId: string;
+  parentThreadId: string;
+  collabToolCallId: string;
+  senderThreadId: string;
+  receiverThreadIds: string[];
+  actual: ShadowActualBinding;
+  observedAtMs: number;
+};
+
+export type ExecutionBindingQuery = {
+  workspaceId: string;
+  parentThreadId: string;
+  collabToolCallId?: string | null;
+};
+
+export type ShadowBindingContext = {
+  approvedPlan: ShadowApprovedPlanRef | null;
+  expected: ShadowExpectedBinding | null;
+  actual: ShadowActualBinding | null;
+};
+
 export type ShadowRouteRequest = {
   task: ShadowTaskSignals;
   provider: ShadowProviderContext;
   runtime: ShadowRuntimeState;
   coordination: ShadowCoordinationContext | null;
+  binding?: ShadowBindingContext | null;
 };
 
 export type ShadowRouteRecommendation =
@@ -1359,11 +1453,42 @@ export type ShadowRouteReasonCode =
   | "claim_invalid"
   | "claim_conflict"
   | "coordination_clear"
-  | "model_capability_verified";
+  | "model_capability_verified"
+  | "binding_audit_failed";
+
+export type ShadowBindingAuditStatus =
+  | "matched"
+  | "mismatch"
+  | "missing_evidence"
+  | "invalid_expected";
+
+export type ShadowBindingAuditReasonCode =
+  | "approved_plan_missing"
+  | "approved_plan_invalid"
+  | "expected_binding_missing"
+  | "expected_binding_invalid"
+  | "actual_binding_missing"
+  | "expected_model_unknown"
+  | "expected_model_unverified"
+  | "expected_effort_unsupported"
+  | "model_mismatch"
+  | "effort_mismatch";
+
+export type ShadowBindingAudit = {
+  status: ShadowBindingAuditStatus;
+  reasonCodes: ShadowBindingAuditReasonCode[];
+  planId: string | null;
+  planRevision: number | null;
+  nodeId: string | null;
+  taskFingerprint: string | null;
+  expected: ShadowExpectedBinding | null;
+  actual: ShadowActualBinding | null;
+};
 
 export type ShadowRouteAdvice = {
   recommendation: ShadowRouteRecommendation;
   reasonCodes: ShadowRouteReasonCode[];
+  bindingAudit?: ShadowBindingAudit;
 };
 
 export type WorkflowCapabilityProfile = Record<

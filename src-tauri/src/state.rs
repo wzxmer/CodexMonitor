@@ -54,6 +54,8 @@ pub(crate) struct AppState {
     >,
     pub(crate) turn_execution_summaries:
         tokio::sync::Mutex<crate::shared::turn_execution_summary_core::TurnExecutionSummarySidecar>,
+    pub(crate) execution_bindings:
+        tokio::sync::Mutex<crate::shared::execution_binding_core::ExecutionBindingSidecar>,
     pub(crate) windows_installer_repair: Mutex<()>,
 }
 
@@ -91,6 +93,9 @@ impl AppState {
             task_coordination_ledger: tokio::sync::Mutex::new(Some(Default::default())),
             turn_execution_summaries: tokio::sync::Mutex::new(
                 crate::shared::turn_execution_summary_core::TurnExecutionSummarySidecar::for_data_dir(&data_dir),
+            ),
+            execution_bindings: tokio::sync::Mutex::new(
+                crate::shared::execution_binding_core::ExecutionBindingSidecar::for_data_dir(&data_dir),
             ),
             windows_installer_repair: Mutex::new(()),
         }

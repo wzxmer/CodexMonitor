@@ -25,6 +25,10 @@ pub fn shadow_route(
     ledger: &CoordinationLedger,
     now_ms: u64,
 ) -> ShadowRouteAdvice {
+    let binding_audit = request
+        .binding
+        .as_ref()
+        .map(|binding| audit_binding(binding, &request.provider));
     let delegate_candidate = request.task.complexity == TaskComplexity::High
         && request.task.parallelizable
         && !request.task.requires_independent_review
@@ -45,11 +49,18 @@ pub fn shadow_route(
     if request.task.requires_user_decision || request.task.risk == TaskRisk::High {
         push_unique(&mut gates, ShadowRouteReasonCode::UserDecisionRequired);
     }
+    if binding_audit
+        .as_ref()
+        .is_some_and(|audit| audit.status != ShadowBindingAuditStatus::Matched)
+    {
+        push_unique(&mut gates, ShadowRouteReasonCode::BindingAuditFailed);
+    }
 
     if !gates.is_empty() {
         return ShadowRouteAdvice {
             recommendation: ShadowRouteRecommendation::DecisionGate,
             reason_codes: gates,
+            binding_audit,
         };
     }
 
@@ -62,6 +73,7 @@ pub fn shadow_route(
                 ShadowRouteReasonCode::ComplexTask,
                 ShadowRouteReasonCode::IndependentReviewRequired,
             ],
+            binding_audit,
         };
     }
 
@@ -75,6 +87,7 @@ pub fn shadow_route(
                 ShadowRouteReasonCode::CoordinationClear,
                 ShadowRouteReasonCode::ModelCapabilityVerified,
             ],
+            binding_audit,
         };
     }
 
@@ -88,7 +101,154 @@ pub fn shadow_route(
     ShadowRouteAdvice {
         recommendation: ShadowRouteRecommendation::Direct,
         reason_codes: reasons,
+        binding_audit,
     }
+}
+
+pub fn audit_binding(
+    binding: &ShadowBindingContext,
+    provider: &ShadowProviderContext,
+) -> ShadowBindingAudit {
+    let mut reasons = Vec::new();
+    let mut invalid_expected = false;
+    let mut missing_evidence = false;
+
+    match binding.approved_plan.as_ref() {
+        None => {
+            reasons.push(ShadowBindingAuditReasonCode::ApprovedPlanMissing);
+            missing_evidence = true;
+        }
+        Some(plan) if !valid_approved_plan_ref(plan) => {
+            reasons.push(ShadowBindingAuditReasonCode::ApprovedPlanInvalid);
+            invalid_expected = true;
+        }
+        Some(_) => {}
+    }
+
+    match binding.expected.as_ref() {
+        None => {
+            reasons.push(ShadowBindingAuditReasonCode::ExpectedBindingMissing);
+            missing_evidence = true;
+        }
+        Some(expected)
+            if expected.model_id.trim().is_empty()
+                || expected.model_id.len() > 256
+                || expected.reasoning_effort.trim().is_empty()
+                || expected.reasoning_effort.len() > 64 =>
+        {
+            reasons.push(ShadowBindingAuditReasonCode::ExpectedBindingInvalid);
+            invalid_expected = true;
+        }
+        Some(expected) => {
+            match provider.models.iter().find(|candidate| {
+                candidate.provider_id == provider.active_provider_id
+                    && candidate.model_id == expected.model_id
+            }) {
+                None => {
+                    reasons.push(ShadowBindingAuditReasonCode::ExpectedModelUnknown);
+                    invalid_expected = true;
+                }
+                Some(model) if !model.verified => {
+                    reasons.push(ShadowBindingAuditReasonCode::ExpectedModelUnverified);
+                    invalid_expected = true;
+                }
+                Some(model)
+                    if !model
+                        .supported_reasoning_efforts
+                        .iter()
+                        .any(|effort| effort == &expected.reasoning_effort) =>
+                {
+                    reasons.push(ShadowBindingAuditReasonCode::ExpectedEffortUnsupported);
+                    invalid_expected = true;
+                }
+                Some(_) => {}
+            }
+        }
+    }
+
+    let actual_complete = binding.actual.as_ref().is_some_and(|actual| {
+        actual
+            .model_id
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+            && actual
+                .reasoning_effort
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+    });
+    if !actual_complete {
+        reasons.push(ShadowBindingAuditReasonCode::ActualBindingMissing);
+        missing_evidence = true;
+    }
+
+    if !invalid_expected && !missing_evidence {
+        let expected = binding.expected.as_ref().expect("checked expected binding");
+        let actual = binding.actual.as_ref().expect("checked actual binding");
+        if actual.model_id.as_deref() != Some(expected.model_id.as_str()) {
+            reasons.push(ShadowBindingAuditReasonCode::ModelMismatch);
+        }
+        if actual.reasoning_effort.as_deref() != Some(expected.reasoning_effort.as_str()) {
+            reasons.push(ShadowBindingAuditReasonCode::EffortMismatch);
+        }
+    }
+
+    let status = if invalid_expected {
+        ShadowBindingAuditStatus::InvalidExpected
+    } else if missing_evidence {
+        ShadowBindingAuditStatus::MissingEvidence
+    } else if reasons.is_empty() {
+        ShadowBindingAuditStatus::Matched
+    } else {
+        ShadowBindingAuditStatus::Mismatch
+    };
+    ShadowBindingAudit {
+        status,
+        reason_codes: reasons,
+        plan_id: binding
+            .approved_plan
+            .as_ref()
+            .map(|plan| plan.plan_id.clone()),
+        plan_revision: binding
+            .approved_plan
+            .as_ref()
+            .map(|plan| plan.plan_revision),
+        node_id: binding
+            .approved_plan
+            .as_ref()
+            .map(|plan| plan.node_id.clone()),
+        task_fingerprint: binding
+            .approved_plan
+            .as_ref()
+            .map(|plan| plan.task_fingerprint.clone()),
+        expected: binding.expected.clone(),
+        actual: binding.actual.clone(),
+    }
+}
+
+fn valid_approved_plan_ref(plan: &ShadowApprovedPlanRef) -> bool {
+    valid_portable_id(&plan.plan_id, "plan-")
+        && plan.plan_revision > 0
+        && valid_sha256(&plan.plan_hash)
+        && !plan.approval_receipt_id.trim().is_empty()
+        && plan.approval_receipt_id.len() <= 256
+        && valid_portable_id(&plan.node_id, "node-")
+        && valid_sha256(&plan.task_fingerprint)
+}
+
+fn valid_portable_id(value: &str, prefix: &str) -> bool {
+    value.len() > prefix.len()
+        && value.len() <= 256
+        && value.starts_with(prefix)
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+fn valid_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 fn evaluate_provider(provider: &ShadowProviderContext, reasons: &mut Vec<ShadowRouteReasonCode>) {
@@ -361,6 +521,7 @@ mod tests {
             provider: verified_provider(),
             runtime: runtime(),
             coordination: None,
+            binding: None,
         }
     }
 
@@ -429,6 +590,30 @@ mod tests {
             }],
         });
         request
+    }
+
+    fn approved_binding(
+        actual_model: Option<&str>,
+        actual_effort: Option<&str>,
+    ) -> ShadowBindingContext {
+        ShadowBindingContext {
+            approved_plan: Some(ShadowApprovedPlanRef {
+                plan_id: "plan-routing".to_string(),
+                plan_revision: 2,
+                plan_hash: "a".repeat(64),
+                approval_receipt_id: "receipt-plan-routing".to_string(),
+                node_id: "node-implementation".to_string(),
+                task_fingerprint: "b".repeat(64),
+            }),
+            expected: Some(ShadowExpectedBinding {
+                model_id: "model-a".to_string(),
+                reasoning_effort: "high".to_string(),
+            }),
+            actual: Some(ShadowActualBinding {
+                model_id: actual_model.map(str::to_string),
+                reasoning_effort: actual_effort.map(str::to_string),
+            }),
+        }
     }
 
     #[test]
@@ -658,6 +843,86 @@ mod tests {
         assert!(advice
             .reason_codes
             .contains(&ShadowRouteReasonCode::OwnerLeaseInactive));
+    }
+
+    #[test]
+    fn approved_expected_binding_matches_actual_runtime_evidence() {
+        let mut request = request(TaskComplexity::Low, TaskRisk::Low);
+        request.binding = Some(approved_binding(Some("model-a"), Some("high")));
+
+        let advice = shadow_route(&request, &CoordinationLedger::default(), NOW);
+
+        assert_eq!(advice.recommendation, ShadowRouteRecommendation::Direct);
+        assert_eq!(
+            advice.binding_audit.as_ref().map(|audit| audit.status),
+            Some(ShadowBindingAuditStatus::Matched)
+        );
+    }
+
+    #[test]
+    fn binding_mismatch_fails_closed_without_changing_runtime() {
+        let mut request = request(TaskComplexity::Low, TaskRisk::Low);
+        request.binding = Some(approved_binding(Some("model-b"), Some("low")));
+
+        let advice = shadow_route(&request, &CoordinationLedger::default(), NOW);
+        let audit = advice.binding_audit.expect("binding audit");
+
+        assert_eq!(
+            advice.recommendation,
+            ShadowRouteRecommendation::DecisionGate
+        );
+        assert!(advice
+            .reason_codes
+            .contains(&ShadowRouteReasonCode::BindingAuditFailed));
+        assert_eq!(audit.status, ShadowBindingAuditStatus::Mismatch);
+        assert_eq!(
+            audit.reason_codes,
+            vec![
+                ShadowBindingAuditReasonCode::ModelMismatch,
+                ShadowBindingAuditReasonCode::EffortMismatch,
+            ]
+        );
+    }
+
+    #[test]
+    fn missing_actual_binding_evidence_fails_closed() {
+        let mut request = request(TaskComplexity::Low, TaskRisk::Low);
+        request.binding = Some(approved_binding(None, None));
+
+        let advice = shadow_route(&request, &CoordinationLedger::default(), NOW);
+        let audit = advice.binding_audit.expect("binding audit");
+
+        assert_eq!(
+            advice.recommendation,
+            ShadowRouteRecommendation::DecisionGate
+        );
+        assert_eq!(audit.status, ShadowBindingAuditStatus::MissingEvidence);
+        assert_eq!(
+            audit.reason_codes,
+            vec![ShadowBindingAuditReasonCode::ActualBindingMissing]
+        );
+    }
+
+    #[test]
+    fn unsupported_expected_effort_is_not_silently_lowered() {
+        let mut request = request(TaskComplexity::Low, TaskRisk::Low);
+        let mut binding = approved_binding(Some("model-a"), Some("xhigh"));
+        binding
+            .expected
+            .as_mut()
+            .expect("expected")
+            .reasoning_effort = "xhigh".to_string();
+        request.binding = Some(binding);
+
+        let audit = shadow_route(&request, &CoordinationLedger::default(), NOW)
+            .binding_audit
+            .expect("binding audit");
+
+        assert_eq!(audit.status, ShadowBindingAuditStatus::InvalidExpected);
+        assert_eq!(
+            audit.reason_codes,
+            vec![ShadowBindingAuditReasonCode::ExpectedEffortUnsupported]
+        );
     }
 
     #[test]

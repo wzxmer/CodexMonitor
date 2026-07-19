@@ -21,7 +21,7 @@ export function useSessionManager(enabled: boolean) {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [scrollOffset, setScrollOffset] = useState(0);
+  const scrollOffsetRef = useRef(0);
   const [searchResults, setSearchResults] = useState<SessionSearchResult[] | null>(null);
   const [searchProgress, setSearchProgress] = useState<SessionSearchProgress | null>(null);
   const [archiveResult, setArchiveResult] = useState<ArchiveManagedSessionsResponse | null>(null);
@@ -29,6 +29,10 @@ export function useSessionManager(enabled: boolean) {
   const [deletingKeys, setDeletingKeys] = useState<Set<string>>(new Set());
   const scanRequestIdRef = useRef<string | null>(null);
   const searchRequestIdRef = useRef<string | null>(null);
+  const getScrollOffset = useCallback(() => scrollOffsetRef.current, []);
+  const setScrollOffset = useCallback((offset: number) => {
+    scrollOffsetRef.current = offset;
+  }, []);
 
   const refresh = useCallback(async () => {
     const previousRequestId = scanRequestIdRef.current;
@@ -40,11 +44,12 @@ export function useSessionManager(enabled: boolean) {
     setSearchResults(null);
     setSearchProgress(null);
     try {
-      const nextSources = await listSessionSources();
+      const [nextSources] = await Promise.all([
+        listSessionSources(),
+        scanManagedSessions({ requestId }),
+      ]);
       if (scanRequestIdRef.current !== requestId) return;
       setSources(nextSources);
-      await scanManagedSessions({ requestId });
-      if (scanRequestIdRef.current !== requestId) return;
       const page = await fetchManagedSessionsPage({ requestId, offset: 0, limit: PAGE_LIMIT });
       if (scanRequestIdRef.current !== requestId) return;
       setSessions(page.items);
@@ -156,6 +161,12 @@ export function useSessionManager(enabled: boolean) {
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
+  }, []);
+
+  const selectSingle = useCallback((key: string) => {
+    setSelectedSessionKeys((current) =>
+      current.size === 1 && current.has(key) ? current : new Set([key]),
+    );
   }, []);
 
   const archiveSessions = useCallback(async (targets: ManagedSession[]) => {
@@ -299,5 +310,5 @@ export function useSessionManager(enabled: boolean) {
     }
   }, [nextOffset, sessions]);
 
-  return { sources, sessions: filteredSessions, indexedSessions: sessions, totalSessionCount, diagnostics, query, setQuery, showSubagents, setShowSubagents, statusFilter, setStatusFilter, sourceFilter, setSourceFilter, selectedSessionKeys, toggleSelected, nextOffset: query.trim().length >= 2 ? null : nextOffset, loading, loadingMore, error, refresh, loadMore, scrollOffset, setScrollOffset, searchProgress, archiveResult, dismissArchiveResult: () => setArchiveResult(null), archivingKeys, archiveSessions, deletingKeys, permanentlyDeleteSession, permanentlyDeleteSessions, getPermanentDeleteChildCount };
+  return { sources, sessions: filteredSessions, indexedSessions: sessions, totalSessionCount, diagnostics, query, setQuery, showSubagents, setShowSubagents, statusFilter, setStatusFilter, sourceFilter, setSourceFilter, selectedSessionKeys, toggleSelected, selectSingle, nextOffset: query.trim().length >= 2 ? null : nextOffset, loading, loadingMore, error, refresh, loadMore, getScrollOffset, setScrollOffset, searchProgress, archiveResult, dismissArchiveResult: () => setArchiveResult(null), archivingKeys, archiveSessions, deletingKeys, permanentlyDeleteSession, permanentlyDeleteSessions, getPermanentDeleteChildCount };
 }

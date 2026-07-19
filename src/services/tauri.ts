@@ -58,6 +58,10 @@ import type {
   CandidateMatch,
   ShadowRouteAdvice,
   ShadowRouteRequest,
+  ExecutionBindingObserveInput,
+  ExecutionBindingQuery,
+  ExecutionBindingRecord,
+  ExecutionBindingRegisterInput,
   TurnExecutionSummary,
 } from "../types";
 import {
@@ -1053,6 +1057,24 @@ export async function executionRouterShadowPreview(
   input: ShadowRouteRequest,
 ): Promise<ShadowRouteAdvice> {
   return invoke<ShadowRouteAdvice>("execution_router_shadow_preview", { input });
+}
+
+export async function registerExecutionBinding(
+  input: ExecutionBindingRegisterInput,
+): Promise<ExecutionBindingRecord> {
+  return invoke<ExecutionBindingRecord>("execution_binding_register", { input });
+}
+
+export async function observeExecutionBinding(
+  input: ExecutionBindingObserveInput,
+): Promise<ExecutionBindingRecord> {
+  return invoke<ExecutionBindingRecord>("execution_binding_observe", { input });
+}
+
+export async function listExecutionBindings(
+  input: ExecutionBindingQuery,
+): Promise<ExecutionBindingRecord[]> {
+  return invoke<ExecutionBindingRecord[]>("execution_binding_list", { input });
 }
 
 export async function taskCoordinationCreateGroup(group: unknown) {

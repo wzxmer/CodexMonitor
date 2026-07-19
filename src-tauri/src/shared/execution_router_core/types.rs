@@ -94,11 +94,46 @@ pub struct ShadowRuntimeState {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ShadowApprovedPlanRef {
+    pub plan_id: String,
+    pub plan_revision: u64,
+    pub plan_hash: String,
+    pub approval_receipt_id: String,
+    pub node_id: String,
+    pub task_fingerprint: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ShadowExpectedBinding {
+    pub model_id: String,
+    pub reasoning_effort: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ShadowActualBinding {
+    pub model_id: Option<String>,
+    pub reasoning_effort: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ShadowBindingContext {
+    pub approved_plan: Option<ShadowApprovedPlanRef>,
+    pub expected: Option<ShadowExpectedBinding>,
+    pub actual: Option<ShadowActualBinding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ShadowRouteRequest {
     pub task: ShadowTaskSignals,
     pub provider: ShadowProviderContext,
     pub runtime: ShadowRuntimeState,
     pub coordination: Option<ShadowCoordinationContext>,
+    #[serde(default)]
+    pub binding: Option<ShadowBindingContext>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -146,6 +181,44 @@ pub enum ShadowRouteReasonCode {
     ClaimConflict,
     CoordinationClear,
     ModelCapabilityVerified,
+    BindingAuditFailed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShadowBindingAuditStatus {
+    Matched,
+    Mismatch,
+    MissingEvidence,
+    InvalidExpected,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShadowBindingAuditReasonCode {
+    ApprovedPlanMissing,
+    ApprovedPlanInvalid,
+    ExpectedBindingMissing,
+    ExpectedBindingInvalid,
+    ActualBindingMissing,
+    ExpectedModelUnknown,
+    ExpectedModelUnverified,
+    ExpectedEffortUnsupported,
+    ModelMismatch,
+    EffortMismatch,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShadowBindingAudit {
+    pub status: ShadowBindingAuditStatus,
+    pub reason_codes: Vec<ShadowBindingAuditReasonCode>,
+    pub plan_id: Option<String>,
+    pub plan_revision: Option<u64>,
+    pub node_id: Option<String>,
+    pub task_fingerprint: Option<String>,
+    pub expected: Option<ShadowExpectedBinding>,
+    pub actual: Option<ShadowActualBinding>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -153,4 +226,6 @@ pub enum ShadowRouteReasonCode {
 pub struct ShadowRouteAdvice {
     pub recommendation: ShadowRouteRecommendation,
     pub reason_codes: Vec<ShadowRouteReasonCode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub binding_audit: Option<ShadowBindingAudit>,
 }

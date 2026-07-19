@@ -16,6 +16,51 @@ pub(super) async fn try_handle(
     params: &Value,
 ) -> Option<Result<Value, String>> {
     match method {
+        "execution_binding_register" => {
+            let input = match parse_input::<
+                crate::shared::execution_binding_core::ExecutionBindingRegisterRequest,
+            >(params)
+            {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .execution_binding_register(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "execution_binding_observe" => {
+            let input = match parse_input::<
+                crate::shared::execution_binding_core::ExecutionBindingObserveRequest,
+            >(params)
+            {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .execution_binding_observe(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
+        "execution_binding_list" => {
+            let input = match parse_input::<
+                crate::shared::execution_binding_core::ExecutionBindingQuery,
+            >(params)
+            {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(
+                state
+                    .execution_binding_list(input)
+                    .await
+                    .and_then(|value| serde_json::to_value(value).map_err(|err| err.to_string())),
+            )
+        }
         "turn_execution_summary_get" => {
             let query = match parse_input::<
                 crate::shared::turn_execution_summary_core::TurnExecutionSummaryQuery,

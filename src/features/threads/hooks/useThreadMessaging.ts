@@ -77,6 +77,19 @@ type OptimisticUserMessage = {
   turnId?: string;
 };
 
+function createOptimisticUserMessage(
+  attachments: string[],
+  replaceMessageId?: string,
+): OptimisticUserMessage {
+  const timestamp = Date.now();
+  return {
+    id: replaceMessageId ?? `local-user-${timestamp}`,
+    timestamp,
+    images: attachments.filter(isImageAttachment),
+    attachments: attachments.filter((attachment) => !isImageAttachment(attachment)),
+  };
+}
+
 async function workflowPreflightWithTimeout(
   promise: Promise<WorkflowHostPreflightPreview>,
 ) {
@@ -298,7 +311,11 @@ type UseThreadMessagingOptions = {
   pendingInterruptsRef: MutableRefObject<Set<string>>;
   dispatch: Dispatch<ThreadAction>;
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
-  markProcessing: (threadId: string, isProcessing: boolean) => void;
+  markProcessing: (
+    threadId: string,
+    isProcessing: boolean,
+    timestamp?: number,
+  ) => void;
   markReviewing: (threadId: string, isReviewing: boolean) => void;
   setActiveTurnId: (threadId: string, turnId: string | null) => void;
   recordThreadActivity: (
@@ -414,14 +431,10 @@ export function useThreadMessaging({
       text: string,
       attachments: string[],
       replaceMessageId?: string,
+      existingMessage?: OptimisticUserMessage,
     ): OptimisticUserMessage => {
-      const timestamp = Date.now();
-      const id = replaceMessageId ?? `local-user-${timestamp}`;
-      const images = attachments.filter(isImageAttachment);
-      const displayAttachments = attachments.filter(
-        (attachment) => !isImageAttachment(attachment),
-      );
-      const message = { id, timestamp, images, attachments: displayAttachments };
+      const message =
+        existingMessage ?? createOptimisticUserMessage(attachments, replaceMessageId);
       upsertOptimisticUserMessage(
         workspace,
         threadId,
@@ -429,12 +442,12 @@ export function useThreadMessaging({
         message,
         Boolean(replaceMessageId),
       );
-      recordThreadActivity(workspace.id, threadId, timestamp);
+      recordThreadActivity(workspace.id, threadId, message.timestamp);
       dispatch({
         type: "setThreadTimestamp",
         workspaceId: workspace.id,
         threadId,
-        timestamp,
+        timestamp: message.timestamp,
       });
       safeMessageActivity();
       return message;
@@ -661,7 +674,7 @@ export function useThreadMessaging({
         },
       });
       const customThreadName = getCustomName(workspace.id, threadId) ?? null;
-      markProcessing(threadId, true);
+      markProcessing(threadId, true, optimisticMessage.timestamp);
       if (!options?.replaceMessageId && requestMode === "start") {
         void onUserMessageCreated?.(workspace.id, threadId, finalText);
       }
@@ -864,13 +877,12 @@ export function useThreadMessaging({
           safeMessageActivity();
           return { status: "blocked" };
         }
-        upsertOptimisticUserMessage(
-          workspace,
+        dispatch({
+          type: "setItemTurnId",
           threadId,
-          finalText,
-          { ...optimisticMessage, turnId },
-          false,
-        );
+          itemId: optimisticMessage.id,
+          turnId,
+        });
         setActiveTurnId(threadId, turnId);
         return { status: "sent" };
       } catch (error) {
@@ -968,6 +980,10 @@ export function useThreadMessaging({
         return { status: "blocked" };
       }
       const finalText = promptExpansion?.expanded ?? messageText;
+      const pendingOptimisticMessage = createOptimisticUserMessage(
+        images,
+        options?.replaceMessageId,
+      );
       const optimisticMessage = activeThreadId
         ? insertOptimisticUserMessage(
           activeWorkspace,
@@ -975,13 +991,15 @@ export function useThreadMessaging({
           finalText,
           images,
           options?.replaceMessageId,
+          pendingOptimisticMessage,
         )
-        : undefined;
+        : pendingOptimisticMessage;
+      let optimisticThreadId = activeThreadId;
       const discardOptimisticMessage = () => {
-        if (activeThreadId && optimisticMessage) {
+        if (optimisticThreadId) {
           dispatch({
             type: "removeItem",
-            threadId: activeThreadId,
+            threadId: optimisticThreadId,
             itemId: optimisticMessage.id,
           });
         }
@@ -997,6 +1015,7 @@ export function useThreadMessaging({
         discardOptimisticMessage();
         return { status: "blocked" };
       }
+      optimisticThreadId = threadId;
       const result = await sendMessageToThread(activeWorkspace, threadId, finalText, images, {
         skipPromptExpansion: true,
         appMentions,

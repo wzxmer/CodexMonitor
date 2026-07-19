@@ -3,6 +3,7 @@ import type { ConversationItem } from "../types";
 import {
   buildConversationItem,
   buildConversationItemFromThreadItem,
+  buildCollabActualBinding,
   buildItemsFromThread,
   getThreadCreatedTimestamp,
   getThreadTimestamp,
@@ -1153,6 +1154,99 @@ describe("threadItems", () => {
       expect(item.detail).toContain("thread-c");
       expect(item.output).toBe("Coordinate work\n\nagent-1: running");
     }
+  });
+
+  it("retains actual model and reasoning effort from collab spawn items", () => {
+    const camelCase = buildConversationItem({
+      type: "collabAgentToolCall",
+      id: "collab-binding-camel",
+      tool: "spawn_agent",
+      status: "completed",
+      senderThreadId: "thread-parent",
+      receiverThreadIds: ["thread-child"],
+      model: " gpt-5.6-terra ",
+      reasoningEffort: " low ",
+    });
+    const snakeCase = buildConversationItem({
+      type: "collabAgentToolCall",
+      id: "collab-binding-snake",
+      tool: "spawn_agent",
+      status: "completed",
+      sender_thread_id: "thread-parent",
+      receiver_thread_ids: ["thread-child"],
+      model: "gpt-5.6-luna",
+      reasoning_effort: "medium",
+    });
+
+    expect(camelCase).toMatchObject({
+      kind: "tool",
+      collabModel: "gpt-5.6-terra",
+      collabReasoningEffort: "low",
+    });
+    expect(snakeCase).toMatchObject({
+      kind: "tool",
+      collabModel: "gpt-5.6-luna",
+      collabReasoningEffort: "medium",
+    });
+  });
+
+  it("omits blank collab model binding metadata", () => {
+    const item = buildConversationItem({
+      type: "collabAgentToolCall",
+      id: "collab-binding-empty",
+      tool: "spawn_agent",
+      status: "completed",
+      model: "  ",
+      reasoning_effort: "\t",
+    });
+
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.collabModel).toBeUndefined();
+      expect(item.collabReasoningEffort).toBeUndefined();
+    }
+  });
+
+  it("keeps streamed collab binding metadata when completion omits it", () => {
+    const remote: ConversationItem = {
+      id: "collab-binding-merge",
+      kind: "tool",
+      toolType: "collabToolCall",
+      title: "Collab: spawn_agent",
+      detail: "",
+      status: "completed",
+      output: "",
+    };
+    const local: ConversationItem = {
+      ...remote,
+      status: "in_progress",
+      collabModel: "gpt-5.6-terra",
+      collabReasoningEffort: "high",
+    };
+
+    const merged = mergeThreadItems([remote], [local]);
+
+    expect(merged[0]).toMatchObject({
+      collabModel: "gpt-5.6-terra",
+      collabReasoningEffort: "high",
+      status: "completed",
+    });
+  });
+
+  it("projects normalized collab metadata into an actual binding", () => {
+    const item = buildConversationItem({
+      type: "collabAgentToolCall",
+      id: "collab-binding-audit",
+      tool: "spawn_agent",
+      status: "completed",
+      model: "gpt-5.6-luna",
+      reasoningEffort: "low",
+    });
+
+    expect(item && buildCollabActualBinding(item)).toEqual({
+      modelId: "gpt-5.6-luna",
+      reasoningEffort: "low",
+    });
   });
 
   it("captures rich collab metadata from receiver_agents and agent_statuses", () => {

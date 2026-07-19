@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use crate::backend::app_server::WorkspaceSession;
 use crate::types::{SessionSource, WorkspaceEntry};
 
-use super::types::{normalize_source_path, source_identity_key};
+use super::types::source_identity_key;
 
 pub(crate) const DEFAULT_SOURCE_RUNTIME_IDLE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
@@ -45,13 +45,13 @@ impl SourceRuntimeKey {
         if source_identity.is_empty() {
             return Err("Session source path is required".to_string());
         }
-        let workspace_context = normalize_source_path(workspace_context);
+        let workspace_context = source_identity_key(workspace_context);
         if workspace_context.is_empty() {
             return Err("Session runtime workspace context is required".to_string());
         }
         Ok(Self {
             source_identity,
-            workspace_context: workspace_context.to_lowercase(),
+            workspace_context,
             purpose,
         })
     }
@@ -139,8 +139,8 @@ impl SourceThreadRuntimeBindings {
         for candidate in matches {
             if source_identity_key(&candidate.1.source.codex_home_path)
                 != source_identity_key(&first.1.source.codex_home_path)
-                || normalize_source_path(&candidate.1.workspace.path).to_lowercase()
-                    != normalize_source_path(&first.1.workspace.path).to_lowercase()
+                || source_identity_key(&candidate.1.workspace.path)
+                    != source_identity_key(&first.1.workspace.path)
             {
                 return None;
             }
@@ -408,6 +408,7 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
     #[test]
     fn normalizes_source_and_workspace_identity() {
         let left = SourceRuntimeKey::new(r"C:\Users\Test\.codex\", r"D:\Project\Alpha\.").unwrap();
@@ -455,6 +456,21 @@ mod tests {
                 .unwrap();
             assert!(!Arc::ptr_eq(&first, &other));
         });
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn normalizes_unix_source_and_workspace_identity() {
+        let left =
+            SourceRuntimeKey::new("/Users/test/.codex/", "/Users/test/Project/Alpha/.").unwrap();
+        let right =
+            SourceRuntimeKey::new("/Users/test/.codex", "/Users/test/Project/Alpha").unwrap();
+
+        assert_eq!(left, right);
+        assert_ne!(
+            left,
+            SourceRuntimeKey::new("/Users/test/.CODEX", "/Users/test/Project/Alpha").unwrap()
+        );
     }
 
     #[test]

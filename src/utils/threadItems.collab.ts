@@ -2,6 +2,7 @@ import type {
   CollabAgentRef,
   CollabAgentStatus,
   ConversationItem,
+  ShadowActualBinding,
   ThreadSummary,
 } from "../types";
 import { asString, normalizeStringList } from "./threadItems.shared";
@@ -296,6 +297,10 @@ function buildCollabOutput(prompt: string, statuses: CollabAgentStatus[]) {
   return [promptText, statusesText].filter(Boolean).join("\n\n");
 }
 
+function normalizeOptionalString(value: unknown) {
+  return asString(value ?? "").trim() || undefined;
+}
+
 export function parseCollabToolCallItem(
   item: Record<string, unknown>,
 ): Extract<ConversationItem, { kind: "tool" }> {
@@ -353,6 +358,10 @@ export function parseCollabToolCallItem(
   );
   const prompt = asString(item.prompt ?? "");
   const primaryReceiver = receiverFromInteraction ?? receiverFromSpawn ?? receiverAgents[0];
+  const collabModel = normalizeOptionalString(item.model);
+  const collabReasoningEffort = normalizeOptionalString(
+    item.reasoningEffort ?? item.reasoning_effort,
+  );
   return {
     id: asString(item.id),
     kind: "tool",
@@ -365,6 +374,20 @@ export function parseCollabToolCallItem(
     collabReceiver: primaryReceiver ?? undefined,
     collabReceivers: receiverAgents.length > 0 ? receiverAgents : undefined,
     collabStatuses: collabStatuses.length > 0 ? collabStatuses : undefined,
+    collabModel,
+    collabReasoningEffort,
+  };
+}
+
+export function buildCollabActualBinding(
+  item: ConversationItem,
+): ShadowActualBinding | null {
+  if (item.kind !== "tool" || item.toolType !== "collabToolCall") {
+    return null;
+  }
+  return {
+    modelId: item.collabModel ?? null,
+    reasoningEffort: item.collabReasoningEffort ?? null,
   };
 }
 

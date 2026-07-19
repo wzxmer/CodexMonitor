@@ -407,18 +407,24 @@ export const WorkingIndicator = memo(function WorkingIndicator({
   failedLabel = "Failed in",
 }: WorkingIndicatorProps) {
   const [elapsedMs, setElapsedMs] = useState(0);
+  const localStartedAtRef = useRef<number | null>(null);
   const [pollCountdownSeconds, setPollCountdownSeconds] = useState(() =>
     Math.max(1, Math.ceil(pollingIntervalMs / 1000)),
   );
 
   useEffect(() => {
-    if (!isThinking || !processingStartedAt) {
+    if (!isThinking) {
+      localStartedAtRef.current = null;
       setElapsedMs(0);
       return undefined;
     }
-    setElapsedMs(Date.now() - processingStartedAt);
+    if (localStartedAtRef.current === null) {
+      localStartedAtRef.current = Date.now();
+    }
+    const startedAt = processingStartedAt ?? localStartedAtRef.current;
+    setElapsedMs(Date.now() - startedAt);
     const interval = window.setInterval(() => {
-      setElapsedMs(Date.now() - processingStartedAt);
+      setElapsedMs(Date.now() - startedAt);
     }, 1000);
     return () => window.clearInterval(interval);
   }, [isThinking, processingStartedAt]);

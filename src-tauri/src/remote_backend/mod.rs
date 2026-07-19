@@ -211,6 +211,9 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "thread_live_subscribe"
             | "thread_live_unsubscribe"
             | "skills_list"
+            | "execution_binding_register"
+            | "execution_binding_observe"
+            | "execution_binding_list"
             | "execution_router_shadow_preview"
             | "workflow_preflight_preview"
             | "worktree_setup_status"
@@ -310,6 +313,9 @@ mod tests {
         assert!(can_retry_after_disconnect(
             "execution_router_shadow_preview"
         ));
+        assert!(can_retry_after_disconnect("execution_binding_register"));
+        assert!(can_retry_after_disconnect("execution_binding_observe"));
+        assert!(can_retry_after_disconnect("execution_binding_list"));
         assert!(!can_retry_after_disconnect("send_user_message"));
         assert!(!can_retry_after_disconnect("start_thread"));
         assert!(!can_retry_after_disconnect("remove_workspace"));

@@ -946,11 +946,16 @@ pub(crate) async fn fetch_managed_session_preview_core(
         .and_then(|scan| scan.files_by_key.get(&session.key))
         .map(|file| file.path.clone())
         .ok_or_else(|| "Managed session preview file is unavailable".to_string())?;
+    let full = request.full;
     let limit = request.limit.clamp(1, 12);
     let preview = tokio::task::spawn_blocking(move || {
-        crate::shared::session_manager_core::preview::read_session_conversation_preview(
-            &path, limit,
-        )
+        if full {
+            crate::shared::session_manager_core::preview::read_session_conversation(&path)
+        } else {
+            crate::shared::session_manager_core::preview::read_session_conversation_preview(
+                &path, limit,
+            )
+        }
     })
     .await
     .map_err(|error| format!("Managed session preview task failed: {error}"))??;
@@ -1174,6 +1179,7 @@ fn current_time_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::io::Write;
     use std::sync::{Arc, Mutex as StdMutex};
 
     use tokio::sync::Mutex;
@@ -1181,12 +1187,12 @@ mod tests {
 
     use super::{
         archive_managed_sessions_core, cancel_session_task_core, cleanup_managed_sessions_now_core,
-        execute_delete_steps, fetch_managed_sessions_page_core, fetch_session_search_results_core,
-        permanently_delete_managed_session_core, prepare_managed_session_derivation_core,
-        preview_managed_session_cleanup_core, resolve_managed_session_core,
-        run_managed_session_cleanup_scheduler_core, scan_managed_sessions_core,
-        search_managed_sessions_core, update_session_source_core, verify_session_threads_core,
-        SessionManagerRuntime,
+        execute_delete_steps, fetch_managed_session_preview_core, fetch_managed_sessions_page_core,
+        fetch_session_search_results_core, permanently_delete_managed_session_core,
+        prepare_managed_session_derivation_core, preview_managed_session_cleanup_core,
+        resolve_managed_session_core, run_managed_session_cleanup_scheduler_core,
+        scan_managed_sessions_core, search_managed_sessions_core, update_session_source_core,
+        verify_session_threads_core, SessionManagerRuntime,
     };
     use crate::shared::attachment_storage_core::session_attachment_dir;
     use crate::shared::session_manager_core::ledger::{
@@ -1195,9 +1201,10 @@ mod tests {
     use crate::types::{
         AppSettings, ArchiveManagedSessionItem, ArchiveManagedSessionsRequest,
         ManagedSessionCleanupRequest, ManagedSessionCleanupSchedulerRequest,
-        ManagedSessionPageRequest, PermanentlyDeleteManagedSessionRequest,
-        PrepareManagedSessionDerivationRequest, SessionScanRequest, SessionSearchRequest,
-        SessionSourceUpdateRequest, SessionThreadPresence, VerifySessionThreadsRequest,
+        ManagedSessionPageRequest, ManagedSessionPreviewRequest,
+        PermanentlyDeleteManagedSessionRequest, PrepareManagedSessionDerivationRequest,
+        SessionScanRequest, SessionSearchRequest, SessionSourceUpdateRequest,
+        SessionThreadPresence, VerifySessionThreadsRequest,
     };
 
     #[test]
@@ -1792,6 +1799,42 @@ mod tests {
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             };
             assert_eq!(search.results.len(), 1);
+            let rollout_path = session_path.join("rollout-thread-a.jsonl");
+            let mut rollout = fs::OpenOptions::new().append(true).open(&rollout_path).unwrap();
+            for index in 0..13 {
+                writeln!(
+                    rollout,
+                    "{{\"type\":\"event_msg\",\"payload\":{{\"type\":\"agent_message\",\"message\":\"extra {index}\",\"phase\":\"final_answer\"}}}}"
+                )
+                .unwrap();
+            }
+            drop(rollout);
+            let full = fetch_managed_session_preview_core(
+                ManagedSessionPreviewRequest {
+                    source_id: sources[0].id.clone(),
+                    thread_id: "thread-a".to_string(),
+                    limit: 6,
+                    full: true,
+                },
+                &settings,
+                &runtime,
+            )
+            .await
+            .unwrap();
+            let limited = fetch_managed_session_preview_core(
+                ManagedSessionPreviewRequest {
+                    source_id: sources[0].id.clone(),
+                    thread_id: "thread-a".to_string(),
+                    limit: 6,
+                    full: false,
+                },
+                &settings,
+                &runtime,
+            )
+            .await
+            .unwrap();
+            assert_eq!(full.items.len(), 14);
+            assert_eq!(limited.items.len(), 6);
             cancel_session_task_core("scan-a".to_string(), &runtime)
                 .await
                 .unwrap();

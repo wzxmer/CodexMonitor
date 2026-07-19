@@ -15,6 +15,9 @@ use crate::event_sink::TauriEventSink;
 use crate::remote_backend;
 use crate::shared::agents_config_core;
 use crate::shared::codex_core::{self, insert_optional_nullable_string};
+use crate::shared::execution_binding_core::{
+    ExecutionBindingObserveRequest, ExecutionBindingQuery, ExecutionBindingRegisterRequest,
+};
 use crate::shared::execution_router_core::{self, ShadowRouteRequest};
 use crate::shared::provider_profiles_core::{self, active_codex_key_runtime};
 use crate::shared::turn_execution_summary_core::{
@@ -312,6 +315,78 @@ pub(crate) async fn turn_execution_summary_upsert(
     input.runtime_id = runtime_id;
     let mut sidecar = state.turn_execution_summaries.lock().await;
     serde_json::to_value(sidecar.upsert(input)?).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn execution_binding_register(
+    mut input: ExecutionBindingRegisterRequest,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "execution_binding_register",
+            json!({ "input": input }),
+        )
+        .await;
+    }
+    let (source_id, runtime_id) =
+        resolve_turn_execution_summary_scope(&input.workspace_id, &input.parent_thread_id, &state)
+            .await?;
+    input.source_id = source_id;
+    input.runtime_id = runtime_id;
+    let mut sidecar = state.execution_bindings.lock().await;
+    serde_json::to_value(sidecar.register(input)?).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn execution_binding_observe(
+    mut input: ExecutionBindingObserveRequest,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "execution_binding_observe",
+            json!({ "input": input }),
+        )
+        .await;
+    }
+    let (source_id, runtime_id) =
+        resolve_turn_execution_summary_scope(&input.workspace_id, &input.parent_thread_id, &state)
+            .await?;
+    input.source_id = source_id;
+    input.runtime_id = runtime_id;
+    let mut sidecar = state.execution_bindings.lock().await;
+    serde_json::to_value(sidecar.observe(input)?).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn execution_binding_list(
+    mut input: ExecutionBindingQuery,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "execution_binding_list",
+            json!({ "input": input }),
+        )
+        .await;
+    }
+    let (source_id, runtime_id) =
+        resolve_turn_execution_summary_scope(&input.workspace_id, &input.parent_thread_id, &state)
+            .await?;
+    input.source_id = source_id;
+    input.runtime_id = runtime_id;
+    let mut sidecar = state.execution_bindings.lock().await;
+    serde_json::to_value(sidecar.list(&input)?).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

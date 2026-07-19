@@ -214,6 +214,9 @@ function chooseRicherItem(remote: ConversationItem, local: ConversationItem) {
       changes: remote.changes ?? local.changes,
       collabSender: remote.collabSender ?? local.collabSender,
       collabReceiver: remote.collabReceiver ?? local.collabReceiver,
+      collabModel: remote.collabModel ?? local.collabModel,
+      collabReasoningEffort:
+        remote.collabReasoningEffort ?? local.collabReasoningEffort,
       collabReceivers:
         (remote.collabReceivers?.length ?? 0) > 0
           ? remote.collabReceivers

@@ -1,4 +1,7 @@
+#[cfg(windows)]
 use crate::utils::normalize_windows_namespace_path;
+#[cfg(not(windows))]
+use std::path::{Component, Path, PathBuf};
 
 #[allow(unused_imports)]
 pub(crate) use crate::types::{
@@ -8,6 +11,11 @@ pub(crate) use crate::types::{
 };
 
 pub(crate) fn normalize_source_path(path: &str) -> String {
+    normalize_source_path_for_platform(path)
+}
+
+#[cfg(windows)]
+fn normalize_source_path_for_platform(path: &str) -> String {
     let namespace_normalized = normalize_windows_namespace_path(path.trim());
     let slash_normalized = namespace_normalized.replace('/', "\\");
     let (root, remainder, is_absolute) = split_windows_root(&slash_normalized);
@@ -34,10 +42,44 @@ pub(crate) fn normalize_source_path(path: &str) -> String {
     }
 }
 
-pub(crate) fn source_identity_key(path: &str) -> String {
-    normalize_source_path(path).to_lowercase()
+#[cfg(not(windows))]
+fn normalize_source_path_for_platform(path: &str) -> String {
+    let path = Path::new(path.trim());
+    let is_absolute = path.is_absolute();
+    let mut normalized = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir
+                if normalized
+                    .components()
+                    .next_back()
+                    .is_some_and(|value| matches!(value, Component::Normal(_))) =>
+            {
+                normalized.pop();
+            }
+            Component::ParentDir if !is_absolute => normalized.push(component.as_os_str()),
+            Component::ParentDir => {}
+            Component::Normal(value) => normalized.push(value),
+        }
+    }
+
+    normalized.to_string_lossy().into_owned()
 }
 
+pub(crate) fn source_identity_key(path: &str) -> String {
+    let normalized = normalize_source_path(path);
+    if cfg!(windows) {
+        normalized.to_lowercase()
+    } else {
+        normalized
+    }
+}
+
+#[cfg(windows)]
 fn split_windows_root(path: &str) -> (String, &str, bool) {
     if let Some(remainder) = path.strip_prefix("\\\\") {
         let mut parts = remainder.splitn(3, '\\');
@@ -71,6 +113,7 @@ mod tests {
         SessionSource, SessionSourceStatus, SourceScopedSessionKey,
     };
 
+    #[cfg(windows)]
     #[test]
     fn normalizes_windows_source_paths_and_identity() {
         assert_eq!(
@@ -89,6 +132,21 @@ mod tests {
         assert_eq!(
             normalize_source_path(r"\\Server\Share\..\Other"),
             r"\\Server\Share\Other"
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn normalizes_unix_source_paths_and_preserves_case_sensitive_identity() {
+        assert_eq!(
+            normalize_source_path("  /Users/test/.codex/sessions/..  "),
+            "/Users/test/.codex"
+        );
+        assert_eq!(normalize_source_path("/../../Users/test"), "/Users/test");
+        assert_eq!(normalize_source_path("profiles/../.codex"), ".codex");
+        assert_ne!(
+            source_identity_key("/Users/test/.CODEX"),
+            source_identity_key("/Users/test/.codex")
         );
     }
 

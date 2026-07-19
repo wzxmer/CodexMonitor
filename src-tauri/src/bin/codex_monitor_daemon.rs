@@ -207,6 +207,8 @@ struct DaemonState {
     >,
     turn_execution_summaries:
         tokio::sync::Mutex<crate::shared::turn_execution_summary_core::TurnExecutionSummarySidecar>,
+    execution_bindings:
+        tokio::sync::Mutex<crate::shared::execution_binding_core::ExecutionBindingSidecar>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -456,6 +458,9 @@ impl DaemonState {
             task_coordination_ledger: tokio::sync::Mutex::new(Some(Default::default())),
             turn_execution_summaries: tokio::sync::Mutex::new(
                 crate::shared::turn_execution_summary_core::TurnExecutionSummarySidecar::for_data_dir(&config.data_dir),
+            ),
+            execution_bindings: tokio::sync::Mutex::new(
+                crate::shared::execution_binding_core::ExecutionBindingSidecar::for_data_dir(&config.data_dir),
             ),
         }
     }
@@ -1411,6 +1416,42 @@ impl DaemonState {
         input.source_id = source_id;
         input.runtime_id = runtime_id;
         self.turn_execution_summaries.lock().await.upsert(input)
+    }
+
+    async fn execution_binding_register(
+        &self,
+        mut input: crate::shared::execution_binding_core::ExecutionBindingRegisterRequest,
+    ) -> Result<crate::shared::execution_binding_core::ExecutionBindingRecord, String> {
+        let (source_id, runtime_id) = self
+            .turn_execution_summary_scope(&input.workspace_id, &input.parent_thread_id)
+            .await?;
+        input.source_id = source_id;
+        input.runtime_id = runtime_id;
+        self.execution_bindings.lock().await.register(input)
+    }
+
+    async fn execution_binding_observe(
+        &self,
+        mut input: crate::shared::execution_binding_core::ExecutionBindingObserveRequest,
+    ) -> Result<crate::shared::execution_binding_core::ExecutionBindingRecord, String> {
+        let (source_id, runtime_id) = self
+            .turn_execution_summary_scope(&input.workspace_id, &input.parent_thread_id)
+            .await?;
+        input.source_id = source_id;
+        input.runtime_id = runtime_id;
+        self.execution_bindings.lock().await.observe(input)
+    }
+
+    async fn execution_binding_list(
+        &self,
+        mut query: crate::shared::execution_binding_core::ExecutionBindingQuery,
+    ) -> Result<Vec<crate::shared::execution_binding_core::ExecutionBindingRecord>, String> {
+        let (source_id, runtime_id) = self
+            .turn_execution_summary_scope(&query.workspace_id, &query.parent_thread_id)
+            .await?;
+        query.source_id = source_id;
+        query.runtime_id = runtime_id;
+        self.execution_bindings.lock().await.list(&query)
     }
 
     async fn thread_live_subscribe(
@@ -2514,6 +2555,9 @@ mod tests {
             turn_execution_summaries: tokio::sync::Mutex::new(
                 crate::shared::turn_execution_summary_core::TurnExecutionSummarySidecar::for_data_dir(data_dir),
             ),
+            execution_bindings: tokio::sync::Mutex::new(
+                crate::shared::execution_binding_core::ExecutionBindingSidecar::for_data_dir(data_dir),
+            ),
         }
     }
 
@@ -2703,6 +2747,105 @@ mod tests {
     }
 
     #[test]
+    fn rpc_execution_binding_matches_actual_first_and_survives_reload() {
+        run_async_test(async {
+            let tmp = make_temp_dir("execution-binding-rpc");
+            let now_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("time")
+                .as_millis() as u64;
+            {
+                let state = test_state(&tmp);
+                let observed = rpc::handle_rpc_request(
+                    &state,
+                    "execution_binding_observe",
+                    json!({
+                        "input": {
+                            "workspaceId": "workspace-a",
+                            "parentThreadId": "parent-a",
+                            "collabToolCallId": "call-a",
+                            "senderThreadId": "parent-a",
+                            "receiverThreadIds": ["child-a"],
+                            "actual": {
+                                "modelId": "gpt-5.6-luna",
+                                "reasoningEffort": "low"
+                            },
+                            "observedAtMs": now_ms
+                        }
+                    }),
+                    "daemon-test".to_string(),
+                )
+                .await
+                .expect("observe actual binding");
+                assert_eq!(observed["status"], "awaiting_expected");
+
+                let registered = rpc::handle_rpc_request(
+                    &state,
+                    "execution_binding_register",
+                    json!({
+                        "input": {
+                            "workspaceId": "workspace-a",
+                            "parentThreadId": "parent-a",
+                            "collabToolCallId": "call-a",
+                            "activePlanRevision": 2,
+                            "approvedPlan": {
+                                "planId": "plan-routing",
+                                "planRevision": 2,
+                                "planHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "approvalReceiptId": "receipt-plan-routing",
+                                "nodeId": "node-transform",
+                                "taskFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                            },
+                            "expected": {
+                                "modelId": "gpt-5.6-luna",
+                                "reasoningEffort": "low"
+                            },
+                            "provider": {
+                                "activeProviderId": "openai",
+                                "selectedProviderId": "openai",
+                                "selectedModelId": "gpt-5.6-luna",
+                                "selectedReasoningEffort": "low",
+                                "models": [{
+                                    "providerId": "openai",
+                                    "modelId": "gpt-5.6-luna",
+                                    "verified": true,
+                                    "supportedReasoningEfforts": ["low", "medium"]
+                                }]
+                            },
+                            "registeredAtMs": now_ms + 1,
+                            "expiresAtMs": now_ms + 60_001
+                        }
+                    }),
+                    "daemon-test".to_string(),
+                )
+                .await
+                .expect("register expected binding");
+                assert_eq!(registered["status"], "matched");
+            }
+
+            let reloaded = test_state(&tmp);
+            let records = rpc::handle_rpc_request(
+                &reloaded,
+                "execution_binding_list",
+                json!({
+                    "input": {
+                        "workspaceId": "workspace-a",
+                        "parentThreadId": "parent-a",
+                        "collabToolCallId": "call-a"
+                    }
+                }),
+                "daemon-test".to_string(),
+            )
+            .await
+            .expect("reload execution binding");
+            assert_eq!(records.as_array().map(Vec::len), Some(1));
+            assert_eq!(records[0]["status"], "matched");
+            assert_eq!(records[0]["receiverThreadIds"][0], "child-a");
+            let _ = std::fs::remove_dir_all(tmp);
+        });
+    }
+
+    #[test]
     fn rpc_shadow_router_returns_read_only_advice_contract() {
         run_async_test(async {
             let tmp = make_temp_dir("shadow-router-rpc");
@@ -2750,6 +2893,79 @@ mod tests {
             assert_eq!(result["recommendation"], "direct");
             assert!(result["reasonCodes"].is_array());
             assert_eq!(result.as_object().map(|object| object.len()), Some(2));
+            let _ = std::fs::remove_dir_all(tmp);
+        });
+    }
+
+    #[test]
+    fn rpc_shadow_router_audits_approved_binding_without_dispatch() {
+        run_async_test(async {
+            let tmp = make_temp_dir("shadow-router-binding-rpc");
+            let state = test_state(&tmp);
+            let result = rpc::handle_rpc_request(
+                &state,
+                "execution_router_shadow_preview",
+                json!({
+                    "input": {
+                        "task": {
+                            "complexity": "low",
+                            "risk": "low",
+                            "parallelizable": false,
+                            "requiresWrite": false
+                        },
+                        "provider": {
+                            "activeProviderId": "openai",
+                            "selectedProviderId": "openai",
+                            "selectedModelId": "gpt-5.6-luna",
+                            "selectedReasoningEffort": "low",
+                            "models": [{
+                                "providerId": "openai",
+                                "modelId": "gpt-5.6-luna",
+                                "verified": true,
+                                "supportedReasoningEfforts": ["low", "medium"]
+                            }]
+                        },
+                        "runtime": {
+                            "activeSlots": 0,
+                            "depth": 0,
+                            "rootTokensUsed": 0,
+                            "subtaskTokensEstimate": 1000,
+                            "elapsedMs": 0,
+                            "retryCount": 0,
+                            "fallbackCount": 0
+                        },
+                        "coordination": null,
+                        "binding": {
+                            "approvedPlan": {
+                                "planId": "plan-routing",
+                                "planRevision": 2,
+                                "planHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                "approvalReceiptId": "receipt-plan-routing",
+                                "nodeId": "node-transform",
+                                "taskFingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                            },
+                            "expected": {
+                                "modelId": "gpt-5.6-luna",
+                                "reasoningEffort": "low"
+                            },
+                            "actual": {
+                                "modelId": "gpt-5.6-luna",
+                                "reasoningEffort": "low"
+                            }
+                        }
+                    }
+                }),
+                "daemon-test".to_string(),
+            )
+            .await
+            .expect("shadow binding audit");
+
+            assert_eq!(result["recommendation"], "direct");
+            assert_eq!(result["bindingAudit"]["status"], "matched");
+            assert_eq!(
+                result["bindingAudit"]["expected"]["modelId"],
+                "gpt-5.6-luna"
+            );
             let _ = std::fs::remove_dir_all(tmp);
         });
     }

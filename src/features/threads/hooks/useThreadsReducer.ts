@@ -130,6 +130,7 @@ export type ThreadAction =
       replaceExisting?: boolean;
       hasCustomName?: boolean;
     }
+  | { type: "setItemTurnId"; threadId: string; itemId: string; turnId: string }
   | { type: "removeItem"; threadId: string; itemId: string }
   | {
       type: "setThreadItems";

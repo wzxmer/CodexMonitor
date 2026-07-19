@@ -27,6 +27,59 @@ const source: SessionSource = { id: "source-a", name: "Primary", codexHomePath: 
 const managedSession: ManagedSession = { key: "source-a:thread-a", sourceId: "source-a", threadId: "thread-a", sourceKind: "cli", cwd: "C:/missing/project", title: "Archived child", preview: null, createdAt: 1, updatedAt: 2, archivedAt: 2, isArchived: true, parentThreadId: "parent", isSubagent: true, subagentNickname: "worker", subagentRole: null, projectExists: false, fileStatus: "mapped", fileConfidence: "exact" };
 
 describe("SessionManagerList", () => {
+  it("selects one session from the whole row without elevating inner controls", () => {
+    const onSelectSingle = vi.fn();
+    const selectionProps = { onSelectSingle };
+    const baseListProps = {
+      sessions: [managedSession],
+      sources: [source],
+      resumingKey: null,
+      archivingKeys: new Set<string>(),
+      loading: false,
+      loadingMore: false,
+      error: null,
+      hasMore: false,
+      onToggleSelected: vi.fn(),
+      onResume: vi.fn(),
+      onArchive: vi.fn(),
+      onDerive: vi.fn(),
+      onLoadMore: vi.fn(),
+    };
+    const { rerender } = render(
+      <SessionManagerList {...baseListProps} {...selectionProps} selected={new Set()} />,
+    );
+    const row = screen.getByText(managedSession.title).closest(".session-manager-row");
+    expect(row).not.toBeNull();
+
+    fireEvent.click(row!);
+    fireEvent.click(screen.getByText(managedSession.title));
+
+    expect(onSelectSingle).toHaveBeenNthCalledWith(1, managedSession.key);
+    expect(onSelectSingle).toHaveBeenNthCalledWith(2, managedSession.key);
+    expect(
+      Array.from(row!.querySelectorAll("button")).every(
+        (button) => button.getAttribute("data-button-elevation") === "none",
+      ),
+    ).toBe(true);
+
+    onSelectSingle.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "选择 Archived child" }));
+    expect(baseListProps.onToggleSelected).toHaveBeenCalledWith(managedSession.key);
+    expect(onSelectSingle).not.toHaveBeenCalled();
+
+    rerender(
+      <SessionManagerList
+        {...baseListProps}
+        {...selectionProps}
+        selected={new Set([managedSession.key])}
+      />,
+    );
+    expect(row?.classList.contains("is-selected")).toBe(true);
+    expect(screen.getByRole("button", { pressed: true }).textContent).toContain(
+      managedSession.title,
+    );
+  });
+
   it("renders source, archive, missing-project, and subagent metadata", () => {
     const onToggleSelected = vi.fn();
     render(<SessionManagerList sessions={[managedSession]} sources={[source]} selected={new Set()} resumingKey={null} archivingKeys={new Set()} loading={false} loadingMore={false} error={null} hasMore={false} onToggleSelected={onToggleSelected} onResume={vi.fn()} onArchive={vi.fn()} onDerive={vi.fn()} onLoadMore={vi.fn()} />);

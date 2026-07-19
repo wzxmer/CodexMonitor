@@ -58,6 +58,9 @@ import {
   startThread,
   workflowPreflightPreview,
   executionRouterShadowPreview,
+  registerExecutionBinding,
+  observeExecutionBinding,
+  listExecutionBindings,
   startReview,
   setThreadName,
   updateSessionSource,
@@ -159,6 +162,69 @@ describe("tauri invoke wrappers", () => {
     });
   });
 
+  it("forwards execution binding registration, observation, and query inputs", async () => {
+    const invokeMock = vi.mocked(invoke);
+    const registerInput = {
+      workspaceId: "ws-1",
+      parentThreadId: "parent-1",
+      collabToolCallId: "call-1",
+      activePlanRevision: 2,
+      approvedPlan: {
+        planId: "plan-1",
+        planRevision: 2,
+        planHash: "a".repeat(64),
+        approvalReceiptId: "receipt-1",
+        nodeId: "node-1",
+        taskFingerprint: "b".repeat(64),
+      },
+      expected: { modelId: "gpt-5.6-luna", reasoningEffort: "low" },
+      provider: {
+        activeProviderId: "openai",
+        selectedProviderId: "openai",
+        selectedModelId: "gpt-5.6-luna",
+        selectedReasoningEffort: "low",
+        models: [
+          {
+            providerId: "openai",
+            modelId: "gpt-5.6-luna",
+            verified: true,
+            supportedReasoningEfforts: ["low", "medium"],
+          },
+        ],
+      },
+      registeredAtMs: 10,
+      expiresAtMs: 60_010,
+    };
+    const observeInput = {
+      workspaceId: "ws-1",
+      parentThreadId: "parent-1",
+      collabToolCallId: "call-1",
+      senderThreadId: "parent-1",
+      receiverThreadIds: ["child-1"],
+      actual: { modelId: "gpt-5.6-luna", reasoningEffort: "low" },
+      observedAtMs: 20,
+    };
+    const query = {
+      workspaceId: "ws-1",
+      parentThreadId: "parent-1",
+      collabToolCallId: "call-1",
+    };
+
+    await registerExecutionBinding(registerInput);
+    await observeExecutionBinding(observeInput);
+    await listExecutionBindings(query);
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "execution_binding_register", {
+      input: registerInput,
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "execution_binding_observe", {
+      input: observeInput,
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "execution_binding_list", {
+      input: query,
+    });
+  });
+
   it("forwards token efficiency mode when starting a thread", async () => {
     const invokeMock = vi.mocked(invoke);
 
@@ -223,6 +289,58 @@ describe("tauri invoke wrappers", () => {
         fallbackCount: 0,
       },
       coordination: null,
+    };
+
+    await executionRouterShadowPreview(input);
+
+    expect(invokeMock).toHaveBeenCalledWith("execution_router_shadow_preview", {
+      input,
+    });
+  });
+
+  it("forwards approved expected and actual bindings to shadow audit", async () => {
+    const invokeMock = vi.mocked(invoke);
+    const input = {
+      task: {
+        complexity: "low" as const,
+        risk: "low" as const,
+        parallelizable: false,
+        requiresWrite: false,
+      },
+      provider: {
+        activeProviderId: "openai",
+        selectedProviderId: "openai",
+        selectedModelId: "gpt-5.6-luna",
+        selectedReasoningEffort: "low",
+        models: [{
+          providerId: "openai",
+          modelId: "gpt-5.6-luna",
+          verified: true,
+          supportedReasoningEfforts: ["low", "medium"],
+        }],
+      },
+      runtime: {
+        activeSlots: 0,
+        depth: 0,
+        rootTokensUsed: 0,
+        subtaskTokensEstimate: 1_000,
+        elapsedMs: 0,
+        retryCount: 0,
+        fallbackCount: 0,
+      },
+      coordination: null,
+      binding: {
+        approvedPlan: {
+          planId: "plan-routing",
+          planRevision: 2,
+          planHash: "a".repeat(64),
+          approvalReceiptId: "receipt-plan-routing",
+          nodeId: "node-transform",
+          taskFingerprint: "b".repeat(64),
+        },
+        expected: { modelId: "gpt-5.6-luna", reasoningEffort: "low" },
+        actual: { modelId: "gpt-5.6-luna", reasoningEffort: "low" },
+      },
     };
 
     await executionRouterShadowPreview(input);
@@ -374,7 +492,7 @@ describe("tauri invoke wrappers", () => {
     });
     await scanManagedSessions({ requestId: "scan-a", sourceIds: ["source-a"] });
     await fetchManagedSessionsPage({ requestId: "scan-a", offset: 0, limit: 50 });
-    await fetchManagedSessionPreview({ sourceId: "source-a", threadId: "thread-a", limit: 6 });
+    await fetchManagedSessionPreview({ sourceId: "source-a", threadId: "thread-a", full: true });
     await searchManagedSessions({ requestId: "search-a", query: "alpha", sourceIds: [], includeArchived: true, includeSubagents: false });
     await fetchSessionSearchResults("search-a");
     await cancelSessionTask("scan-a");
@@ -401,7 +519,7 @@ describe("tauri invoke wrappers", () => {
       request: { requestId: "scan-a", offset: 0, limit: 50 },
     });
     expect(invokeMock).toHaveBeenCalledWith("fetch_managed_session_preview", {
-      request: { sourceId: "source-a", threadId: "thread-a", limit: 6 },
+      request: { sourceId: "source-a", threadId: "thread-a", full: true },
     });
     expect(invokeMock).toHaveBeenCalledWith("search_managed_sessions", {
       request: { requestId: "search-a", query: "alpha", sourceIds: [], includeArchived: true, includeSubagents: false },

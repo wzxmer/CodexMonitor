@@ -7,6 +7,7 @@ import type {
   DebugEntry,
   RateLimitSnapshot,
   TurnPlan,
+  ExecutionBindingObserveInput,
 } from "@/types";
 import { getAppServerRawMethod } from "@utils/appServerEvents";
 import { useThreadApprovalEvents } from "./useThreadApprovalEvents";
@@ -58,6 +59,7 @@ type ThreadEventHandlersOptions = {
     receivers: CollabAgentRef[],
   ) => void | Promise<void>;
   onReviewExited?: (workspaceId: string, threadId: string) => void;
+  onExecutionBindingObserved?: (input: ExecutionBindingObserveInput) => void;
   approvalAllowlistRef: MutableRefObject<Record<string, string[][]>>;
   pendingInterruptsRef: MutableRefObject<Set<string>>;
 };
@@ -85,6 +87,7 @@ export function useThreadEventHandlers({
   applyCollabThreadLinks,
   hydrateSubagentThreads,
   onReviewExited,
+  onExecutionBindingObserved,
   approvalAllowlistRef,
   pendingInterruptsRef,
 }: ThreadEventHandlersOptions) {
@@ -159,6 +162,7 @@ export function useThreadEventHandlers({
     hydrateSubagentThreads,
     onUserMessageCreated,
     onReviewExited,
+    onExecutionBindingObserved,
   });
 
   const {

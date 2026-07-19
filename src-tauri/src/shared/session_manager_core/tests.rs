@@ -126,6 +126,41 @@ fn scans_archived_missing_project_and_subagent_metadata() {
 }
 
 #[test]
+fn scans_native_sessions_and_archived_sessions_directories() {
+    let fixture = SessionFixture::new();
+    let source_root = fixture.root.join("home");
+    create_session(
+        &source_root,
+        false,
+        "thread-active",
+        None,
+        json!("cli"),
+        Some("user"),
+    );
+    create_session(
+        &source_root,
+        true,
+        "thread-archived",
+        None,
+        json!("cli"),
+        Some("user"),
+    );
+
+    let result = scan_session_source(&source("source-a", &source_root));
+
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    assert_eq!(result.sessions.len(), 2);
+    assert!(result
+        .sessions
+        .iter()
+        .any(|session| session.thread_id == "thread-active" && !session.is_archived));
+    assert!(result
+        .sessions
+        .iter()
+        .any(|session| session.thread_id == "thread-archived" && session.is_archived));
+}
+
+#[test]
 fn source_scan_uses_persisted_activity_instead_of_index_or_file_time() {
     let fixture = SessionFixture::new();
     let source_root = fixture.root.join("home");

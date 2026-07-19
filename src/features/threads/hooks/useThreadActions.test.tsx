@@ -99,6 +99,9 @@ describe("useThreadActions", () => {
   ) {
     const dispatch = vi.fn();
     const loadedThreadsRef = { current: {} as Record<string, boolean> };
+    const loadedThreadRuntimeKeyRef = {
+      current: {} as Record<string, string>,
+    };
     const replaceOnResumeRef = { current: {} as Record<string, boolean> };
     const tokenUsageRevisionByThreadRef = {
       current: {} as Record<string, number>,
@@ -126,6 +129,7 @@ describe("useThreadActions", () => {
       getCustomName: () => undefined,
       threadActivityRef,
       loadedThreadsRef,
+      loadedThreadRuntimeKeyRef,
       replaceOnResumeRef,
       tokenUsageRevisionByThreadRef,
       applyCollabThreadLinksFromThread,
@@ -142,6 +146,7 @@ describe("useThreadActions", () => {
       args,
       dispatch,
       loadedThreadsRef: args.loadedThreadsRef,
+      loadedThreadRuntimeKeyRef: args.loadedThreadRuntimeKeyRef,
       replaceOnResumeRef: args.replaceOnResumeRef,
       threadActivityRef: args.threadActivityRef,
       applyCollabThreadLinksFromThread: args.applyCollabThreadLinksFromThread,
@@ -254,8 +259,10 @@ describe("useThreadActions", () => {
   });
 
   it("skips resume when already loaded", async () => {
-    const loadedThreadsRef = { current: { "thread-1": true } };
-    const { result } = renderActions({ loadedThreadsRef });
+    const { result } = renderActions({
+      loadedThreadsRef: { current: { "thread-1": true } },
+      loadedThreadRuntimeKeyRef: { current: { "thread-1": ":0" } },
+    });
 
     let threadId: string | null = null;
     await act(async () => {
@@ -264,6 +271,46 @@ describe("useThreadActions", () => {
 
     expect(threadId).toBe("thread-1");
     expect(resumeThread).not.toHaveBeenCalled();
+  });
+
+  it("does not mark a stale resume response as loaded in a newer runtime", async () => {
+    let runtimeContext = {
+      sourceId: "source-a",
+      runtimeGeneration: 3,
+    };
+    let resolveResume!: (value: Awaited<ReturnType<typeof resumeThread>>) => void;
+    vi.mocked(resumeThread).mockReturnValue(
+      new Promise((resolve) => {
+        resolveResume = resolve;
+      }),
+    );
+    const { result } = renderActions({
+      getThreadListRuntimeContext: () => runtimeContext,
+    });
+
+    let firstResume!: Promise<string | null>;
+    act(() => {
+      firstResume = result.current.resumeThreadForWorkspace("ws-1", "thread-1");
+    });
+    await waitFor(() => {
+      expect(resumeThread).toHaveBeenCalledTimes(1);
+    });
+
+    runtimeContext = {
+      sourceId: "source-a",
+      runtimeGeneration: 4,
+    };
+    resolveResume({ result: {} } as Awaited<ReturnType<typeof resumeThread>>);
+    await act(async () => {
+      await firstResume;
+    });
+
+    vi.mocked(resumeThread).mockResolvedValue({ result: {} });
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-1");
+    });
+
+    expect(resumeThread).toHaveBeenCalledTimes(2);
   });
 
   it("resumes an explicit thread id, replaces history, and activates after success", async () => {
@@ -380,6 +427,7 @@ describe("useThreadActions", () => {
   it("skips resume while processing unless forced", async () => {
     const options = {
       loadedThreadsRef: { current: { "thread-1": true } },
+      loadedThreadRuntimeKeyRef: { current: { "thread-1": ":0" } },
       threadStatusById: {
         "thread-1": {
           isProcessing: true,

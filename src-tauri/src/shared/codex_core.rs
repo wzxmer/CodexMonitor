@@ -513,10 +513,25 @@ fn token_efficiency_developer_instructions(mode: Option<&str>) -> Option<&'stati
     }
 }
 
-fn build_start_thread_params(workspace_path: String, token_efficiency_mode: Option<&str>) -> Value {
+fn model_provider_override_for_runtime(
+    provider_runtime_fingerprint: Option<&str>,
+) -> Option<&'static str> {
+    provider_runtime_fingerprint
+        .filter(|fingerprint| !fingerprint.trim().is_empty())
+        .map(|_| crate::shared::provider_profiles_core::CODEX_MONITOR_PROVIDER_ID)
+}
+
+fn build_start_thread_params(
+    workspace_path: String,
+    token_efficiency_mode: Option<&str>,
+    model_provider: Option<&str>,
+) -> Value {
     let mut params = Map::new();
     params.insert("cwd".to_string(), json!(workspace_path));
     params.insert("approvalPolicy".to_string(), json!("on-request"));
+    if let Some(model_provider) = model_provider {
+        params.insert("modelProvider".to_string(), json!(model_provider));
+    }
     if let Some(instructions) = token_efficiency_developer_instructions(token_efficiency_mode) {
         params.insert("developerInstructions".to_string(), json!(instructions));
     }
@@ -531,7 +546,11 @@ pub(crate) async fn start_thread_core(
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
     let workspace_path = resolve_workspace_path_core(workspaces, &workspace_id).await?;
-    let params = build_start_thread_params(workspace_path, token_efficiency_mode.as_deref());
+    let params = build_start_thread_params(
+        workspace_path,
+        token_efficiency_mode.as_deref(),
+        model_provider_override_for_runtime(session.provider_runtime_fingerprint.as_deref()),
+    );
     session
         .send_request_for_workspace(&workspace_id, "thread/start", params)
         .await
@@ -551,9 +570,15 @@ pub(crate) async fn resume_thread_with_session_core(
     workspace_id: String,
     thread_id: String,
 ) -> Result<Value, String> {
-    let params = json!({ "threadId": thread_id });
+    let mut params = Map::new();
+    params.insert("threadId".to_string(), json!(thread_id));
+    if let Some(model_provider) =
+        model_provider_override_for_runtime(session.provider_runtime_fingerprint.as_deref())
+    {
+        params.insert("modelProvider".to_string(), json!(model_provider));
+    }
     session
-        .send_request_for_workspace(&workspace_id, "thread/resume", params)
+        .send_request_for_workspace(&workspace_id, "thread/resume", Value::Object(params))
         .await
 }
 
@@ -1665,6 +1690,22 @@ base_url = "{base_url}"
     }
 
     #[test]
+    fn active_provider_runtime_overrides_start_and_resume_provider() {
+        let start = build_start_thread_params(
+            "D:/workspace".to_string(),
+            None,
+            model_provider_override_for_runtime(Some("fingerprint")),
+        );
+        assert_eq!(start["modelProvider"], json!("codex_monitor"));
+
+        assert_eq!(
+            model_provider_override_for_runtime(Some("fingerprint")),
+            Some("codex_monitor")
+        );
+        assert_eq!(model_provider_override_for_runtime(None), None);
+    }
+
+    #[test]
     fn rollout_message_timestamps_are_applied_to_matching_thread_items() {
         let mut current_turn_id = None;
         let mut timestamps = RolloutMessageTimestamps::new();
@@ -1706,9 +1747,11 @@ base_url = "{base_url}"
 
     #[test]
     fn thread_start_token_efficiency_instructions_are_stable_and_opt_in() {
-        let quality = build_start_thread_params("D:/workspace".to_string(), Some("quality"));
-        let balanced = build_start_thread_params("D:/workspace".to_string(), Some("balanced"));
-        let economy = build_start_thread_params("D:/workspace".to_string(), Some("economy"));
+        let quality = build_start_thread_params("D:/workspace".to_string(), Some("quality"), None);
+        let balanced =
+            build_start_thread_params("D:/workspace".to_string(), Some("balanced"), None);
+        let economy =
+            build_start_thread_params("D:/workspace".to_string(), Some("economy"), None);
 
         assert!(quality.get("developerInstructions").is_none());
         assert_eq!(
@@ -1721,7 +1764,7 @@ base_url = "{base_url}"
         );
         assert_eq!(
             balanced,
-            build_start_thread_params("D:/workspace".to_string(), Some("balanced"))
+            build_start_thread_params("D:/workspace".to_string(), Some("balanced"), None)
         );
     }
 

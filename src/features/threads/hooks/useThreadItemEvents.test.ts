@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildConversationItem } from "@utils/threadItems";
+import {
+  buildCollabActualBinding,
+  buildConversationItem,
+} from "@utils/threadItems";
 import { useThreadItemEvents } from "./useThreadItemEvents";
 
 vi.mock("@utils/threadItems", () => ({
   buildConversationItem: vi.fn(),
+  buildCollabActualBinding: vi.fn(),
 }));
 
 type ItemPayload = Record<string, unknown>;
@@ -15,6 +19,7 @@ type SetupOverrides = {
   getCustomName?: (workspaceId: string, threadId: string) => string | undefined;
   onUserMessageCreated?: (workspaceId: string, threadId: string, text: string) => void;
   onReviewExited?: (workspaceId: string, threadId: string) => void;
+  onExecutionBindingObserved?: ReturnType<typeof vi.fn>;
 };
 
 const makeOptions = (overrides: SetupOverrides = {}) => {
@@ -39,6 +44,7 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
       applyCollabThreadLinks,
       onUserMessageCreated: overrides.onUserMessageCreated,
       onReviewExited: overrides.onReviewExited,
+      onExecutionBindingObserved: overrides.onExecutionBindingObserved,
     }),
   );
 
@@ -189,6 +195,55 @@ describe("useThreadItemEvents", () => {
         status: "completed",
       }),
     );
+  });
+
+  it("observes collab bindings on started and completed without prompt data", () => {
+    const onExecutionBindingObserved = vi.fn();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1234);
+    vi.mocked(buildConversationItem).mockReturnValue({
+      id: "call-1",
+      kind: "tool",
+      toolType: "collabToolCall",
+      title: "Collab: spawn_agent",
+      detail: "",
+      output: "sensitive prompt",
+      collabSender: { threadId: "parent-1" },
+      collabReceivers: [
+        { threadId: "child-1" },
+        { threadId: "child-1" },
+      ],
+    });
+    vi.mocked(buildCollabActualBinding)
+      .mockReturnValueOnce({ modelId: null, reasoningEffort: "low" })
+      .mockReturnValueOnce({ modelId: "gpt-5.6-luna", reasoningEffort: "low" });
+    const { result } = makeOptions({ onExecutionBindingObserved });
+    const item: ItemPayload = { type: "collabAgentToolCall", id: "call-1" };
+
+    act(() => {
+      result.current.onItemStarted("ws-1", "event-thread", item);
+      result.current.onItemCompleted("ws-1", "event-thread", item);
+    });
+
+    expect(onExecutionBindingObserved).toHaveBeenNthCalledWith(1, {
+      workspaceId: "ws-1",
+      parentThreadId: "parent-1",
+      collabToolCallId: "call-1",
+      senderThreadId: "parent-1",
+      receiverThreadIds: ["child-1"],
+      actual: { modelId: null, reasoningEffort: "low" },
+      observedAtMs: 1234,
+    });
+    expect(onExecutionBindingObserved).toHaveBeenNthCalledWith(2, {
+      workspaceId: "ws-1",
+      parentThreadId: "parent-1",
+      collabToolCallId: "call-1",
+      senderThreadId: "parent-1",
+      receiverThreadIds: ["child-1"],
+      actual: { modelId: "gpt-5.6-luna", reasoningEffort: "low" },
+      observedAtMs: 1234,
+    });
+    expect(onExecutionBindingObserved.mock.calls[0][0]).not.toHaveProperty("prompt");
+    nowSpy.mockRestore();
   });
 
   it("notifies when a user message is created", () => {

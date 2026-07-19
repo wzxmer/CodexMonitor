@@ -809,20 +809,18 @@ describe("useThreadMessaging telemetry", () => {
     const upserts = dispatch.mock.calls
       .map(([action]) => action)
       .filter((action) => action.type === "upsertItem");
-    expect(upserts).toHaveLength(3);
+    expect(upserts).toHaveLength(2);
     expect(upserts[1]).toEqual(
       expect.objectContaining({
         item: expect.objectContaining({ id: upserts[0]?.item.id }),
       }),
     );
-    expect(upserts[2]).toEqual(
-      expect.objectContaining({
-        item: expect.objectContaining({
-          id: upserts[0]?.item.id,
-          turnId: "turn-1",
-        }),
-      }),
-    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setItemTurnId",
+      threadId: "thread-1",
+      itemId: upserts[0]?.item.id,
+      turnId: "turn-1",
+    });
   });
 
   it("removes the optimistic active-thread message when resume is blocked", async () => {
@@ -1617,7 +1615,11 @@ describe("useThreadMessaging telemetry", () => {
 
     expect(steerTurnService).toHaveBeenCalledTimes(1);
     expect(sendUserMessageService).not.toHaveBeenCalled();
-    expect(markProcessing).toHaveBeenCalledWith("thread-1", true);
+    expect(markProcessing).toHaveBeenCalledWith(
+      "thread-1",
+      true,
+      expect.any(Number),
+    );
     expect(markProcessing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
@@ -1895,7 +1897,11 @@ describe("useThreadMessaging telemetry", () => {
 
     expect(steerTurnService).toHaveBeenCalledTimes(1);
     expect(sendUserMessageService).not.toHaveBeenCalled();
-    expect(markProcessing).toHaveBeenCalledWith("thread-1", true);
+    expect(markProcessing).toHaveBeenCalledWith(
+      "thread-1",
+      true,
+      expect.any(Number),
+    );
     expect(markProcessing).not.toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
@@ -1965,7 +1971,11 @@ describe("useThreadMessaging telemetry", () => {
     });
 
     expect(sendUserMessageService).not.toHaveBeenCalled();
-    expect(markProcessing).toHaveBeenCalledWith("thread-1", true);
+    expect(markProcessing).toHaveBeenCalledWith(
+      "thread-1",
+      true,
+      expect.any(Number),
+    );
     expect(markProcessing).not.toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
