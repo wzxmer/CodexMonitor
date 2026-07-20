@@ -60,7 +60,7 @@ fn keep_daemon_running_after_close(app_handle: &tauri::AppHandle) -> bool {
     })
 }
 
-#[cfg(desktop)]
+#[cfg(target_os = "macos")]
 fn show_main_window(app_handle: &tauri::AppHandle) {
     if let Some(window) = app_handle.get_webview_window("main") {
         let _ = window.show();
@@ -115,11 +115,6 @@ pub fn run() {
 
     #[cfg(not(desktop))]
     let builder = tauri::Builder::default();
-
-    #[cfg(desktop)]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-        show_main_window(app);
-    }));
 
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_autostart::init(

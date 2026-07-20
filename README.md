@@ -45,6 +45,7 @@ macOS 版本当前采用完整 ad-hoc 签名，但尚未使用 Apple Developer I
 ### 项目、会话与 Agent
 
 - 添加、分组、排序和连接多个工作区。
+- 可同时启动多个独立的 CodexMonitor 实例；后续启动不再只唤回已有窗口。
 - 启动或恢复 Codex `app-server` 会话，显示运行中、未读、审批和用户输入状态。
 - 长会话按设置数量分批显示；滚动到顶部或底部可继续加载，当前会话搜索会自动展开并定位隐藏历史，避免一次性渲染全部内容。
 - 消息支持引用选中内容或整条消息到当前/新会话；引用先进入目标会话输入框草稿，由用户确认后发送；Composer 可折叠长引用、展开预览、单条移除和调整多条引用顺序；长内容可用智能引用保存为后端只读快照，按需读取，避免把全文重复塞入上下文。
@@ -285,6 +286,7 @@ The macOS build is fully ad-hoc signed but not notarized with Apple Developer ID
 - **Development knowledge adapter**: Settings > Workflow shows DevKnowledgeBase view and database health, supports citation-backed retrieval, and exposes guarded Intake capture and task initialization through the single `kb-core` writer. Missing local knowledge tooling degrades explicitly without blocking the client.
 - **Usage display**: toggle Codex usage in the bottom-left, switch between used/remaining quota. Home page distinguishes cached reads from uncached input.
 - **Local session management**: total local session count, local last-used timestamps for every session, and a unified history entry. Session content is not read on entry; explicitly selecting one session loads only that session's complete user/assistant conversation, with older content revealed in batches for long sessions. Cross-project return and context references can create new sessions; list context menus support continuing the original workspace/thread, deriving to the current project, archiving, permanently deleting sessions, and copying session IDs. Active sessions are safely archived before permanent deletion; spawned subagent sessions generate task titles in the parent conversation's primary language and fall back to assigned task names when generation is unavailable.
+- **Multiple app instances**: launch additional independent CodexMonitor instances instead of redirecting later launches to an existing window.
 - **Subagent result summaries**: parent conversations show compact child-result summaries, while long outputs open in a dedicated detail panel for reading, copying, or opening the child thread without burying the parent conclusion.
 - **Message experience**: references to the current or a new conversation enter the target composer as a draft and require explicit send; long references can be collapsed or previewed, individual references removed, and multiple references reordered; failed message re-send overwrites the original, auto-reconnect per session, large paste auto-converts to a previewable and restorable TXT attachment at 4,000 chars or 80 lines, image paste/drag/drop with hover copy and in-app large view.
 - **Execution summaries**: completed runs retain their matching added/deleted line counts and Working duration across thread switches and app restarts; older sessions without local summary data are left unchanged.
