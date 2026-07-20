@@ -1,5 +1,5 @@
-import type { CSSProperties } from "react";
-import { BrainCog, RefreshCw, Repeat2, SlidersHorizontal, Zap } from "lucide-react";
+import { useState, type CSSProperties } from "react";
+import { BrainCog, Link2, RefreshCw, Repeat2, SlidersHorizontal, Zap } from "lucide-react";
 import { RoundedSelect } from "@/features/design-system/components/select/RoundedSelect";
 import { useI18n } from "@/features/i18n/I18nProvider";
 import { formatReasoningEffortLabel } from "@/features/models/utils/reasoningEffortLabels";
@@ -10,6 +10,8 @@ import type {
   ServiceTier,
 } from "../../../types";
 import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
+import type { WorkflowGateAdapterStatus } from "@/types";
+import { WorkflowGateBindingPrompt } from "./WorkflowGateBindingPrompt";
 
 type ComposerMetaBarProps = {
   disabled: boolean;
@@ -39,6 +41,9 @@ type ComposerMetaBarProps = {
   codexArgsOptions?: CodexArgsOption[];
   selectedCodexArgsOverride?: string | null;
   onSelectCodexArgsOverride?: (value: string | null) => void;
+  selectedWorkflowGateId?: string | null;
+  onSelectWorkflowGateId?: (workflowId: string | null) => void;
+  onVerifyWorkflowGate?: (workflowId: string) => Promise<WorkflowGateAdapterStatus>;
 };
 
 const formatComposerModelLabel = (label: string) =>
@@ -95,8 +100,15 @@ export function ComposerMetaBar({
   codexArgsOptions = [],
   selectedCodexArgsOverride = null,
   onSelectCodexArgsOverride,
+  selectedWorkflowGateId = null,
+  onSelectWorkflowGateId,
+  onVerifyWorkflowGate,
 }: ComposerMetaBarProps) {
   const { t } = useI18n();
+  const [workflowGatePromptOpen, setWorkflowGatePromptOpen] = useState(false);
+  const workflowGateLabel = selectedWorkflowGateId
+    ? t("composer.workflowGate.boundLabel").replace("{workflowId}", selectedWorkflowGateId)
+    : t("composer.workflowGate.open");
   const planMode =
     collaborationModes.find((mode) => mode.id === "plan") ?? null;
   const defaultMode =
@@ -451,6 +463,19 @@ export function ComposerMetaBar({
             />
           </div>
         )}
+        {onSelectWorkflowGateId && onVerifyWorkflowGate && (
+          <button
+            type="button"
+            className={`composer-workflow-gate${selectedWorkflowGateId ? " is-bound" : ""}`}
+            onClick={() => setWorkflowGatePromptOpen(true)}
+            disabled={disabled}
+            aria-label={workflowGateLabel}
+            title={workflowGateLabel}
+          >
+            <Link2 size={15} strokeWidth={1.8} />
+            {selectedWorkflowGateId && <span aria-hidden className="composer-workflow-gate-dot" />}
+          </button>
+        )}
         {onAutoReconnectChange ? (
           <label
             className={`composer-auto-reconnect${autoReconnectEnabled ? " is-on" : ""}`}
@@ -480,6 +505,14 @@ export function ComposerMetaBar({
         ) : null}
         </div>
       </div>
+      {workflowGatePromptOpen && onSelectWorkflowGateId && onVerifyWorkflowGate && (
+        <WorkflowGateBindingPrompt
+          selectedWorkflowGateId={selectedWorkflowGateId}
+          onSelectWorkflowGateId={onSelectWorkflowGateId}
+          onVerifyWorkflowGate={onVerifyWorkflowGate}
+          onClose={() => setWorkflowGatePromptOpen(false)}
+        />
+      )}
     </div>
   );
 }

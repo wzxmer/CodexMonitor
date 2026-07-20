@@ -2,14 +2,14 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  buildCollabActualBinding,
+  buildCollabExecutionBindingObservation,
   buildConversationItem,
 } from "@utils/threadItems";
 import { useThreadItemEvents } from "./useThreadItemEvents";
 
 vi.mock("@utils/threadItems", () => ({
   buildConversationItem: vi.fn(),
-  buildCollabActualBinding: vi.fn(),
+  buildCollabExecutionBindingObservation: vi.fn(),
 }));
 
 type ItemPayload = Record<string, unknown>;
@@ -71,6 +71,7 @@ describe("useThreadItemEvents", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(buildConversationItem).mockReturnValue(convertedItem);
+    vi.mocked(buildCollabExecutionBindingObservation).mockReturnValue(null);
   });
 
   it("dispatches item updates and marks review mode on item start", () => {
@@ -197,27 +198,31 @@ describe("useThreadItemEvents", () => {
     );
   });
 
-  it("observes collab bindings on started and completed without prompt data", () => {
+  it("observes spawn bindings from raw started and completed items without prompt data", () => {
     const onExecutionBindingObserved = vi.fn();
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1234);
-    vi.mocked(buildConversationItem).mockReturnValue({
-      id: "call-1",
-      kind: "tool",
-      toolType: "collabToolCall",
-      title: "Collab: spawn_agent",
-      detail: "",
-      output: "sensitive prompt",
-      collabSender: { threadId: "parent-1" },
-      collabReceivers: [
-        { threadId: "child-1" },
-        { threadId: "child-1" },
-      ],
-    });
-    vi.mocked(buildCollabActualBinding)
-      .mockReturnValueOnce({ modelId: null, reasoningEffort: "low" })
-      .mockReturnValueOnce({ modelId: "gpt-5.6-luna", reasoningEffort: "low" });
+    vi.mocked(buildCollabExecutionBindingObservation)
+      .mockReturnValueOnce({
+        parentThreadId: "parent-1",
+        collabToolCallId: "call-1",
+        senderThreadId: "parent-1",
+        receiverThreadIds: ["child-1"],
+        actual: { modelId: null, reasoningEffort: "low" },
+      })
+      .mockReturnValueOnce({
+        parentThreadId: "parent-1",
+        collabToolCallId: "call-1",
+        senderThreadId: "parent-1",
+        receiverThreadIds: ["child-1"],
+        actual: { modelId: "gpt-5.6-luna", reasoningEffort: "low" },
+      });
     const { result } = makeOptions({ onExecutionBindingObserved });
-    const item: ItemPayload = { type: "collabAgentToolCall", id: "call-1" };
+    const item: ItemPayload = {
+      type: "subAgentActivity",
+      id: "call-1",
+      agentThreadId: "child-1",
+      prompt: "sensitive prompt",
+    };
 
     act(() => {
       result.current.onItemStarted("ws-1", "event-thread", item);

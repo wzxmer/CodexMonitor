@@ -2,8 +2,8 @@ use serde::Serialize;
 use std::collections::HashSet;
 
 use super::types::{
-    claims_conflict, validate_resource_key, AccessLevel, ClaimState, ConflictResult,
-    ResourceClaim, ResourceKind, TaskCoordinationGroup, TaskParticipant, ThreadKey,
+    claims_conflict, validate_resource_key, AccessLevel, ClaimState, ConflictResult, ResourceClaim,
+    ResourceKind, TaskCoordinationGroup, TaskParticipant, ThreadKey,
 };
 
 /// Result of acquiring a claim.

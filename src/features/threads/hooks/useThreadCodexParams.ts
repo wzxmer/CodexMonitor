@@ -18,6 +18,7 @@ type ThreadCodexParamsPatch = Partial<
     | "accessMode"
     | "collaborationModeId"
     | "codexArgsOverride"
+    | "workflowGateId"
   >
 >;
 
@@ -39,6 +40,7 @@ const DEFAULT_ENTRY: ThreadCodexParams = {
   accessMode: null,
   collaborationModeId: null,
   codexArgsOverride: null,
+  workflowGateId: null,
   updatedAt: 0,
 };
 
@@ -90,6 +92,10 @@ function sanitizeEntry(value: unknown): ThreadCodexParams | null {
         ? entry.collaborationModeId
         : null,
     codexArgsOverride,
+    workflowGateId:
+      typeof entry.workflowGateId === "string" && entry.workflowGateId.length <= 160
+        ? entry.workflowGateId.trim() || null
+        : null,
     updatedAt: typeof entry.updatedAt === "number" ? entry.updatedAt : 0,
   };
 }

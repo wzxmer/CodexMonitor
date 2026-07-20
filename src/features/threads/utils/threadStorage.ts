@@ -40,6 +40,7 @@ export type ThreadCodexParams = {
   // null => explicit "Default" (no override)
   // undefined => legacy/unset thread value that should inherit no-thread scope
   codexArgsOverride: string | null | undefined;
+  workflowGateId?: string | null;
   updatedAt: number;
 };
 

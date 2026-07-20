@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
-use tokio::sync::{mpsc, oneshot, Mutex};
-use tokio::time::timeout;
+use tokio::sync::{mpsc, oneshot, Mutex, Notify};
+use tokio::time::{timeout, Instant};
 
 use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::parse_codex_args;
@@ -455,15 +455,15 @@ async fn track_active_turn_event(
     match method_name {
         Some("turn/started") => {
             if let Some(turn_id) = extract_turn_id(value) {
-                session
-                    .active_turns
-                    .lock()
-                    .await
-                    .insert(thread_id.clone(), turn_id);
+                session.set_active_turn(thread_id.clone(), turn_id).await;
             }
         }
         Some("turn/completed") | Some("error") => {
-            session.active_turns.lock().await.remove(thread_id);
+            if let Some(turn_id) = extract_turn_id(value) {
+                session
+                    .clear_active_turn_if_matches(thread_id, &turn_id)
+                    .await;
+            }
         }
         _ => {}
     }
@@ -471,11 +471,22 @@ async fn track_active_turn_event(
 
 const PENDING_TURN_ID: &str = "__codex_monitor_pending_turn__";
 
-async fn clear_pending_turn_marker(session: &WorkspaceSession, thread_id: &str) {
-    let mut active_turns = session.active_turns.lock().await;
-    if active_turns.get(thread_id).map(String::as_str) == Some(PENDING_TURN_ID) {
-        active_turns.remove(thread_id);
+fn remove_matching_active_turn(
+    active_turns: &mut HashMap<String, String>,
+    thread_id: &str,
+    turn_id: &str,
+) -> bool {
+    if active_turns.get(thread_id).map(String::as_str) != Some(turn_id) {
+        return false;
     }
+    active_turns.remove(thread_id);
+    true
+}
+
+async fn clear_pending_turn_marker(session: &WorkspaceSession, thread_id: &str) {
+    session
+        .clear_active_turn_if_matches(thread_id, PENDING_TURN_ID)
+        .await;
 }
 
 async fn fail_pending_and_active_turns_after_output_end<E: EventSink>(
@@ -514,6 +525,7 @@ async fn fail_pending_and_active_turns_after_output_end<E: EventSink>(
         let mut active_turns = session.active_turns.lock().await;
         active_turns.drain().collect::<Vec<_>>()
     };
+    session.active_turns_changed.notify_waiters();
     if active_turns.is_empty() {
         return;
     }
@@ -554,6 +566,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) request_context: Mutex<HashMap<u64, RequestContext>>,
     pub(crate) thread_workspace: Mutex<HashMap<String, String>>,
     pub(crate) active_turns: Mutex<HashMap<String, String>>,
+    active_turns_changed: Notify,
     pub(crate) hidden_thread_ids: Mutex<HashSet<String>>,
     pub(crate) next_id: AtomicU64,
     pub(crate) output_closed: AtomicBool,
@@ -583,6 +596,7 @@ impl WorkspaceSession {
             request_context: Mutex::new(HashMap::new()),
             thread_workspace: Mutex::new(HashMap::new()),
             active_turns: Mutex::new(HashMap::new()),
+            active_turns_changed: Notify::new(),
             hidden_thread_ids: Mutex::new(HashSet::new()),
             next_id: AtomicU64::new(0),
             output_closed: AtomicBool::new(false),
@@ -614,6 +628,60 @@ impl WorkspaceSession {
         }
         let mut child = self.child.lock().await;
         matches!(child.try_wait(), Ok(None))
+    }
+
+    async fn set_active_turn(&self, thread_id: String, turn_id: String) {
+        self.active_turns.lock().await.insert(thread_id, turn_id);
+        self.active_turns_changed.notify_waiters();
+    }
+
+    pub(crate) async fn clear_active_turn_if_matches(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+    ) -> bool {
+        let removed = {
+            let mut active_turns = self.active_turns.lock().await;
+            remove_matching_active_turn(&mut active_turns, thread_id, turn_id)
+        };
+        if removed {
+            self.active_turns_changed.notify_waiters();
+        }
+        removed
+    }
+
+    pub(crate) async fn wait_for_turn_inactive(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+        wait_for: Duration,
+    ) -> bool {
+        let deadline = Instant::now() + wait_for;
+        loop {
+            let notified = self.active_turns_changed.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self
+                .active_turns
+                .lock()
+                .await
+                .get(thread_id)
+                .map(String::as_str)
+                != Some(turn_id)
+            {
+                return true;
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() || timeout(remaining, notified).await.is_err() {
+                return self
+                    .active_turns
+                    .lock()
+                    .await
+                    .get(thread_id)
+                    .map(String::as_str)
+                    != Some(turn_id);
+            }
+        }
     }
 
     pub(crate) async fn register_workspace(&self, workspace_id: &str) {
@@ -675,10 +743,8 @@ impl WorkspaceSession {
         let thread_id = extract_thread_id(&json!({ "params": params.clone() }));
         let pending_turn_thread_id = if method == "turn/start" {
             if let Some(thread_id) = thread_id.as_ref() {
-                self.active_turns
-                    .lock()
-                    .await
-                    .insert(thread_id.clone(), PENDING_TURN_ID.to_string());
+                self.set_active_turn(thread_id.clone(), PENDING_TURN_ID.to_string())
+                    .await;
             }
             thread_id.clone()
         } else {
@@ -720,10 +786,18 @@ impl WorkspaceSession {
                 }
                 Ok(value)
             }
-            Ok(Err(_)) => Err("request canceled".to_string()),
+            Ok(Err(_)) => {
+                if let Some(thread_id) = pending_turn_thread_id.as_deref() {
+                    clear_pending_turn_marker(self, thread_id).await;
+                }
+                Err("request canceled".to_string())
+            }
             Err(_) => {
                 self.pending.lock().await.remove(&id);
                 self.request_context.lock().await.remove(&id);
+                if let Some(thread_id) = pending_turn_thread_id.as_deref() {
+                    clear_pending_turn_marker(self, thread_id).await;
+                }
                 Err(format!(
                     "request timed out after {} seconds",
                     REQUEST_TIMEOUT.as_secs()
@@ -1024,6 +1098,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
         request_context: Mutex::new(HashMap::new()),
         thread_workspace: Mutex::new(HashMap::new()),
         active_turns: Mutex::new(HashMap::new()),
+        active_turns_changed: Notify::new(),
         hidden_thread_ids: Mutex::new(HashSet::new()),
         next_id: AtomicU64::new(1),
         output_closed: AtomicBool::new(false),
@@ -1387,11 +1462,33 @@ mod tests {
     use super::{
         build_initialize_params, build_turn_error_event, extract_related_thread_ids,
         extract_thread_entries_from_thread_list_result, extract_thread_id, normalize_root_path,
-        resolve_workspace_for_cwd, should_suppress_hidden_thread_event, source_subagent_kind,
+        remove_matching_active_turn, resolve_workspace_for_cwd,
+        should_suppress_hidden_thread_event, source_subagent_kind,
         thread_started_is_memory_consolidation,
     };
     use serde_json::json;
     use std::collections::HashMap;
+
+    #[test]
+    fn stale_terminal_turn_cannot_clear_a_newer_active_turn() {
+        let mut active_turns = HashMap::from([("thread-1".to_string(), "turn-new".to_string())]);
+
+        assert!(!remove_matching_active_turn(
+            &mut active_turns,
+            "thread-1",
+            "turn-old",
+        ));
+        assert_eq!(
+            active_turns.get("thread-1").map(String::as_str),
+            Some("turn-new")
+        );
+        assert!(remove_matching_active_turn(
+            &mut active_turns,
+            "thread-1",
+            "turn-new",
+        ));
+        assert!(!active_turns.contains_key("thread-1"));
+    }
 
     #[test]
     fn extract_thread_id_reads_camel_case() {

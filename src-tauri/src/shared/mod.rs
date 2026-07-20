@@ -17,6 +17,7 @@ pub(crate) mod installer_migration_core;
 pub(crate) mod installer_migration_engine;
 #[allow(dead_code)]
 pub(crate) mod installer_migration_store;
+pub(crate) mod knowledge_adapter_core;
 pub(crate) mod local_usage_core;
 pub(crate) mod message_reference_core;
 pub(crate) mod process_core;
@@ -28,6 +29,7 @@ pub(crate) mod session_manager_core;
 pub(crate) mod settings_core;
 pub(crate) mod task_coordination_core;
 pub(crate) mod turn_execution_summary_core;
+pub(crate) mod workflow_gate_adapter_core;
 pub(crate) mod workflow_preflight_core;
 pub(crate) mod workflow_registry_core;
 pub(crate) mod workspace_rpc;

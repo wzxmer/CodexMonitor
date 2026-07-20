@@ -1760,6 +1760,77 @@ describe("useThreads UX integration", () => {
     expect(interruptMock).not.toHaveBeenCalledWith("ws-1", "thread-1", "pending");
   });
 
+  it("keeps the turn active until interrupt completion is confirmed", async () => {
+    let resolveInterrupt!: (value: Awaited<ReturnType<typeof interruptTurn>>) => void;
+    vi.mocked(interruptTurn).mockReturnValue(
+      new Promise((resolve) => {
+        resolveInterrupt = resolve;
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-1");
+      handlers?.onTurnStarted?.("ws-1", "thread-1", "turn-1");
+    });
+
+    let interruptPromise!: Promise<void>;
+    act(() => {
+      interruptPromise = result.current.interruptTurn();
+    });
+
+    expect(result.current.threadStatusById["thread-1"]?.isProcessing).toBe(true);
+    expect(result.current.activeTurnIdByThread["thread-1"]).toBe("turn-1");
+
+    resolveInterrupt({ result: {} });
+    await act(async () => {
+      await interruptPromise;
+    });
+
+    expect(result.current.threadStatusById["thread-1"]?.isProcessing).toBe(false);
+    expect(result.current.activeTurnIdByThread["thread-1"]).toBeNull();
+  });
+
+  it("keeps the turn active when interrupt completion cannot be confirmed", async () => {
+    vi.mocked(interruptTurn).mockRejectedValue(
+      new Error("Turn interruption was acknowledged, but completion could not be confirmed."),
+    );
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-1");
+      handlers?.onTurnStarted?.("ws-1", "thread-1", "turn-1");
+    });
+
+    await act(async () => {
+      await result.current.interruptTurn();
+    });
+
+    expect(result.current.threadStatusById["thread-1"]?.isProcessing).toBe(true);
+    expect(result.current.activeTurnIdByThread["thread-1"]).toBe("turn-1");
+    expect(result.current.itemsByThread["thread-1"]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "message",
+          role: "assistant",
+          text: "Turn interruption was acknowledged, but completion could not be confirmed.",
+        }),
+      ]),
+    );
+  });
+
   it("uses turn steer after request user input when the turn is still active", async () => {
     vi.mocked(steerTurn).mockResolvedValue({
       result: { turnId: "turn-1" },

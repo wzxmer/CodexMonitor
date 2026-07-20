@@ -57,6 +57,9 @@ import {
   setTraySessionUsage,
   startThread,
   workflowPreflightPreview,
+  workflowGateStatus,
+  knowledgeStatus,
+  knowledgeQuery,
   executionRouterShadowPreview,
   registerExecutionBinding,
   observeExecutionBinding,
@@ -253,6 +256,59 @@ describe("tauri invoke wrappers", () => {
       providerKind: "opencode",
       model: "minimax-m3",
       mode: "shadow",
+      workflowId: null,
+    });
+  });
+
+  it("forwards an explicit external workflow binding to host preflight", async () => {
+    const invokeMock = vi.mocked(invoke);
+
+    await workflowPreflightPreview(
+      "ws-1",
+      "continue approved implementation",
+      "openai",
+      "gpt-5.6-terra",
+      "active",
+      "wf-bound-1",
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith("workflow_preflight_preview", {
+      workspaceId: "ws-1",
+      task: "continue approved implementation",
+      providerKind: "openai",
+      model: "gpt-5.6-terra",
+      mode: "active",
+      workflowId: "wf-bound-1",
+    });
+  });
+
+  it("forwards an explicit workflow ID to the external gate adapter", async () => {
+    const invokeMock = vi.mocked(invoke);
+
+    await workflowGateStatus("ws-1", "wf-explicit-1");
+
+    expect(invokeMock).toHaveBeenCalledWith("workflow_gate_status", {
+      workspaceId: "ws-1",
+      workflowId: "wf-explicit-1",
+    });
+  });
+
+  it("uses the read-only knowledge status adapter", async () => {
+    const invokeMock = vi.mocked(invoke);
+
+    await knowledgeStatus();
+
+    expect(invokeMock).toHaveBeenCalledWith("knowledge_status");
+  });
+
+  it("passes knowledge query scope without exposing provider credentials", async () => {
+    const invokeMock = vi.mocked(invoke);
+
+    await knowledgeQuery("review the knowledge architecture", "dev-knowledge-base");
+
+    expect(invokeMock).toHaveBeenCalledWith("knowledge_query", {
+      query: "review the knowledge architecture",
+      projectId: "dev-knowledge-base",
     });
   });
 

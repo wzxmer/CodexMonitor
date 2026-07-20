@@ -1598,7 +1598,112 @@ export type WorkflowHostPreflightPreview = {
   knowledgeCacheHit: boolean;
   contextPlan?: WorkflowContextPlan;
   completionPlan?: WorkflowCompletionPlan;
+  workflowGate?: WorkflowGateAdapterStatus | null;
   contextFragments: WorkflowAdditionalContextEntry[];
+};
+
+export type KnowledgeAdapterStatus = {
+  availability: "ready" | "degraded" | "unavailable";
+  root: string | null;
+  viewState: "current" | "stale" | "possibly_stale" | "missing" | null;
+  viewRevision: string | null;
+  ledgerIntegrity: string | null;
+  runtimeIntegrity: string | null;
+  diagnostic: string | null;
+  usageVisibility: "actual" | "estimated" | "unknown";
+};
+
+export type KnowledgeQueryHit = {
+  knowledge_id: string;
+  title: string;
+  path: string;
+  status: string;
+  excerpt: string;
+  citation: {
+    knowledge_id: string;
+    path: string;
+    revision: string;
+    verification: string;
+  };
+};
+
+export type KnowledgeQueryResponse = {
+  state: "ready" | "blocked";
+  mode: "context_only";
+  question: string;
+  answer: null;
+  provider_execution: "not_performed";
+  context: {
+    catalog_revision?: string;
+    results: KnowledgeQueryHit[];
+    omitted: Array<Record<string, unknown>>;
+    warnings: Array<Record<string, unknown>>;
+  };
+  citations: KnowledgeQueryHit["citation"][];
+  omitted: Array<Record<string, unknown>>;
+  usage_visibility: "unknown";
+};
+
+export type KnowledgeIntakeCaptureRequest = {
+  projectId: string;
+  rawSnapshot: string;
+  sourceSession: string;
+  sourceTurn: string;
+  risk: "low" | "medium" | "high" | "critical";
+  sensitivity: "public" | "internal" | "private";
+  idempotencyKey: string;
+};
+
+export type KnowledgeIntakeCaptureResponse = {
+  intake_id: string;
+  state: "captured";
+  revision: number;
+  content_hash: string;
+};
+
+export type KnowledgeTaskInitRequest = {
+  projectId: string;
+  scale: "S" | "M" | "L";
+  risk: "low" | "medium" | "high" | "critical";
+  authorizationScope: string;
+  idempotencyKey: string;
+  intakeId: string | null;
+  workItemPath: string | null;
+  capabilityId: string | null;
+  moduleId: string | null;
+};
+
+export type KnowledgeTaskInitResponse = {
+  task_id: string;
+  state: "queued";
+  revision: number;
+};
+
+export type WorkflowGateProjection = {
+  schemaVersion: number;
+  workflowId: string;
+  projectId: string | null;
+  workspace: string;
+  taskId: string | null;
+  workItemPath: string | null;
+  status: string;
+  stage: string;
+  revision: number;
+  planId: string | null;
+  planRevision: number | null;
+  planReviewStatus: string | null;
+  implementationReviewStatus: string | null;
+  tokenVisibility: string | null;
+  creditVisibility: string | null;
+  auditValid: boolean | null;
+};
+
+export type WorkflowGateAdapterStatus = {
+  enforcementLevel: "gated" | "manual" | "unsupported";
+  stateSource: "dev-knowledge-base";
+  workflowId: string;
+  projection: WorkflowGateProjection | null;
+  diagnostic: string | null;
 };
 
 export type WorkflowAdditionalContextEntry = {

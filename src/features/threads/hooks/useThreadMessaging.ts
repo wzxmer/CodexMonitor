@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { Dispatch, MutableRefObject } from "react";
 import * as Sentry from "@sentry/react";
 import type {
@@ -293,6 +293,7 @@ type UseThreadMessagingOptions = {
   workflowRuntimeMode?: WorkflowRuntimeMode;
   workflowSkills?: SkillOption[];
   workflowAgents?: WorkflowAgentOption[];
+  getWorkflowGateId?: (workspaceId: string, threadId: string) => string | null;
   effort?: string | null;
   serviceTier?: ServiceTier | null | undefined;
   collaborationMode?: Record<string, unknown> | null;
@@ -361,6 +362,7 @@ export function useThreadMessaging({
   workflowRuntimeMode = "shadow",
   workflowSkills = [],
   workflowAgents = [],
+  getWorkflowGateId,
   effort,
   serviceTier,
   collaborationMode,
@@ -394,6 +396,7 @@ export function useThreadMessaging({
   onUserMessageCreated,
 }: UseThreadMessagingOptions) {
   const { t } = useI18n();
+  const interruptInFlightRef = useRef(new Set<string>());
   const upsertOptimisticUserMessage = useCallback(
     (
       workspace: WorkspaceInfo,
@@ -508,7 +511,11 @@ export function useThreadMessaging({
           activeTurnId,
         },
       });
-      if (!shouldSteer && ensureWorkspaceRuntimeCodexArgs) {
+      if (
+        !shouldSteer &&
+        !options?.skipRuntimePreflight &&
+        ensureWorkspaceRuntimeCodexArgs
+      ) {
         try {
           await ensureWorkspaceRuntimeCodexArgs(workspace.id, threadId);
         } catch (error) {
@@ -654,6 +661,7 @@ export function useThreadMessaging({
             workflowProviderKind,
             resolvedModel ?? null,
             workflowRuntimeMode,
+            getWorkflowGateId?.(workspace.id, threadId) ?? null,
           ),
         ).then(
           (preview) => ({ preview, error: null }),
@@ -718,6 +726,7 @@ export function useThreadMessaging({
               validationSummary: hostPreview.validationSuggestions.join(", "),
               sourceErrors: hostPreview.sourceErrors,
               knowledgeCacheHit: hostPreview.knowledgeCacheHit,
+              workflowGate: hostPreview.workflowGate ?? null,
               contextPlan: hostPreview.contextPlan ?? null,
               completionPlan: hostPreview.completionPlan
                 ? {
@@ -936,6 +945,7 @@ export function useThreadMessaging({
       workflowRuntimeMode,
       workflowSkills,
       workflowAgents,
+      getWorkflowGateId,
       onDebug,
       pushThreadErrorMessage,
       safeMessageActivity,
@@ -980,6 +990,29 @@ export function useThreadMessaging({
         return { status: "blocked" };
       }
       const finalText = promptExpansion?.expanded ?? messageText;
+      let runtimePreflightComplete = false;
+      if (
+        activeThreadId &&
+        !threadStatusById[activeThreadId]?.isProcessing &&
+        ensureWorkspaceRuntimeCodexArgs
+      ) {
+        try {
+          await ensureWorkspaceRuntimeCodexArgs(activeWorkspace.id, activeThreadId);
+          runtimePreflightComplete = true;
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          onDebug?.({
+            id: `${Date.now()}-client-turn-runtime-preflight-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "turn/runtime preflight error",
+            payload: errorMessage,
+          });
+          pushThreadErrorMessage(activeThreadId, errorMessage);
+          safeMessageActivity();
+          return { status: "blocked" };
+        }
+      }
       const pendingOptimisticMessage = createOptimisticUserMessage(
         images,
         options?.replaceMessageId,
@@ -1018,6 +1051,7 @@ export function useThreadMessaging({
       optimisticThreadId = threadId;
       const result = await sendMessageToThread(activeWorkspace, threadId, finalText, images, {
         skipPromptExpansion: true,
+        skipRuntimePreflight: runtimePreflightComplete,
         appMentions,
         sendIntent: options?.sendIntent,
         replaceMessageId: options?.replaceMessageId,
@@ -1033,11 +1067,13 @@ export function useThreadMessaging({
       customPrompts,
       dispatch,
       ensureThreadForActiveWorkspace,
+      ensureWorkspaceRuntimeCodexArgs,
       insertOptimisticUserMessage,
       onDebug,
       pushThreadErrorMessage,
       safeMessageActivity,
       sendMessageToThread,
+      threadStatusById,
     ],
   );
 
@@ -1097,27 +1133,21 @@ export function useThreadMessaging({
     if (!activeWorkspace || !activeThreadId) {
       return;
     }
+    if (interruptInFlightRef.current.has(activeThreadId)) {
+      return;
+    }
     const activeTurnId = activeTurnIdByThread[activeThreadId] ?? null;
     const turnId = activeTurnId ?? "pending";
     const timestamp = Date.now();
-    if (activeTurnId) {
-      dispatch({
-        type: "completeTurnExecution",
-        threadId: activeThreadId,
-        turnId: activeTurnId,
-        status: "interrupted",
-        timestamp,
-      });
-    }
-    markProcessing(activeThreadId, false);
-    setActiveTurnId(activeThreadId, null);
-    dispatch({
-      type: "markThreadInterrupted",
-      threadId: activeThreadId,
-      timestamp,
-    });
     if (!activeTurnId) {
       pendingInterruptsRef.current.add(activeThreadId);
+      markProcessing(activeThreadId, false);
+      setActiveTurnId(activeThreadId, null);
+      dispatch({
+        type: "markThreadInterrupted",
+        threadId: activeThreadId,
+        timestamp,
+      });
     }
     onDebug?.({
       id: `${Date.now()}-client-turn-interrupt`,
@@ -1131,12 +1161,29 @@ export function useThreadMessaging({
         queued: !activeTurnId,
       },
     });
+    interruptInFlightRef.current.add(activeThreadId);
     try {
       const response = await interruptTurnService(
         activeWorkspace.id,
         activeThreadId,
         turnId,
       );
+      if (activeTurnId) {
+        dispatch({
+          type: "completeTurnExecution",
+          threadId: activeThreadId,
+          turnId: activeTurnId,
+          status: "interrupted",
+          timestamp: Date.now(),
+        });
+        markProcessing(activeThreadId, false);
+        setActiveTurnId(activeThreadId, null);
+        dispatch({
+          type: "markThreadInterrupted",
+          threadId: activeThreadId,
+          timestamp: Date.now(),
+        });
+      }
       onDebug?.({
         id: `${Date.now()}-server-turn-interrupt`,
         timestamp: Date.now(),
@@ -1145,13 +1192,18 @@ export function useThreadMessaging({
         payload: response,
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       onDebug?.({
         id: `${Date.now()}-client-turn-interrupt-error`,
         timestamp: Date.now(),
         source: "error",
         label: "turn/interrupt error",
-        payload: error instanceof Error ? error.message : String(error),
+        payload: errorMessage,
       });
+      pushThreadErrorMessage(activeThreadId, errorMessage);
+      safeMessageActivity();
+    } finally {
+      interruptInFlightRef.current.delete(activeThreadId);
     }
   }, [
     activeThreadId,
@@ -1161,6 +1213,8 @@ export function useThreadMessaging({
     markProcessing,
     onDebug,
     pendingInterruptsRef,
+    pushThreadErrorMessage,
+    safeMessageActivity,
     setActiveTurnId,
   ]);
 

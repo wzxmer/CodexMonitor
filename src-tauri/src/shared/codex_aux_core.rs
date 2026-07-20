@@ -436,10 +436,9 @@ pub(crate) async fn run_background_prompt_core<F>(
 where
     F: Fn(&str, &str),
 {
-    let _runtime_switch_guard =
-        crate::shared::workspaces_core::provider_runtime_switch_gate()
-            .read()
-            .await;
+    let _runtime_switch_guard = crate::shared::workspaces_core::provider_runtime_switch_gate()
+        .read()
+        .await;
     let workspace_path = {
         let workspaces = workspaces.lock().await;
         let entry = workspaces.get(&workspace_id).ok_or("workspace not found")?;

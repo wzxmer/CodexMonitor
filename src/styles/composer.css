@@ -1508,6 +1508,11 @@
     margin-left: 0;
   }
 
+  .app.layout-phone .composer-workflow-gate {
+    flex: 0 0 32px;
+    margin-left: auto;
+  }
+
   .app.layout-phone .composer-followup-hint {
     display: none;
   }
@@ -1525,6 +1530,162 @@
   display: grid;
   gap: 6px;
   padding: 8px 10px 0;
+}
+
+.composer-workflow-gate {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border-muted) 58%, transparent);
+  border-radius: 50%;
+  background: var(--surface-card-strong);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.composer-workflow-gate:hover:not(:disabled) {
+  border-color: var(--border-muted);
+  background: var(--cm-surface-panel-hover);
+  color: var(--text-strong);
+}
+
+.composer-workflow-gate:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.composer-workflow-gate:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.composer-workflow-gate.is-bound {
+  border-color: var(--cm-border-accent);
+  color: var(--message-link-color);
+}
+
+.composer-workflow-gate-dot {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 5px;
+  height: 5px;
+  border: 1px solid var(--surface-card-strong);
+  border-radius: 50%;
+  background: var(--accent-success, #2f9e68);
+}
+
+.composer-workflow-gate + .composer-auto-reconnect {
+  margin-left: 0;
+}
+
+.workflow-gate-binding-modal .ds-modal-card {
+  display: grid;
+  gap: 12px;
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 18px;
+  border-radius: 8px;
+  overflow-y: auto;
+}
+
+.workflow-gate-binding-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflow-gate-binding-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.workflow-gate-binding-close:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-strong);
+}
+
+.workflow-gate-binding-input {
+  min-width: 0;
+  font-family: var(--code-font-family, Menlo, Monaco, "Courier New", monospace);
+}
+
+.workflow-gate-binding-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: 6px;
+  background: var(--ds-surface-muted);
+  color: var(--ds-text-subtle);
+  font-size: 12px;
+}
+
+.workflow-gate-binding-status > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.workflow-gate-binding-status.is-gated {
+  border-color: color-mix(in srgb, var(--accent-success, #2f9e68) 48%, var(--ds-border-subtle));
+  color: var(--accent-success, #2f9e68);
+}
+
+.workflow-gate-binding-status.is-manual,
+.workflow-gate-binding-status.is-unsupported,
+.workflow-gate-binding-status.is-closed,
+.workflow-gate-binding-status.is-inactive {
+  border-color: color-mix(in srgb, var(--accent-warning-strong, #b45309) 48%, var(--ds-border-subtle));
+  color: var(--accent-warning-strong, #b45309);
+}
+
+.workflow-gate-binding-status.is-error {
+  border-color: color-mix(in srgb, #d74b4b 48%, var(--ds-border-subtle));
+  color: #d74b4b;
+}
+
+.workflow-gate-binding-status-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.workflow-gate-binding-status-copy span {
+  color: var(--ds-text-subtle);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.workflow-gate-binding-status .is-spinning {
+  animation: composer-model-refresh-spin 0.8s linear infinite;
+}
+
+.workflow-gate-binding-actions {
+  align-items: center;
+}
+
+.workflow-gate-binding-unbind {
+  margin-right: auto;
 }
 
 .composer-reference {

@@ -88,8 +88,8 @@ use shared::session_manager_core::runtime::{
 use shared::session_manager_core::service::SessionManagerRuntime;
 use shared::{
     agents_config_core, codex_aux_core, codex_core, files_core, git_core, git_ui_core,
-    local_usage_core, provider_profiles_core, settings_core, workflow_preflight_core,
-    workspaces_core, worktree_core,
+    knowledge_adapter_core, local_usage_core, provider_profiles_core, settings_core,
+    workflow_gate_adapter_core, workflow_preflight_core, workspaces_core, worktree_core,
 };
 use storage::{read_settings, read_workspaces};
 use types::{
@@ -231,9 +231,10 @@ impl DaemonState {
             binding.source.id
         } else {
             let settings = self.app_settings.lock().await.clone();
-            let codex_home = codex_home::resolve_settings_codex_home(&settings).ok_or_else(|| {
-                "Unable to resolve CODEX_HOME for turn execution summary".to_string()
-            })?;
+            let codex_home =
+                codex_home::resolve_settings_codex_home(&settings).ok_or_else(|| {
+                    "Unable to resolve CODEX_HOME for turn execution summary".to_string()
+                })?;
             crate::shared::turn_execution_summary_core::source_id_for_codex_home(&codex_home)
         };
         Ok((
@@ -1667,9 +1668,7 @@ impl DaemonState {
         collaboration_mode: Option<Value>,
         additional_context: Option<Value>,
     ) -> Result<Value, String> {
-        let _runtime_switch_guard = workspaces_core::provider_runtime_switch_gate()
-            .read()
-            .await;
+        let _runtime_switch_guard = workspaces_core::provider_runtime_switch_gate().read().await;
         if let Some(session) = self
             .source_runtime_for_bound_thread(&workspace_id, &thread_id)
             .await?
@@ -1838,6 +1837,7 @@ impl DaemonState {
         mode: Option<String>,
         provider_kind: String,
         model: Option<String>,
+        workflow_id: Option<String>,
     ) -> Result<Value, String> {
         workflow_preflight_core::workflow_preflight_preview_core(
             &self.workspaces,
@@ -1846,8 +1846,48 @@ impl DaemonState {
             mode,
             provider_kind,
             model,
+            workflow_id,
         )
         .await
+    }
+
+    async fn workflow_gate_status(
+        &self,
+        workspace_id: String,
+        workflow_id: String,
+    ) -> Result<Value, String> {
+        workflow_gate_adapter_core::workflow_gate_status_core(
+            &self.workspaces,
+            workspace_id,
+            workflow_id,
+        )
+        .await
+    }
+
+    async fn knowledge_status(&self) -> Result<Value, String> {
+        knowledge_adapter_core::knowledge_status_core().await
+    }
+
+    async fn knowledge_query(
+        &self,
+        query: String,
+        project_id: Option<String>,
+    ) -> Result<Value, String> {
+        knowledge_adapter_core::knowledge_query_core(query, project_id).await
+    }
+
+    async fn knowledge_intake_capture(
+        &self,
+        input: knowledge_adapter_core::KnowledgeIntakeCaptureRequest,
+    ) -> Result<Value, String> {
+        knowledge_adapter_core::knowledge_intake_capture_core(input).await
+    }
+
+    async fn knowledge_task_init(
+        &self,
+        input: knowledge_adapter_core::KnowledgeTaskInitRequest,
+    ) -> Result<Value, String> {
+        knowledge_adapter_core::knowledge_task_init_core(input).await
     }
 
     async fn apps_list(

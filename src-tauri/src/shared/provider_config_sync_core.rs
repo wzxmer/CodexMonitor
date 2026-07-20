@@ -817,9 +817,8 @@ wire_api = "responses"
 
         let mut default_settings = profile_settings;
         default_settings.active_codex_key_profile_id = None;
-        let outcome =
-            sync_active_provider_profile_to_local_config(&codex_home, &default_settings)
-                .expect("external Provider config must remain authoritative");
+        let outcome = sync_active_provider_profile_to_local_config(&codex_home, &default_settings)
+            .expect("external Provider config must remain authoritative");
 
         assert_eq!(outcome, ProviderConfigSyncOutcome::NoActiveProfile);
         assert_eq!(

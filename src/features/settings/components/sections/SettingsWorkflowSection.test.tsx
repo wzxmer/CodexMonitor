@@ -1,8 +1,40 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings } from "@/types";
 import { SettingsWorkflowSection } from "./SettingsWorkflowSection";
+
+const serviceMocks = vi.hoisted(() => ({
+  knowledgeStatus: vi.fn(() => new Promise(() => undefined)),
+  knowledgeIntakeCapture: vi.fn(async () => ({
+    intake_id: "intake-1",
+    state: "captured" as const,
+    revision: 1,
+    content_hash: "hash",
+  })),
+  knowledgeTaskInit: vi.fn(async () => ({
+    task_id: "task-1",
+    state: "queued" as const,
+    revision: 1,
+  })),
+}));
+
+vi.mock("@services/tauri", () => ({
+  knowledgeStatus: serviceMocks.knowledgeStatus,
+  knowledgeQuery: vi.fn(async () => ({
+    state: "ready",
+    mode: "context_only",
+    question: "test",
+    answer: null,
+    provider_execution: "not_performed",
+    context: { results: [], omitted: [], warnings: [] },
+    citations: [],
+    omitted: [],
+    usage_visibility: "unknown",
+  })),
+  knowledgeIntakeCapture: serviceMocks.knowledgeIntakeCapture,
+  knowledgeTaskInit: serviceMocks.knowledgeTaskInit,
+}));
 
 function renderSection({
   mode = "active",
@@ -105,5 +137,44 @@ describe("SettingsWorkflowSection", () => {
     renderSection({ workspaceName: null, registryLastRefreshAtMs: null });
     expect(screen.getByText("尚未刷新")).toBeTruthy();
     expect(screen.queryByText(/尚未刷新.*已重新扫描/)).toBeNull();
+  });
+
+  it("captures intake and initializes a task through the knowledge adapter", async () => {
+    serviceMocks.knowledgeStatus.mockResolvedValueOnce({
+      availability: "ready",
+      root: "D:/DevKnowledgeBase",
+      viewState: "current",
+      viewRevision: "revision",
+      ledgerIntegrity: "ok",
+      runtimeIntegrity: "ok",
+      diagnostic: null,
+      usageVisibility: "unknown",
+    });
+    renderSection();
+    fireEvent.click(screen.getByText("知识写入"));
+
+    const [intakeProject] = screen.getAllByLabelText("项目 ID");
+    fireEvent.change(intakeProject, { target: { value: "rime-txjx" } });
+    const rawIntake = screen.getByLabelText("原始要求");
+    fireEvent.change(rawIntake, { target: { value: "保留这条原始需求" } });
+    const captureButton = screen.getByRole("button", { name: "捕获 Intake" }) as HTMLButtonElement;
+    await waitFor(() => expect(captureButton.disabled).toBe(false));
+    fireEvent.click(captureButton);
+
+    expect(await screen.findByText("已捕获：intake-1")).toBeTruthy();
+    expect(serviceMocks.knowledgeIntakeCapture).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "rime-txjx",
+      rawSnapshot: "保留这条原始需求",
+      risk: "medium",
+      sensitivity: "private",
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "创建任务" }));
+    expect(await screen.findByText("已创建：task-1")).toBeTruthy();
+    expect(serviceMocks.knowledgeTaskInit).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "rime-txjx",
+      intakeId: "intake-1",
+      scale: "S",
+    }));
   });
 });

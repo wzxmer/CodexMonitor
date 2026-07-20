@@ -20,6 +20,7 @@ describe("useThreadCodexParams", () => {
         accessMode: "full-access",
         collaborationModeId: "plan",
         codexArgsOverride: "--profile dev",
+        workflowGateId: "wf-thread-1",
       });
     });
 
@@ -31,6 +32,7 @@ describe("useThreadCodexParams", () => {
         accessMode: "full-access",
         collaborationModeId: "plan",
         codexArgsOverride: "--profile dev",
+        workflowGateId: "wf-thread-1",
       }),
     );
 
@@ -51,6 +53,7 @@ describe("useThreadCodexParams", () => {
           accessMode: "nope",
           collaborationModeId: 99,
           codexArgsOverride: 12,
+          workflowGateId: 42,
           updatedAt: "never",
         },
       }),
@@ -65,6 +68,7 @@ describe("useThreadCodexParams", () => {
       accessMode: null,
       collaborationModeId: null,
       codexArgsOverride: null,
+      workflowGateId: null,
       updatedAt: 0,
     });
   });
@@ -96,6 +100,7 @@ describe("useThreadCodexParams", () => {
     );
     expect(legacy?.serviceTier).toBeUndefined();
     expect(legacy?.codexArgsOverride).toBeUndefined();
+    expect(legacy?.workflowGateId).toBeNull();
   });
 
   it("syncs from storage events", async () => {
@@ -111,6 +116,7 @@ describe("useThreadCodexParams", () => {
           accessMode: "current",
           collaborationModeId: "default",
           codexArgsOverride: "--profile ws",
+          workflowGateId: "  wf-thread-2  ",
           updatedAt: 1,
         },
       }),
@@ -133,6 +139,7 @@ describe("useThreadCodexParams", () => {
       accessMode: "current",
       collaborationModeId: "default",
       codexArgsOverride: "--profile ws",
+      workflowGateId: "wf-thread-2",
       updatedAt: 1,
     });
   });
@@ -172,5 +179,23 @@ describe("useThreadCodexParams", () => {
     expect(
       result.current.getThreadCodexParams("ws-1", "thread-4")?.codexArgsOverride,
     ).toBeUndefined();
+  });
+
+  it("rejects oversized persisted WorkflowGate ids", () => {
+    window.localStorage.setItem(
+      STORAGE_KEY_THREAD_CODEX_PARAMS,
+      JSON.stringify({
+        "ws-1:thread-long": {
+          workflowGateId: "w".repeat(161),
+          updatedAt: 1,
+        },
+      }),
+    );
+
+    const { result } = renderHook(() => useThreadCodexParams());
+
+    expect(
+      result.current.getThreadCodexParams("ws-1", "thread-long")?.workflowGateId,
+    ).toBeNull();
   });
 });

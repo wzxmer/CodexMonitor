@@ -111,6 +111,7 @@ import {
   prepareManagedSessionDerivation,
   createMessageReference,
   resumeManagedSession,
+  workflowGateStatus,
 } from "@services/tauri";
 import { subscribeReleaseAssetDownloadProgress } from "@services/events";
 import { fetchManagedCodexPackage } from "@/features/codex/utils/managedCodex";
@@ -368,6 +369,11 @@ export default function MainApp() {
   } = useThreadCodexBootstrapOrchestration({
     activeWorkspaceId,
   });
+  const getWorkflowGateId = useCallback(
+    (workspaceId: string, threadId: string) =>
+      getThreadCodexParams(workspaceId, threadId)?.workflowGateId ?? null,
+    [getThreadCodexParams],
+  );
   const {
     appRef,
     isResizing,
@@ -799,6 +805,7 @@ export default function MainApp() {
     workflowRuntimeMode: appSettings.workflowRuntimeMode ?? "shadow",
     workflowSkills: skills,
     workflowAgents: agents,
+    getWorkflowGateId,
     tokenEfficiencyMode: appSettings.tokenEfficiencyMode ?? "quality",
     effort: resolvedEffort,
     serviceTier: selectedServiceTier,
@@ -823,6 +830,32 @@ export default function MainApp() {
     threadSortKey: threadListSortKey,
     onThreadCodexMetadataDetected: handleThreadCodexMetadataDetected,
   });
+  const selectedWorkflowGateId = useMemo(
+    () => projectActiveWorkspace && activeThreadId
+      ? getWorkflowGateId(projectActiveWorkspace.id, activeThreadId)
+      : null,
+    [activeThreadId, getWorkflowGateId, projectActiveWorkspace, threadCodexParamsVersion],
+  );
+  const handleSelectWorkflowGateId = useCallback(
+    (workflowId: string | null) => {
+      if (!projectActiveWorkspace || !activeThreadId) {
+        return;
+      }
+      patchThreadCodexParams(projectActiveWorkspace.id, activeThreadId, {
+        workflowGateId: workflowId,
+      });
+    },
+    [activeThreadId, patchThreadCodexParams, projectActiveWorkspace],
+  );
+  const handleVerifyWorkflowGate = useCallback(
+    (workflowId: string) => {
+      if (!projectActiveWorkspace) {
+        return Promise.reject(new Error("workspace not found"));
+      }
+      return workflowGateStatus(projectActiveWorkspace.id, workflowId);
+    },
+    [projectActiveWorkspace],
+  );
   const providerSessionDiagnostics = useMemo(
     () =>
       buildProviderSessionDiagnostics({
@@ -2455,6 +2488,11 @@ export default function MainApp() {
     codexArgsOptions,
     selectedCodexArgsOverride,
     onSelectCodexArgsOverride: handleSelectCodexArgsOverride,
+    selectedWorkflowGateId,
+    onSelectWorkflowGateId: handleSelectWorkflowGateId,
+    onVerifyWorkflowGate: projectActiveWorkspace && activeThreadId
+      ? handleVerifyWorkflowGate
+      : undefined,
     accessMode,
     onSelectAccessMode: handleSelectAccessMode,
     skills,

@@ -1946,6 +1946,111 @@
   overflow-wrap: anywhere;
 }
 
+.knowledge-adapter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: 8px;
+  background: var(--ds-surface-muted);
+}
+
+.knowledge-adapter-toolbar,
+.knowledge-adapter-toolbar > div,
+.knowledge-query-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.knowledge-adapter-toolbar { justify-content: space-between; }
+.knowledge-adapter-toolbar > div { min-width: 0; font-weight: 650; }
+.knowledge-adapter-toolbar svg { width: 16px; height: 16px; }
+
+.knowledge-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.knowledge-status-grid > div { min-width: 0; padding: 8px 10px; }
+.knowledge-status-grid > div + div { border-left: 1px solid var(--ds-border-subtle); }
+.knowledge-status-grid dt { color: var(--text-muted); font-size: 0.74rem; }
+.knowledge-status-grid dd { margin: 3px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.knowledge-status-grid dd[data-tone="success"] { color: var(--status-success); }
+.knowledge-status-grid dd[data-tone="warning"] { color: var(--status-warning); }
+
+.knowledge-root {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-adapter-error,
+.knowledge-query-omitted {
+  color: var(--status-warning);
+  font-size: 0.78rem;
+}
+
+.knowledge-query-row input { min-width: 0; flex: 1; }
+.knowledge-query-row .primary { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.knowledge-query-row .primary svg { width: 15px; height: 15px; }
+.knowledge-query-results { display: flex; max-height: 300px; flex-direction: column; gap: 6px; overflow: auto; }
+.knowledge-query-result { padding: 9px 10px; border: 1px solid var(--ds-border-subtle); border-radius: 6px; background: var(--ds-surface-card); }
+.knowledge-query-result strong, .knowledge-query-result span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.knowledge-query-result span, .knowledge-query-result p, .knowledge-query-empty { color: var(--text-muted); font-size: 0.78rem; }
+.knowledge-query-result p { margin: 6px 0 0; line-height: 1.45; white-space: normal; }
+
+.knowledge-write-panel {
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
+.knowledge-write-panel summary {
+  padding: 10px 0 0;
+  cursor: pointer;
+  color: var(--text-strong);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.knowledge-write-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.knowledge-write-grid form {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: 6px;
+  background: var(--ds-surface-card);
+}
+
+.knowledge-write-grid label { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: var(--text-muted); font-size: 0.75rem; }
+.knowledge-write-grid input, .knowledge-write-grid select { width: 100%; min-width: 0; }
+.knowledge-write-grid button { align-self: flex-start; }
+.knowledge-write-grid output { color: var(--status-success); font-size: 0.76rem; overflow-wrap: anywhere; }
+.knowledge-write-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+
+@media (max-width: 720px) {
+  .knowledge-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .knowledge-status-grid > div:nth-child(3) { border-left: 0; border-top: 1px solid var(--ds-border-subtle); }
+  .knowledge-status-grid > div:nth-child(4) { border-top: 1px solid var(--ds-border-subtle); }
+  .knowledge-write-grid { grid-template-columns: 1fr; }
+}
+
 .workflow-diagnostics {
   border-top: 1px solid var(--border-muted);
   border-bottom: 1px solid var(--border-muted);

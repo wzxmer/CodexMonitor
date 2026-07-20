@@ -11,6 +11,7 @@ import { formatRelativeTime } from "@utils/time";
 
 export type SendMessageOptions = {
   skipPromptExpansion?: boolean;
+  skipRuntimePreflight?: boolean;
   model?: string | null;
   effort?: string | null;
   serviceTier?: ServiceTier | null | undefined;

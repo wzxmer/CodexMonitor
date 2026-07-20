@@ -188,6 +188,7 @@ describe("useThreadMessaging telemetry", () => {
             instructions: "Run the public check.",
           },
         ],
+        getWorkflowGateId: vi.fn(() => "wf-thread-1"),
         effort: null,
         collaborationMode: null,
         reviewDeliveryMode: "inline",
@@ -274,6 +275,7 @@ describe("useThreadMessaging telemetry", () => {
       "opencode",
       "minimax-m3",
       "active",
+      "wf-thread-1",
     );
     const hostDebugEntry = onDebug.mock.calls
       .map(([entry]) => entry)
@@ -364,6 +366,7 @@ describe("useThreadMessaging telemetry", () => {
       "opencode",
       "minimax-m3",
       "shadow",
+      null,
     );
     expect(sendUserMessageService).toHaveBeenCalledWith(
       "ws-1",
@@ -931,6 +934,67 @@ describe("useThreadMessaging telemetry", () => {
       threadId: "thread-1",
       itemId: optimisticAction?.item.id,
     });
+    expect(sendUserMessageService).not.toHaveBeenCalled();
+  });
+
+  it("does not insert an optimistic message before runtime preflight succeeds", async () => {
+    const dispatch = vi.fn();
+    const ensureWorkspaceRuntimeCodexArgs = vi.fn(async () => {
+      throw new Error(
+        "Cannot restart the Codex runtime while another thread is processing.",
+      );
+    });
+    const pushThreadErrorMessage = vi.fn();
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "current",
+        model: null,
+        effort: null,
+        collaborationMode: null,
+        reviewDeliveryMode: "inline",
+        steerEnabled: false,
+        customPrompts: [],
+        ensureWorkspaceRuntimeCodexArgs,
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(() => undefined),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug: vi.fn(),
+        pushThreadErrorMessage,
+        ensureThreadForActiveWorkspace: vi.fn(async () => "thread-1"),
+        ensureThreadForWorkspace: vi.fn(async () => "thread-1"),
+        refreshThread: vi.fn(async () => null),
+        forkThreadForWorkspace: vi.fn(async () => null),
+        updateThreadParent: vi.fn(),
+      }),
+    );
+
+    let sendResult;
+    await act(async () => {
+      sendResult = await result.current.sendUserMessage("继续");
+    });
+
+    expect(sendResult).toEqual({ status: "blocked" });
+    expect(ensureWorkspaceRuntimeCodexArgs).toHaveBeenCalledWith("ws-1", "thread-1");
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "upsertItem" }),
+    );
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "removeItem" }),
+    );
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "thread-1",
+      "Cannot restart the Codex runtime while another thread is processing.",
+    );
     expect(sendUserMessageService).not.toHaveBeenCalled();
   });
 

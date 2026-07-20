@@ -47,6 +47,13 @@ import type {
   TailscaleStatus,
   WorkflowAdditionalContext,
   WorkflowHostPreflightPreview,
+  WorkflowGateAdapterStatus,
+  KnowledgeAdapterStatus,
+  KnowledgeIntakeCaptureRequest,
+  KnowledgeIntakeCaptureResponse,
+  KnowledgeQueryResponse,
+  KnowledgeTaskInitRequest,
+  KnowledgeTaskInitResponse,
   WorkflowRuntimeMode,
   TrayLabels,
   TrayRecentThreadEntry,
@@ -624,6 +631,7 @@ export async function workflowPreflightPreview(
   providerKind: string,
   model: string | null,
   mode: Exclude<WorkflowRuntimeMode, "off">,
+  workflowId: string | null = null,
 ): Promise<WorkflowHostPreflightPreview> {
   return invoke<WorkflowHostPreflightPreview>("workflow_preflight_preview", {
     workspaceId,
@@ -631,7 +639,41 @@ export async function workflowPreflightPreview(
     providerKind,
     model,
     mode,
+    workflowId,
   });
+}
+
+export async function workflowGateStatus(
+  workspaceId: string,
+  workflowId: string,
+): Promise<WorkflowGateAdapterStatus> {
+  return invoke<WorkflowGateAdapterStatus>("workflow_gate_status", {
+    workspaceId,
+    workflowId,
+  });
+}
+
+export async function knowledgeStatus(): Promise<KnowledgeAdapterStatus> {
+  return invoke<KnowledgeAdapterStatus>("knowledge_status");
+}
+
+export async function knowledgeQuery(
+  query: string,
+  projectId: string | null = null,
+): Promise<KnowledgeQueryResponse> {
+  return invoke<KnowledgeQueryResponse>("knowledge_query", { query, projectId });
+}
+
+export async function knowledgeIntakeCapture(
+  input: KnowledgeIntakeCaptureRequest,
+): Promise<KnowledgeIntakeCaptureResponse> {
+  return invoke<KnowledgeIntakeCaptureResponse>("knowledge_intake_capture", { input });
+}
+
+export async function knowledgeTaskInit(
+  input: KnowledgeTaskInitRequest,
+): Promise<KnowledgeTaskInitResponse> {
+  return invoke<KnowledgeTaskInitResponse>("knowledge_task_init", { input });
 }
 
 export async function forkThread(workspaceId: string, threadId: string) {

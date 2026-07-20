@@ -55,6 +55,7 @@ import { useI18n } from "@/features/i18n/I18nProvider";
 import { isMacPlatform } from "../../../utils/platformPaths";
 import { isComposingEvent } from "../../../utils/keys";
 import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
+import type { WorkflowGateAdapterStatus } from "@/types";
 import { getCompactionCyclePercent } from "@/features/threads/utils/contextUsage";
 import {
   analyzeLargePaste,
@@ -106,6 +107,9 @@ type ComposerProps = {
   codexArgsOptions?: CodexArgsOption[];
   selectedCodexArgsOverride?: string | null;
   onSelectCodexArgsOverride?: (value: string | null) => void;
+  selectedWorkflowGateId?: string | null;
+  onSelectWorkflowGateId?: (workflowId: string | null) => void;
+  onVerifyWorkflowGate?: (workflowId: string) => Promise<WorkflowGateAdapterStatus>;
   accessMode: "read-only" | "current" | "full-access";
   onSelectAccessMode: (mode: "read-only" | "current" | "full-access") => void;
   skills: { name: string; description?: string }[];
@@ -239,6 +243,9 @@ export const Composer = memo(function Composer({
   codexArgsOptions = [],
   selectedCodexArgsOverride = null,
   onSelectCodexArgsOverride,
+  selectedWorkflowGateId = null,
+  onSelectWorkflowGateId,
+  onVerifyWorkflowGate,
   accessMode,
   onSelectAccessMode,
   skills,
@@ -952,6 +959,9 @@ export const Composer = memo(function Composer({
         codexArgsOptions={codexArgsOptions}
         selectedCodexArgsOverride={selectedCodexArgsOverride}
         onSelectCodexArgsOverride={onSelectCodexArgsOverride}
+        selectedWorkflowGateId={selectedWorkflowGateId}
+        onSelectWorkflowGateId={onSelectWorkflowGateId}
+        onVerifyWorkflowGate={onVerifyWorkflowGate}
         accessMode={accessMode}
         onSelectAccessMode={onSelectAccessMode}
         composerSendShortcut={composerSendShortcut}

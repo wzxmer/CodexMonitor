@@ -198,6 +198,9 @@ type UseMainAppLayoutSurfacesArgs = {
   codexArgsOptions: ComposerProps["codexArgsOptions"];
   selectedCodexArgsOverride: ComposerProps["selectedCodexArgsOverride"];
   onSelectCodexArgsOverride: ComposerProps["onSelectCodexArgsOverride"];
+  selectedWorkflowGateId: ComposerProps["selectedWorkflowGateId"];
+  onSelectWorkflowGateId: ComposerProps["onSelectWorkflowGateId"];
+  onVerifyWorkflowGate: ComposerProps["onVerifyWorkflowGate"];
   accessMode: ComposerProps["accessMode"];
   onSelectAccessMode: ComposerProps["onSelectAccessMode"];
   skills: ComposerProps["skills"];
@@ -385,6 +388,9 @@ function buildPrimarySurface({
   codexArgsOptions,
   selectedCodexArgsOverride,
   onSelectCodexArgsOverride,
+  selectedWorkflowGateId,
+  onSelectWorkflowGateId,
+  onVerifyWorkflowGate,
   accessMode,
   onSelectAccessMode,
   skills,
@@ -710,6 +716,9 @@ function buildPrimarySurface({
           codexArgsOptions,
           selectedCodexArgsOverride,
           onSelectCodexArgsOverride,
+          selectedWorkflowGateId,
+          onSelectWorkflowGateId,
+          onVerifyWorkflowGate,
           accessMode,
           onSelectAccessMode,
           skills,
@@ -1264,6 +1273,9 @@ export function useMainAppLayoutSurfaces({
   codexArgsOptions,
   selectedCodexArgsOverride,
   onSelectCodexArgsOverride,
+  selectedWorkflowGateId,
+  onSelectWorkflowGateId,
+  onVerifyWorkflowGate,
   accessMode,
   onSelectAccessMode,
   skills,
@@ -1485,6 +1497,9 @@ export function useMainAppLayoutSurfaces({
     codexArgsOptions,
     selectedCodexArgsOverride,
     onSelectCodexArgsOverride,
+    selectedWorkflowGateId,
+    onSelectWorkflowGateId,
+    onVerifyWorkflowGate,
     accessMode,
     onSelectAccessMode,
     skills,

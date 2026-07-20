@@ -1,6 +1,7 @@
 export type { PrepareThreadItemsOptions } from "./threadItems.shared";
 export {
   buildCollabActualBinding,
+  buildCollabExecutionBindingObservation,
   enrichConversationItemsWithThreads,
 } from "./threadItems.collab";
 export { buildConversationItem, buildConversationItemFromThreadItem, buildItemsFromThread, isReviewingFromThread } from "./threadItems.conversion";

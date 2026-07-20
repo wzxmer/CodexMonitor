@@ -24,6 +24,7 @@ use crate::shared::{config_toml_core, provider_profiles_core, workflow_registry_
 use crate::types::{AppSettings, WorkspaceEntry};
 
 const LOGIN_START_TIMEOUT: Duration = Duration::from_secs(30);
+const TURN_INTERRUPT_CONFIRM_TIMEOUT: Duration = Duration::from_secs(3);
 #[allow(dead_code)]
 const MAX_INLINE_IMAGE_BYTES: u64 = 50 * 1024 * 1024;
 const MAX_INLINE_TEXT_ATTACHMENT_BYTES: usize = 1024 * 1024;
@@ -966,9 +967,53 @@ pub(crate) async fn turn_interrupt_with_session_core(
     turn_id: String,
 ) -> Result<Value, String> {
     let params = json!({ "threadId": thread_id, "turnId": turn_id });
-    session
+    let response = session
         .send_request_for_workspace(&workspace_id, "turn/interrupt", params)
-        .await
+        .await?;
+    if let Some(message) = rpc_error_message(&response) {
+        return Err(message.to_string());
+    }
+    if turn_id == "pending"
+        || session
+            .wait_for_turn_inactive(&thread_id, &turn_id, TURN_INTERRUPT_CONFIRM_TIMEOUT)
+            .await
+    {
+        return Ok(response);
+    }
+
+    let thread = read_thread_with_session_core(session, workspace_id, thread_id.clone()).await?;
+    if thread_response_confirms_terminal_turn(&thread, &turn_id) {
+        session
+            .clear_active_turn_if_matches(&thread_id, &turn_id)
+            .await;
+        return Ok(response);
+    }
+
+    Err("Turn interruption was acknowledged, but completion could not be confirmed.".to_string())
+}
+
+fn thread_response_confirms_terminal_turn(response: &Value, turn_id: &str) -> bool {
+    let payload = response.get("result").unwrap_or(response);
+    let thread = payload.get("thread").unwrap_or(payload);
+    thread
+        .get("turns")
+        .and_then(Value::as_array)
+        .is_some_and(|turns| {
+            turns.iter().any(|turn| {
+                turn.get("id").and_then(Value::as_str) == Some(turn_id)
+                    && matches!(
+                        turn.get("status").and_then(Value::as_str),
+                        Some("completed" | "interrupted" | "failed")
+                    )
+            })
+        })
+}
+
+fn rpc_error_message(response: &Value) -> Option<&str> {
+    response
+        .get("error")
+        .and_then(|error| error.get("message"))
+        .and_then(Value::as_str)
 }
 
 pub(crate) async fn start_review_core(
@@ -1402,6 +1447,54 @@ mod tests {
     use toml_edit::Document;
 
     #[test]
+    fn thread_response_confirms_only_matching_terminal_turn() {
+        let response = json!({
+            "result": {
+                "thread": {
+                    "turns": [
+                        { "id": "turn-old", "status": "completed" },
+                        { "id": "turn-target", "status": "interrupted" }
+                    ]
+                }
+            }
+        });
+
+        assert!(thread_response_confirms_terminal_turn(
+            &response,
+            "turn-target"
+        ));
+        assert!(!thread_response_confirms_terminal_turn(
+            &response,
+            "turn-missing"
+        ));
+    }
+
+    #[test]
+    fn thread_response_rejects_matching_in_progress_turn() {
+        let response = json!({
+            "result": {
+                "thread": {
+                    "turns": [{ "id": "turn-target", "status": "inProgress" }]
+                }
+            }
+        });
+
+        assert!(!thread_response_confirms_terminal_turn(
+            &response,
+            "turn-target"
+        ));
+    }
+
+    #[test]
+    fn rpc_error_message_reads_protocol_errors() {
+        assert_eq!(
+            rpc_error_message(&json!({ "error": { "message": "turn not found" } })),
+            Some("turn not found")
+        );
+        assert_eq!(rpc_error_message(&json!({ "result": {} })), None);
+    }
+
+    #[test]
     fn normalize_strips_file_uri_prefix() {
         assert_eq!(
             normalize_file_path("file:///var/mobile/Containers/Data/photo.jpg"),
@@ -1750,8 +1843,7 @@ base_url = "{base_url}"
         let quality = build_start_thread_params("D:/workspace".to_string(), Some("quality"), None);
         let balanced =
             build_start_thread_params("D:/workspace".to_string(), Some("balanced"), None);
-        let economy =
-            build_start_thread_params("D:/workspace".to_string(), Some("economy"), None);
+        let economy = build_start_thread_params("D:/workspace".to_string(), Some("economy"), None);
 
         assert!(quality.get("developerInstructions").is_none());
         assert_eq!(

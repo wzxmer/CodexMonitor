@@ -7,6 +7,14 @@ import type {
 } from "../types";
 import { asString, normalizeStringList } from "./threadItems.shared";
 
+export type CollabExecutionBindingObservation = {
+  parentThreadId: string;
+  collabToolCallId: string;
+  senderThreadId: string;
+  receiverThreadIds: string[];
+  actual: ShadowActualBinding;
+};
+
 function buildCollabAgentRef(
   threadIdValue: unknown,
   nicknameValue?: unknown,
@@ -388,6 +396,76 @@ export function buildCollabActualBinding(
   return {
     modelId: item.collabModel ?? null,
     reasoningEffort: item.collabReasoningEffort ?? null,
+  };
+}
+
+export function buildCollabExecutionBindingObservation(
+  item: Record<string, unknown>,
+  fallbackParentThreadId: string,
+): CollabExecutionBindingObservation | null {
+  const itemType = asString(item.type).trim();
+  const collabToolCallId = asString(item.id).trim();
+  if (!collabToolCallId) {
+    return null;
+  }
+
+  if (itemType === "subAgentActivity") {
+    const receiverThreadIds = Array.from(
+      new Set(
+        normalizeStringList(item.agentThreadId ?? item.agent_thread_id)
+          .map((threadId) => threadId.trim())
+          .filter(Boolean),
+      ),
+    );
+    const senderThreadId =
+      asString(item.senderThreadId ?? item.sender_thread_id).trim() ||
+      fallbackParentThreadId.trim();
+    if (!senderThreadId || receiverThreadIds.length === 0) {
+      return null;
+    }
+    return {
+      parentThreadId: senderThreadId,
+      collabToolCallId,
+      senderThreadId,
+      receiverThreadIds,
+      actual: {
+        modelId: normalizeOptionalString(item.model) ?? null,
+        reasoningEffort:
+          normalizeOptionalString(item.reasoningEffort ?? item.reasoning_effort) ?? null,
+      },
+    };
+  }
+
+  if (itemType !== "collabToolCall" && itemType !== "collabAgentToolCall") {
+    return null;
+  }
+  if (asString(item.tool).trim().toLowerCase() !== "spawn_agent") {
+    return null;
+  }
+
+  const converted = parseCollabToolCallItem(item);
+  const senderThreadId =
+    converted.collabSender?.threadId.trim() || fallbackParentThreadId.trim();
+  if (!senderThreadId) {
+    return null;
+  }
+  const receiverThreadIds = Array.from(
+    new Set(
+      (converted.collabReceivers ??
+        (converted.collabReceiver ? [converted.collabReceiver] : []))
+        .map((receiver) => receiver.threadId.trim())
+        .filter(Boolean),
+    ),
+  );
+  return {
+    parentThreadId: senderThreadId,
+    collabToolCallId,
+    senderThreadId,
+    receiverThreadIds,
+    actual: buildCollabActualBinding(converted) ?? {
+      modelId: null,
+      reasoningEffort: null,
+    },
   };
 }
 

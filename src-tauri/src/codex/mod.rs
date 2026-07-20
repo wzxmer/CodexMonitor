@@ -19,11 +19,13 @@ use crate::shared::execution_binding_core::{
     ExecutionBindingObserveRequest, ExecutionBindingQuery, ExecutionBindingRegisterRequest,
 };
 use crate::shared::execution_router_core::{self, ShadowRouteRequest};
+use crate::shared::knowledge_adapter_core;
 use crate::shared::provider_profiles_core::{self, active_codex_key_runtime};
 use crate::shared::turn_execution_summary_core::{
     runtime_id_for_data_dir, source_id_for_codex_home, TurnExecutionSummaryQuery,
     TurnExecutionSummaryUpsert,
 };
+use crate::shared::workflow_gate_adapter_core;
 use crate::shared::workflow_preflight_core;
 use crate::state::AppState;
 use crate::types::{AppSettings, WorkspaceEntry};
@@ -1301,6 +1303,7 @@ pub(crate) async fn workflow_preflight_preview(
     mode: Option<String>,
     provider_kind: String,
     model: Option<String>,
+    workflow_id: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -1315,6 +1318,7 @@ pub(crate) async fn workflow_preflight_preview(
                 "mode": mode,
                 "providerKind": provider_kind,
                 "model": model,
+                "workflowId": workflow_id,
             }),
         )
         .await;
@@ -1327,8 +1331,103 @@ pub(crate) async fn workflow_preflight_preview(
         mode,
         provider_kind,
         model,
+        workflow_id,
     )
     .await
+}
+
+#[tauri::command]
+pub(crate) async fn workflow_gate_status(
+    workspace_id: String,
+    workflow_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "workflow_gate_status",
+            json!({
+                "workspaceId": workspace_id,
+                "workflowId": workflow_id,
+            }),
+        )
+        .await;
+    }
+
+    workflow_gate_adapter_core::workflow_gate_status_core(
+        &state.workspaces,
+        workspace_id,
+        workflow_id,
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn knowledge_status(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(&*state, app, "knowledge_status", json!({})).await;
+    }
+    knowledge_adapter_core::knowledge_status_core().await
+}
+
+#[tauri::command]
+pub(crate) async fn knowledge_query(
+    query: String,
+    project_id: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "knowledge_query",
+            json!({ "query": query, "projectId": project_id }),
+        )
+        .await;
+    }
+    knowledge_adapter_core::knowledge_query_core(query, project_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn knowledge_intake_capture(
+    input: knowledge_adapter_core::KnowledgeIntakeCaptureRequest,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "knowledge_intake_capture",
+            json!({ "input": input }),
+        )
+        .await;
+    }
+    knowledge_adapter_core::knowledge_intake_capture_core(input).await
+}
+
+#[tauri::command]
+pub(crate) async fn knowledge_task_init(
+    input: knowledge_adapter_core::KnowledgeTaskInitRequest,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "knowledge_task_init",
+            json!({ "input": input }),
+        )
+        .await;
+    }
+    knowledge_adapter_core::knowledge_task_init_core(input).await
 }
 
 #[tauri::command]
@@ -1609,9 +1708,7 @@ pub(crate) async fn task_coordination_detect_candidates(
     );
     let serialized: Vec<Value> = results
         .iter()
-        .map(|m| {
-            serde_json::to_value(m).unwrap_or(Value::Null)
-        })
+        .map(|m| serde_json::to_value(m).unwrap_or(Value::Null))
         .collect();
     Ok(Value::Array(serialized))
 }

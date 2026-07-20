@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ConversationItem, ThreadSummary, TurnExecutionSummary } from "@/types";
+import { getActivePlanStream } from "@/features/plan/planStream";
+import { buildConversationItem } from "@utils/threadItems";
+import { buildItemForDisplay } from "./threadItemEventHelpers";
 import { initialState, threadReducer } from "./useThreadsReducer";
 import type { ThreadState } from "./useThreadsReducer";
 
@@ -429,6 +432,40 @@ describe("threadReducer", () => {
       output: "- Inspect source\n- Run tests",
     });
     expect(next.planByThread["thread-1"]).toBeUndefined();
+  });
+
+  it("clears a delta plan stream when its status-less completed item arrives", () => {
+    const withDelta = threadReducer(initialState, {
+      type: "appendPlanDelta",
+      threadId: "thread-1",
+      itemId: "plan-1",
+      delta: "- Inspect source\n- Run tests",
+    });
+    const completed = buildConversationItem(
+      buildItemForDisplay(
+        {
+          type: "plan",
+          id: "plan-1",
+          text: "- Inspect source\n- Run tests",
+        },
+        false,
+      ),
+    );
+    expect(completed).not.toBeNull();
+
+    const next = threadReducer(withDelta, {
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      item: completed!,
+    });
+    const items = next.itemsByThread["thread-1"] ?? [];
+
+    expect(items[0]).toMatchObject({
+      id: "plan-1",
+      status: "completed",
+    });
+    expect(getActivePlanStream(items)).toBeNull();
   });
 
   it("appends reasoning summary and content when missing", () => {

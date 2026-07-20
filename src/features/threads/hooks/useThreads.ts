@@ -83,6 +83,7 @@ type UseThreadsOptions = {
   workflowRuntimeMode?: WorkflowRuntimeMode;
   workflowSkills?: SkillOption[];
   workflowAgents?: WorkflowAgentOption[];
+  getWorkflowGateId?: (workspaceId: string, threadId: string) => string | null;
   tokenEfficiencyMode?: TokenEfficiencyMode;
   effort?: string | null;
   serviceTier?: ServiceTier | null | undefined;
@@ -141,6 +142,7 @@ export function useThreads({
   workflowRuntimeMode = "shadow",
   workflowSkills = [],
   workflowAgents = [],
+  getWorkflowGateId,
   tokenEfficiencyMode = "quality",
   effort,
   serviceTier,
@@ -1347,6 +1349,7 @@ export function useThreads({
     workflowRuntimeMode,
     workflowSkills,
     workflowAgents,
+    getWorkflowGateId,
     effort,
     serviceTier,
     collaborationMode,

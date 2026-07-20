@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import type { Dispatch } from "react";
 import {
-  buildCollabActualBinding,
+  buildCollabExecutionBindingObservation,
   buildConversationItem,
 } from "@utils/threadItems";
 import type { CollabAgentRef, ExecutionBindingObserveInput } from "@/types";
@@ -80,38 +80,22 @@ export function useThreadItemEvents({
         }
       }
       const itemForDisplay = buildItemForDisplay(item, shouldMarkProcessing);
-      const converted = buildConversationItem(itemForDisplay);
-      if (
-        converted?.kind === "tool" &&
-        converted.toolType === "collabToolCall" &&
-        converted.id.trim()
-      ) {
-        const actual = buildCollabActualBinding(converted);
-        const parentThreadId = converted.collabSender?.threadId.trim() || threadId;
-        const receiverThreadIds = Array.from(
-          new Set(
-            (converted.collabReceivers ??
-              (converted.collabReceiver ? [converted.collabReceiver] : []))
-              .map((receiver) => receiver.threadId.trim())
-              .filter(Boolean),
-          ),
-        );
-        if (actual) {
-          try {
-            onExecutionBindingObserved?.({
-              workspaceId,
-              parentThreadId,
-              collabToolCallId: converted.id.trim(),
-              senderThreadId: parentThreadId,
-              receiverThreadIds,
-              actual,
-              observedAtMs: Date.now(),
-            });
-          } catch {
-            // Observation must not block app-server item rendering.
-          }
+      const bindingObservation = buildCollabExecutionBindingObservation(
+        itemForDisplay,
+        threadId,
+      );
+      if (bindingObservation) {
+        try {
+          onExecutionBindingObserved?.({
+            workspaceId,
+            ...bindingObservation,
+            observedAtMs: Date.now(),
+          });
+        } catch {
+          // Observation must not block app-server item rendering.
         }
       }
+      const converted = buildConversationItem(itemForDisplay);
       handleConvertedItemEffects({
         converted,
         workspaceId,

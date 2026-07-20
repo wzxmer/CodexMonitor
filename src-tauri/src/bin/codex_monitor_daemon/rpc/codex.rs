@@ -614,11 +614,59 @@ pub(super) async fn try_handle(
                 Err(err) => return Some(Err(err)),
             };
             let model = parse_optional_string(params, "model");
+            let workflow_id = parse_optional_string(params, "workflowId");
             Some(
                 state
-                    .workflow_preflight_preview(workspace_id, task, mode, provider_kind, model)
+                    .workflow_preflight_preview(
+                        workspace_id,
+                        task,
+                        mode,
+                        provider_kind,
+                        model,
+                        workflow_id,
+                    )
                     .await,
             )
+        }
+        "workflow_gate_status" => {
+            let workspace_id = match parse_string(params, "workspaceId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let workflow_id = match parse_string(params, "workflowId") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(state.workflow_gate_status(workspace_id, workflow_id).await)
+        }
+        "knowledge_status" => Some(state.knowledge_status().await),
+        "knowledge_query" => {
+            let query = match parse_string(params, "query") {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            let project_id = parse_optional_string(params, "projectId");
+            Some(state.knowledge_query(query, project_id).await)
+        }
+        "knowledge_intake_capture" => {
+            let input = match parse_input::<
+                crate::shared::knowledge_adapter_core::KnowledgeIntakeCaptureRequest,
+            >(params)
+            {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(state.knowledge_intake_capture(input).await)
+        }
+        "knowledge_task_init" => {
+            let input = match parse_input::<
+                crate::shared::knowledge_adapter_core::KnowledgeTaskInitRequest,
+            >(params)
+            {
+                Ok(value) => value,
+                Err(err) => return Some(Err(err)),
+            };
+            Some(state.knowledge_task_init(input).await)
         }
         "execution_router_shadow_preview" => {
             let input = match parse_input::<crate::shared::execution_router_core::ShadowRouteRequest>(

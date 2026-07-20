@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::UNIX_EPOCH;
 use tokio::sync::Mutex;
 
+use crate::shared::workflow_gate_adapter_core;
 use crate::types::WorkspaceEntry;
 
 const MAX_RULE_DEPTH: usize = 4;
@@ -143,6 +144,7 @@ pub(crate) struct WorkflowHostPreflightPreview {
     context_fragments: Vec<WorkflowContextFragment>,
     context_plan: WorkflowContextPlan,
     completion_plan: WorkflowCompletionPlan,
+    workflow_gate: Option<Value>,
 }
 
 #[derive(Clone)]
@@ -1108,6 +1110,7 @@ fn build_preview(
         context_fragments,
         context_plan,
         completion_plan,
+        workflow_gate: None,
     }
 }
 
@@ -1118,6 +1121,7 @@ pub(crate) async fn workflow_preflight_preview_core(
     mode: Option<String>,
     provider_kind: String,
     model: Option<String>,
+    workflow_id: Option<String>,
 ) -> Result<Value, String> {
     let (workspace_name, workspace_path) = {
         let workspaces = workspaces.lock().await;
@@ -1131,7 +1135,7 @@ pub(crate) async fn workflow_preflight_preview_core(
         Some("shadow") => "shadow".to_string(),
         _ => "active".to_string(),
     };
-    let preview = tokio::task::spawn_blocking(move || {
+    let preview_task = tokio::task::spawn_blocking(move || {
         build_preview(
             &workspace_name,
             &workspace_path,
@@ -1141,9 +1145,22 @@ pub(crate) async fn workflow_preflight_preview_core(
             model,
             root.as_deref(),
         )
-    })
-    .await
-    .map_err(|error| format!("workflow preflight task failed: {error}"))?;
+    });
+    let workflow_gate = match workflow_id {
+        Some(workflow_id) => Some(
+            workflow_gate_adapter_core::workflow_gate_status_core(
+                workspaces,
+                workspace_id,
+                workflow_id,
+            )
+            .await?,
+        ),
+        None => None,
+    };
+    let mut preview = preview_task
+        .await
+        .map_err(|error| format!("workflow preflight task failed: {error}"))?;
+    preview.workflow_gate = workflow_gate;
     serde_json::to_value(preview).map_err(|error| error.to_string())
 }
 

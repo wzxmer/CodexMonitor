@@ -216,6 +216,11 @@ fn can_retry_after_disconnect(method: &str) -> bool {
             | "execution_binding_list"
             | "execution_router_shadow_preview"
             | "workflow_preflight_preview"
+            | "workflow_gate_status"
+            | "knowledge_status"
+            | "knowledge_query"
+            | "knowledge_intake_capture"
+            | "knowledge_task_init"
             | "worktree_setup_status"
     )
 }

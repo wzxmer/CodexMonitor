@@ -4,6 +4,7 @@ import {
   buildConversationItem,
   buildConversationItemFromThreadItem,
   buildCollabActualBinding,
+  buildCollabExecutionBindingObservation,
   buildItemsFromThread,
   getThreadCreatedTimestamp,
   getThreadTimestamp,
@@ -1246,6 +1247,65 @@ describe("threadItems", () => {
     expect(item && buildCollabActualBinding(item)).toEqual({
       modelId: "gpt-5.6-luna",
       reasoningEffort: "low",
+    });
+  });
+
+  it("observes a real spawn from subAgentActivity without prompt data", () => {
+    const observation = buildCollabExecutionBindingObservation(
+      {
+        type: "subAgentActivity",
+        id: "call-spawn-1",
+        kind: "started",
+        agentThreadId: "thread-child-1",
+      },
+      "thread-parent-1",
+    );
+
+    expect(observation).toEqual({
+      parentThreadId: "thread-parent-1",
+      collabToolCallId: "call-spawn-1",
+      senderThreadId: "thread-parent-1",
+      receiverThreadIds: ["thread-child-1"],
+      actual: { modelId: null, reasoningEffort: null },
+    });
+    expect(observation).not.toHaveProperty("prompt");
+  });
+
+  it("does not observe wait_agent as a spawn binding", () => {
+    expect(
+      buildCollabExecutionBindingObservation(
+        {
+          type: "collabAgentToolCall",
+          id: "call-wait-1",
+          tool: "wait_agent",
+          senderThreadId: "thread-parent-1",
+        },
+        "thread-parent-1",
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps metadata-visible spawn_agent observation support", () => {
+    expect(
+      buildCollabExecutionBindingObservation(
+        {
+          type: "collabAgentToolCall",
+          id: "call-spawn-2",
+          tool: "spawn_agent",
+          sender_thread_id: "thread-parent-1",
+          receiver_thread_ids: ["thread-child-2"],
+          model: "gpt-5.6-luna",
+          reasoning_effort: "low",
+          prompt: "sensitive prompt",
+        },
+        "fallback-parent",
+      ),
+    ).toEqual({
+      parentThreadId: "thread-parent-1",
+      collabToolCallId: "call-spawn-2",
+      senderThreadId: "thread-parent-1",
+      receiverThreadIds: ["thread-child-2"],
+      actual: { modelId: "gpt-5.6-luna", reasoningEffort: "low" },
     });
   });
 
