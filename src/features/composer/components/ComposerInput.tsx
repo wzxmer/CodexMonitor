@@ -338,7 +338,7 @@ export function ComposerInput({
             height={Math.max(progressHeight - progressStrokeInset * 2, 0)}
             rx={progressRadius}
             ry={progressRadius}
-            pathLength="100"
+            pathLength={boundedContextCyclePercent === null ? undefined : 100}
           />
         </svg>
         <div

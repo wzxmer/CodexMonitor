@@ -18,12 +18,14 @@ type HarnessProps = {
   activeThreadId: string | null;
   activeWorkspaceId: string | null;
   disabled?: boolean;
+  contextCyclePercent?: number | null;
 };
 
 function ComposerHarness({
   activeThreadId,
   activeWorkspaceId,
   disabled = false,
+  contextCyclePercent,
 }: HarnessProps) {
   const { activeImages, attachImages, removeImage, clearActiveImages } =
     useComposerImages({ activeThreadId, activeWorkspaceId });
@@ -53,6 +55,7 @@ function ComposerHarness({
         onSelectionChange={setSelectionStart}
         onKeyDown={() => {}}
         textareaRef={textareaRef}
+        contextCyclePercent={contextCyclePercent}
         suggestionsOpen={false}
         suggestions={[]}
         highlightIndex={0}
@@ -172,19 +175,34 @@ function setMockFileReader() {
 }
 
 describe("Composer attachments integration", () => {
-  it("keeps an unavailable context cycle visibly marked", () => {
+  it("keeps an unavailable context cycle visibly marked with pixel-sized dashes", () => {
     const harness = renderComposerHarness({
       activeThreadId: "thread-1",
       activeWorkspaceId: "ws-1",
     });
 
     expect(harness.container.querySelector(".is-context-unknown")).toBeTruthy();
-    expect(getContextProgress(harness.container)).toBeTruthy();
+    const progressRect = getContextProgress(harness.container).querySelector("rect");
+    expect(progressRect).toBeTruthy();
+    expect(progressRect?.hasAttribute("pathLength")).toBe(false);
     const contextCountLabel = harness.container
       .querySelector(".composer-context-count")
       ?.getAttribute("aria-label");
     expect(contextCountLabel).toContain("压缩周期 --");
     expect(contextCountLabel).toContain("上下文已压缩 0 次");
+
+    harness.unmount();
+  });
+
+  it("keeps known context progress normalized to a 100-unit path", () => {
+    const harness = renderComposerHarness({
+      activeThreadId: "thread-1",
+      activeWorkspaceId: "ws-1",
+      contextCyclePercent: 42,
+    });
+
+    const progressRect = getContextProgress(harness.container).querySelector("rect");
+    expect(progressRect?.getAttribute("pathLength")).toBe("100");
 
     harness.unmount();
   });
