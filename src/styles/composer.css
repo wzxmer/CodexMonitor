@@ -177,8 +177,9 @@
 }
 
 .composer-input-area.is-context-unknown .composer-context-progress rect {
+  stroke: var(--text-dim);
   stroke-dasharray: 2 3;
-  opacity: 0.7;
+  opacity: 1;
 }
 
 .composer-input-area.is-drag-over {

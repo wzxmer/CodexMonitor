@@ -40,6 +40,19 @@ describe("composer select interaction styles", () => {
     );
   });
 
+  it("keeps an unknown context track distinct from the input border", () => {
+    const inputRule = composerCss.match(
+      /\.composer-input-area\s*\{([\s\S]*?)\n\}/,
+    );
+    const unknownRule = composerCss.match(
+      /\.composer-input-area\.is-context-unknown \.composer-context-progress rect\s*\{([\s\S]*?)\n\}/,
+    );
+
+    expect(inputRule?.[1]).toContain("border: 1px solid var(--cm-border-heavy)");
+    expect(unknownRule?.[1]).toContain("stroke: var(--text-dim)");
+    expect(unknownRule?.[1]).toContain("opacity: 1");
+  });
+
   it("lets text attachments use the composer width and wrap controls when needed", () => {
     const textAttachmentRule = composerCss.match(
       /\.composer-attachment\.is-text-attachment\s*\{([\s\S]*?)\n\}/,
