@@ -5,6 +5,7 @@ import type { DebugEntry } from "../../../types";
 import {
   cleanupDownloadedReleaseAssets,
   downloadAndOpenReleaseAsset,
+  getReleasePlatform,
   windowsInstallerKind,
 } from "../../../services/tauri";
 import { subscribeReleaseAssetDownloadProgress } from "../../../services/events";
@@ -19,6 +20,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("../../../services/tauri", () => ({
   cleanupDownloadedReleaseAssets: vi.fn(() => Promise.resolve()),
   downloadAndOpenReleaseAsset: vi.fn(() => Promise.resolve({ path: "installer.msi" })),
+  getReleasePlatform: vi.fn(() => Promise.resolve("windows-x86_64")),
   windowsInstallerKind: vi.fn(() => Promise.resolve("msi")),
 }));
 
@@ -28,6 +30,7 @@ vi.mock("../../../services/events", () => ({
 
 const cleanupDownloadedReleaseAssetsMock = vi.mocked(cleanupDownloadedReleaseAssets);
 const downloadAndOpenReleaseAssetMock = vi.mocked(downloadAndOpenReleaseAsset);
+const getReleasePlatformMock = vi.mocked(getReleasePlatform);
 const windowsInstallerKindMock = vi.mocked(windowsInstallerKind);
 const subscribeReleaseAssetDownloadProgressMock = vi.mocked(
   subscribeReleaseAssetDownloadProgress,
@@ -76,6 +79,7 @@ describe("useUpdater", () => {
     vi.clearAllMocks();
     cleanupDownloadedReleaseAssetsMock.mockResolvedValue(undefined);
     downloadAndOpenReleaseAssetMock.mockResolvedValue({ path: "installer.msi" });
+    getReleasePlatformMock.mockResolvedValue("windows-x86_64");
     windowsInstallerKindMock.mockResolvedValue("msi");
     progressListener = null;
     subscribeReleaseAssetDownloadProgressMock.mockImplementation((listener) => {
@@ -158,6 +162,39 @@ describe("useUpdater", () => {
         payload: "No compatible installer asset found in the latest release.",
       }),
     );
+  });
+
+  it("fails closed when native macOS architecture cannot be proven", async () => {
+    vi.stubGlobal("navigator", {
+      ...window.navigator,
+      platform: "MacIntel",
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+    });
+    getReleasePlatformMock.mockResolvedValue("macos-unknown");
+    fetchMock.mockResolvedValue(latestReleaseResponse("9.9.9", [
+      {
+        name: "CodexMonitor_9.9.9_x86_64.dmg",
+        browser_download_url:
+          "https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x86_64.dmg",
+        size: 100,
+      },
+      {
+        name: "CodexMonitor_9.9.9_aarch64.dmg",
+        browser_download_url:
+          "https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_aarch64.dmg",
+        size: 100,
+      },
+    ]));
+    const { result } = renderHook(() => useUpdater({}));
+
+    await act(async () => {
+      await result.current.checkForUpdates();
+    });
+
+    expect(result.current.state).toEqual({
+      stage: "error",
+      error: "No compatible installer asset found in the latest release.",
+    });
   });
 
   it("blocks automatic installer selection for mixed MSI and NSIS ownership", async () => {

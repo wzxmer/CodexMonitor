@@ -40,6 +40,7 @@ export type PostUpdateReleaseInfo = {
 };
 
 export type ReleasePlatform = "windows" | "macos" | "linux" | "unknown";
+export type ReleaseArchitecture = "arm64" | "x64" | "unknown";
 export type WindowsInstallerKind = "msi" | "nsis" | "mixed" | "unknown";
 
 export type ReleaseAsset = {
@@ -104,6 +105,34 @@ export function detectReleasePlatform(): ReleasePlatform {
   return "unknown";
 }
 
+export function releaseArchitectureFromPlatform(value: string | null | undefined): ReleaseArchitecture {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  if (/(aarch64|arm64|apple[-_ ]?silicon)/.test(normalized)) {
+    return "arm64";
+  }
+  if (/(x86_64|amd64|x64|intel)/.test(normalized)) {
+    return "x64";
+  }
+  return "unknown";
+}
+
+export function detectReleaseArchitecture(): ReleaseArchitecture {
+  if (typeof navigator === "undefined") {
+    return "unknown";
+  }
+  const userAgentData = (navigator as Navigator & {
+    userAgentData?: { platform?: string };
+  }).userAgentData;
+  const platformText = [
+    userAgentData?.platform,
+    navigator.userAgent,
+    navigator.platform,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return releaseArchitectureFromPlatform(platformText);
+}
+
 export function isReleaseVersionNewer(
   candidateVersion: string,
   currentVersion: string,
@@ -130,6 +159,7 @@ export function selectReleaseAsset(
   assets: ReleaseAsset[],
   platform: ReleasePlatform,
   windowsInstallerKind: WindowsInstallerKind = "unknown",
+  architecture: ReleaseArchitecture = detectReleaseArchitecture(),
 ): ReleaseAsset | null {
   const usableAssets = assets.filter((asset) => {
     const name = asset.name.toLowerCase();
@@ -156,9 +186,23 @@ export function selectReleaseAsset(
           : [".msi", ".exe", ".dmg", ".appimage", ".rpm"];
 
   for (const extension of preferredExtensions) {
-    const match = usableAssets.find((asset) =>
+    const candidates = usableAssets.filter((asset) =>
       asset.name.toLowerCase().endsWith(extension),
     );
+    if (platform === "macos") {
+      if (architecture === "unknown") {
+        return null;
+      }
+      const match = candidates.find((asset) => {
+        const assetArchitecture = releaseArchitectureFromPlatform(asset.name);
+        return assetArchitecture === architecture || /universal/i.test(asset.name);
+      });
+      if (match) {
+        return match;
+      }
+      continue;
+    }
+    const match = candidates[0];
     if (match) {
       return match;
     }
@@ -170,6 +214,7 @@ function selectMirrorReleaseAsset(
   assets: ReleaseAsset[],
   platform: ReleasePlatform,
   windowsInstallerKind: WindowsInstallerKind,
+  architecture: ReleaseArchitecture,
 ): ReleaseAsset | null {
   const preferredExtensions =
     platform === "windows"
@@ -183,11 +228,26 @@ function selectMirrorReleaseAsset(
         : platform === "linux"
           ? [".appimage", ".rpm"]
           : [".msi", ".exe", ".dmg", ".appimage", ".rpm"];
-  return preferredExtensions
-    .map((extension) =>
-      assets.find((asset) => asset.name.toLowerCase().endsWith(extension)),
-    )
-    .find((asset): asset is ReleaseAsset => Boolean(asset)) ?? null;
+  for (const extension of preferredExtensions) {
+    const candidates = assets.filter((asset) => asset.name.toLowerCase().endsWith(extension));
+    if (platform === "macos") {
+      if (architecture === "unknown") {
+        return null;
+      }
+      const match = candidates.find((asset) => {
+        const assetArchitecture = releaseArchitectureFromPlatform(asset.name);
+        return assetArchitecture === architecture || /universal/i.test(asset.name);
+      });
+      if (match) {
+        return match;
+      }
+      continue;
+    }
+    if (candidates[0]) {
+      return candidates[0];
+    }
+  }
+  return null;
 }
 
 function parseMirrorUpdate(
@@ -195,6 +255,7 @@ function parseMirrorUpdate(
   currentVersion: string,
   platform: ReleasePlatform,
   windowsInstallerKind: WindowsInstallerKind,
+  architecture: ReleaseArchitecture,
 ): ReleaseUpdateInfo | null {
   const version = normalizeStoredVersion(payload.version ?? "");
   if (!version || !isReleaseVersionNewer(version, currentVersion)) return null;
@@ -207,7 +268,12 @@ function parseMirrorUpdate(
       return { name, urls: [url], size: asset.size, sha256 };
     })
     .filter((asset): asset is ReleaseAsset => asset !== null);
-  const selectedAsset = selectMirrorReleaseAsset(assets, platform, windowsInstallerKind);
+  const selectedAsset = selectMirrorReleaseAsset(
+    assets,
+    platform,
+    windowsInstallerKind,
+    architecture,
+  );
   if (!selectedAsset) {
     throw new Error("No compatible installer asset found in the update mirror.");
   }
@@ -224,6 +290,7 @@ async function fetchMirrorUpdate(
   currentVersion: string,
   platform: ReleasePlatform,
   windowsInstallerKind: WindowsInstallerKind,
+  architecture: ReleaseArchitecture,
 ): Promise<ReleaseUpdateInfo | null> {
   const response = await fetch(manifestUrl, {
     cache: "no-store",
@@ -237,6 +304,7 @@ async function fetchMirrorUpdate(
     currentVersion,
     platform,
     windowsInstallerKind,
+    architecture,
   );
 }
 
@@ -245,6 +313,7 @@ export async function fetchLatestReleaseUpdate(
   platform: ReleasePlatform = detectReleasePlatform(),
   mirrorManifestUrls: string[] = MIRROR_MANIFEST_URLS,
   windowsInstallerKind: WindowsInstallerKind = "unknown",
+  architecture: ReleaseArchitecture = detectReleaseArchitecture(),
 ): Promise<ReleaseUpdateInfo | null> {
   let githubError: unknown;
   try {
@@ -273,7 +342,12 @@ export async function fetchLatestReleaseUpdate(
         };
       })
       .filter((asset): asset is ReleaseAsset => asset !== null);
-    const selectedAsset = selectReleaseAsset(assets, platform, windowsInstallerKind);
+    const selectedAsset = selectReleaseAsset(
+      assets,
+      platform,
+      windowsInstallerKind,
+      architecture,
+    );
     if (!selectedAsset) {
       throw new Error("No compatible installer asset found in the latest release.");
     }
@@ -285,6 +359,7 @@ export async function fetchLatestReleaseUpdate(
           currentVersion,
           platform,
           windowsInstallerKind,
+          architecture,
         );
         if (mirrorUpdate?.version === releaseVersion && mirrorUpdate.asset.name === selectedAsset.name) {
           selectedAsset.urls.push(...mirrorUpdate.asset.urls);
@@ -313,6 +388,7 @@ export async function fetchLatestReleaseUpdate(
         currentVersion,
         platform,
         windowsInstallerKind,
+        architecture,
       );
       if (!candidate) continue;
       if (!mirrorUpdate) {

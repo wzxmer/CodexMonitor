@@ -52,9 +52,11 @@ import {
   sendTransientNotification,
   setCodexFeatureFlag,
   setAgentsCoreSettings,
+  setNativeMenuLabels,
   setTrayLabels,
   setTrayRecentThreads,
   setTraySessionUsage,
+  getReleasePlatform,
   startThread,
   workflowPreflightPreview,
   workflowGateStatus,
@@ -900,6 +902,64 @@ describe("tauri invoke wrappers", () => {
     expect(invokeMock).toHaveBeenCalledWith("set_tray_labels", {
       labels,
     });
+  });
+
+  it("maps localized labels for the native menu", async () => {
+    const invokeMock = vi.mocked(invoke);
+    const labels = {
+      about: "关于 Codex Monitor",
+      checkForUpdates: "检查更新...",
+      settings: "设置...",
+      services: "服务",
+      hide: "隐藏 Codex Monitor",
+      hideOthers: "隐藏其他窗口",
+      quit: "退出 Codex Monitor",
+      file: "文件",
+      newAgent: "新建 Agent",
+      newWorktreeAgent: "新建 Worktree Agent",
+      newCloneAgent: "新建 Clone Agent",
+      addWorkspace: "添加工作区...",
+      addWorkspaceFromUrl: "从 URL 添加工作区...",
+      closeWindow: "关闭窗口",
+      edit: "编辑",
+      undo: "撤销",
+      redo: "重做",
+      cut: "剪切",
+      copy: "复制",
+      paste: "粘贴",
+      selectAll: "全选",
+      composer: "编写器",
+      cycleModel: "切换模型",
+      cycleAccess: "切换访问模式",
+      cycleReasoning: "切换推理模式",
+      cycleCollaboration: "切换协作模式",
+      view: "视图",
+      toggleProjectsSidebar: "切换项目侧栏",
+      toggleGitSidebar: "切换 Git 侧栏",
+      toggleDebugPanel: "切换调试面板",
+      toggleTerminal: "切换终端",
+      nextAgent: "下一个 Agent",
+      previousAgent: "上一个 Agent",
+      nextWorkspace: "下一个工作区",
+      previousWorkspace: "上一个工作区",
+      toggleFullScreen: "切换全屏",
+      window: "窗口",
+      minimize: "最小化",
+      maximize: "最大化",
+      help: "帮助",
+    };
+
+    await setNativeMenuLabels(labels);
+
+    expect(invokeMock).toHaveBeenCalledWith("menu_set_labels", { labels });
+  });
+
+  it("reads the native release platform", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce("macos-aarch64");
+
+    await expect(getReleasePlatform()).resolves.toBe("macos-aarch64");
+    expect(invokeMock).toHaveBeenCalledWith("release_platform");
   });
 
   it("maps usage for set_tray_session_usage", async () => {

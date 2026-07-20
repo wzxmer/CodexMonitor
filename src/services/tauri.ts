@@ -54,6 +54,7 @@ import type {
   KnowledgeQueryResponse,
   KnowledgeTaskInitRequest,
   KnowledgeTaskInitResponse,
+  NativeMenuLabels,
   WorkflowRuntimeMode,
   TrayLabels,
   TrayRecentThreadEntry,
@@ -1420,6 +1421,10 @@ export async function setMenuAccelerators(
   return invoke("menu_set_accelerators", { updates });
 }
 
+export async function setNativeMenuLabels(labels: NativeMenuLabels): Promise<void> {
+  return invoke("menu_set_labels", { labels });
+}
+
 export async function runCodexDoctor(
   codexBin: string | null,
   codexArgs: string | null,
@@ -1579,6 +1584,10 @@ export async function installManagedCodex(
 
 export async function getManagedCodexPlatform(): Promise<string> {
   return invoke<string>("managed_codex_platform");
+}
+
+export async function getReleasePlatform(): Promise<string> {
+  return invoke<string>("release_platform");
 }
 
 export async function openExternalTerminal(workspaceId: string): Promise<void> {

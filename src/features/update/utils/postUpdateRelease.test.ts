@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchLatestReleaseUpdate, selectReleaseAsset } from "./postUpdateRelease";
+import {
+  fetchLatestReleaseUpdate,
+  releaseArchitectureFromPlatform,
+  selectReleaseAsset,
+} from "./postUpdateRelease";
 
 const checksum = "a".repeat(64);
 
@@ -104,5 +108,46 @@ describe("selectReleaseAsset", () => {
   it("does not cross installer families when the owned package is absent", () => {
     expect(selectReleaseAsset(assets.slice(1), "windows", "msi")).toBeNull();
     expect(selectReleaseAsset(assets.slice(0, 1), "windows", "nsis")).toBeNull();
+  });
+
+  it("selects the native macOS asset for Apple Silicon", () => {
+    const macAssets = [
+      {
+        name: "CodexMonitor_9.9.9_x86_64.dmg",
+        urls: ["https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x86_64.dmg"],
+      },
+      {
+        name: "CodexMonitor_9.9.9_aarch64.dmg",
+        urls: ["https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_aarch64.dmg"],
+      },
+    ];
+
+    expect(selectReleaseAsset(macAssets, "macos", "unknown", "arm64")?.name).toContain(
+      "aarch64",
+    );
+    expect(selectReleaseAsset(macAssets, "macos", "unknown", "x64")?.name).toContain(
+      "x86_64",
+    );
+  });
+
+  it("fails closed when macOS architecture evidence is unavailable", () => {
+    const macAssets = [
+      {
+        name: "CodexMonitor_9.9.9_x86_64.dmg",
+        urls: ["https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x86_64.dmg"],
+      },
+      {
+        name: "CodexMonitor_9.9.9_aarch64.dmg",
+        urls: ["https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_aarch64.dmg"],
+      },
+    ];
+
+    expect(selectReleaseAsset(macAssets, "macos", "unknown", "unknown")).toBeNull();
+  });
+
+  it("normalizes native platform architecture names", () => {
+    expect(releaseArchitectureFromPlatform("macos-aarch64")).toBe("arm64");
+    expect(releaseArchitectureFromPlatform("macos-x86_64")).toBe("x64");
+    expect(releaseArchitectureFromPlatform("unknown")).toBe("unknown");
   });
 });

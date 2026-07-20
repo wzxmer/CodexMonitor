@@ -36,6 +36,57 @@ pub fn managed_codex_platform() -> String {
     format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
 
+fn resolve_release_architecture(
+    os: &str,
+    process_architecture: &str,
+    macos_arm64_capable: Option<bool>,
+) -> String {
+    if os != "macos" {
+        return process_architecture.to_string();
+    }
+    if matches!(process_architecture, "aarch64" | "arm64") {
+        return "aarch64".to_string();
+    }
+    match macos_arm64_capable {
+        Some(true) => "aarch64".to_string(),
+        Some(false) if matches!(process_architecture, "x86_64" | "amd64" | "x64") => {
+            "x86_64".to_string()
+        }
+        _ => "unknown".to_string(),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_arm64_capable() -> Option<bool> {
+    let output = Command::new("/usr/sbin/sysctl")
+        .args(["-n", "hw.optional.arm64"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    match String::from_utf8_lossy(&output.stdout).trim() {
+        "1" => Some(true),
+        "0" => Some(false),
+        _ => None,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn macos_arm64_capable() -> Option<bool> {
+    None
+}
+
+#[tauri::command]
+pub fn release_platform() -> String {
+    let architecture = resolve_release_architecture(
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        macos_arm64_capable(),
+    );
+    format!("{}-{architecture}", std::env::consts::OS)
+}
+
 #[tauri::command]
 pub fn windows_installer_kind() -> String {
     crate::windows_installer::detect_installer_kind()
@@ -498,7 +549,8 @@ fn open_installer(path: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        extract_managed_codex_archive, sanitize_release_asset_file_name, validate_release_asset_url,
+        extract_managed_codex_archive, resolve_release_architecture,
+        sanitize_release_asset_file_name, validate_release_asset_url,
     };
     use crate::windows_installer::{
         classify_windows_installer_registration, select_windows_installer_kind,
@@ -511,6 +563,30 @@ mod tests {
         let url =
             format!("https://github.com/wzxmer/CodexMonitor/releases/download/v1.2.3/{file_name}");
         assert!(validate_release_asset_url(&url, file_name).is_ok());
+    }
+
+    #[test]
+    fn selects_macos_hardware_architecture_even_under_rosetta() {
+        assert_eq!(
+            resolve_release_architecture("macos", "x86_64", Some(true)),
+            "aarch64"
+        );
+        assert_eq!(
+            resolve_release_architecture("macos", "x86_64", Some(false)),
+            "x86_64"
+        );
+        assert_eq!(
+            resolve_release_architecture("windows", "x86_64", Some(true)),
+            "x86_64"
+        );
+        assert_eq!(
+            resolve_release_architecture("macos", "aarch64", None),
+            "aarch64"
+        );
+        assert_eq!(
+            resolve_release_architecture("macos", "x86_64", None),
+            "unknown"
+        );
     }
 
     #[test]

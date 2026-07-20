@@ -4,6 +4,7 @@ import type { DebugEntry } from "../../../types";
 import {
   cleanupDownloadedReleaseAssets,
   downloadAndOpenReleaseAsset,
+  getReleasePlatform,
   windowsInstallerKind,
 } from "../../../services/tauri";
 import { subscribeReleaseAssetDownloadProgress } from "../../../services/events";
@@ -12,6 +13,7 @@ import {
   fetchLatestReleaseUpdate,
   type ReleaseUpdateInfo,
   loadPendingPostUpdateVersion,
+  releaseArchitectureFromPlatform,
 } from "../utils/postUpdateRelease";
 
 type UpdateStage =
@@ -103,11 +105,14 @@ export function useUpdater({
         setState(nextState);
         return nextState;
       }
+      const nativePlatform = await getReleasePlatform().catch(() => "");
+      const architecture = releaseArchitectureFromPlatform(nativePlatform);
       const update = await fetchLatestReleaseUpdate(
         __APP_VERSION__,
         undefined,
         undefined,
         installerKind,
+        architecture,
       );
       if (!update) {
         updateRef.current = null;

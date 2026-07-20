@@ -1,13 +1,19 @@
 import { useCallback, useMemo } from "react";
 import { useMenuAccelerators } from "./useMenuAccelerators";
-import type { AppSettings, DebugEntry } from "../../../types";
+import { setNativeMenuLabels } from "../../../services/tauri";
+import type { AppSettings, DebugEntry, NativeMenuLabels } from "../../../types";
 
 type Params = {
   appSettings: AppSettings;
+  nativeMenuLabels: NativeMenuLabels;
   onDebug: (entry: DebugEntry) => void;
 };
 
-export function useMenuAcceleratorController({ appSettings, onDebug }: Params) {
+export function useMenuAcceleratorController({
+  appSettings,
+  nativeMenuLabels,
+  onDebug,
+}: Params) {
   const menuAccelerators = useMemo(
     () => [
       {
@@ -106,8 +112,27 @@ export function useMenuAcceleratorController({ appSettings, onDebug }: Params) {
     [onDebug],
   );
 
+  const updateMenuLabels = useCallback(
+    async () => {
+      try {
+        await setNativeMenuLabels(nativeMenuLabels);
+      } catch (error) {
+        onDebug({
+          id: `${Date.now()}-client-menu-label-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "menu/label-error",
+          payload: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    },
+    [nativeMenuLabels, onDebug],
+  );
+
   useMenuAccelerators({
     accelerators: menuAccelerators,
+    beforeUpdate: updateMenuLabels,
     onError: handleMenuAcceleratorError,
   });
 }

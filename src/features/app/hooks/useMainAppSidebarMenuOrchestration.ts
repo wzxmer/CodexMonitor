@@ -28,6 +28,7 @@ type UseMainAppSidebarMenuOrchestrationArgs = {
     >;
   };
   appSettings: Parameters<typeof useMenuAcceleratorController>[0]["appSettings"];
+  nativeMenuLabels: Parameters<typeof useMenuAcceleratorController>[0]["nativeMenuLabels"];
   onDebug: Parameters<typeof useMenuAcceleratorController>[0]["onDebug"];
 };
 
@@ -36,6 +37,7 @@ export function useMainAppSidebarMenuOrchestration({
   workspaceCycling,
   appMenu,
   appSettings,
+  nativeMenuLabels,
   onDebug,
 }: UseMainAppSidebarMenuOrchestrationArgs) {
   const sidebarHandlers = useSidebarLayoutActions(sidebarActions);
@@ -63,7 +65,7 @@ export function useMainAppSidebarMenuOrchestration({
     onCycleWorkspace: handleCycleWorkspace,
   });
 
-  useMenuAcceleratorController({ appSettings, onDebug });
+  useMenuAcceleratorController({ appSettings, nativeMenuLabels, onDebug });
 
   return sidebarHandlers;
 }

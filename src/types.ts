@@ -100,6 +100,49 @@ export type TrayLabels = {
   quit: string;
 };
 
+export type NativeMenuLabels = {
+  about: string;
+  checkForUpdates: string;
+  settings: string;
+  services: string;
+  hide: string;
+  hideOthers: string;
+  quit: string;
+  file: string;
+  newAgent: string;
+  newWorktreeAgent: string;
+  newCloneAgent: string;
+  addWorkspace: string;
+  addWorkspaceFromUrl: string;
+  closeWindow: string;
+  edit: string;
+  undo: string;
+  redo: string;
+  cut: string;
+  copy: string;
+  paste: string;
+  selectAll: string;
+  composer: string;
+  cycleModel: string;
+  cycleAccess: string;
+  cycleReasoning: string;
+  cycleCollaboration: string;
+  view: string;
+  toggleProjectsSidebar: string;
+  toggleGitSidebar: string;
+  toggleDebugPanel: string;
+  toggleTerminal: string;
+  nextAgent: string;
+  previousAgent: string;
+  nextWorkspace: string;
+  previousWorkspace: string;
+  toggleFullScreen: string;
+  window: string;
+  minimize: string;
+  maximize: string;
+  help: string;
+};
+
 export type Message = {
   id: string;
   role: "user" | "assistant";

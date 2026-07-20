@@ -20,6 +20,13 @@ pub struct MenuAcceleratorUpdate {
     pub accelerator: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeMenuLabels {
+    #[serde(flatten)]
+    _labels: std::collections::HashMap<String, String>,
+}
+
 #[tauri::command]
 pub fn menu_set_accelerators<R: Runtime>(
     _app: tauri::AppHandle<R>,
@@ -28,5 +35,13 @@ pub fn menu_set_accelerators<R: Runtime>(
     for update in updates {
         let _ = (update.id, update.accelerator);
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn menu_set_labels<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    _labels: NativeMenuLabels,
+) -> Result<(), String> {
     Ok(())
 }

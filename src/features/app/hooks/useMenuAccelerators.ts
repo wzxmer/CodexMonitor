@@ -9,17 +9,23 @@ type MenuAccelerator = {
 
 type UseMenuAcceleratorsOptions = {
   accelerators: MenuAccelerator[];
+  beforeUpdate?: () => Promise<void>;
   onError?: (error: unknown) => void;
 };
 
 export function useMenuAccelerators({
   accelerators,
+  beforeUpdate,
   onError,
 }: UseMenuAcceleratorsOptions) {
   useEffect(() => {
     let active = true;
     const updateMenuAccelerators = async () => {
       try {
+        if (!active) {
+          return;
+        }
+        await beforeUpdate?.();
         if (!active) {
           return;
         }
@@ -37,5 +43,5 @@ export function useMenuAccelerators({
     return () => {
       active = false;
     };
-  }, [accelerators, onError]);
+  }, [accelerators, beforeUpdate, onError]);
 }

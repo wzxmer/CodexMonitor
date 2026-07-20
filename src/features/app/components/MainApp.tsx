@@ -53,6 +53,7 @@ import { useMainAppDisplayNodes } from "@app/hooks/useMainAppDisplayNodes";
 import { useMainAppPromptActions } from "@app/hooks/useMainAppPromptActions";
 import { useMainAppShellProps } from "@app/hooks/useMainAppShellProps";
 import { useMainAppSidebarMenuOrchestration } from "@app/hooks/useMainAppSidebarMenuOrchestration";
+import { buildNativeMenuLabels } from "@/features/i18n/nativeMenuLabels";
 import { useMainAppSettingsActions } from "@app/hooks/useMainAppSettingsActions";
 import { useMainAppThreadCodexState } from "@app/hooks/useMainAppThreadCodexState";
 import {
@@ -222,6 +223,7 @@ export default function MainApp() {
     (key: I18nKey) => I18N_STRINGS[appLanguage][key] ?? I18N_STRINGS.zh[key],
     [appLanguage],
   );
+  const nativeMenuLabels = useMemo(() => buildNativeMenuLabels(t), [t]);
   const trayLabels = useMemo(
     () => ({
       open: t("tray.open"),
@@ -2237,6 +2239,7 @@ export default function MainApp() {
       onCollapseRightPanel: collapseRightPanel,
     },
     appSettings,
+    nativeMenuLabels,
     onDebug: addDebugEntry,
   });
   useArchiveShortcut({
