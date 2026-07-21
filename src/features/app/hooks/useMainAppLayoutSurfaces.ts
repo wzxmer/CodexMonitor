@@ -37,12 +37,6 @@ type ComposerProps = NonNullable<LayoutNodesOptions["primary"]["composerProps"]>
 type MainHeaderProps = NonNullable<LayoutNodesOptions["primary"]["mainHeaderProps"]>;
 type GitDiffPanelProps = LayoutNodesOptions["git"]["gitDiffPanelProps"];
 
-function countContextCompactions(items: ConversationItem[]) {
-  return items.filter(
-    (item) => item.kind === "tool" && item.toolType === "contextCompaction",
-  ).length;
-}
-
 type UseMainAppLayoutSurfacesArgs = {
   appSettings: AppSettings;
   conversationAppearance: ConversationAppearance;
@@ -106,6 +100,7 @@ type UseMainAppLayoutSurfacesArgs = {
   activePlanStream: string | null;
   activeTurnId: string | null;
   activeTokenUsage: ComposerProps["contextUsage"];
+  activeContextCompactionCount: number;
   latestAgentRuns: LayoutNodesOptions["primary"]["homeProps"]["latestAgentRuns"];
   isLoadingLatestAgents: LayoutNodesOptions["primary"]["homeProps"]["isLoadingLatestAgents"];
   localUsageSnapshot: LayoutNodesOptions["primary"]["homeProps"]["localUsageSnapshot"];
@@ -278,7 +273,6 @@ type MainAppLayoutSurfacesContext = UseMainAppLayoutSurfacesArgs & {
   sidebarAccount: SidebarProps["accountInfo"];
   codexProviderStatus: CodexProviderStatus | null;
   thirdPartyProviderUsage: SidebarProps["thirdPartyProviderUsage"];
-  contextCompactionTokenLimit: number | null;
   subagentResults: SubagentResultSummary[];
 };
 
@@ -323,7 +317,6 @@ function buildPrimarySurface({
   sidebarAccount,
   codexProviderStatus,
   thirdPartyProviderUsage,
-  contextCompactionTokenLimit,
   homeRateLimits,
   homeAccount,
   accountSwitching,
@@ -336,6 +329,7 @@ function buildPrimarySurface({
   onPlanSubmitChanges,
   onReferenceMessage,
   activeTokenUsage,
+  activeContextCompactionCount,
   latestAgentRuns,
   isLoadingLatestAgents,
   localUsageSnapshot,
@@ -633,8 +627,7 @@ function buildPrimarySurface({
           disabled: composerWorkspaceState.isReviewing,
           onFileAutocompleteActiveChange: composerWorkspaceState.setFileAutocompleteActive,
           contextUsage: activeTokenUsage,
-          contextCompactionTokenLimit,
-          contextCompactionCount: countContextCompactions(activeItems),
+          contextCompactionCount: activeContextCompactionCount,
           contextCompactionInProgress: isContextCompactionInProgress(activeItems),
           references: composerWorkspaceState.composerReferences,
           onToggleReference: composerWorkspaceState.toggleComposerReference,
@@ -1218,6 +1211,7 @@ export function useMainAppLayoutSurfaces({
   activePlanStream,
   activeTurnId,
   activeTokenUsage,
+  activeContextCompactionCount,
   latestAgentRuns,
   isLoadingLatestAgents,
   localUsageSnapshot,
@@ -1350,11 +1344,7 @@ export function useMainAppLayoutSurfaces({
 }: UseMainAppLayoutSurfacesArgs): LayoutNodesOptions {
   const { t } = useI18n();
   const sidebarAccount = activeWorkspace ? activeAccount : homeAccount;
-  const {
-    codexProviderStatus,
-    thirdPartyProviderUsage,
-    contextCompactionTokenLimit,
-  } = useSidebarProviderUsage({
+  const { codexProviderStatus, thirdPartyProviderUsage } = useSidebarProviderUsage({
     appSettings,
     activeWorkspaceId,
     homeAccountWorkspaceId,
@@ -1442,6 +1432,7 @@ export function useMainAppLayoutSurfaces({
     activePlanStream,
     activeTurnId,
     activeTokenUsage,
+    activeContextCompactionCount,
     latestAgentRuns,
     isLoadingLatestAgents,
     localUsageSnapshot,
@@ -1574,7 +1565,6 @@ export function useMainAppLayoutSurfaces({
     sidebarAccount,
     codexProviderStatus,
     thirdPartyProviderUsage,
-    contextCompactionTokenLimit,
     subagentResults,
   };
 

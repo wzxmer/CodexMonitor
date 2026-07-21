@@ -52,6 +52,25 @@ function prepareLiveThreadItems(items: ConversationItem[]) {
   return prepareThreadItems(items, { maxItemsPerThread: null });
 }
 
+function mergeCompletedContextCompactionIds(
+  current: Record<string, true> | undefined,
+  items: ConversationItem[],
+) {
+  let next = current;
+  items.forEach((item) => {
+    if (
+      item.kind !== "tool" ||
+      item.toolType !== "contextCompaction" ||
+      item.status !== "completed" ||
+      next?.[item.id]
+    ) {
+      return;
+    }
+    next = { ...(next ?? {}), [item.id]: true };
+  });
+  return next;
+}
+
 export function reduceThreadItems(state: ThreadState, action: ThreadAction): ThreadState {
   switch (action.type) {
     case "addAssistantMessage": {
@@ -210,6 +229,10 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
               ]
           : upsertItem(list, nextItem);
       const updatedItems = prepareLiveThreadItems(nextList);
+      const completedContextCompactionIds = mergeCompletedContextCompactionIds(
+        state.completedContextCompactionIdsByThread[action.threadId],
+        [nextItem],
+      );
       const nextPendingUserMessageReplacementByThread =
         action.replaceExisting && userMessage
           ? {
@@ -274,6 +297,14 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
         threadsByWorkspace: nextThreadsByWorkspace,
         pendingUserMessageReplacementByThread:
           nextPendingUserMessageReplacementByThread,
+        completedContextCompactionIdsByThread:
+          completedContextCompactionIds ===
+          state.completedContextCompactionIdsByThread[action.threadId]
+            ? state.completedContextCompactionIdsByThread
+            : {
+                ...state.completedContextCompactionIdsByThread,
+                [action.threadId]: completedContextCompactionIds ?? {},
+              },
       };
     }
     case "setItemTurnId": {
@@ -320,7 +351,11 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
           nextPendingUserMessageReplacementByThread,
       };
     }
-    case "setThreadItems":
+    case "setThreadItems": {
+      const completedContextCompactionIds = mergeCompletedContextCompactionIds(
+        state.completedContextCompactionIdsByThread[action.threadId],
+        action.items,
+      );
       return {
         ...state,
         itemsByThread: {
@@ -330,7 +365,16 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
               action.trimItems === false ? null : state.maxItemsPerThread,
           }),
         },
+        completedContextCompactionIdsByThread:
+          completedContextCompactionIds ===
+          state.completedContextCompactionIdsByThread[action.threadId]
+            ? state.completedContextCompactionIdsByThread
+            : {
+                ...state.completedContextCompactionIdsByThread,
+                [action.threadId]: completedContextCompactionIds ?? {},
+              },
       };
+    }
     case "evictThreadItems": {
       const residentThreadIds = action.threadIds.filter(
         (threadId) => threadId in state.itemsByThread,

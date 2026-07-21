@@ -1532,6 +1532,8 @@ export function useThreads({
     turnExecutionSummaryByThread: state.turnExecutionSummaryByThread,
     turnExecutionSummariesByThread: state.turnExecutionSummariesByThread,
     tokenUsageByThread: state.tokenUsageByThread,
+    completedContextCompactionIdsByThread:
+      state.completedContextCompactionIdsByThread,
     rateLimitsByWorkspace: state.rateLimitsByWorkspace,
     accountByWorkspace: state.accountByWorkspace,
     planByThread: state.planByThread,

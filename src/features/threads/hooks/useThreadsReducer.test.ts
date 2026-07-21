@@ -58,6 +58,72 @@ describe("threadReducer", () => {
     expect(withBothSessions.tokenUsageByThread["thread-b"]).toEqual(usageB);
   });
 
+  it("counts completed context compactions once across hydration and live events", () => {
+    const completed = {
+      id: "compact-1",
+      kind: "tool" as const,
+      toolType: "contextCompaction",
+      title: "Context compaction",
+      detail: "",
+      status: "completed",
+    };
+    const hydrated = threadReducer(initialState, {
+      type: "setThreadItems",
+      threadId: "thread-1",
+      items: [completed],
+    });
+    const duplicated = threadReducer(hydrated, {
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      item: completed,
+    });
+    const inProgress = threadReducer(duplicated, {
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      item: {
+        ...completed,
+        id: "compact-2",
+        status: "inProgress",
+      },
+    });
+
+    expect(
+      Object.keys(
+        inProgress.completedContextCompactionIdsByThread["thread-1"] ?? {},
+      ),
+    ).toEqual(["compact-1"]);
+  });
+
+  it("keeps completed compaction counts when resident message history is evicted", () => {
+    const hydrated = threadReducer(initialState, {
+      type: "setThreadItems",
+      threadId: "thread-1",
+      items: [
+        {
+          id: "compact-1",
+          kind: "tool",
+          toolType: "contextCompaction",
+          title: "Context compaction",
+          detail: "",
+          status: "completed",
+        },
+      ],
+    });
+    const evicted = threadReducer(hydrated, {
+      type: "evictThreadItems",
+      threadIds: ["thread-1"],
+    });
+
+    expect(evicted.itemsByThread["thread-1"]).toBeUndefined();
+    expect(
+      Object.keys(
+        evicted.completedContextCompactionIdsByThread["thread-1"] ?? {},
+      ),
+    ).toEqual(["compact-1"]);
+  });
+
   it("renames auto-generated thread on first user message", () => {
     const threads: ThreadSummary[] = [
       { id: "thread-1", name: "New Agent", updatedAt: 1 },

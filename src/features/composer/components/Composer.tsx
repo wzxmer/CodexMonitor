@@ -56,7 +56,7 @@ import { isMacPlatform } from "../../../utils/platformPaths";
 import { isComposingEvent } from "../../../utils/keys";
 import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
 import type { WorkflowGateAdapterStatus } from "@/types";
-import { getCompactionCyclePercent } from "@/features/threads/utils/contextUsage";
+import { getContextUsedPercent } from "@/features/threads/utils/contextUsage";
 import {
   analyzeLargePaste,
   createPastedTextAttachment,
@@ -117,7 +117,6 @@ type ComposerProps = {
   prompts: CustomPromptOption[];
   files: string[];
   contextUsage?: ThreadTokenUsage | null;
-  contextCompactionTokenLimit?: number | null;
   contextCompactionCount?: number;
   contextCompactionInProgress?: boolean;
   queuedMessages?: QueuedMessage[];
@@ -253,7 +252,6 @@ export const Composer = memo(function Composer({
   prompts,
   files,
   contextUsage = null,
-  contextCompactionTokenLimit = null,
   contextCompactionCount = 0,
   contextCompactionInProgress = false,
   queuedMessages = [],
@@ -321,9 +319,9 @@ export const Composer = memo(function Composer({
   onRedoReference,
 }: ComposerProps) {
   const { t } = useI18n();
-  const contextCyclePercent = contextCompactionInProgress
+  const contextUsagePercent = contextCompactionInProgress
     ? 100
-    : getCompactionCyclePercent(contextUsage, contextCompactionTokenLimit);
+    : getContextUsedPercent(contextUsage);
   const [text, setText] = useState(draftText);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [appMentionBindings, setAppMentionBindings] = useState<AppMentionBinding[]>([]);
@@ -938,8 +936,9 @@ export const Composer = memo(function Composer({
         onReviewPromptConfirmCommit={onReviewPromptConfirmCommit}
         onReviewPromptUpdateCustomInstructions={onReviewPromptUpdateCustomInstructions}
         onReviewPromptConfirmCustom={onReviewPromptConfirmCustom}
-        contextCyclePercent={contextCyclePercent}
+        contextUsagePercent={contextUsagePercent}
         contextCompactionCount={contextCompactionCount}
+        contextCompactionInProgress={contextCompactionInProgress}
       />
       <ComposerMetaBar
         disabled={disabled}

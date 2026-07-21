@@ -175,6 +175,10 @@ export function reduceThreadLifecycle(
         [action.threadId]: __________,
         ...restPendingUserMessageReplacement
       } = state.pendingUserMessageReplacementByThread;
+      const {
+        [action.threadId]: ___________,
+        ...restCompletedContextCompactionIds
+      } = state.completedContextCompactionIdsByThread;
       return {
         ...state,
         threadsByWorkspace: {
@@ -191,6 +195,8 @@ export function reduceThreadLifecycle(
         threadParentById: restParents,
         interruptedThreadById: restInterrupted,
         pendingUserMessageReplacementByThread: restPendingUserMessageReplacement,
+        completedContextCompactionIdsByThread:
+          restCompletedContextCompactionIds,
         activeThreadIdByWorkspace: {
           ...state.activeThreadIdByWorkspace,
           [action.workspaceId]: nextActive,

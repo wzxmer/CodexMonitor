@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import type { ThreadTokenUsage } from "@/types";
 import {
-  getCompactionCyclePercent,
   getContextUsedPercent,
   isContextCompactionInProgress,
 } from "./contextUsage";
@@ -38,40 +37,14 @@ describe("contextUsage", () => {
     expect(getContextUsedPercent(usage(100, 0, 0))).toBeNull();
   });
 
-  it("uses the larger total or last token snapshot as context usage", () => {
-    expect(getContextUsedPercent(usage(320, 0, 1_000))).toBe(32);
+  it("uses only the current-cycle token snapshot as context usage", () => {
+    expect(getContextUsedPercent(usage(320, 0, 1_000))).toBe(0);
     expect(getContextUsedPercent(usage(100, 450, 1_000))).toBe(45);
   });
 
   it("clamps context usage percent to the 0-100 range", () => {
-    expect(getContextUsedPercent(usage(1_200, 0, 1_000))).toBe(100);
+    expect(getContextUsedPercent(usage(0, 1_200, 1_000))).toBe(100);
     expect(getContextUsedPercent(usage(-20, -10, 1_000))).toBe(0);
-  });
-
-  it("uses last token usage for compaction cycle progress", () => {
-    expect(getCompactionCyclePercent(usage(1_000, 50, 1_000), 200)).toBe(25);
-  });
-
-  it("caps the configured compaction threshold at the runtime context window", () => {
-    expect(getCompactionCyclePercent(usage(0, 318_060, 353_400), 900_000)).toBe(90);
-  });
-
-  it("keeps a configured compaction threshold below the runtime context window", () => {
-    expect(getCompactionCyclePercent(usage(0, 180_000, 353_400), 200_000)).toBe(90);
-  });
-
-  it("does not use total token usage for compaction cycle progress", () => {
-    expect(getCompactionCyclePercent(usage(1_000, 50, 1_000), 200)).toBe(25);
-  });
-
-  it("does not fall back to the model context window when the compaction threshold is missing", () => {
-    expect(getCompactionCyclePercent(usage(0, 20, 1_000))).toBeNull();
-  });
-
-  it("clamps compaction cycle progress to the 0-100 range", () => {
-    expect(getCompactionCyclePercent(usage(0, 400, 1_000), 200)).toBe(100);
-    expect(getCompactionCyclePercent(usage(0, -20, 1_000), 200)).toBe(0);
-    expect(getCompactionCyclePercent(usage(0, 20, 1_000), 0)).toBeNull();
   });
 
   it("detects only an in-progress context compaction item", () => {

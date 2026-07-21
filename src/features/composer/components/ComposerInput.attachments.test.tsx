@@ -18,14 +18,16 @@ type HarnessProps = {
   activeThreadId: string | null;
   activeWorkspaceId: string | null;
   disabled?: boolean;
-  contextCyclePercent?: number | null;
+  contextUsagePercent?: number | null;
+  contextCompactionCount?: number;
 };
 
 function ComposerHarness({
   activeThreadId,
   activeWorkspaceId,
   disabled = false,
-  contextCyclePercent,
+  contextUsagePercent,
+  contextCompactionCount,
 }: HarnessProps) {
   const { activeImages, attachImages, removeImage, clearActiveImages } =
     useComposerImages({ activeThreadId, activeWorkspaceId });
@@ -55,7 +57,8 @@ function ComposerHarness({
         onSelectionChange={setSelectionStart}
         onKeyDown={() => {}}
         textareaRef={textareaRef}
-        contextCyclePercent={contextCyclePercent}
+        contextUsagePercent={contextUsagePercent}
+        contextCompactionCount={contextCompactionCount}
         suggestionsOpen={false}
         suggestions={[]}
         highlightIndex={0}
@@ -175,7 +178,7 @@ function setMockFileReader() {
 }
 
 describe("Composer attachments integration", () => {
-  it("keeps an unavailable context cycle visibly marked with pixel-sized dashes", () => {
+  it("keeps unavailable context usage visibly marked with pixel-sized dashes", () => {
     const harness = renderComposerHarness({
       activeThreadId: "thread-1",
       activeWorkspaceId: "ws-1",
@@ -188,7 +191,7 @@ describe("Composer attachments integration", () => {
     const contextCountLabel = harness.container
       .querySelector(".composer-context-count")
       ?.getAttribute("aria-label");
-    expect(contextCountLabel).toContain("压缩周期 --");
+    expect(contextCountLabel).toContain("上下文占用 --");
     expect(contextCountLabel).toContain("上下文已压缩 0 次");
 
     harness.unmount();
@@ -198,11 +201,30 @@ describe("Composer attachments integration", () => {
     const harness = renderComposerHarness({
       activeThreadId: "thread-1",
       activeWorkspaceId: "ws-1",
-      contextCyclePercent: 42,
+      contextUsagePercent: 42,
     });
 
     const progressRect = getContextProgress(harness.container).querySelector("rect");
     expect(progressRect?.getAttribute("pathLength")).toBe("100");
+
+    harness.unmount();
+  });
+
+  it("shows the durable completed compaction count", () => {
+    const harness = renderComposerHarness({
+      activeThreadId: "thread-1",
+      activeWorkspaceId: "ws-1",
+      contextCompactionCount: 3,
+    });
+
+    expect(
+      harness.container.querySelector(".composer-context-count")?.textContent,
+    ).toBe("3");
+    expect(
+      harness.container
+        .querySelector(".composer-context-count")
+        ?.getAttribute("aria-label"),
+    ).toContain("上下文已压缩 3 次");
 
     harness.unmount();
   });

@@ -51,6 +51,7 @@ export type ThreadState = {
   approvals: ApprovalRequest[];
   userInputRequests: RequestUserInputRequest[];
   tokenUsageByThread: Record<string, ThreadTokenUsage>;
+  completedContextCompactionIdsByThread: Record<string, Record<string, true>>;
   rateLimitsByWorkspace: Record<string, RateLimitSnapshot | null>;
   accountByWorkspace: Record<string, AccountSnapshot | null>;
   planByThread: Record<string, TurnPlan | null>;
@@ -267,6 +268,7 @@ export const initialState: ThreadState = {
   approvals: [],
   userInputRequests: [],
   tokenUsageByThread: {},
+  completedContextCompactionIdsByThread: {},
   rateLimitsByWorkspace: {},
   accountByWorkspace: {},
   planByThread: {},

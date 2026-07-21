@@ -23,7 +23,6 @@ type SidebarProviderUsage = {
   workspaceId: string | null;
   codexProviderStatus: CodexProviderStatus | null;
   thirdPartyProviderUsage: ThirdPartyKeyUsageSnapshot | null;
-  contextCompactionTokenLimit: number | null;
 };
 
 export function useSidebarProviderUsage({
@@ -126,7 +125,5 @@ export function useSidebarProviderUsage({
     workspaceId,
     codexProviderStatus,
     thirdPartyProviderUsage,
-    contextCompactionTokenLimit:
-      codexProviderStatus?.autoCompactTokenLimit ?? null,
   };
 }

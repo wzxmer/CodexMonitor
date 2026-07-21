@@ -739,6 +739,7 @@ export default function MainApp() {
     turnExecutionSummaryByThread,
     turnExecutionSummariesByThread,
     tokenUsageByThread,
+    completedContextCompactionIdsByThread,
     rateLimitsByWorkspace,
     accountByWorkspace,
     planByThread,
@@ -1678,6 +1679,11 @@ export default function MainApp() {
   const activeTokenUsage = activeThreadId
     ? tokenUsageByThread[activeThreadId] ?? null
     : null;
+  const activeContextCompactionCount = activeThreadId
+    ? Object.keys(
+        completedContextCompactionIdsByThread[activeThreadId] ?? {},
+      ).length
+    : 0;
   const activePlan = activeThreadId
     ? planByThread[activeThreadId] ?? null
     : null;
@@ -2399,6 +2405,7 @@ export default function MainApp() {
     activePlanStream,
     activeTurnId,
     activeTokenUsage,
+    activeContextCompactionCount,
     latestAgentRuns,
     isLoadingLatestAgents,
     localUsageSnapshot,

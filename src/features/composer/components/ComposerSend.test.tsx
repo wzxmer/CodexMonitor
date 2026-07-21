@@ -59,7 +59,6 @@ type HarnessProps = {
   onAutoReconnectChange?: (enabled: boolean) => void;
   references?: ComposerReference[];
   contextUsage?: ThreadTokenUsage | null;
-  contextCompactionTokenLimit?: number | null;
   contextCompactionInProgress?: boolean;
 };
 
@@ -84,7 +83,6 @@ function ComposerHarness({
   onAutoReconnectChange,
   references = [],
   contextUsage,
-  contextCompactionTokenLimit,
   contextCompactionInProgress,
 }: HarnessProps) {
   const [draftText, setDraftText] = useState("");
@@ -128,13 +126,42 @@ function ComposerHarness({
       dictationEnabled={false}
       references={references}
       contextUsage={contextUsage}
-      contextCompactionTokenLimit={contextCompactionTokenLimit}
       contextCompactionInProgress={contextCompactionInProgress}
     />
   );
 }
 
 describe("Composer send triggers", () => {
+  it("shows current context usage from the app-server token snapshot", () => {
+    render(
+      <ComposerHarness
+        onSend={vi.fn()}
+        contextUsage={{
+          total: {
+            totalTokens: 90_000,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+          },
+          last: {
+            totalTokens: 40_000,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+          },
+          modelContextWindow: 100_000,
+        }}
+      />,
+    );
+
+    const status = screen.getByLabelText(/上下文占用 40%/);
+    const inputArea = status.closest(".composer-input-area") as HTMLElement;
+    expect(inputArea.classList.contains("is-context-ok")).toBe(true);
+    expect(inputArea.style.getPropertyValue("--composer-context-used")).toBe("40");
+  });
+
   it("shows a full danger ring while context compaction is in progress", () => {
     render(
       <ComposerHarness
@@ -143,7 +170,7 @@ describe("Composer send triggers", () => {
       />,
     );
 
-    const status = screen.getByLabelText(/压缩周期 100%/);
+    const status = screen.getByLabelText(/正在压缩上下文/);
     const inputArea = status.closest(".composer-input-area") as HTMLElement;
     expect(inputArea.classList.contains("is-context-danger")).toBe(true);
     expect(inputArea.style.getPropertyValue("--composer-context-used")).toBe("100");

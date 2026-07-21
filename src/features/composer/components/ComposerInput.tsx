@@ -84,8 +84,9 @@ type ComposerInputProps = {
   onReviewPromptConfirmCommit?: () => Promise<void>;
   onReviewPromptUpdateCustomInstructions?: (value: string) => void;
   onReviewPromptConfirmCustom?: () => Promise<void>;
-  contextCyclePercent?: number | null;
+  contextUsagePercent?: number | null;
   contextCompactionCount?: number;
+  contextCompactionInProgress?: boolean;
 };
 
 export function ComposerInput({
@@ -145,8 +146,9 @@ export function ComposerInput({
   onReviewPromptConfirmCommit,
   onReviewPromptUpdateCustomInstructions,
   onReviewPromptConfirmCustom,
-  contextCyclePercent = null,
+  contextUsagePercent = null,
   contextCompactionCount = 0,
+  contextCompactionInProgress = false,
 }: ComposerInputProps) {
   const { t } = useI18n();
   const suggestionListRef = useRef<HTMLDivElement | null>(null);
@@ -226,15 +228,15 @@ export function ComposerInput({
     onOpenDictationSettings,
   });
   const boundedContextCyclePercent =
-    contextCyclePercent === null
+    contextUsagePercent === null
       ? null
-      : Math.min(100, Math.max(0, Math.round(contextCyclePercent)));
+      : Math.min(100, Math.max(0, Math.round(contextUsagePercent)));
   const contextStatus = useMemo(() => {
     if (boundedContextCyclePercent === null) {
       return {
         className: "is-context-unknown",
         color: "var(--cm-border-heavy)",
-        label: t("composer.contextCycleEmpty"),
+        label: t("composer.contextUsageEmpty"),
       };
     }
     const className =
@@ -252,9 +254,11 @@ export function ComposerInput({
     return {
       className,
       color,
-      label: `${t("composer.contextCyclePrefix")} ${boundedContextCyclePercent}%`,
+      label: contextCompactionInProgress
+        ? t("composer.contextCompacting")
+        : `${t("composer.contextUsagePrefix")} ${boundedContextCyclePercent}%`,
     };
-  }, [boundedContextCyclePercent, t]);
+  }, [boundedContextCyclePercent, contextCompactionInProgress, t]);
   const contextCompactionLabel = t("composer.contextCompactionsPrefix").replace(
     "{count}",
     String(contextCompactionCount),
