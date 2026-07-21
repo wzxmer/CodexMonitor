@@ -178,7 +178,7 @@ mod tests {
             source_id: "source-a".to_string(),
             thread_id: "thread-1".to_string(),
             source_kind: Some("vscode".to_string()),
-            cwd: Some(r"D:\Project\CodexMonitor".to_string()),
+            cwd: Some(r"D:\Project\ThreadFleet".to_string()),
             title: "Session".to_string(),
             preview: None,
             created_at: Some(1),

@@ -645,50 +645,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codex-monitor"
-version = "0.7.93"
-dependencies = [
- "base64 0.22.1",
- "block2",
- "chrono",
- "cpal",
- "fix-path-env",
- "fontdb",
- "futures-util",
- "git2",
- "ignore",
- "libc",
- "objc2",
- "objc2-app-kit",
- "objc2-av-foundation",
- "objc2-foundation",
- "portable-pty",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "sha2",
- "shell-words",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-dialog",
- "tauri-plugin-liquid-glass",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "tauri-plugin-process",
- "tauri-plugin-updater",
- "tauri-plugin-window-state",
- "tokio",
- "tokio-tungstenite",
- "toml_edit 0.20.2",
- "uuid",
- "whisper-rs",
- "windows-sys 0.59.0",
- "winreg 0.52.0",
- "zip",
-]
-
-[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5449,6 +5405,50 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.114",
+]
+
+[[package]]
+name = "threadfleet"
+version = "0.7.93"
+dependencies = [
+ "base64 0.22.1",
+ "block2",
+ "chrono",
+ "cpal",
+ "fix-path-env",
+ "fontdb",
+ "futures-util",
+ "git2",
+ "ignore",
+ "libc",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-av-foundation",
+ "objc2-foundation",
+ "portable-pty",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
+ "shell-words",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-dialog",
+ "tauri-plugin-liquid-glass",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tauri-plugin-process",
+ "tauri-plugin-updater",
+ "tauri-plugin-window-state",
+ "tokio",
+ "tokio-tungstenite",
+ "toml_edit 0.20.2",
+ "uuid",
+ "whisper-rs",
+ "windows-sys 0.59.0",
+ "winreg 0.52.0",
+ "zip",
 ]
 
 [[package]]

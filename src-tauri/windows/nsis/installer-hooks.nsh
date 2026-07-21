@@ -1,6 +1,6 @@
 !define CM_UNINSTALL_ROOT "Software\Microsoft\Windows\CurrentVersion\Uninstall"
-!define CM_MSI_DISPLAY_NAME "Codex Monitor"
-!define CM_MSI_BLOCK_MESSAGE "A Windows Installer (MSI) registration for Codex Monitor already exists. NSIS installation is blocked to protect existing files. Continue updates with the .msi package or repair installer ownership first."
+!define CM_MSI_DISPLAY_NAME "ThreadFleet"
+!define CM_MSI_BLOCK_MESSAGE "A Windows Installer (MSI) registration for ThreadFleet already exists. NSIS installation is blocked to protect existing files. Continue updates with the .msi package or repair installer ownership first."
 
 !macro CM_SCAN_MSI_REGISTRATION ROOT VIEW LABEL_PREFIX
   SetRegView ${VIEW}

@@ -46,7 +46,7 @@ vi.mock("@services/tauri", () => ({
 
 const workspace: WorkspaceInfo = {
   id: "ws-1",
-  name: "CodexMonitor",
+  name: "ThreadFleet",
   path: "/tmp/codex",
   connected: true,
   settings: { sidebarCollapsed: false },
@@ -114,7 +114,7 @@ describe("useThreads app-server markdown code block scroll", () => {
         id: "thread-2-wide-code-block",
         text: [
           "```text",
-          "D:/DevKnowledgeBase/20-项目知识/CodexMonitor/BUG/CodexMonitor-Markdown表格横向滚动位置被重置.md",
+          "D:/DevKnowledgeBase/20-项目知识/ThreadFleet/BUG/ThreadFleet-Markdown表格横向滚动位置被重置.md",
           "Use diagnose and ui-regression-guardian to verify the visible code block scroll state.",
           "```",
         ].join("\n"),

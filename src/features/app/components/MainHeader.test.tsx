@@ -12,8 +12,8 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 
 const workspace: WorkspaceInfo = {
   id: "workspace-1",
-  name: "CodexMonitor",
-  path: "D:/Project/CodexMonitor",
+  name: "ThreadFleet",
+  path: "D:/Project/ThreadFleet",
   connected: true,
   settings: {
     sidebarCollapsed: false,
@@ -51,12 +51,12 @@ describe("MainHeader", () => {
     renderHeader({ titleOverride: "Fix Windows colors" });
 
     expect(screen.getByText("Fix Windows colors")).toBeTruthy();
-    expect(screen.queryByText("CodexMonitor")).toBeNull();
+    expect(screen.queryByText("ThreadFleet")).toBeNull();
   });
 
   it("falls back to the workspace name when no thread title exists", () => {
     renderHeader({ titleOverride: "   " });
 
-    expect(screen.getByText("CodexMonitor")).toBeTruthy();
+    expect(screen.getByText("ThreadFleet")).toBeTruthy();
   });
 });

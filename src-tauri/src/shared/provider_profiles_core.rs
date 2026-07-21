@@ -135,7 +135,7 @@ pub(crate) async fn provider_model_list_core(
             .header(reqwest::header::CACHE_CONTROL, "no-cache")
             .header(
                 reqwest::header::USER_AGENT,
-                concat!("CodexMonitor/", env!("CARGO_PKG_VERSION")),
+                concat!("ThreadFleet/", env!("CARGO_PKG_VERSION")),
             )
             .bearer_auth(api_key)
             .send()
@@ -460,7 +460,7 @@ fn merge_profile_codex_args(
         .ok_or_else(|| "Provider profiles require a provider base URL".to_string())?;
     for value in [
         format!("model_provider={CODEX_MONITOR_PROVIDER_ID}"),
-        format!("model_providers.{CODEX_MONITOR_PROVIDER_ID}.name=CodexMonitor"),
+        format!("model_providers.{CODEX_MONITOR_PROVIDER_ID}.name=ThreadFleet"),
         format!("model_providers.{CODEX_MONITOR_PROVIDER_ID}.base_url={runtime_base_url}"),
         format!(
             "model_providers.{CODEX_MONITOR_PROVIDER_ID}.env_key={CODEX_MONITOR_PROVIDER_KEY_ENV}"

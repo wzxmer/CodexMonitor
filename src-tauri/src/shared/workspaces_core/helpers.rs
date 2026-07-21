@@ -227,8 +227,8 @@ mod tests {
     #[test]
     fn workspace_path_to_string_strips_windows_namespace_prefixes() {
         assert_eq!(
-            workspace_path_to_string(&PathBuf::from(r"\\?\I:\gpt-projects\CodexMonitor")),
-            r"I:\gpt-projects\CodexMonitor"
+            workspace_path_to_string(&PathBuf::from(r"\\?\I:\gpt-projects\ThreadFleet")),
+            r"I:\gpt-projects\ThreadFleet"
         );
     }
 }

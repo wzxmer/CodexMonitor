@@ -44,7 +44,7 @@ function latestReleaseResponse(version: string, assets = releaseAssets()) {
     status: 200,
     json: async () => ({
       tag_name: `v${version}`,
-      html_url: `https://github.com/wzxmer/CodexMonitor/releases/tag/v${version}`,
+      html_url: `https://github.com/wzxmer/ThreadFleet/releases/tag/v${version}`,
       body: "## Latest",
       assets,
     }),
@@ -54,21 +54,21 @@ function latestReleaseResponse(version: string, assets = releaseAssets()) {
 function releaseAssets() {
   return [
     {
-      name: "CodexMonitor_9.9.9_x64_en-US.msi",
+      name: "ThreadFleet_9.9.9_x64_en-US.msi",
       browser_download_url:
-        "https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x64_en-US.msi",
+        "https://github.com/wzxmer/ThreadFleet/releases/download/v9.9.9/ThreadFleet_9.9.9_x64_en-US.msi",
       size: 100,
     },
     {
-      name: "CodexMonitor_9.9.9_aarch64.dmg",
+      name: "ThreadFleet_9.9.9_aarch64.dmg",
       browser_download_url:
-        "https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_aarch64.dmg",
+        "https://github.com/wzxmer/ThreadFleet/releases/download/v9.9.9/ThreadFleet_9.9.9_aarch64.dmg",
       size: 100,
     },
     {
-      name: "codex-monitor_9.9.9_amd64.AppImage",
+      name: "threadfleet_9.9.9_amd64.AppImage",
       browser_download_url:
-        "https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/codex-monitor_9.9.9_amd64.AppImage",
+        "https://github.com/wzxmer/ThreadFleet/releases/download/v9.9.9/threadfleet_9.9.9_amd64.AppImage",
       size: 100,
     },
   ];
@@ -173,15 +173,15 @@ describe("useUpdater", () => {
     getReleasePlatformMock.mockResolvedValue("macos-unknown");
     fetchMock.mockResolvedValue(latestReleaseResponse("9.9.9", [
       {
-        name: "CodexMonitor_9.9.9_x86_64.dmg",
+        name: "ThreadFleet_9.9.9_x86_64.dmg",
         browser_download_url:
-          "https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x86_64.dmg",
+          "https://github.com/wzxmer/ThreadFleet/releases/download/v9.9.9/ThreadFleet_9.9.9_x86_64.dmg",
         size: 100,
       },
       {
-        name: "CodexMonitor_9.9.9_aarch64.dmg",
+        name: "ThreadFleet_9.9.9_aarch64.dmg",
         browser_download_url:
-          "https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_aarch64.dmg",
+          "https://github.com/wzxmer/ThreadFleet/releases/download/v9.9.9/ThreadFleet_9.9.9_aarch64.dmg",
         size: 100,
       },
     ]));

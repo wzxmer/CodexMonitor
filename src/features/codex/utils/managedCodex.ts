@@ -17,7 +17,7 @@ type ManagedCodexManifest = {
 };
 
 const DEFAULT_MANIFEST_URL =
-  "https://github.com/wzxmer/CodexMonitor/releases/latest/download/codex-cli-latest.json";
+  "https://github.com/wzxmer/ThreadFleet/releases/latest/download/codex-cli-latest.json";
 
 export const MANAGED_CODEX_MANIFEST_URLS = [
   import.meta.env.VITE_TENCENT_CODEX_CLI_MANIFEST_URL,

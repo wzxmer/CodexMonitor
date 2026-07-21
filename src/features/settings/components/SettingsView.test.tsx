@@ -647,19 +647,19 @@ describe("SettingsView About", () => {
 
     expect(
       screen.getByText(
-        "启用后，汉化版 CodexMonitor 启动时会检查新版本。默认使用 GitHub，发布者配置国内镜像后会自动回退。",
+        "启用后，ThreadFleet 启动时会检查新版本。默认使用 GitHub，发布者配置国内镜像后会自动回退。",
       ),
     ).toBeTruthy();
     expect(screen.getByText("项目仓库：")).toBeTruthy();
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "https://github.com/wzxmer/CodexMonitor",
+        name: "https://github.com/wzxmer/ThreadFleet",
       }),
     );
 
     expect(openUrlMock).toHaveBeenCalledWith(
-      "https://github.com/wzxmer/CodexMonitor",
+      "https://github.com/wzxmer/ThreadFleet",
     );
   });
 });
@@ -1019,7 +1019,7 @@ describe("SettingsView About", () => {
       status: 200,
       json: async () => ({
         tag_name: `v${__APP_VERSION__}`,
-        html_url: `https://github.com/wzxmer/CodexMonitor/releases/tag/v${__APP_VERSION__}`,
+        html_url: `https://github.com/wzxmer/ThreadFleet/releases/tag/v${__APP_VERSION__}`,
         assets: [],
       }),
     } as Response);
@@ -1567,7 +1567,7 @@ describe("SettingsView Codex section", () => {
       expect(screen.queryByRole("button", { name: "启动守护进程" })).toBeNull();
       expect(screen.queryByRole("button", { name: "检测 Tailscale" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Start Runner" })).toBeNull();
-      expect(screen.getByText(/从桌面端 CodexMonitor 获取 Tailscale 主机名和令牌/)).toBeTruthy();
+      expect(screen.getByText(/从桌面端 ThreadFleet 获取 Tailscale 主机名和令牌/)).toBeTruthy();
     } finally {
       if (originalPlatformDescriptor) {
         Object.defineProperty(window.navigator, "platform", originalPlatformDescriptor);
@@ -1806,7 +1806,7 @@ describe("SettingsView Codex defaults", () => {
     result: { data: models },
   });
 
-  it("explains that provider profiles only affect CodexMonitor-launched sessions", () => {
+  it("explains that provider profiles only affect ThreadFleet-launched sessions", () => {
     renderCodexSection({ initialSection: "providers" });
 
     expect(screen.getByText("模型服务商配置")).toBeTruthy();
@@ -1816,7 +1816,7 @@ describe("SettingsView Codex defaults", () => {
     expect(screen.getByText("沿用本机 Codex 配置")).toBeTruthy();
     expect(
       screen.getAllByText(
-        /只覆盖 CodexMonitor 新启动会话的 API 密钥、URL、模型和上下文，不修改 CODEX_HOME、sessions、MCP、agents 或全局 config\.toml/,
+        /只覆盖 ThreadFleet 新启动会话的 API 密钥、URL、模型和上下文，不修改 CODEX_HOME、sessions、MCP、agents 或全局 config\.toml/,
       ).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByPlaceholderText(/倍率/)).toBeNull();

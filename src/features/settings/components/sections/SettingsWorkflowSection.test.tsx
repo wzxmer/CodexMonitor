@@ -38,7 +38,7 @@ vi.mock("@services/tauri", () => ({
 
 function renderSection({
   mode = "active",
-  workspaceName = "CodexMonitor",
+  workspaceName = "ThreadFleet",
   refreshing = false,
   registryLastRefreshAtMs = 1_700_000_000_000,
 }: {

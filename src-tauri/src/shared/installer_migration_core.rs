@@ -372,7 +372,7 @@ mod tests {
     fn valid_intent(family: InstallerFamily) -> MigrationIntent {
         let (artifact_path, scope) = match family {
             InstallerFamily::Msi => (
-                r"C:\ProgramData\CodexMonitor\target.msi",
+                r"C:\ProgramData\ThreadFleet\target.msi",
                 InstallerScope::PerMachine,
             ),
             InstallerFamily::Nsis => (r"C:\Users\tester\target.exe", InstallerScope::PerUser),
@@ -572,8 +572,8 @@ mod tests {
     #[test]
     fn rejects_windows_device_namespace_artifact_paths() {
         for path in [
-            r"\\?\C:\ProgramData\CodexMonitor\target.msi",
-            r"\\.\C:\ProgramData\CodexMonitor\target.msi",
+            r"\\?\C:\ProgramData\ThreadFleet\target.msi",
+            r"\\.\C:\ProgramData\ThreadFleet\target.msi",
         ] {
             let mut intent = valid_intent(InstallerFamily::Msi);
             intent.target.artifact_path = path.into();
@@ -587,7 +587,7 @@ mod tests {
     #[test]
     fn rejects_alternate_data_stream_artifact_paths() {
         for path in [
-            r"C:\ProgramData\CodexMonitor\target.msi:payload.msi",
+            r"C:\ProgramData\ThreadFleet\target.msi:payload.msi",
             r"\\server\share\target.msi:payload.msi",
         ] {
             let mut intent = valid_intent(InstallerFamily::Msi);

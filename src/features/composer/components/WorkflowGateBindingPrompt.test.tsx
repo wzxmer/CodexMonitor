@@ -34,7 +34,7 @@ const createStatus = (
     schemaVersion: 2,
     workflowId: "wf-thread-1",
     projectId: "codex-monitor",
-    workspace: "D:/Project/CodexMonitor",
+    workspace: "D:/Project/ThreadFleet",
     taskId: null,
     workItemPath: null,
     status: "active",

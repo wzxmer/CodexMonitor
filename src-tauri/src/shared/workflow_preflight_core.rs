@@ -1180,12 +1180,12 @@ mod tests {
     #[test]
     fn discovers_rules_and_ranks_project_knowledge_without_returning_task() {
         let root = temp_root("knowledge");
-        let workspace = root.join("CodexMonitor");
+        let workspace = root.join("ThreadFleet");
         let nested = workspace.join("src").join("feature");
         let knowledge = root
             .join("knowledge")
             .join("20-项目知识")
-            .join("CodexMonitor")
+            .join("ThreadFleet")
             .join("BUG");
         fs::create_dir_all(&nested).expect("nested workspace");
         fs::create_dir_all(&knowledge).expect("knowledge dir");
@@ -1199,7 +1199,7 @@ mod tests {
         let task = "排查模型列表刷新失败";
 
         let preview = build_preview(
-            "CodexMonitor",
+            "ThreadFleet",
             &workspace,
             task,
             "active".to_string(),
@@ -1213,7 +1213,7 @@ mod tests {
         assert_eq!(preview.knowledge_candidates[0].title, "模型刷新故障");
         assert!(!preview.knowledge_cache_hit);
         let cached = build_preview(
-            "CodexMonitor",
+            "ThreadFleet",
             &workspace,
             task,
             "active".to_string(),
@@ -1251,11 +1251,11 @@ mod tests {
     #[test]
     fn ignores_generic_fix_requests_but_keeps_specific_knowledge_matches() {
         let root = temp_root("knowledge-confidence");
-        let workspace = root.join("CodexMonitor");
+        let workspace = root.join("ThreadFleet");
         let knowledge = root
             .join("knowledge")
             .join("20-项目知识")
-            .join("CodexMonitor")
+            .join("ThreadFleet")
             .join("BUG");
         fs::create_dir_all(&workspace).expect("workspace");
         fs::create_dir_all(&knowledge).expect("knowledge dir");
@@ -1272,7 +1272,7 @@ mod tests {
         }
 
         let generic = build_preview(
-            "CodexMonitor",
+            "ThreadFleet",
             &workspace,
             "开始修复",
             "active".to_string(),
@@ -1287,7 +1287,7 @@ mod tests {
             .any(|fragment| fragment.source_id.starts_with("cm.knowledge.")));
 
         let broad_domain = build_preview(
-            "CodexMonitor",
+            "ThreadFleet",
             &workspace,
             "会话管理",
             "active".to_string(),
@@ -1298,7 +1298,7 @@ mod tests {
         assert!(broad_domain.knowledge_candidates.is_empty());
 
         let specific = build_preview(
-            "CodexMonitor",
+            "ThreadFleet",
             &workspace,
             "排查会话管理切换首次加载与布局修复",
             "active".to_string(),

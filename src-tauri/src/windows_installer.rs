@@ -5,7 +5,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const PRODUCT_NAME: &str = "Codex Monitor";
+const PRODUCT_NAME: &str = "ThreadFleet";
+const LEGACY_PRODUCT_NAME: &str = "Codex Monitor";
 const UNINSTALL_ROOT: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
 const LEGACY_SNAPSHOT_SCHEMA_VERSION: u32 = 2;
 const SNAPSHOT_SCHEMA_VERSION: u32 = 3;
@@ -248,6 +249,10 @@ fn raw_registry_string(record: &InstallerRecord, name: &str) -> Result<String, S
         .map_err(|error| format!("Invalid installer registry snapshot {name}: {error}"))
 }
 
+fn is_supported_product_name(value: &str) -> bool {
+    matches!(value, PRODUCT_NAME | LEGACY_PRODUCT_NAME)
+}
+
 fn validate_nsis_record_scope(record: &InstallerRecord) -> Result<PathBuf, String> {
     if record.locator.hive != RegistryHive::CurrentUser
         || record.family != InstallerFamily::Nsis
@@ -265,7 +270,7 @@ fn validate_nsis_record_scope(record: &InstallerRecord) -> Result<PathBuf, Strin
     if subkey.trim() != subkey {
         return Err("Recovery registry subkey is not canonical.".into());
     }
-    if raw_registry_string(record, "DisplayName")? != PRODUCT_NAME {
+    if !is_supported_product_name(&raw_registry_string(record, "DisplayName")?) {
         return Err("Recovery registry snapshot has a different product name.".into());
     }
     let raw_uninstall = raw_registry_string(record, "UninstallString")?;
@@ -468,7 +473,7 @@ trait RepairBackend {
         transaction_id: &str,
         index: usize,
     ) -> Result<PathBuf, String>;
-    fn canonical_nsis_shortcut_path(&self) -> Result<Option<PathBuf>, String>;
+    fn allowed_nsis_shortcut_paths(&self) -> Result<Vec<PathBuf>, String>;
 }
 
 struct RepairEngine<B> {
@@ -785,7 +790,7 @@ impl<B: RepairBackend> RepairEngine<B> {
             return Err("Recovery uninstaller is not beside the current executable.".into());
         }
 
-        let canonical_shortcut = self.backend.canonical_nsis_shortcut_path()?;
+        let allowed_shortcuts = self.backend.allowed_nsis_shortcut_paths()?;
         let mut roles = BTreeMap::<String, usize>::new();
         let mut source_paths = std::collections::BTreeSet::new();
         let mut quarantine_paths = std::collections::BTreeSet::new();
@@ -818,10 +823,9 @@ impl<B: RepairBackend> RepairEngine<B> {
                     if normalize_path(source) == normalize_path(&uninstall_path)
                         && file.source.shortcut_target.is_none() => {}
                 "nsisShortcut" => {
-                    let expected_shortcut = canonical_shortcut
-                        .as_deref()
-                        .ok_or("Recovery shortcut scope cannot be resolved.")?;
-                    if normalize_path(source) != normalize_path(expected_shortcut)
+                    if !allowed_shortcuts
+                        .iter()
+                        .any(|expected| normalize_path(source) == normalize_path(expected))
                         || file
                             .source
                             .shortcut_target
@@ -836,7 +840,7 @@ impl<B: RepairBackend> RepairEngine<B> {
             }
         }
         if roles.get("nsisUninstaller") != Some(&1)
-            || roles.get("nsisShortcut").copied().unwrap_or(0) > 1
+            || roles.get("nsisShortcut").copied().unwrap_or(0) > 2
             || roles.len() > 2
         {
             return Err("Recovery file roles are missing or duplicated.".into());
@@ -1061,7 +1065,7 @@ fn build_repair_plan(observation: &SystemObservation) -> Result<RepairPlan, Vec<
         .iter()
         .any(|record| record.family == InstallerFamily::Unknown)
     {
-        blockers.push("An unrecognized Codex Monitor installer registration exists.".into());
+        blockers.push("An unrecognized ThreadFleet installer registration exists.".into());
     }
     if msi.len() != 1 {
         blockers.push("Repair requires exactly one MSI registration.".into());
@@ -1492,7 +1496,12 @@ mod platform {
                 let key = uninstall
                     .open_subkey_with_flags(&subkey, KEY_READ | view_flag(view))
                     .map_err(|error| error.to_string())?;
-                if key.get_value::<String, _>("DisplayName").ok().as_deref() != Some(PRODUCT_NAME) {
+                if !key
+                    .get_value::<String, _>("DisplayName")
+                    .ok()
+                    .as_deref()
+                    .is_some_and(is_supported_product_name)
+                {
                     continue;
                 }
                 let mut values = BTreeMap::new();
@@ -1617,18 +1626,21 @@ mod platform {
                 }
             }
             if let Some(app_data) = std::env::var_os("APPDATA") {
-                let shortcut = PathBuf::from(app_data)
-                    .join(r"Microsoft\Windows\Start Menu\Programs\Codex Monitor.lnk");
-                match self.inspect_file("nsisShortcut", &shortcut) {
-                    Ok(Some(file)) => {
-                        files.push(file);
-                        inspection_errors.push(
-                            "A legacy NSIS shortcut exists, but this build cannot verify its Shell Link target safely."
-                                .into(),
-                        );
+                let programs =
+                    PathBuf::from(app_data).join(r"Microsoft\Windows\Start Menu\Programs");
+                for shortcut_name in ["ThreadFleet.lnk", "Codex Monitor.lnk"] {
+                    let shortcut = programs.join(shortcut_name);
+                    match self.inspect_file("nsisShortcut", &shortcut) {
+                        Ok(Some(file)) => {
+                            files.push(file);
+                            inspection_errors.push(
+                                "An NSIS shortcut exists, but this build cannot verify its Shell Link target safely."
+                                    .into(),
+                            );
+                        }
+                        Ok(None) => {}
+                        Err(error) => inspection_errors.push(error),
                     }
-                    Ok(None) => {}
-                    Err(error) => inspection_errors.push(error),
                 }
             }
             Ok(SystemObservation {
@@ -1690,7 +1702,7 @@ mod platform {
                 return Ok(());
             }
             let current = self.find_exact_record(&record.locator)?.ok_or(
-                "The exact NSIS registration still exists but no longer matches Codex Monitor.",
+                "The exact NSIS registration still exists but no longer matches ThreadFleet.",
             )?;
             if record_digest(&current) != record_digest(record) {
                 return Err("NSIS registration changed before deletion.".into());
@@ -1818,11 +1830,15 @@ mod platform {
                 .join(format!("{index}-{}", file_name.to_string_lossy())))
         }
 
-        fn canonical_nsis_shortcut_path(&self) -> Result<Option<PathBuf>, String> {
-            Ok(std::env::var_os("APPDATA").map(|app_data| {
-                PathBuf::from(app_data)
-                    .join(r"Microsoft\Windows\Start Menu\Programs\Codex Monitor.lnk")
-            }))
+        fn allowed_nsis_shortcut_paths(&self) -> Result<Vec<PathBuf>, String> {
+            let Some(app_data) = std::env::var_os("APPDATA") else {
+                return Ok(Vec::new());
+            };
+            let programs = PathBuf::from(app_data).join(r"Microsoft\Windows\Start Menu\Programs");
+            Ok(["ThreadFleet.lnk", "Codex Monitor.lnk"]
+                .into_iter()
+                .map(|name| programs.join(name))
+                .collect())
         }
     }
 
@@ -2014,8 +2030,8 @@ mod tests {
 
     impl FakeBackend {
         fn healthy_mixed(include_shortcut: bool) -> Self {
-            let current_exe = r"C:\Users\Test\AppData\Local\Codex Monitor\codex-monitor.exe";
-            let uninstall = r"C:\Users\Test\AppData\Local\Codex Monitor\uninstall.exe";
+            let current_exe = r"C:\Users\Test\AppData\Local\ThreadFleet\threadfleet.exe";
+            let uninstall = r"C:\Users\Test\AppData\Local\ThreadFleet\uninstall.exe";
             let mut values = BTreeMap::new();
             for value_type in 0..=11 {
                 values.insert(
@@ -2043,7 +2059,7 @@ mod tests {
                 uninstall_string: Some(
                     "MsiExec.exe /I {12345678-1234-1234-1234-123456789ABC}".into(),
                 ),
-                install_location: Some(r"C:\Users\Test\AppData\Local\Codex Monitor".into()),
+                install_location: Some(r"C:\Users\Test\AppData\Local\ThreadFleet".into()),
                 product_code: Some("{12345678-1234-1234-1234-123456789ABC}".into()),
                 has_subkeys: false,
                 values: msi_values,
@@ -2052,12 +2068,12 @@ mod tests {
                 locator: RegistryLocator {
                     hive: RegistryHive::CurrentUser,
                     view: RegistryView::Registry64,
-                    key_path: format!(r"{UNINSTALL_ROOT}\Codex Monitor"),
+                    key_path: format!(r"{UNINSTALL_ROOT}\ThreadFleet"),
                 },
                 family: InstallerFamily::Nsis,
                 display_version: Some("1.2.2".into()),
                 uninstall_string: Some(format!("\"{uninstall}\"")),
-                install_location: Some(r"C:\Users\Test\AppData\Local\Codex Monitor".into()),
+                install_location: Some(r"C:\Users\Test\AppData\Local\ThreadFleet".into()),
                 product_code: None,
                 has_subkeys: false,
                 values,
@@ -2069,7 +2085,7 @@ mod tests {
             if include_shortcut {
                 files.push(file(
                     "nsisShortcut",
-                    r"C:\Users\Test\Start Menu\Codex Monitor.lnk",
+                    r"C:\Users\Test\Start Menu\ThreadFleet.lnk",
                     Some(current_exe),
                 ));
             }
@@ -2276,10 +2292,11 @@ mod tests {
             )))
         }
 
-        fn canonical_nsis_shortcut_path(&self) -> Result<Option<PathBuf>, String> {
-            Ok(Some(PathBuf::from(
-                r"C:\Users\Test\Start Menu\Codex Monitor.lnk",
-            )))
+        fn allowed_nsis_shortcut_paths(&self) -> Result<Vec<PathBuf>, String> {
+            Ok(vec![
+                PathBuf::from(r"C:\Users\Test\Start Menu\ThreadFleet.lnk"),
+                PathBuf::from(r"C:\Users\Test\Start Menu\Codex Monitor.lnk"),
+            ])
         }
     }
 
@@ -2361,6 +2378,43 @@ mod tests {
         assert_eq!(engine.backend.observation, observation);
         assert_eq!(engine.backend.manifests, manifests);
         assert_eq!(engine.backend.mutations, mutations);
+    }
+
+    #[test]
+    fn supported_product_names_include_current_and_legacy_names_only() {
+        assert!(is_supported_product_name(PRODUCT_NAME));
+        assert!(is_supported_product_name(LEGACY_PRODUCT_NAME));
+        assert!(!is_supported_product_name("CodexMonitor"));
+        assert!(!is_supported_product_name("ThreadFleet Preview"));
+    }
+
+    #[test]
+    fn legacy_nsis_registration_and_shortcut_remain_repairable() {
+        let mut backend = FakeBackend::healthy_mixed(true);
+        let nsis = backend
+            .observation
+            .records
+            .iter_mut()
+            .find(|record| record.family == InstallerFamily::Nsis)
+            .unwrap();
+        nsis.locator.key_path = format!(r"{UNINSTALL_ROOT}\Codex Monitor");
+        nsis.values
+            .insert("DisplayName".into(), raw_reg_sz(LEGACY_PRODUCT_NAME));
+        backend
+            .observation
+            .files
+            .iter_mut()
+            .find(|file| file.role == "nsisShortcut")
+            .unwrap()
+            .path = r"C:\Users\Test\Start Menu\Codex Monitor.lnk".into();
+
+        let pre = observation_fingerprint(&backend.observation);
+        let mut engine = RepairEngine::new(backend, "1.2.3");
+        assert_eq!(engine.preview().status, "repairable");
+        assert_eq!(
+            engine.apply(&pre, "operation-legacy-brand").unwrap().status,
+            "completed"
+        );
     }
 
     #[test]
@@ -2860,7 +2914,7 @@ mod tests {
                 manifest.nsis_record.locator.hive = RegistryHive::LocalMachine;
             } else {
                 manifest.nsis_record.locator.key_path =
-                    r"SOFTWARE\Codex Monitor\OutsideUninstall".into();
+                    r"SOFTWARE\ThreadFleet\OutsideUninstall".into();
             }
             assert_untrusted_recovery_is_zero_write(backend, manifest);
         }

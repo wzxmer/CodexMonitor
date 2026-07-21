@@ -218,9 +218,9 @@ if [[ "$SKIP_BUILD" -eq 0 ]]; then
   "${BUILD_CMD[@]}"
 fi
 
-APP_PATH="src-tauri/gen/apple/build/arm64/Codex Monitor.app"
+APP_PATH="src-tauri/gen/apple/build/arm64/ThreadFleet.app"
 if [[ ! -d "$APP_PATH" ]]; then
-  APP_PATH="$(find src-tauri/gen/apple/build -maxdepth 4 -type d -name 'Codex Monitor.app' | head -n 1 || true)"
+  APP_PATH="$(find src-tauri/gen/apple/build -maxdepth 4 -type d -name 'ThreadFleet.app' | head -n 1 || true)"
 fi
 
 if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then

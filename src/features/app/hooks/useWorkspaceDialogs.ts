@@ -271,7 +271,7 @@ export function useWorkspaceDialogs() {
           : "";
 
       return ask(
-        `确定删除 "${workspaceName}"？\n\n这会从 CodexMonitor 移除此项目。${detail}`,
+        `确定删除 "${workspaceName}"？\n\n这会从 ThreadFleet 移除此项目。${detail}`,
         {
           title: "删除项目",
           kind: "warning",
@@ -288,7 +288,7 @@ export function useWorkspaceDialogs() {
       const workspace = workspaces.find((entry) => entry.id === workspaceId);
       const workspaceName = workspace?.name || "这个工作树";
       return ask(
-        `确定删除 "${workspaceName}"？\n\n这会关闭 Agent，移除工作树，并从 CodexMonitor 删除。`,
+        `确定删除 "${workspaceName}"？\n\n这会关闭 Agent，移除工作树，并从 ThreadFleet 删除。`,
         {
           title: "删除工作树",
           kind: "warning",

@@ -37,12 +37,12 @@ jobs:
       RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
       VITE_TENCENT_UPDATE_MANIFEST_URL: ${{ vars.TENCENT_UPDATE_MANIFEST_URL }}
       VITE_ALIYUN_UPDATE_MANIFEST_URL: ${{ vars.ALIYUN_UPDATE_MANIFEST_URL }}
-      CODEXMONITOR_TENCENT_UPDATE_BASE_URL: ${{ vars.TENCENT_UPDATE_BASE_URL }}
-      CODEXMONITOR_ALIYUN_UPDATE_BASE_URL: ${{ vars.ALIYUN_UPDATE_BASE_URL }}
+      THREADFLEET_TENCENT_UPDATE_BASE_URL: ${{ vars.TENCENT_UPDATE_BASE_URL }}
+      THREADFLEET_ALIYUN_UPDATE_BASE_URL: ${{ vars.ALIYUN_UPDATE_BASE_URL }}
       VITE_TENCENT_CODEX_CLI_MANIFEST_URL: ${{ vars.TENCENT_CODEX_CLI_MANIFEST_URL }}
       VITE_ALIYUN_CODEX_CLI_MANIFEST_URL: ${{ vars.ALIYUN_CODEX_CLI_MANIFEST_URL }}
-      CODEXMONITOR_TENCENT_CODEX_CLI_BASE_URL: ${{ vars.TENCENT_CODEX_CLI_BASE_URL }}
-      CODEXMONITOR_ALIYUN_CODEX_CLI_BASE_URL: ${{ vars.ALIYUN_CODEX_CLI_BASE_URL }}
+      THREADFLEET_TENCENT_CODEX_CLI_BASE_URL: ${{ vars.TENCENT_CODEX_CLI_BASE_URL }}
+      THREADFLEET_ALIYUN_CODEX_CLI_BASE_URL: ${{ vars.ALIYUN_CODEX_CLI_BASE_URL }}
     strategy:
       fail-fast: false
       matrix:
@@ -116,13 +116,13 @@ jobs:
           path = Path("src-tauri/Cargo.lock")
           content = path.read_text()
           content, count = re.subn(
-            r'(?ms)(\[\[package\]\]\nname = "codex-monitor"\nversion = ")[^"]+(")',
+            r'(?ms)(\[\[package\]\]\nname = "threadfleet"\nversion = ")[^"]+(")',
             r'\g<1>$RELEASE_VERSION\2',
             content,
             count=1,
           )
           if count != 1:
-            raise SystemExit("Failed to update codex-monitor version in src-tauri/Cargo.lock")
+            raise SystemExit("Failed to update threadfleet version in src-tauri/Cargo.lock")
           path.write_text(content)
           PY
 
@@ -172,7 +172,7 @@ jobs:
       - name: Ad-hoc sign macOS app bundle
         run: |
           set -euo pipefail
-          APP_PATH="src-tauri/target/${{ matrix.target }}/release/bundle/macos/Codex Monitor.app"
+          APP_PATH="src-tauri/target/${{ matrix.target }}/release/bundle/macos/ThreadFleet.app"
           codesign \
             --force \
             --deep \
@@ -195,36 +195,36 @@ jobs:
           )
 
           mkdir -p release-artifacts release-artifacts/dmg-root
-          rm -rf "release-artifacts/dmg-root/Codex Monitor.app"
-          ditto "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Codex Monitor.app" \
-            "release-artifacts/dmg-root/Codex Monitor.app"
+          rm -rf "release-artifacts/dmg-root/ThreadFleet.app"
+          ditto "src-tauri/target/${{ matrix.target }}/release/bundle/macos/ThreadFleet.app" \
+            "release-artifacts/dmg-root/ThreadFleet.app"
           ln -s /Applications "release-artifacts/dmg-root/Applications"
           cat > "release-artifacts/dmg-root/安装与打开说明.txt" <<'EOF'
-          安装：将 Codex Monitor 拖入 Applications 文件夹。
+          安装：将 ThreadFleet 拖入 Applications 文件夹。
 
           本版本未使用 Apple Developer ID 公证。首次打开时：
-          1. 在“应用程序”中右键 Codex Monitor，选择“打开”。
+          1. 在“应用程序”中右键 ThreadFleet，选择“打开”。
           2. 如果仍被阻止，前往“系统设置 > 隐私与安全性”，点击“仍要打开”。
 
           正常情况下不需要执行终端命令。
           EOF
 
           ditto -c -k --keepParent \
-            "src-tauri/target/${{ matrix.target }}/release/bundle/macos/Codex Monitor.app" \
-            release-artifacts/CodexMonitor_${VERSION}_${{ matrix.arch }}.zip
+            "src-tauri/target/${{ matrix.target }}/release/bundle/macos/ThreadFleet.app" \
+            release-artifacts/ThreadFleet_${VERSION}_${{ matrix.arch }}.zip
 
-          hdiutil create -volname "Codex Monitor" \
+          hdiutil create -volname "ThreadFleet" \
             -srcfolder release-artifacts/dmg-root \
             -ov -format UDZO \
-            release-artifacts/CodexMonitor_${VERSION}_${{ matrix.arch }}.dmg
+            release-artifacts/ThreadFleet_${VERSION}_${{ matrix.arch }}.dmg
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-artifacts-${{ matrix.arch }}
           path: |
-            release-artifacts/CodexMonitor_*_${{ matrix.arch }}.zip
-            release-artifacts/CodexMonitor_*_${{ matrix.arch }}.dmg
+            release-artifacts/ThreadFleet_*_${{ matrix.arch }}.zip
+            release-artifacts/ThreadFleet_*_${{ matrix.arch }}.dmg
 
   build_linux:
     name: linux bundles (${{ matrix.arch }})
@@ -235,12 +235,12 @@ jobs:
       RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
       VITE_TENCENT_UPDATE_MANIFEST_URL: ${{ vars.TENCENT_UPDATE_MANIFEST_URL }}
       VITE_ALIYUN_UPDATE_MANIFEST_URL: ${{ vars.ALIYUN_UPDATE_MANIFEST_URL }}
-      CODEXMONITOR_TENCENT_UPDATE_BASE_URL: ${{ vars.TENCENT_UPDATE_BASE_URL }}
-      CODEXMONITOR_ALIYUN_UPDATE_BASE_URL: ${{ vars.ALIYUN_UPDATE_BASE_URL }}
+      THREADFLEET_TENCENT_UPDATE_BASE_URL: ${{ vars.TENCENT_UPDATE_BASE_URL }}
+      THREADFLEET_ALIYUN_UPDATE_BASE_URL: ${{ vars.ALIYUN_UPDATE_BASE_URL }}
       VITE_TENCENT_CODEX_CLI_MANIFEST_URL: ${{ vars.TENCENT_CODEX_CLI_MANIFEST_URL }}
       VITE_ALIYUN_CODEX_CLI_MANIFEST_URL: ${{ vars.ALIYUN_CODEX_CLI_MANIFEST_URL }}
-      CODEXMONITOR_TENCENT_CODEX_CLI_BASE_URL: ${{ vars.TENCENT_CODEX_CLI_BASE_URL }}
-      CODEXMONITOR_ALIYUN_CODEX_CLI_BASE_URL: ${{ vars.ALIYUN_CODEX_CLI_BASE_URL }}
+      THREADFLEET_TENCENT_CODEX_CLI_BASE_URL: ${{ vars.TENCENT_CODEX_CLI_BASE_URL }}
+      THREADFLEET_ALIYUN_CODEX_CLI_BASE_URL: ${{ vars.ALIYUN_CODEX_CLI_BASE_URL }}
     strategy:
       fail-fast: false
       matrix:
@@ -340,13 +340,13 @@ jobs:
           path = Path("src-tauri/Cargo.lock")
           content = path.read_text()
           content, count = re.subn(
-            r'(?ms)(\[\[package\]\]\nname = "codex-monitor"\nversion = ")[^"]+(")',
+            r'(?ms)(\[\[package\]\]\nname = "threadfleet"\nversion = ")[^"]+(")',
             r'\g<1>$RELEASE_VERSION\2',
             content,
             count=1,
           )
           if count != 1:
-            raise SystemExit("Failed to update codex-monitor version in src-tauri/Cargo.lock")
+            raise SystemExit("Failed to update threadfleet version in src-tauri/Cargo.lock")
           path.write_text(content)
           PY
 
@@ -396,12 +396,12 @@ jobs:
       RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
       VITE_TENCENT_UPDATE_MANIFEST_URL: ${{ vars.TENCENT_UPDATE_MANIFEST_URL }}
       VITE_ALIYUN_UPDATE_MANIFEST_URL: ${{ vars.ALIYUN_UPDATE_MANIFEST_URL }}
-      CODEXMONITOR_TENCENT_UPDATE_BASE_URL: ${{ vars.TENCENT_UPDATE_BASE_URL }}
-      CODEXMONITOR_ALIYUN_UPDATE_BASE_URL: ${{ vars.ALIYUN_UPDATE_BASE_URL }}
+      THREADFLEET_TENCENT_UPDATE_BASE_URL: ${{ vars.TENCENT_UPDATE_BASE_URL }}
+      THREADFLEET_ALIYUN_UPDATE_BASE_URL: ${{ vars.ALIYUN_UPDATE_BASE_URL }}
       VITE_TENCENT_CODEX_CLI_MANIFEST_URL: ${{ vars.TENCENT_CODEX_CLI_MANIFEST_URL }}
       VITE_ALIYUN_CODEX_CLI_MANIFEST_URL: ${{ vars.ALIYUN_CODEX_CLI_MANIFEST_URL }}
-      CODEXMONITOR_TENCENT_CODEX_CLI_BASE_URL: ${{ vars.TENCENT_CODEX_CLI_BASE_URL }}
-      CODEXMONITOR_ALIYUN_CODEX_CLI_BASE_URL: ${{ vars.ALIYUN_CODEX_CLI_BASE_URL }}
+      THREADFLEET_TENCENT_CODEX_CLI_BASE_URL: ${{ vars.TENCENT_CODEX_CLI_BASE_URL }}
+      THREADFLEET_ALIYUN_CODEX_CLI_BASE_URL: ${{ vars.ALIYUN_CODEX_CLI_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -462,13 +462,13 @@ jobs:
           path = Path("src-tauri/Cargo.lock")
           content = path.read_text()
           content, count = re.subn(
-            r'(?ms)(\[\[package\]\]\nname = "codex-monitor"\nversion = ")[^"]+(")',
+            r'(?ms)(\[\[package\]\]\nname = "threadfleet"\nversion = ")[^"]+(")',
             r'\g<1>$RELEASE_VERSION\2',
             content,
             count=1,
           )
           if count != 1:
-            raise SystemExit("Failed to update codex-monitor version in src-tauri/Cargo.lock")
+            raise SystemExit("Failed to update threadfleet version in src-tauri/Cargo.lock")
           path.write_text(content)
           PY
 
@@ -574,13 +574,13 @@ jobs:
           path = Path("src-tauri/Cargo.lock")
           content = path.read_text()
           content, count = re.subn(
-            r'(?ms)(\[\[package\]\]\nname = "codex-monitor"\nversion = ")[^"]+(")',
+            r'(?ms)(\[\[package\]\]\nname = "threadfleet"\nversion = ")[^"]+(")',
             r'\g<1>$RELEASE_VERSION\2',
             content,
             count=1,
           )
           if count != 1:
-            raise SystemExit("Failed to update codex-monitor version in src-tauri/Cargo.lock")
+            raise SystemExit("Failed to update threadfleet version in src-tauri/Cargo.lock")
           path.write_text(content)
           PY
 
@@ -721,7 +721,7 @@ jobs:
                   })
               manifest = {
                   "version": version,
-                  "htmlUrl": f"https://github.com/wzxmer/CodexMonitor/releases/tag/v{release_label_version}",
+                  "htmlUrl": f"https://github.com/wzxmer/ThreadFleet/releases/tag/v{release_label_version}",
                   "body": notes,
                   "assets": assets,
               }
@@ -752,7 +752,7 @@ jobs:
               headers={
                   "Accept": "application/vnd.github+json",
                   "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-                  "User-Agent": "CodexMonitor-release",
+                  "User-Agent": "ThreadFleet-release",
               },
           )
           with urllib.request.urlopen(request) as response:
@@ -772,7 +772,7 @@ jobs:
           packages = {}
           cm_version = os.environ["RELEASE_VERSION"]
           release_label_version = os.environ["RELEASE_LABEL_VERSION"]
-          github_base = f"https://github.com/wzxmer/CodexMonitor/releases/download/v{release_label_version}"
+          github_base = f"https://github.com/wzxmer/ThreadFleet/releases/download/v{release_label_version}"
           mirror_bases = [
               os.environ.get("TENCENT_CODEX_CLI_BASE_URL", "").strip().rstrip("/"),
               os.environ.get("ALIYUN_CODEX_CLI_BASE_URL", "").strip().rstrip("/"),
@@ -787,7 +787,7 @@ jobs:
               asset = candidates[0]
               download = urllib.request.Request(
                   asset["browser_download_url"],
-                  headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "User-Agent": "CodexMonitor-release"},
+                  headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "User-Agent": "ThreadFleet-release"},
               )
               with urllib.request.urlopen(download) as response:
                   archive_bytes = response.read()
@@ -858,8 +858,8 @@ jobs:
             --title "v${RELEASE_LABEL_VERSION}" \
             --notes-file release-artifacts/release-notes.md \
             --target "$GITHUB_SHA" \
-            release-artifacts/CodexMonitor_*_*.zip \
-            release-artifacts/CodexMonitor_*_*.dmg \
+            release-artifacts/ThreadFleet_*_*.zip \
+            release-artifacts/ThreadFleet_*_*.dmg \
             release-artifacts/codex-cli-latest.json \
             release-artifacts/codex-cli-packages/*.zip \
             "${appimages[@]}" \

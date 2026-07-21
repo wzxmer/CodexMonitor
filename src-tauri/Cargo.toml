@@ -1,10 +1,10 @@
 [package]
-name = "codex-monitor"
+name = "threadfleet"
 version = "0.7.93"
-description = "A Tauri App"
-authors = ["you"]
+description = "A desktop workspace for coordinating Codex agents"
+authors = ["wzxmer and ThreadFleet contributors"]
 edition = "2021"
-default-run = "codex-monitor"
+default-run = "threadfleet"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

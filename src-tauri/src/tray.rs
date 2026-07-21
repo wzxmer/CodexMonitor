@@ -58,7 +58,7 @@ pub(crate) struct TrayLabels {
 impl Default for TrayLabels {
     fn default() -> Self {
         Self {
-            open: "Open Codex Monitor".into(),
+            open: "Open ThreadFleet".into(),
             hide: "Hide Window".into(),
             check_updates: "Check for Updates...".into(),
             launch_at_startup: "Launch at Startup".into(),
@@ -132,7 +132,7 @@ pub(crate) fn initialize<R: Runtime>(
     #[cfg(target_os = "macos")]
     let builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
-        .tooltip("Codex Monitor")
+        .tooltip("ThreadFleet")
         .show_menu_on_left_click(false)
         .icon(load_tray_icon()?)
         .icon_as_template(true)
@@ -142,7 +142,7 @@ pub(crate) fn initialize<R: Runtime>(
     #[cfg(not(target_os = "macos"))]
     let builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
-        .tooltip("Codex Monitor")
+        .tooltip("ThreadFleet")
         .show_menu_on_left_click(false)
         .icon(load_tray_icon()?)
         .on_tray_icon_event(handle_tray_icon_event::<R>)

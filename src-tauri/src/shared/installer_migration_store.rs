@@ -915,7 +915,7 @@ mod tests {
             source: NsisSourceSnapshot {
                 ownership: ObservedOwnership::PureNsis,
                 root: SourceRootSnapshot {
-                    source_path: r"C:\Apps\Codex Monitor".into(),
+                    source_path: r"C:\Apps\ThreadFleet".into(),
                     backup_path: r"C:\Migration\source".into(),
                     tree_sha256: HASH.into(),
                 },
@@ -933,7 +933,7 @@ mod tests {
                 artifact_sha256: HASH.into(),
                 version: "0.7.91".into(),
                 product_code: "{AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE}".into(),
-                expected_install_root: r"C:\Apps\Codex Monitor".into(),
+                expected_install_root: r"C:\Apps\ThreadFleet".into(),
                 expected_executable_sha256: HASH.into(),
             },
             pending_metadata_index: None,

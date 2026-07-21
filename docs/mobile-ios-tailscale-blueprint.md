@@ -1,6 +1,6 @@
-# CodexMonitor iOS Remote Blueprint (Tailscale + TCP)
+# ThreadFleet iOS Remote Blueprint (Tailscale + TCP)
 
-This document is the canonical runbook for iOS remote usage with a desktop-hosted CodexMonitor backend over Tailscale.
+This document is the canonical runbook for iOS remote usage with a desktop-hosted ThreadFleet backend over Tailscale.
 
 ## Scope
 
@@ -11,21 +11,21 @@ This document is the canonical runbook for iOS remote usage with a desktop-hoste
 
 ## Current Architecture
 
-1. Desktop CodexMonitor hosts the daemon and executes Codex workflows.
-2. iOS CodexMonitor connects to the desktop daemon using `remoteBackendHost` + token.
+1. Desktop ThreadFleet hosts the daemon and executes Codex workflows.
+2. iOS ThreadFleet connects to the desktop daemon using `remoteBackendHost` + token.
 3. Transport is TCP only (`remoteBackendProvider = "tcp"`).
 4. Tailscale is used as the network path between iOS and desktop.
 
 ## Prerequisites
 
 - Desktop and iPhone are signed into the same Tailscale tailnet.
-- Desktop CodexMonitor is installed and able to run local workspaces.
+- Desktop ThreadFleet is installed and able to run local workspaces.
 - iOS build/runtime is available (simulator or device).
 - A non-empty remote backend token is configured.
 
 ## Desktop Setup (Source of Truth)
 
-In desktop CodexMonitor:
+In desktop ThreadFleet:
 
 1. Open `Settings > Server`.
 2. Set `Remote backend token`.
@@ -49,7 +49,7 @@ Headless alternative (no desktop UI required):
 
 ## iOS Setup
 
-In iOS CodexMonitor:
+In iOS ThreadFleet:
 
 1. Open `Settings > Server` (or the mobile setup wizard).
 2. Enter the desktop Tailscale host (including port).

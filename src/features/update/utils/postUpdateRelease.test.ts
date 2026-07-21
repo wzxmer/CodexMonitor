@@ -21,19 +21,19 @@ describe("fetchLatestReleaseUpdate", () => {
       .mockResolvedValueOnce(response({
         version: "9.9.9",
         assets: [{
-          name: "CodexMonitor_9.9.9_x64.msi",
+          name: "ThreadFleet_9.9.9_x64.msi",
           size: 100,
           sha256: checksum,
-          url: "https://cos.example.com/v9.9.9/CodexMonitor_9.9.9_x64.msi",
+          url: "https://cos.example.com/v9.9.9/ThreadFleet_9.9.9_x64.msi",
         }],
       }))
       .mockResolvedValueOnce(response({
         version: "9.9.9",
         assets: [{
-          name: "CodexMonitor_9.9.9_x64.msi",
+          name: "ThreadFleet_9.9.9_x64.msi",
           size: 100,
           sha256: checksum,
-          url: "https://oss.example.com/v9.9.9/CodexMonitor_9.9.9_x64.msi",
+          url: "https://oss.example.com/v9.9.9/ThreadFleet_9.9.9_x64.msi",
         }],
       }));
     vi.stubGlobal("fetch", fetchMock);
@@ -44,26 +44,26 @@ describe("fetchLatestReleaseUpdate", () => {
     ], "msi");
 
     expect(update?.asset.urls).toEqual([
-      "https://cos.example.com/v9.9.9/CodexMonitor_9.9.9_x64.msi",
-      "https://oss.example.com/v9.9.9/CodexMonitor_9.9.9_x64.msi",
+      "https://cos.example.com/v9.9.9/ThreadFleet_9.9.9_x64.msi",
+      "https://oss.example.com/v9.9.9/ThreadFleet_9.9.9_x64.msi",
     ]);
     expect(update?.asset.sha256).toBe(checksum);
   });
 
   it("keeps GitHub first and appends a verified mirror route", async () => {
     const githubUrl =
-      "https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x64.msi";
-    const mirrorUrl = "https://cos.example.com/v9.9.9/CodexMonitor_9.9.9_x64.msi";
+      "https://github.com/wzxmer/ThreadFleet/releases/download/v9.9.9/ThreadFleet_9.9.9_x64.msi";
+    const mirrorUrl = "https://cos.example.com/v9.9.9/ThreadFleet_9.9.9_x64.msi";
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(response({
         tag_name: "v9.9.9",
-        assets: [{ name: "CodexMonitor_9.9.9_x64.msi", browser_download_url: githubUrl, size: 100 }],
+        assets: [{ name: "ThreadFleet_9.9.9_x64.msi", browser_download_url: githubUrl, size: 100 }],
       }))
       .mockResolvedValueOnce(response({
         version: "9.9.9",
         assets: [{
-          name: "CodexMonitor_9.9.9_x64.msi",
+          name: "ThreadFleet_9.9.9_x64.msi",
           size: 100,
           sha256: checksum,
           url: mirrorUrl,
@@ -83,12 +83,12 @@ describe("fetchLatestReleaseUpdate", () => {
 describe("selectReleaseAsset", () => {
   const assets = [
     {
-      name: "CodexMonitor_9.9.9_x64.msi",
-      urls: ["https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x64.msi"],
+      name: "ThreadFleet_9.9.9_x64.msi",
+      urls: ["https://github.com/wzxmer/ThreadFleet/releases/download/v9.9.9/ThreadFleet_9.9.9_x64.msi"],
     },
     {
-      name: "CodexMonitor_9.9.9_x64-setup.exe",
-      urls: ["https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x64-setup.exe"],
+      name: "ThreadFleet_9.9.9_x64-setup.exe",
+      urls: ["https://github.com/wzxmer/ThreadFleet/releases/download/v9.9.9/ThreadFleet_9.9.9_x64-setup.exe"],
     },
   ];
 
@@ -113,12 +113,12 @@ describe("selectReleaseAsset", () => {
   it("selects the native macOS asset for Apple Silicon", () => {
     const macAssets = [
       {
-        name: "CodexMonitor_9.9.9_x86_64.dmg",
-        urls: ["https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x86_64.dmg"],
+        name: "ThreadFleet_9.9.9_x86_64.dmg",
+        urls: ["https://github.com/wzxmer/ThreadFleet/releases/download/v9.9.9/ThreadFleet_9.9.9_x86_64.dmg"],
       },
       {
-        name: "CodexMonitor_9.9.9_aarch64.dmg",
-        urls: ["https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_aarch64.dmg"],
+        name: "ThreadFleet_9.9.9_aarch64.dmg",
+        urls: ["https://github.com/wzxmer/ThreadFleet/releases/download/v9.9.9/ThreadFleet_9.9.9_aarch64.dmg"],
       },
     ];
 
@@ -133,12 +133,12 @@ describe("selectReleaseAsset", () => {
   it("fails closed when macOS architecture evidence is unavailable", () => {
     const macAssets = [
       {
-        name: "CodexMonitor_9.9.9_x86_64.dmg",
-        urls: ["https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_x86_64.dmg"],
+        name: "ThreadFleet_9.9.9_x86_64.dmg",
+        urls: ["https://github.com/wzxmer/ThreadFleet/releases/download/v9.9.9/ThreadFleet_9.9.9_x86_64.dmg"],
       },
       {
-        name: "CodexMonitor_9.9.9_aarch64.dmg",
-        urls: ["https://github.com/wzxmer/CodexMonitor/releases/download/v9.9.9/CodexMonitor_9.9.9_aarch64.dmg"],
+        name: "ThreadFleet_9.9.9_aarch64.dmg",
+        urls: ["https://github.com/wzxmer/ThreadFleet/releases/download/v9.9.9/ThreadFleet_9.9.9_aarch64.dmg"],
       },
     ];
 

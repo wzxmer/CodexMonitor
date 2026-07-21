@@ -10,18 +10,18 @@ class BuildReleaseNotesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             artifacts = Path(directory)
             names = [
-                "Codex Monitor_1.2.3_x64-setup.exe",
-                "CodexMonitor_1.2.3_aarch64.dmg",
-                "CodexMonitor_1.2.3_x86_64.dmg",
-                "Codex.Monitor_1.2.3_amd64.AppImage",
-                "Codex.Monitor_1.2.3_aarch64.AppImage",
+                "ThreadFleet_1.2.3_x64-setup.exe",
+                "ThreadFleet_1.2.3_aarch64.dmg",
+                "ThreadFleet_1.2.3_x86_64.dmg",
+                "ThreadFleet_1.2.3_amd64.AppImage",
+                "ThreadFleet_1.2.3_aarch64.AppImage",
             ]
             for name in names:
                 (artifacts / name).write_bytes(b"artifact")
 
             notes = build_release_notes(
                 artifacts,
-                "wzxmer/CodexMonitor",
+                "wzxmer/ThreadFleet",
                 "1.2.3",
                 ["feat: add provider switching", "fix(ui): restore window dragging"],
             )
@@ -33,21 +33,21 @@ class BuildReleaseNotesTests(unittest.TestCase):
             self.assertIn("Linux x64", notes)
             self.assertIn("Linux ARM64", notes)
             self.assertIn(
-                "https://github.com/wzxmer/CodexMonitor/releases/download/v1.2.3/",
+                "https://github.com/wzxmer/ThreadFleet/releases/download/v1.2.3/",
                 notes,
             )
-            self.assertIn("Codex%20Monitor_1.2.3_x64-setup.exe", notes)
+            self.assertIn("ThreadFleet_1.2.3_x64-setup.exe", notes)
             self.assertIn("## New Features", notes)
             self.assertIn("## Fixes", notes)
 
     def test_omits_platforms_without_a_matching_installer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             artifacts = Path(directory)
-            (artifacts / "Codex.Monitor_1.2.3_x64_en-US.msi").write_bytes(b"artifact")
+            (artifacts / "ThreadFleet_1.2.3_x64_en-US.msi").write_bytes(b"artifact")
 
             notes = build_release_notes(
                 artifacts,
-                "wzxmer/CodexMonitor",
+                "wzxmer/ThreadFleet",
                 "1.2.3",
             )
 

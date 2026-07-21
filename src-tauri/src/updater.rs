@@ -8,15 +8,15 @@ use tauri::Manager;
 use tokio::io::AsyncWriteExt;
 
 const RELEASE_HOST: &str = "github.com";
-const RELEASE_PATH_PREFIX: &str = "/wzxmer/CodexMonitor/releases/download/";
+const RELEASE_PATH_PREFIX: &str = "/wzxmer/ThreadFleet/releases/download/";
 const INSTALLER_DIR_NAME: &str = "release-installers";
 const DOWNLOAD_STALL_TIMEOUT_SECS: u64 = 30;
-const TENCENT_UPDATE_BASE_URL: Option<&str> = option_env!("CODEXMONITOR_TENCENT_UPDATE_BASE_URL");
-const ALIYUN_UPDATE_BASE_URL: Option<&str> = option_env!("CODEXMONITOR_ALIYUN_UPDATE_BASE_URL");
+const TENCENT_UPDATE_BASE_URL: Option<&str> = option_env!("THREADFLEET_TENCENT_UPDATE_BASE_URL");
+const ALIYUN_UPDATE_BASE_URL: Option<&str> = option_env!("THREADFLEET_ALIYUN_UPDATE_BASE_URL");
 const TENCENT_CODEX_CLI_BASE_URL: Option<&str> =
-    option_env!("CODEXMONITOR_TENCENT_CODEX_CLI_BASE_URL");
+    option_env!("THREADFLEET_TENCENT_CODEX_CLI_BASE_URL");
 const ALIYUN_CODEX_CLI_BASE_URL: Option<&str> =
-    option_env!("CODEXMONITOR_ALIYUN_CODEX_CLI_BASE_URL");
+    option_env!("THREADFLEET_ALIYUN_CODEX_CLI_BASE_URL");
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -559,9 +559,9 @@ mod tests {
 
     #[test]
     fn accepts_matching_github_release_asset() {
-        let file_name = "CodexMonitor_1.2.3_x64.msi";
+        let file_name = "ThreadFleet_1.2.3_x64.msi";
         let url =
-            format!("https://github.com/wzxmer/CodexMonitor/releases/download/v1.2.3/{file_name}");
+            format!("https://github.com/wzxmer/ThreadFleet/releases/download/v1.2.3/{file_name}");
         assert!(validate_release_asset_url(&url, file_name).is_ok());
     }
 
@@ -591,8 +591,8 @@ mod tests {
 
     #[test]
     fn rejects_mismatched_release_asset_file_name() {
-        let url = "https://github.com/wzxmer/CodexMonitor/releases/download/v1.2.3/other.msi";
-        assert!(validate_release_asset_url(url, "CodexMonitor_1.2.3_x64.msi").is_err());
+        let url = "https://github.com/wzxmer/ThreadFleet/releases/download/v1.2.3/other.msi";
+        assert!(validate_release_asset_url(url, "ThreadFleet_1.2.3_x64.msi").is_err());
     }
 
     #[test]
@@ -663,8 +663,8 @@ mod tests {
     #[test]
     fn strips_directory_components_from_release_asset_name() {
         assert_eq!(
-            sanitize_release_asset_file_name("../CodexMonitor 1.2.3.msi").unwrap(),
-            "CodexMonitor_1.2.3.msi"
+            sanitize_release_asset_file_name("../ThreadFleet 1.2.3.msi").unwrap(),
+            "ThreadFleet_1.2.3.msi"
         );
     }
 

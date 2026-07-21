@@ -94,13 +94,13 @@ pub struct NativeMenuLabels {
 impl Default for NativeMenuLabels {
     fn default() -> Self {
         Self {
-            about: "About Codex Monitor".into(),
+            about: "About ThreadFleet".into(),
             check_for_updates: "Check for Updates...".into(),
             settings: "Settings...".into(),
             services: "Services".into(),
-            hide: "Hide Codex Monitor".into(),
+            hide: "Hide ThreadFleet".into(),
             hide_others: "Hide Others".into(),
-            quit: "Quit Codex Monitor".into(),
+            quit: "Quit ThreadFleet".into(),
             file: "File".into(),
             new_agent: "New Agent".into(),
             new_worktree_agent: "New Worktree Agent".into(),
@@ -455,7 +455,7 @@ pub(crate) fn handle_menu_event<R: tauri::Runtime>(
                 return;
             }
             let _ = WebviewWindowBuilder::new(app, "about", WebviewUrl::App("index.html".into()))
-                .title("About Codex Monitor")
+                .title("About ThreadFleet")
                 .resizable(false)
                 .inner_size(360.0, 240.0)
                 .center()

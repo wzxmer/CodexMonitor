@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Keep CodexMonitor's Agents settings behavior in sync with upstream Codex (`../Codex`) whenever Codex changes:
+Keep ThreadFleet's Agents settings behavior in sync with upstream Codex (`../Codex`) whenever Codex changes:
 
 - multi-agent feature flags
 - `[agents]` config schema
@@ -13,7 +13,7 @@ Keep CodexMonitor's Agents settings behavior in sync with upstream Codex (`../Co
 
 - After pulling updates in `../Codex`
 - Before changing `src-tauri/src/shared/agents_config_core.rs`
-- When users report a mismatch between CodexMonitor settings and Codex runtime behavior
+- When users report a mismatch between ThreadFleet settings and Codex runtime behavior
 
 ## Upstream Source Of Truth (Check These First)
 
@@ -38,7 +38,7 @@ Notes:
 
 ## Fast Upstream Diff Commands
 
-Run from `CodexMonitor` repo root:
+Run from `ThreadFleet` repo root:
 
 ```bash
 cd ../Codex
@@ -62,7 +62,7 @@ rg -n "multi_agent|max_threads|max_depth|AgentsToml|AgentRoleToml|config_file|ap
   codex-rs/core/src/tools/handlers/multi_agents.rs
 ```
 
-## CodexMonitor Files To Update If Upstream Changes
+## ThreadFleet Files To Update If Upstream Changes
 
 1. Shared read/write core:
 - `src-tauri/src/shared/agents_config_core.rs`
@@ -89,8 +89,8 @@ rg -n "multi_agent|max_threads|max_depth|AgentsToml|AgentRoleToml|config_file|ap
 
 1. Feature flags
 - Verify upstream key remains `features.multi_agent`.
-- Keep CodexMonitor scoped to the new key only (no legacy alias read/write).
-- Keep CodexMonitor writes aligned with upstream expectations.
+- Keep ThreadFleet scoped to the new key only (no legacy alias read/write).
+- Keep ThreadFleet writes aligned with upstream expectations.
 
 2. Agents schema
 - Verify `[agents]` shape still supports `max_threads`, `max_depth`, plus dynamic role tables.
@@ -99,7 +99,7 @@ rg -n "multi_agent|max_threads|max_depth|AgentsToml|AgentRoleToml|config_file|ap
 3. Defaults/validation
 - Check upstream default for `agents.max_threads` and validation constraints.
 - Check upstream default for `agents.max_depth` and validation constraints.
-- Reconcile CodexMonitor guardrails when upstream changes.
+- Reconcile ThreadFleet guardrails when upstream changes.
 
 4. Role setup behavior
 - Verify built-in role names/descriptions and built-in config files (currently includes `explorer.toml`).
@@ -112,8 +112,8 @@ rg -n "multi_agent|max_threads|max_depth|AgentsToml|AgentRoleToml|config_file|ap
 ## Known Intentional Divergence
 
 - Upstream Codex default `agents.max_threads` is `6`.
-- CodexMonitor default `agents.max_depth` is `1`.
-- CodexMonitor currently enforces a product cap of `12` for `agents.max_threads` and `4` for `agents.max_depth` in UI + backend.
+- ThreadFleet default `agents.max_depth` is `1`.
+- ThreadFleet currently enforces a product cap of `12` for `agents.max_threads` and `4` for `agents.max_depth` in UI + backend.
 
 If upstream introduces a hard max or materially changes spawn behavior, revisit this cap and update both:
 

@@ -292,7 +292,7 @@ pub(crate) fn apply_active_provider_profile(
         .ok_or_else(|| {
             format!("`model_providers.{CODEX_MONITOR_PROVIDER_ID}` must be a table in config.toml")
         })?;
-    provider["name"] = value("CodexMonitor");
+    provider["name"] = value("ThreadFleet");
     provider["base_url"] = value(base_url);
     provider["env_key"] = value(key_env_var);
     provider["wire_api"] = value("responses");
@@ -411,7 +411,7 @@ fn ensure_sync_state_matches_current(
         return Ok(());
     }
     Err(
-        "Provider-owned config.toml fields changed outside CodexMonitor; refusing to overwrite them"
+        "Provider-owned config.toml fields changed outside ThreadFleet; refusing to overwrite them"
             .to_string(),
     )
 }

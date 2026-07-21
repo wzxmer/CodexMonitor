@@ -1,9 +1,9 @@
 export const STORAGE_KEY_PENDING_POST_UPDATE_VERSION =
   "codexmonitor.pendingPostUpdateVersion";
 const GITHUB_RELEASES_API_BASE =
-  "https://api.github.com/repos/wzxmer/CodexMonitor/releases";
+  "https://api.github.com/repos/wzxmer/ThreadFleet/releases";
 const GITHUB_RELEASES_WEB_BASE =
-  "https://github.com/wzxmer/CodexMonitor/releases";
+  "https://github.com/wzxmer/ThreadFleet/releases";
 
 type GitHubReleaseResponse = {
   tag_name?: string;
@@ -165,7 +165,7 @@ export function selectReleaseAsset(
     const name = asset.name.toLowerCase();
     return (
       asset.urls.some((url) =>
-        url.startsWith("https://github.com/wzxmer/CodexMonitor/releases/download/"),
+        url.startsWith("https://github.com/wzxmer/ThreadFleet/releases/download/"),
       ) &&
       !name.endsWith(".sig") &&
       !name.endsWith(".zip") &&

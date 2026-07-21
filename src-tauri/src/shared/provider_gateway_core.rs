@@ -1578,7 +1578,7 @@ mod tests {
                 }, {
                     "type": "function_call_output",
                     "call_id": "call_123",
-                    "output": "D:/Project/CodexMonitor"
+                    "output": "D:/Project/ThreadFleet"
                 }]
             }),
             None,
@@ -1597,7 +1597,7 @@ mod tests {
         );
         assert_eq!(chat["messages"][1]["role"], "tool");
         assert_eq!(chat["messages"][1]["tool_call_id"], "call_123");
-        assert_eq!(chat["messages"][1]["content"], "D:/Project/CodexMonitor");
+        assert_eq!(chat["messages"][1]["content"], "D:/Project/ThreadFleet");
     }
 
     #[test]

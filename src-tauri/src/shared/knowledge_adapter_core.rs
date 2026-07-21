@@ -381,9 +381,7 @@ mod tests {
         assert!(valid_identifier("codex-monitor-request-1"));
         assert!(!valid_identifier("bad/request"));
         assert!(!valid_project_id(""));
-        assert!(valid_relative_path(
-            "20-项目知识/CodexMonitor/工作项台账.md"
-        ));
+        assert!(valid_relative_path("20-项目知识/ThreadFleet/工作项台账.md"));
         assert!(!valid_relative_path("../outside.md"));
         assert!(validate_risk("critical"));
         assert!(!validate_risk("unknown"));

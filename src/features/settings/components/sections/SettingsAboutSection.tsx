@@ -16,7 +16,8 @@ import {
 } from "@/features/design-system/components/settings/SettingsPrimitives";
 import { useI18n } from "@/features/i18n/I18nProvider";
 
-const PROJECT_REPOSITORY_URL = "https://github.com/wzxmer/CodexMonitor";
+const PROJECT_REPOSITORY_URL = "https://github.com/wzxmer/ThreadFleet";
+const UPSTREAM_REPOSITORY_URL = "https://github.com/Dimillian/CodexMonitor";
 
 type SettingsAboutSectionProps = {
   appSettings: AppSettings;
@@ -131,6 +132,16 @@ export function SettingsAboutSection({
             onClick={() => void openUrl(PROJECT_REPOSITORY_URL)}
           >
             {PROJECT_REPOSITORY_URL}
+          </button>
+        </div>
+        <div className="settings-help">
+          {t("about.upstream")}：
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => void openUrl(UPSTREAM_REPOSITORY_URL)}
+          >
+            {UPSTREAM_REPOSITORY_URL}
           </button>
         </div>
       </div>

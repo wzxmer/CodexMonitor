@@ -889,7 +889,7 @@ describe("tauri invoke wrappers", () => {
   it("maps labels for set_tray_labels", async () => {
     const invokeMock = vi.mocked(invoke);
     const labels = {
-      open: "打开 Codex Monitor",
+      open: "打开 ThreadFleet",
       hide: "隐藏窗口",
       checkUpdates: "检查更新",
       launchAtStartup: "开机启动",
@@ -907,13 +907,13 @@ describe("tauri invoke wrappers", () => {
   it("maps localized labels for the native menu", async () => {
     const invokeMock = vi.mocked(invoke);
     const labels = {
-      about: "关于 Codex Monitor",
+      about: "关于 ThreadFleet",
       checkForUpdates: "检查更新...",
       settings: "设置...",
       services: "服务",
-      hide: "隐藏 Codex Monitor",
+      hide: "隐藏 ThreadFleet",
       hideOthers: "隐藏其他窗口",
-      quit: "退出 Codex Monitor",
+      quit: "退出 ThreadFleet",
       file: "文件",
       newAgent: "新建 Agent",
       newWorktreeAgent: "新建 Worktree Agent",

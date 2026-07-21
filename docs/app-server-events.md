@@ -1,18 +1,18 @@
 # App-Server Events Reference (Codex `87db9bc18ba5bc82c1cb4e4381b44f693ee35623` / `rust-v0.144.5`)
 
 This document helps agents quickly answer:
-- Which app-server events CodexMonitor supports right now.
-- Which app-server requests CodexMonitor sends right now.
-- Where to look in CodexMonitor to add support.
+- Which app-server events ThreadFleet supports right now.
+- Which app-server requests ThreadFleet sends right now.
+- Where to look in ThreadFleet to add support.
 - Where to look in `../Codex` to compare event lists and find emitters.
 
 When updating this document:
 1. Confirm the intended Codex baseline. This revision is pinned to
    `87db9bc18ba5bc82c1cb4e4381b44f693ee35623` (`rust-v0.144.5`); do not replace it with
    `origin/main` unless the baseline is intentionally advanced.
-2. Compare Codex events vs CodexMonitor routing.
-3. Compare Codex client request methods vs CodexMonitor outgoing request methods.
-4. Compare Codex server request methods vs CodexMonitor inbound request handling.
+2. Compare Codex events vs ThreadFleet routing.
+3. Compare Codex client request methods vs ThreadFleet outgoing request methods.
+4. Compare Codex server request methods vs ThreadFleet inbound request handling.
 5. Update supported and missing lists below.
 
 Related project skill:
@@ -23,9 +23,9 @@ Multi-agent schema notes:
 - In Codex 0.144.5, `features.multi_agent_v2.hide_spawn_agent_metadata` defaults to `true`; when enabled, the tool schema removes `agent_type`, `model`, `reasoning_effort`, and `service_tier`. Automatic routing must inspect the effective runtime schema before using overrides.
 - `fork_turns` accepts `none`, `all`, or a positive recent-turn count and defaults to `all`. Full-history forks cannot override agent type, model, or reasoning effort; heterogeneous children require `none` or a bounded recent-turn count.
 - Upstream validates requested model IDs and reasoning efforts against the current model catalog. It has no generic per-spawn metadata or token-level context budget field.
-- Multi-agent items have two observed shapes: a real `spawn_agent` can arrive as `subAgentActivity` with the spawn call `id` and `agentThreadId`, while metadata-visible generic collaboration items arrive as `collabAgentToolCall`. The latter must be checked for `tool = spawn_agent` before treating it as a binding; `wait`/`wait_agent` is not a spawn. Neither shape carries portable plan ID, node ID, task name, or correlation metadata. CodexMonitor retains model/effort only as actual binding evidence; they are not planned routing values.
+- Multi-agent items have two observed shapes: a real `spawn_agent` can arrive as `subAgentActivity` with the spawn call `id` and `agentThreadId`, while metadata-visible generic collaboration items arrive as `collabAgentToolCall`. The latter must be checked for `tool = spawn_agent` before treating it as a binding; `wait`/`wait_agent` is not a spawn. Neither shape carries portable plan ID, node ID, task name, or correlation metadata. ThreadFleet retains model/effort only as actual binding evidence; they are not planned routing values.
 
-## Where To Look In CodexMonitor
+## Where To Look In ThreadFleet
 
 Primary app-server event source of truth (methods + typed parsing helpers):
 - `src/utils/appServerEvents.ts`
@@ -60,7 +60,7 @@ Primary outgoing request layer:
 
 ## Supported Notifications (Codex v2)
 
-These are the current Codex v2 `ServerNotification` methods that CodexMonitor
+These are the current Codex v2 `ServerNotification` methods that ThreadFleet
 supports in `src/utils/appServerEvents.ts` (`SUPPORTED_APP_SERVER_METHODS`) and
 then either routes in `useAppServerEvents.ts` or handles in feature-specific
 subscriptions.
@@ -95,7 +95,7 @@ subscriptions.
 - `turn/plan/updated`
 - `turn/started`
 
-## Additional Stream Methods Handled In CodexMonitor
+## Additional Stream Methods Handled In ThreadFleet
 
 These arrive on the same frontend event stream but are not Codex v2
 `ServerNotification` methods:
@@ -106,8 +106,8 @@ These arrive on the same frontend event stream but are not Codex v2
   `item/permissions/requestApproval`, via suffix match in
   `isApprovalRequestMethod(method)`
 - `item/tool/requestUserInput` (a Codex v2 server request, not a notification)
-- `codex/backgroundThread` (CodexMonitor synthetic bridge event)
-- `codex/connected` (CodexMonitor synthetic bridge event)
+- `codex/backgroundThread` (ThreadFleet synthetic bridge event)
+- `codex/connected` (ThreadFleet synthetic bridge event)
 - `codex/event/skills_update_available` (handled via
   `isSkillsUpdateAvailableEvent(...)` in `useSkills.ts`)
 
@@ -118,7 +118,7 @@ Codex currently exposes two compaction signals:
 - Preferred: `item/started` + `item/completed` with `item.type = "contextCompaction"` (`ThreadItem::ContextCompaction`).
 - Deprecated: `thread/compacted` (`ContextCompactedNotification`).
 
-CodexMonitor status:
+ThreadFleet status:
 
 - It routes `item/started` and `item/completed`, so the preferred signal reaches the frontend event layer.
 - It renders/stores `contextCompaction` items via the normal item lifecycle.
@@ -173,9 +173,9 @@ At the baseline hash, upstream defines 69 server notifications; CM routes 28 and
 - `windows/worldWritableWarning`
 - `windowsSandbox/setupCompleted`
 
-## Supported Requests (CodexMonitor -> App-Server, v2)
+## Supported Requests (ThreadFleet -> App-Server, v2)
 
-These are v2 request methods CodexMonitor currently sends to Codex app-server:
+These are v2 request methods ThreadFleet currently sends to Codex app-server:
 
 - `initialize`
 - `thread/start`
@@ -205,13 +205,13 @@ These are v2 request methods CodexMonitor currently sends to Codex app-server:
 Runtime ownership:
 - `thread/list` and read-only `thread/read` use a Provider-neutral session-source history runtime for the target `CODEX_HOME` and workspace.
 - `thread/resume` and turn execution use the execution runtime selected by the active Provider. History and execution runtimes have distinct pool identities, so a custom Provider cannot replace or hide the local history index.
-- When an active CodexMonitor Provider profile exists, `thread/start` and `thread/resume` explicitly send `modelProvider: "codex_monitor"`; this rebinds threads created under an older Provider instead of allowing persisted `model_provider: "openai"` metadata to route turns to the official endpoint.
+- When an active ThreadFleet Provider profile exists, `thread/start` and `thread/resume` explicitly send `modelProvider: "codex_monitor"`; this rebinds threads created under an older Provider instead of allowing persisted `model_provider: "openai"` metadata to route turns to the official endpoint.
 
 Notes:
 - `turn/start` now forwards the optional `serviceTier` override (`"fast"` for `/fast`, `null` for default/off) alongside `model`, `effort`, and `collaborationMode`.
-- `turn/interrupt` acknowledgement is not treated as terminal. CodexMonitor keeps the matching turn active until `turn/completed` arrives; after a bounded wait it may use `thread/read` on the same execution runtime to confirm that exact turn is `completed`, `interrupted`, or `failed`. An unknown or still-running status remains fail-closed so Provider runtime switching cannot terminate live work.
+- `turn/interrupt` acknowledgement is not treated as terminal. ThreadFleet keeps the matching turn active until `turn/completed` arrives; after a bounded wait it may use `thread/read` on the same execution runtime to confirm that exact turn is `completed`, `interrupted`, or `failed`. An unknown or still-running status remains fail-closed so Provider runtime switching cannot terminate live work.
 - `turn/start` and `turn/steer` forward CM workflow rules, matched skills/agents, and bounded knowledge excerpts through experimental `additionalContext` entries. CM initializes app-server with `experimentalApi: true`; this context is separate from persisted user input.
-- `spawn_agent` is an internal Codex collaboration tool, not a CodexMonitor-to-app-server request. In the Codex 0.144.5 runtime, its live item may be `subAgentActivity` with child-thread metadata; when a `collabAgentToolCall` shape is emitted, CM accepts it for binding only when its tool is `spawn_agent`. `wait` and `wait_agent` collaboration items are excluded.
+- `spawn_agent` is an internal Codex collaboration tool, not a ThreadFleet-to-app-server request. In the Codex 0.144.5 runtime, its live item may be `subAgentActivity` with child-thread metadata; when a `collabAgentToolCall` shape is emitted, CM accepts it for binding only when its tool is `spawn_agent`. `wait` and `wait_agent` collaboration items are excluded.
 - `execution_router_shadow_preview` accepts an optional approved-plan reference plus expected and actual bindings. The shared core validates plan-reference shape, checks the expected model/effort against the observed model catalog, and returns `bindingAudit`; missing evidence or mismatch produces `decision-gate` advice without dispatching, switching models, or mutating runtime configuration.
 - CM automatically observes real spawn-shaped `item/started` / `item/completed` items (`subAgentActivity`, or `collabAgentToolCall` with `tool = spawn_agent`) and persists actual bindings in an app/daemon sidecar keyed by source, runtime, workspace, parent thread, and spawn call ID. Default hidden metadata leaves model/effort null; this remains fail-closed until expected binding evidence arrives. Exact retries are idempotent, and sender/actual conflicts or expired/stale registrations fail closed.
 - Portable workflow remains the source of approved expected bindings. Its adapter must explicitly register the approved expected envelope against the same collab tool-call ID; expected-first and actual-first arrival are both supported across restart. CM does not derive expected model/effort from free-form text, event order, prompt similarity, or model/effort coincidence.
@@ -230,7 +230,7 @@ The regression test `persisted_binding_evidence_contains_no_prompt_or_context_pa
 
 ## Missing Client Requests (Codex v2 ClientRequest Methods)
 
-Compared against Codex v2 request methods, CodexMonitor currently does not send:
+Compared against Codex v2 request methods, ThreadFleet currently does not send:
 
 At the baseline hash, upstream defines 118 non-deprecated client requests; CM sends 24 including `initialize`, leaving 94 below unsupported.
 
@@ -339,7 +339,7 @@ Deprecated client requests are deliberately excluded from the missing-support ba
 - `getConversationSummary`
 - `gitDiffToRemote`
 
-## Server Requests (App-Server -> CodexMonitor, v2)
+## Server Requests (App-Server -> ThreadFleet, v2)
 
 Supported server requests:
 
@@ -370,7 +370,7 @@ Classifications above are from Codex `87db9bc18ba5bc82c1cb4e4381b44f693ee35623` 
 - `internal-only`: upstream documentation restricts the notification to Codex
   Cloud or clients requiring exact upstream usage.
 
-These labels describe protocol status, not whether CodexMonitor supports a
+These labels describe protocol status, not whether ThreadFleet supports a
 method. `item/plan/delta` is separately called experimental by upstream prose
 but has no `#[experimental(...)]` attribute at this baseline.
 
@@ -401,7 +401,7 @@ Use this workflow to update the lists above:
    - `git -C ../Codex fetch --all --prune && git -C ../Codex rev-parse origin/main`
 2. List Codex v2 notification methods:
    - `git -C ../Codex show origin/main:codex-rs/app-server-protocol/src/protocol/common.rs | awk '/server_notification_definitions! \\{/,/client_notification_definitions! \\{/' | rg -N -o '=>\\s*\"[^\"]+\"|rename = \"[^\"]+\"' | sed -E 's/.*\"([^\"]+)\".*/\\1/' | sort -u`
-3. List CodexMonitor routed methods:
+3. List ThreadFleet routed methods:
    - `rg -n \"SUPPORTED_APP_SERVER_METHODS\" src/utils/appServerEvents.ts`
 4. Update the Supported and Missing sections.
 
@@ -415,7 +415,7 @@ Use this workflow to update request support lists:
    - `git -C ../Codex show origin/main:codex-rs/app-server-protocol/src/protocol/common.rs | awk '/client_request_definitions! \\{/,/\\/\\/\\/ DEPRECATED APIs below/' | rg -N -o '=>\\s*\"[^\"]+\"\\s*\\{' | sed -E 's/.*\"([^\"]+)\".*/\\1/' | sort -u`
 3. List Codex server request methods:
    - `git -C ../Codex show origin/main:codex-rs/app-server-protocol/src/protocol/common.rs | awk '/server_request_definitions! \\{/,/\\/\\/\\/ DEPRECATED APIs below/' | rg -N -o '=>\\s*\"[^\"]+\"\\s*\\{' | sed -E 's/.*\"([^\"]+)\".*/\\1/' | sort -u`
-4. List CodexMonitor outgoing requests:
+4. List ThreadFleet outgoing requests:
    - `perl -0777 -ne 'while(/send_request_for_workspace\\(\\s*&[^,]+\\s*,\\s*\"([^\"]+)\"/g){print \"$1\\n\"}' src-tauri/src/shared/codex_core.rs | sort -u`
 5. Check `src-tauri/src/backend/app_server.rs` separately for the initial `initialize` request; it is not sent through `send_request_for_workspace`.
 6. Update the Supported Requests, Missing Client Requests, and Server Requests sections.
@@ -439,7 +439,7 @@ Use this when the method list is unchanged but behavior looks off.
    - `git -C ../Codex show origin/main:codex-rs/app-server-protocol/src/protocol/v2/item.rs | rg -n \"enum ThreadItem|CommandExecution|FileChange|McpToolCall|CollabAgentToolCall|EnteredReviewMode|ExitedReviewMode|ContextCompaction\"`
 6. Check for camelCase vs snake_case mismatches:
    - The protocol uses `#[serde(rename_all = \"camelCase\")]`, but fields are often declared in snake_case.
-   - CodexMonitor generally defends against this by checking both forms (for example in `threadNormalize.ts` and `useAppServerEvents.ts`), while centralizing method/type parsing in `appServerEvents.ts`.
+   - ThreadFleet generally defends against this by checking both forms (for example in `threadNormalize.ts` and `useAppServerEvents.ts`), while centralizing method/type parsing in `appServerEvents.ts`.
 7. If a schema change is found, fix it at the edges first:
    - Prefer updating `src/utils/appServerEvents.ts`, `useAppServerEvents.ts`, and `threadNormalize.ts` rather than spreading conditionals into components.
 
@@ -459,8 +459,8 @@ Use this when the method list is unchanged but behavior looks off.
   - Stored in `useThreadsReducer.ts` (`turnDiffByThread`)
   - Exposed by `useThreads.ts` for UI consumers
 - Steering behavior while a turn is processing:
-  - CodexMonitor attempts `turn/steer` only when steer capability is enabled, the thread is processing, and an active turn id exists.
-  - If `turn/steer` fails, CodexMonitor does not fall back to `turn/start`; it clears stale processing/turn state when applicable, surfaces an error, and returns `steer_failed`.
+  - ThreadFleet attempts `turn/steer` only when steer capability is enabled, the thread is processing, and an active turn id exists.
+  - If `turn/steer` fails, ThreadFleet does not fall back to `turn/start`; it clears stale processing/turn state when applicable, surfaces an error, and returns `steer_failed`.
   - Local queue fallback on `steer_failed` is handled in the composer queued-send flow (`useQueuedSend`), not by all direct `sendUserMessageToThread` callers.
 - Feature toggles in Settings:
   - `experimentalFeature/list` is an app-server request.

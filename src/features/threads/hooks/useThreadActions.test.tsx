@@ -53,7 +53,7 @@ vi.mock("@threads/utils/threadStorage", () => ({
 describe("useThreadActions", () => {
   const workspace: WorkspaceInfo = {
     id: "ws-1",
-    name: "CodexMonitor",
+    name: "ThreadFleet",
     path: "/tmp/codex",
     connected: true,
     settings: { sidebarCollapsed: false },
@@ -3365,7 +3365,7 @@ describe("useThreadActions", () => {
         data: [
           {
             id: "thread-local-older",
-            cwd: "D:/Project/CodexMonitor",
+            cwd: "D:/Project/ThreadFleet",
             preview: "Older local Codex session",
             updated_at: 4000,
           },
@@ -3385,7 +3385,7 @@ describe("useThreadActions", () => {
             id: "thread-local-current",
             name: "Current local Codex session",
             updatedAt: 6000,
-            cwd: "D:/Project/CodexMonitor",
+            cwd: "D:/Project/ThreadFleet",
           },
         ],
       },
@@ -3407,14 +3407,14 @@ describe("useThreadActions", () => {
           id: "thread-local-current",
           name: "Current local Codex session",
           updatedAt: 6000,
-          cwd: "D:/Project/CodexMonitor",
+          cwd: "D:/Project/ThreadFleet",
         },
         {
           id: "thread-local-older",
           name: "Older local Codex session",
           updatedAt: 4000,
           createdAt: 0,
-          cwd: "D:/Project/CodexMonitor",
+          cwd: "D:/Project/ThreadFleet",
         },
       ],
     });

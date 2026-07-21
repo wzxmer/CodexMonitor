@@ -1179,8 +1179,8 @@ describe("Sidebar", () => {
     const onSelectLocalCodexThread = vi.fn();
     const projectWorkspace = {
       id: "project-ws",
-      name: "CodexMonitor",
-      path: "D:/Project/CodexMonitor",
+      name: "ThreadFleet",
+      path: "D:/Project/ThreadFleet",
       connected: true,
       settings: {
         sidebarCollapsed: false,
@@ -1220,25 +1220,25 @@ describe("Sidebar", () => {
             {
               id: "thread-1",
               name: "Recent Codex thread",
-              cwd: "D:/Project/CodexMonitor",
+              cwd: "D:/Project/ThreadFleet",
               updatedAt: 400,
             },
             {
               id: "thread-2",
               name: "Second Codex thread",
-              cwd: "D:/Project/CodexMonitor",
+              cwd: "D:/Project/ThreadFleet",
               updatedAt: 300,
             },
             {
               id: "thread-3",
               name: "Third Codex thread",
-              cwd: "D:/Project/CodexMonitor",
+              cwd: "D:/Project/ThreadFleet",
               updatedAt: 200,
             },
             {
               id: "thread-4",
               name: "Older Codex thread",
-              cwd: "D:/Project/CodexMonitor",
+              cwd: "D:/Project/ThreadFleet",
               updatedAt: 100,
             },
           ],
@@ -1254,7 +1254,7 @@ describe("Sidebar", () => {
     fireEvent.click(screen.getByText("Recent Codex thread").closest(".thread-row") as Element);
     expect(onSelectThread).not.toHaveBeenCalled();
     expect(onSelectLocalCodexThread).toHaveBeenCalledWith(
-      "D:/Project/CodexMonitor",
+      "D:/Project/ThreadFleet",
       "thread-1",
     );
 
@@ -1347,8 +1347,8 @@ describe("Sidebar", () => {
           [LOCAL_CODEX_WORKSPACE_ID]: [
             {
               id: "thread-codexmonitor",
-              name: "CodexMonitor collapsed session",
-              cwd: "D:/Project/CodexMonitor",
+              name: "ThreadFleet collapsed session",
+              cwd: "D:/Project/ThreadFleet",
               updatedAt: 200,
             },
             {
@@ -1365,10 +1365,10 @@ describe("Sidebar", () => {
     fireEvent.click(screen.getByRole("button", {
       name: `展开 ${LOCAL_CODEX_WORKSPACE_NAME}`,
     }));
-    fireEvent.click(screen.getByRole("button", { name: "折叠 CodexMonitor" }));
+    fireEvent.click(screen.getByRole("button", { name: "折叠 ThreadFleet" }));
 
-    expect(screen.queryByText("CodexMonitor collapsed session")).toBeNull();
-    expect(screen.getByRole("button", { name: "展开 CodexMonitor" })).toBeTruthy();
+    expect(screen.queryByText("ThreadFleet collapsed session")).toBeNull();
+    expect(screen.getByRole("button", { name: "展开 ThreadFleet" })).toBeTruthy();
     expect(screen.getByText("Rime visible session")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
@@ -1377,7 +1377,7 @@ describe("Sidebar", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("CodexMonitor collapsed session")).toBeTruthy();
+      expect(screen.getByText("ThreadFleet collapsed session")).toBeTruthy();
     });
   });
 
@@ -1413,8 +1413,8 @@ describe("Sidebar", () => {
           [LOCAL_CODEX_WORKSPACE_ID]: [
             {
               id: "thread-codexmonitor",
-              name: "CodexMonitor session",
-              cwd: "D:/Project/CodexMonitor",
+              name: "ThreadFleet session",
+              cwd: "D:/Project/ThreadFleet",
               updatedAt: 200,
             },
             {
@@ -1469,13 +1469,13 @@ describe("Sidebar", () => {
             {
               id: "thread-1",
               name: "Recent Codex thread",
-              cwd: "D:/Project/CodexMonitor",
+              cwd: "D:/Project/ThreadFleet",
               updatedAt: 400,
             },
             {
               id: "thread-4",
               name: "Older Codex thread",
-              cwd: "D:/Project/CodexMonitor",
+              cwd: "D:/Project/ThreadFleet",
               updatedAt: 100,
             },
           ],
@@ -1525,7 +1525,7 @@ describe("Sidebar", () => {
             {
               id: "thread-local-path",
               name: "Unrelated title",
-              cwd: "D:/Project/CodexMonitor",
+              cwd: "D:/Project/ThreadFleet",
               updatedAt: 100,
             },
           ],
@@ -1535,12 +1535,12 @@ describe("Sidebar", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "切换搜索" }));
     fireEvent.change(screen.getByLabelText("搜索会话"), {
-      target: { value: "codexmonitor" },
+      target: { value: "threadfleet" },
     });
 
     await waitFor(() => {
       expect(screen.getByText("Unrelated title")).toBeTruthy();
-      expect(screen.getByText("CodexMonitor")).toBeTruthy();
+      expect(screen.getByText("ThreadFleet")).toBeTruthy();
     });
   });
 
@@ -1577,7 +1577,7 @@ describe("Sidebar", () => {
             {
               id: "thread-current",
               name: "Current unrelated title",
-              cwd: "D:/Project/CodexMonitor",
+              cwd: "D:/Project/ThreadFleet",
               updatedAt: 100,
             },
           ],

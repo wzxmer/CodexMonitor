@@ -17,7 +17,7 @@ vi.mock("@services/toasts", () => ({
 
 const workspace: WorkspaceInfo = {
   id: "ws-1",
-  name: "CodexMonitor",
+  name: "ThreadFleet",
   path: "/tmp/codex-monitor",
   connected: true,
   settings: { sidebarCollapsed: false },

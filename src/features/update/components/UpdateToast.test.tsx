@@ -152,7 +152,7 @@ describe("UpdateToast", () => {
         postUpdateNotice={{
           stage: "loading",
           version: "1.2.3",
-          htmlUrl: "https://github.com/wzxmer/CodexMonitor/releases/tag/v1.2.3",
+          htmlUrl: "https://github.com/wzxmer/ThreadFleet/releases/tag/v1.2.3",
         }}
         onDismissPostUpdateNotice={onDismissPostUpdateNotice}
       />,
@@ -168,7 +168,7 @@ describe("UpdateToast", () => {
   it("renders post-update release notes and opens GitHub link", () => {
     const onDismissPostUpdateNotice = vi.fn();
     const htmlUrl =
-      "https://github.com/wzxmer/CodexMonitor/releases/tag/v1.2.3";
+      "https://github.com/wzxmer/ThreadFleet/releases/tag/v1.2.3";
     const state: UpdateState = { stage: "idle" };
 
     const { container } = renderUpdateToast(
@@ -199,7 +199,7 @@ describe("UpdateToast", () => {
 
   it("renders post-update fallback notice", () => {
     const htmlUrl =
-      "https://github.com/wzxmer/CodexMonitor/releases/tag/v1.2.3";
+      "https://github.com/wzxmer/ThreadFleet/releases/tag/v1.2.3";
     const state: UpdateState = { stage: "available", version: "9.9.9" };
 
     const { container } = renderUpdateToast(

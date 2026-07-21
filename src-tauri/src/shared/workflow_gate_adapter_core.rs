@@ -323,7 +323,7 @@ mod tests {
             "schema_version": 1,
             "workflow_id": "wf-v1",
             "project_id": "codex-monitor",
-            "workspace": "D:\\Project\\CodexMonitor",
+            "workspace": "D:\\Project\\ThreadFleet",
             "task_id": "task-1",
             "status": "active",
             "stage": "implementation",
@@ -346,7 +346,7 @@ mod tests {
                 "schema_version": 2,
                 "workflow_id": "wf-v2",
                 "project_id": "codex-monitor",
-                "workspace": "D:\\Project\\CodexMonitor",
+                "workspace": "D:\\Project\\ThreadFleet",
                 "status": "active",
                 "stage": "approved",
                 "revision": 5,
@@ -371,7 +371,7 @@ mod tests {
         if cfg!(windows) {
             std::fs::write(
                 tools.join("WorkflowGate.cmd"),
-                "@echo off\r\necho Active code page: 65001\r\necho {\"schema_version\":1,\"workflow_id\":\"wf-test\",\"workspace\":\"D:\\\\Project\\\\CodexMonitor\",\"status\":\"active\",\"stage\":\"test\",\"revision\":1}\r\n",
+                "@echo off\r\necho Active code page: 65001\r\necho {\"schema_version\":1,\"workflow_id\":\"wf-test\",\"workspace\":\"D:\\\\Project\\\\ThreadFleet\",\"status\":\"active\",\"stage\":\"test\",\"revision\":1}\r\n",
             )
             .expect("fixture");
         } else {
@@ -387,7 +387,7 @@ mod tests {
             .build()
             .expect("runtime");
         let workspace = if cfg!(windows) {
-            PathBuf::from(r"D:\Project\CodexMonitor")
+            PathBuf::from(r"D:\Project\ThreadFleet")
         } else {
             PathBuf::from("/tmp/project")
         };
@@ -404,7 +404,7 @@ mod tests {
         if cfg!(windows) {
             std::fs::write(
                 tools.join("WorkflowGate.cmd"),
-                "@echo off\r\necho {\"schema_version\":1,\"workflow_id\":\"wf-test\",\"workspace\":\"D:\\\\Project\\\\CodexMonitor\",\"status\":\"blocked\",\"stage\":\"test\",\"revision\":2}\r\n",
+                "@echo off\r\necho {\"schema_version\":1,\"workflow_id\":\"wf-test\",\"workspace\":\"D:\\\\Project\\\\ThreadFleet\",\"status\":\"blocked\",\"stage\":\"test\",\"revision\":2}\r\n",
             )
             .expect("blocked fixture");
         } else {

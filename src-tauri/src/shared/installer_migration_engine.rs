@@ -1155,7 +1155,7 @@ mod tests {
             let source = NsisSourceSnapshot {
                 ownership: ObservedOwnership::PureNsis,
                 root: SourceRootSnapshot {
-                    source_path: r"C:\Apps\Codex Monitor".into(),
+                    source_path: r"C:\Apps\ThreadFleet".into(),
                     backup_path: r"C:\Migration\tx\source".into(),
                     tree_sha256: TREE_HASH.into(),
                 },
