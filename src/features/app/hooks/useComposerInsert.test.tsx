@@ -81,6 +81,27 @@ describe("useComposerInsert", () => {
     expect(onDraftChange).toHaveBeenCalledWith("Hello world ./src");
   });
 
+  it("reads a ref-backed draft without requiring a parent rerender", () => {
+    const textareaRef: RefObject<HTMLTextAreaElement | null> = { current: null };
+    const onDraftChange = vi.fn();
+    let currentDraft = "Hello";
+    const getDraftText = () => currentDraft;
+    const { result } = renderHook(() =>
+      useComposerInsert({
+        isEnabled: true,
+        draftText: "Hello",
+        getDraftText,
+        onDraftChange,
+        textareaRef,
+      }),
+    );
+
+    currentDraft = "Hello world";
+    act(() => result.current("./src"));
+
+    expect(onDraftChange).toHaveBeenCalledWith("Hello world ./src");
+  });
+
   it("focuses textarea immediately and reapplies caret after frame", () => {
     const textarea = document.createElement("textarea");
     textarea.value = "Hello";

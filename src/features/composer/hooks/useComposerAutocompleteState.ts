@@ -1,6 +1,9 @@
 import { useCallback, useMemo } from "react";
 import type { AutocompleteItem } from "./useComposerAutocomplete";
-import { useComposerAutocomplete } from "./useComposerAutocomplete";
+import {
+  createAutocompleteSearchParts,
+  useComposerAutocomplete,
+} from "./useComposerAutocomplete";
 import type {
   AppOption,
   ComposerTriggerMode,
@@ -37,27 +40,6 @@ type UseComposerAutocompleteStateArgs = {
 
 const MAX_FILE_SUGGESTIONS = 500;
 const FILE_TRIGGER_PREFIX = new RegExp("^(?:\\s|[\"'`]|\\(|\\[|\\{)$");
-
-function isFileTriggerActive(
-  text: string,
-  cursor: number | null,
-  triggerChar: string,
-) {
-  if (!text || cursor === null) {
-    return false;
-  }
-  const beforeCursor = text.slice(0, cursor);
-  const atIndex = beforeCursor.lastIndexOf(triggerChar);
-  if (atIndex < 0) {
-    return false;
-  }
-  const prevChar = atIndex > 0 ? beforeCursor[atIndex - 1] : "";
-  if (prevChar && !FILE_TRIGGER_PREFIX.test(prevChar)) {
-    return false;
-  }
-  const afterAt = beforeCursor.slice(atIndex + 1);
-  return afterAt.length === 0 || !/\s/.test(afterAt);
-}
 
 function getFileTriggerQuery(
   text: string,
@@ -123,25 +105,29 @@ export function useComposerAutocompleteState({
 
   const slashTriggerChar = composerTriggerMode === "swap-slash-at" ? "@" : "/";
   const fileTriggerChar = composerTriggerMode === "swap-slash-at" ? "/" : "@";
-  const fileTriggerActive = useMemo(
-    () => isFileTriggerActive(text, selectionStart, fileTriggerChar),
+  const fileTriggerQuery = useMemo(
+    () => getFileTriggerQuery(text, selectionStart, fileTriggerChar),
     [fileTriggerChar, selectionStart, text],
   );
+  const fileTriggerActive = fileTriggerQuery !== null;
+  const hasFileTriggerQuery = Boolean(fileTriggerQuery);
   const fileItems = useMemo<AutocompleteItem[]>(
     () =>
       fileTriggerActive
         ? (() => {
-            const query = getFileTriggerQuery(text, selectionStart, fileTriggerChar) ?? "";
-            const limited = query ? files : files.slice(0, MAX_FILE_SUGGESTIONS);
+            const limited = hasFileTriggerQuery
+              ? files
+              : files.slice(0, MAX_FILE_SUGGESTIONS);
             return limited.map((path) => ({
               id: path,
               label: path,
               insertText: path,
               group: "Files" as const,
+              searchParts: createAutocompleteSearchParts(path),
             }));
           })()
         : [],
-    [fileTriggerActive, fileTriggerChar, files, selectionStart, text],
+    [fileTriggerActive, files, hasFileTriggerQuery],
   );
 
   const promptItems = useMemo<AutocompleteItem[]>(

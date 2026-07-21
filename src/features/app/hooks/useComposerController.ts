@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type {
   AppMention,
   ComposerSendIntent,
@@ -77,9 +77,8 @@ export function useComposerController({
   startFast: (text: string) => Promise<void>;
   startStatus: (text: string) => Promise<void>;
 }) {
-  const [composerDraftsByThread, setComposerDraftsByThread] = useState<
-    Record<string, string>
-  >({});
+  const composerDraftsByThreadRef = useRef<Record<string, string>>({});
+  const [, setDraftRevision] = useState(0);
   const [prefillDraft, setPrefillDraft] = useState<QueuedMessage | null>(null);
   const [composerInsert, setComposerInsert] = useState<QueuedMessage | null>(
     null,
@@ -156,7 +155,8 @@ export function useComposerController({
         submittedText,
         references.map((reference) => reference.prompt),
       );
-      setComposerDraftsByThread((prev) => ({ ...prev, [draftKey]: restoredText }));
+      composerDraftsByThreadRef.current[draftKey] = restoredText;
+      setDraftRevision((revision) => revision + 1);
     },
   });
 
@@ -176,27 +176,42 @@ export function useComposerController({
           text,
           references.map((reference) => reference.prompt),
         );
-        setComposerDraftsByThread((prev) => ({ ...prev, [draftKey]: restoredText }));
+        composerDraftsByThreadRef.current[draftKey] = restoredText;
+        setDraftRevision((revision) => revision + 1);
       }
       throw error;
     }
   }, [draftKey, handleQueuedSend]);
 
-  const activeDraft = useMemo(
-    () =>
-      draftKey ? composerDraftsByThread[draftKey] ?? "" : "",
-    [composerDraftsByThread, draftKey],
-  );
+  const activeDraft = draftKey
+    ? composerDraftsByThreadRef.current[draftKey] ?? ""
+    : "";
 
   const handleDraftChange = useCallback(
     (next: string) => {
       if (!draftKey) {
         return;
       }
-      setComposerDraftsByThread((prev) => ({
-        ...prev,
-        [draftKey]: next,
-      }));
+      // Composer already owns immediate text rendering; this ref only mirrors cross-thread drafts.
+      composerDraftsByThreadRef.current[draftKey] = next;
+    },
+    [draftKey],
+  );
+
+  const getActiveDraft = useCallback(
+    () =>
+      draftKey ? composerDraftsByThreadRef.current[draftKey] ?? "" : "",
+    [draftKey],
+  );
+
+  const replaceActiveDraft = useCallback(
+    (next: string) => {
+      if (!draftKey) {
+        return;
+      }
+      composerDraftsByThreadRef.current[draftKey] = next;
+      // External insert/restore actions must push the mirrored value back into Composer.
+      setDraftRevision((revision) => revision + 1);
     },
     [draftKey],
   );
@@ -205,30 +220,28 @@ export function useComposerController({
     if (!threadId || !insertText) {
       return;
     }
-    setComposerDraftsByThread((prev) => {
-      const current = prev[threadId] ?? "";
-      const separator = current && !/\s$/.test(current) && !/^\s/.test(insertText)
-        ? "\n\n"
-        : "";
-      return {
-        ...prev,
-        [threadId]: `${current}${separator}${insertText}`,
-      };
-    });
-  }, []);
+    const current = composerDraftsByThreadRef.current[threadId] ?? "";
+    const separator = current && !/\s$/.test(current) && !/^\s/.test(insertText)
+      ? "\n\n"
+      : "";
+    composerDraftsByThreadRef.current[threadId] = `${current}${separator}${insertText}`;
+    if (threadId === draftKey) {
+      setDraftRevision((revision) => revision + 1);
+    }
+  }, [draftKey]);
 
   const addComposerReference = useCallback((reference: ComposerReference) => {
     if (!draftKey) return;
     referenceUndoRef.current[draftKey] = [
       ...(referenceUndoRef.current[draftKey] ?? []),
-      { text: composerDraftsByThread[draftKey] ?? "", references: composerReferencesByDraft[draftKey] ?? [] },
+      { text: composerDraftsByThreadRef.current[draftKey] ?? "", references: composerReferencesByDraft[draftKey] ?? [] },
     ].slice(-20);
     delete referenceRedoRef.current[draftKey];
     setComposerReferencesByDraft((prev) => ({
       ...prev,
       [draftKey]: [...(prev[draftKey] ?? []), reference],
     }));
-  }, [composerDraftsByThread, composerReferencesByDraft, draftKey]);
+  }, [composerReferencesByDraft, draftKey]);
   const addComposerReferenceForDraft = useCallback((targetDraftKey: string, reference: ComposerReference) => {
     setComposerReferencesByDraft((prev) => ({
       ...prev,
@@ -239,7 +252,7 @@ export function useComposerController({
     if (!draftKey) return;
     referenceUndoRef.current[draftKey] = [
       ...(referenceUndoRef.current[draftKey] ?? []),
-      { text: composerDraftsByThread[draftKey] ?? "", references: composerReferencesByDraft[draftKey] ?? [] },
+      { text: composerDraftsByThreadRef.current[draftKey] ?? "", references: composerReferencesByDraft[draftKey] ?? [] },
     ].slice(-20);
     delete referenceRedoRef.current[draftKey];
     setComposerReferencesByDraft((prev) => {
@@ -248,24 +261,24 @@ export function useComposerController({
       if (!target) return prev;
       return { ...prev, [draftKey]: refs.filter((ref) => ref.id !== id) };
     });
-  }, [composerDraftsByThread, composerReferencesByDraft, draftKey]);
+  }, [composerReferencesByDraft, draftKey]);
   const toggleComposerReference = useCallback((id: string) => {
     if (!draftKey) return;
     referenceUndoRef.current[draftKey] = [
       ...(referenceUndoRef.current[draftKey] ?? []),
-      { text: composerDraftsByThread[draftKey] ?? "", references: composerReferencesByDraft[draftKey] ?? [] },
+      { text: composerDraftsByThreadRef.current[draftKey] ?? "", references: composerReferencesByDraft[draftKey] ?? [] },
     ].slice(-20);
     delete referenceRedoRef.current[draftKey];
     setComposerReferencesByDraft((prev) => ({
       ...prev,
       [draftKey]: (prev[draftKey] ?? []).map((ref) => ref.id === id ? { ...ref, collapsed: !ref.collapsed } : ref),
     }));
-  }, [composerDraftsByThread, composerReferencesByDraft, draftKey]);
+  }, [composerReferencesByDraft, draftKey]);
   const reorderComposerReferences = useCallback((from: number, to: number) => {
     if (!draftKey || from === to) return;
     referenceUndoRef.current[draftKey] = [
       ...(referenceUndoRef.current[draftKey] ?? []),
-      { text: composerDraftsByThread[draftKey] ?? "", references: composerReferencesByDraft[draftKey] ?? [] },
+      { text: composerDraftsByThreadRef.current[draftKey] ?? "", references: composerReferencesByDraft[draftKey] ?? [] },
     ].slice(-20);
     delete referenceRedoRef.current[draftKey];
     setComposerReferencesByDraft((prev) => {
@@ -274,7 +287,7 @@ export function useComposerController({
       const [item] = refs.splice(from, 1); refs.splice(to, 0, item);
       return { ...prev, [draftKey]: refs };
     });
-  }, [composerDraftsByThread, composerReferencesByDraft, draftKey]);
+  }, [composerReferencesByDraft, draftKey]);
 
   const restoreReferenceHistory = useCallback((redo: boolean) => {
     if (!draftKey) return false;
@@ -283,17 +296,18 @@ export function useComposerController({
     const stack = source[draftKey] ?? [];
     const snapshot = stack[stack.length - 1];
     if (!snapshot) return false;
-    const currentText = composerDraftsByThread[draftKey] ?? "";
+    const currentText = composerDraftsByThreadRef.current[draftKey] ?? "";
     if (snapshot.text !== currentText) return false;
     target[draftKey] = [
       ...(target[draftKey] ?? []),
       { text: currentText, references: composerReferencesByDraft[draftKey] ?? [] },
     ].slice(-20);
     source[draftKey] = stack.slice(0, -1);
-    setComposerDraftsByThread((prev) => ({ ...prev, [draftKey]: snapshot.text }));
+    composerDraftsByThreadRef.current[draftKey] = snapshot.text;
+    setDraftRevision((revision) => revision + 1);
     setComposerReferencesByDraft((prev) => ({ ...prev, [draftKey]: snapshot.references }));
     return true;
-  }, [composerDraftsByThread, composerReferencesByDraft, draftKey]);
+  }, [composerReferencesByDraft, draftKey]);
 
   const handleSendPrompt = useCallback(
     (text: string, appMentions?: AppMention[]) => {
@@ -338,14 +352,14 @@ export function useComposerController({
   );
 
   const clearDraftForThread = useCallback((threadId: string) => {
-    setComposerDraftsByThread((prev) => {
-      if (!(threadId in prev)) {
-        return prev;
-      }
-      const { [threadId]: _, ...rest } = prev;
-      return rest;
-    });
-  }, []);
+    if (!(threadId in composerDraftsByThreadRef.current)) {
+      return;
+    }
+    delete composerDraftsByThreadRef.current[threadId];
+    if (threadId === draftKey) {
+      setDraftRevision((revision) => revision + 1);
+    }
+  }, [draftKey]);
 
   return {
     activeImageDraftKey,
@@ -369,6 +383,8 @@ export function useComposerController({
     setComposerInsert,
     activeDraft,
     handleDraftChange,
+    getActiveDraft,
+    replaceActiveDraft,
     insertDraftForThread,
     composerReferences: draftKey ? composerReferencesByDraft[draftKey] ?? [] : [],
     addComposerReference,

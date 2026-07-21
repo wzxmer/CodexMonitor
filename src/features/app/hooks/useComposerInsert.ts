@@ -4,6 +4,7 @@ import type { RefObject } from "react";
 type UseComposerInsertArgs = {
   isEnabled: boolean;
   draftText: string;
+  getDraftText?: () => string;
   onDraftChange: (next: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
 };
@@ -11,6 +12,7 @@ type UseComposerInsertArgs = {
 export function useComposerInsert({
   isEnabled,
   draftText,
+  getDraftText,
   onDraftChange,
   textareaRef,
 }: UseComposerInsertArgs) {
@@ -27,7 +29,7 @@ export function useComposerInsert({
         return;
       }
       const textarea = textareaRef.current;
-      const currentText = draftTextRef.current ?? "";
+      const currentText = getDraftText?.() ?? draftTextRef.current ?? "";
       const start = textarea?.selectionStart ?? currentText.length;
       const end = textarea?.selectionEnd ?? start;
       const before = currentText.slice(0, start);
@@ -59,6 +61,6 @@ export function useComposerInsert({
         focusComposer();
       });
     },
-    [isEnabled, onDraftChange, textareaRef],
+    [getDraftText, isEnabled, onDraftChange, textareaRef],
   );
 }

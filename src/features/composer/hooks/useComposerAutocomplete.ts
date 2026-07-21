@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 export type AutocompleteItem = {
   id: string;
@@ -9,6 +9,14 @@ export type AutocompleteItem = {
   cursorOffset?: number;
   group?: "Files" | "Skills" | "Apps" | "Slash" | "Prompts";
   mentionPath?: string;
+  searchParts?: AutocompleteSearchParts;
+};
+
+export type AutocompleteSearchParts = {
+  normalized: string;
+  base: string;
+  name: string;
+  ext: string;
 };
 
 export type AutocompleteTrigger = {
@@ -76,7 +84,7 @@ function basename(label: string) {
   return parts.length ? parts[parts.length - 1] : label;
 }
 
-function fileParts(label: string) {
+export function createAutocompleteSearchParts(label: string): AutocompleteSearchParts {
   const normalized = label.replace(/\\/g, "/").toLowerCase();
   const base = basename(normalized);
   const dotIndex = base.lastIndexOf(".");
@@ -99,12 +107,12 @@ function isSubsequence(query: string, target: string) {
   return q === query.length;
 }
 
-function scoreMatch(query: string, label: string) {
-  if (!query) {
+function scoreMatch(normalizedQuery: string, item: AutocompleteItem) {
+  if (!normalizedQuery) {
     return 0;
   }
-  const normalizedQuery = query.toLowerCase();
-  const { normalized, base, name, ext } = fileParts(label);
+  const { normalized, base, name, ext } =
+    item.searchParts ?? createAutocompleteSearchParts(item.label);
   const queryParts = normalizedQuery.split(".");
   const queryName = queryParts[0] ?? "";
   const queryExt = queryParts.length > 1 ? queryParts.slice(1).join(".") : "";
@@ -148,23 +156,56 @@ function scoreMatch(query: string, label: string) {
   return 0;
 }
 
-function rankItems(items: AutocompleteItem[], query: string) {
+type RankedItem = { item: AutocompleteItem; score: number };
+
+function compareRankedItems(a: RankedItem, b: RankedItem) {
+  if (a.score !== b.score) {
+    return b.score - a.score;
+  }
+  return a.item.label.localeCompare(b.item.label);
+}
+
+function findRankedInsertionIndex(ranked: RankedItem[], entry: RankedItem) {
+  let low = 0;
+  let high = ranked.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (compareRankedItems(entry, ranked[middle]) < 0) {
+      high = middle;
+    } else {
+      low = middle + 1;
+    }
+  }
+  return low;
+}
+
+function rankItems(items: AutocompleteItem[], query: string, maxResults: number) {
+  const limit = Math.max(0, maxResults);
+  if (limit === 0) {
+    return [];
+  }
   const normalized = query.trim().toLowerCase();
   if (!normalized) {
-    return items.slice();
+    return items.slice(0, limit);
   }
-  const ranked = items
-    .map((item) => ({
-      item,
-      score: scoreMatch(normalized, item.label),
-    }))
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => {
-      if (a.score !== b.score) {
-        return b.score - a.score;
-      }
-      return a.item.label.localeCompare(b.item.label);
-    });
+  const ranked: RankedItem[] = [];
+  for (const item of items) {
+    const score = scoreMatch(normalized, item);
+    if (score <= 0) {
+      continue;
+    }
+    const entry = { item, score };
+    if (
+      ranked.length === limit &&
+      compareRankedItems(entry, ranked[ranked.length - 1]) >= 0
+    ) {
+      continue;
+    }
+    ranked.splice(findRankedInsertionIndex(ranked, entry), 0, entry);
+    if (ranked.length > limit) {
+      ranked.pop();
+    }
+  }
   return ranked.map((entry) => entry.item);
 }
 
@@ -183,6 +224,7 @@ export function useComposerAutocomplete({
     }
     return resolveAutocompleteState(text, selectionStart, triggers);
   }, [selectionStart, text, triggers]);
+  const deferredQuery = useDeferredValue(state.query);
 
   const matches = useMemo(() => {
     if (!state.active || !state.trigger) {
@@ -192,9 +234,8 @@ export function useComposerAutocomplete({
     if (!source) {
       return [];
     }
-    const ranked = rankItems(source.items, state.query);
-    return ranked.slice(0, Math.max(0, maxResults));
-  }, [state.active, state.query, state.trigger, triggers, maxResults]);
+    return rankItems(source.items, deferredQuery, maxResults);
+  }, [deferredQuery, state.active, state.trigger, triggers, maxResults]);
 
   useEffect(() => {
     setHighlightIndex(0);

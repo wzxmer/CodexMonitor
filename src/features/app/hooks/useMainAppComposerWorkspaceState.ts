@@ -273,9 +273,10 @@ export function useMainAppComposerWorkspaceState({
   const handleInsertComposerText = useComposerInsert({
     isEnabled: canInsertComposerText,
     draftText: showWorkspaceHome ? workspaceHomeState.draft : composerState.activeDraft,
+    getDraftText: showWorkspaceHome ? undefined : composerState.getActiveDraft,
     onDraftChange: showWorkspaceHome
       ? workspaceHomeState.setDraft
-      : composerState.handleDraftChange,
+      : composerState.replaceActiveDraft,
     textareaRef: showWorkspaceHome ? workspaceHomeTextareaRef : composerInputRef,
   });
 

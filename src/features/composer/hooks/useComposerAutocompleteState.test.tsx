@@ -5,6 +5,44 @@ import { describe, expect, it, vi } from "vitest";
 import { useComposerAutocompleteState } from "./useComposerAutocompleteState";
 
 describe("useComposerAutocompleteState file mentions", () => {
+  it("reuses indexed file candidates while refining a non-empty query", () => {
+    const textareaRef = createRef<HTMLTextAreaElement>();
+    textareaRef.current = {
+      focus: vi.fn(),
+      setSelectionRange: vi.fn(),
+    } as unknown as HTMLTextAreaElement;
+    const files = ["src/alpha.ts", "src/alpine.ts", "src/beta.ts"];
+    const { result, rerender } = renderHook(
+      ({ text }: { text: string }) =>
+        useComposerAutocompleteState({
+          text,
+          selectionStart: text.length,
+          disabled: false,
+          appsEnabled: true,
+          skills: [],
+          apps: [],
+          prompts: [],
+          files,
+          textareaRef,
+          setText: vi.fn(),
+          setSelectionStart: vi.fn(),
+        }),
+      { initialProps: { text: "@a" } },
+    );
+    const initialAlpha = result.current.autocompleteMatches.find(
+      (item) => item.label === "src/alpha.ts",
+    );
+
+    rerender({ text: "@al" });
+
+    expect(initialAlpha).toBeDefined();
+    expect(
+      result.current.autocompleteMatches.find(
+        (item) => item.label === "src/alpha.ts",
+      ),
+    ).toBe(initialAlpha);
+  });
+
   it("suggests a file even if it is already mentioned earlier in the message", () => {
     const files = ["src/App.tsx", "src/main.tsx"];
     const text = "Please review @src/App.tsx and also @";
@@ -67,6 +105,42 @@ describe("useComposerAutocompleteState file mentions", () => {
       (item) => item.label === "AGENTS.md",
     );
     expect(rootItem?.group).toBe("Files");
+  });
+
+  it("keeps score and label ordering when retaining only top matches", () => {
+    const text = "@alpha";
+    const textareaRef = createRef<HTMLTextAreaElement>();
+    textareaRef.current = {
+      focus: vi.fn(),
+      setSelectionRange: vi.fn(),
+    } as unknown as HTMLTextAreaElement;
+    const { result } = renderHook(() =>
+      useComposerAutocompleteState({
+        text,
+        selectionStart: text.length,
+        disabled: false,
+        appsEnabled: true,
+        skills: [],
+        apps: [],
+        prompts: [],
+        files: [
+          "src/zeta-alpha.ts",
+          "src/alpha.ts",
+          "alpha.ts",
+          "src/beta-alpha.ts",
+        ],
+        textareaRef,
+        setText: vi.fn(),
+        setSelectionStart: vi.fn(),
+      }),
+    );
+
+    expect(result.current.autocompleteMatches.map((item) => item.label)).toEqual([
+      "alpha.ts",
+      "src/alpha.ts",
+      "src/beta-alpha.ts",
+      "src/zeta-alpha.ts",
+    ]);
   });
 });
 

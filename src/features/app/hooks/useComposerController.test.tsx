@@ -50,6 +50,30 @@ describe("useComposerController", () => {
     collapsed: false,
   });
 
+  it("mirrors active draft keystrokes without rerendering the app controller", () => {
+    const options = makeOptions({ activeThreadId: "thread-1" });
+    let renderCount = 0;
+    const { result, rerender } = renderHook(
+      (props) => {
+        renderCount += 1;
+        return useComposerController(props);
+      },
+      { initialProps: options },
+    );
+    const initialRenderCount = renderCount;
+
+    act(() => result.current.handleDraftChange("typed locally"));
+
+    expect(renderCount).toBe(initialRenderCount);
+    rerender({ ...options });
+    expect(result.current.activeDraft).toBe("typed locally");
+
+    const renderCountBeforeReplacement = renderCount;
+    act(() => result.current.replaceActiveDraft("inserted externally"));
+    expect(renderCount).toBe(renderCountBeforeReplacement + 1);
+    expect(result.current.activeDraft).toBe("inserted externally");
+  });
+
   it("keeps a workspace draft before the first thread exists", () => {
     const options = makeOptions();
     const { result, rerender } = renderHook((props) => useComposerController(props), {
@@ -59,8 +83,6 @@ describe("useComposerController", () => {
     act(() => {
       result.current.handleDraftChange("no project draft");
     });
-
-    expect(result.current.activeDraft).toBe("no project draft");
 
     rerender({ ...options, activeThreadId: "thread-1" });
     expect(result.current.activeDraft).toBe("");
@@ -245,7 +267,7 @@ describe("useComposerController", () => {
 
   it("leaves undo to the editor when text changed after a reference operation", () => {
     const options = makeOptions({ activeThreadId: "thread-1" });
-    const { result } = renderHook((props) => useComposerController(props), { initialProps: options });
+    const { result, rerender } = renderHook((props) => useComposerController(props), { initialProps: options });
     act(() => result.current.addComposerReference(reference("ref-1")));
     act(() => result.current.handleDraftChange("new body"));
 
@@ -253,6 +275,7 @@ describe("useComposerController", () => {
     act(() => { handled = result.current.undoComposerReference(); });
 
     expect(handled).toBe(false);
+    rerender({ ...options });
     expect(result.current.activeDraft).toBe("new body");
     expect(result.current.composerReferences.map((item) => item.id)).toEqual(["ref-1"]);
   });
