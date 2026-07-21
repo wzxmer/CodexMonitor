@@ -217,6 +217,17 @@ Notes:
 - Portable workflow remains the source of approved expected bindings. Its adapter must explicitly register the approved expected envelope against the same collab tool-call ID; expected-first and actual-first arrival are both supported across restart. CM does not derive expected model/effort from free-form text, event order, prompt similarity, or model/effort coincidence.
 - Because the upstream item has no portable node correlation metadata, CM cannot safely infer which concurrent plan node produced a call. Fully automatic plan-node correlation remains blocked pending upstream metadata or a controlled adapter hook. This sidecar does not enable Active Router, spawn children, or replace the portable Root Task Ledger.
 
+### M2.5B Evidence Contract
+
+M2.5B treats real collaboration, restart recovery, and prompt non-persistence as separate evidence gates:
+
+- Real collaboration evidence must come from Codex app-server `spawn_agent` activity. CM accepts both `subAgentActivity` and metadata-visible `collabAgentToolCall` (`tool = spawn_agent` only); `wait` and `wait_agent` are excluded.
+- Restart evidence must reload `execution-binding-shadow.json` from the same data directory and preserve expected-first and actual-first records. A restart must not recreate a child, clear a binding, or move a child into an unrelated workspace.
+- Persisted binding evidence is structural only: source/runtime/workspace IDs, parent/call/receiver IDs, model/effort evidence, status, reason codes, and timestamps. It must not contain prompt text, `additionalContext`, user input, tool input, API keys, or environment values.
+- Metadata-hidden runtimes are valid but produce incomplete actual evidence; CM must remain fail-closed instead of inferring model or effort from prompt text, event order, or coincidence.
+
+The regression test `persisted_binding_evidence_contains_no_prompt_or_context_payload` reads the serialized sidecar and rejects forbidden prompt/context fields. Real runtime acceptance additionally requires a controlled parent/child `spawn_agent` run, CM restart, binding reload, and child `thread/read` or `thread/resume` verification. Evidence artifacts stay local under `.codex-monitor` and are not published.
+
 ## Missing Client Requests (Codex v2 ClientRequest Methods)
 
 Compared against Codex v2 request methods, CodexMonitor currently does not send:

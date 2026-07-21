@@ -766,6 +766,29 @@ mod tests {
     }
 
     #[test]
+    fn persisted_binding_evidence_contains_no_prompt_or_context_payload() {
+        let path = test_path("no-prompt-persistence");
+        let now = current_time_ms();
+        let mut sidecar = ExecutionBindingSidecar::new(path.clone(), 128, 4_096);
+        sidecar.register(register("call-1", now)).unwrap();
+        sidecar
+            .observe(observe("call-1", Some("gpt-5.6-luna"), now + 1))
+            .unwrap();
+
+        let persisted = std::fs::read_to_string(&path).unwrap();
+        let lower = persisted.to_ascii_lowercase();
+        for forbidden in ["prompt", "additionalcontext", "user_message", "input"] {
+            assert!(
+                !lower.contains(forbidden),
+                "binding evidence must not persist {forbidden}"
+            );
+        }
+        assert!(lower.contains("collabtoolcallid"));
+        assert!(lower.contains("receiverthreadids"));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn actual_first_then_expected_matches() {
         let path = test_path("actual-first");
         let mut sidecar = ExecutionBindingSidecar::new(path.clone(), 128, 4_096);
