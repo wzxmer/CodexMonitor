@@ -1062,6 +1062,7 @@ export type LocalUsageTotals = {
   lastHourTokens: number;
   last7DaysTokens: number;
   last30DaysTokens: number;
+  monthTokens?: number;
   averageDailyTokens: number;
   cacheHitRatePercent: number;
   peakDay: string | null;
@@ -1079,6 +1080,7 @@ export type LocalUsageSnapshot = {
   days: LocalUsageDay[];
   totals: LocalUsageTotals;
   topModels: LocalUsageModel[];
+  topSources?: LocalUsageSource[];
 };
 
 export type TurnPlanStepStatus = "pending" | "inProgress" | "completed";
@@ -1151,6 +1153,12 @@ export type QueuedMessage = {
   images?: string[];
   appMentions?: AppMention[];
   references?: ComposerReference[];
+};
+
+export type LocalUsageSource = {
+  source: string;
+  tokens: number;
+  sharePercent: number;
 };
 
 export type ComposerReference = {

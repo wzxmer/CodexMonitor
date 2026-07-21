@@ -77,6 +77,7 @@ export function HomeUsageSection({
     today: t("home.usage.today"),
     last7Days: t("home.usage.last7Days"),
     last30Days: t("home.usage.last30Days"),
+    thisMonth: t("home.usage.thisMonth"),
     tokens: t("home.usage.tokens"),
     latestAvailableDate: t("home.usage.latestAvailableDate"),
     inputOutput: t("home.usage.inputOutput"),

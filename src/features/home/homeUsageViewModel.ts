@@ -38,6 +38,7 @@ export type HomeUsageViewModelText = HomeFormatterText &
     lastHour: string;
     last7Days: string;
     last30Days: string;
+    thisMonth: string;
     tokens: string;
     latestAvailableDate: string;
     inputOutput: string;
@@ -185,12 +186,16 @@ export function buildHomeUsageViewModel({
             ),
           },
           {
-            label: labels.last30Days,
-            value: formatCompactNumber(usageTotals?.last30DaysTokens ?? last7Tokens),
+            label: labels.thisMonth,
+            value: formatCompactNumber(
+              usageTotals?.monthTokens ?? usageTotals?.last30DaysTokens ?? last7Tokens,
+            ),
             suffix: labels.tokens,
             caption: labels.total.replace(
               "{value}",
-              formatCount(usageTotals?.last30DaysTokens ?? last7Tokens),
+              formatCount(
+                usageTotals?.monthTokens ?? usageTotals?.last30DaysTokens ?? last7Tokens,
+              ),
             ),
           },
           {

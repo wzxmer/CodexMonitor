@@ -20,6 +20,44 @@ describe("threadReducer", () => {
     expect(next.threadStatusById["thread-1"]?.isProcessing).toBe(false);
   });
 
+  it("keeps context token usage isolated between sessions", () => {
+    const usageA = {
+      total: {
+        totalTokens: 10_000,
+        inputTokens: 9_000,
+        cachedInputTokens: 0,
+        outputTokens: 1_000,
+        reasoningOutputTokens: 0,
+      },
+      last: {
+        totalTokens: 2_000,
+        inputTokens: 1_800,
+        cachedInputTokens: 0,
+        outputTokens: 200,
+        reasoningOutputTokens: 0,
+      },
+      modelContextWindow: 100_000,
+    };
+    const usageB = {
+      ...usageA,
+      last: { ...usageA.last, totalTokens: 80_000 },
+    };
+
+    const withSessionA = threadReducer(initialState, {
+      type: "setThreadTokenUsage",
+      threadId: "thread-a",
+      tokenUsage: usageA,
+    });
+    const withBothSessions = threadReducer(withSessionA, {
+      type: "setThreadTokenUsage",
+      threadId: "thread-b",
+      tokenUsage: usageB,
+    });
+
+    expect(withBothSessions.tokenUsageByThread["thread-a"]).toEqual(usageA);
+    expect(withBothSessions.tokenUsageByThread["thread-b"]).toEqual(usageB);
+  });
+
   it("renames auto-generated thread on first user message", () => {
     const threads: ThreadSummary[] = [
       { id: "thread-1", name: "New Agent", updatedAt: 1 },

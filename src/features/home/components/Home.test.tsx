@@ -252,6 +252,7 @@ describe("Home", () => {
             lastHourTokens: 12,
             last7DaysTokens: 248,
             last30DaysTokens: 343,
+            monthTokens: 321,
             averageDailyTokens: 35,
             cacheHitRatePercent: 25,
             peakDay: "2026-01-19",
@@ -310,6 +311,13 @@ describe("Home", () => {
       throw new Error("Expected today usage card");
     }
     expect(within(todayCard).getByText("36")).toBeTruthy();
+
+    const monthCard = screen.getByText("本月").closest(".home-usage-card");
+    expect(monthCard).toBeTruthy();
+    if (!(monthCard instanceof HTMLElement)) {
+      throw new Error("Expected monthly usage card");
+    }
+    expect(within(monthCard).getByText("321")).toBeTruthy();
 
     expect(
       screen.getByLabelText("用量周 2026-01-14 到 2026-01-20"),

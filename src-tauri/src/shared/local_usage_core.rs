@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Local, TimeZone, Utc};
+use chrono::{DateTime, Datelike, Duration, Local, TimeZone, Utc};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -9,7 +9,8 @@ use tokio::sync::Mutex;
 
 use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
 use crate::types::{
-    LocalUsageDay, LocalUsageModel, LocalUsageSnapshot, LocalUsageTotals, WorkspaceEntry,
+    LocalUsageDay, LocalUsageModel, LocalUsageSnapshot, LocalUsageSource, LocalUsageTotals,
+    WorkspaceEntry,
 };
 
 #[derive(Default, Clone, Copy)]
@@ -36,7 +37,9 @@ pub(crate) async fn local_usage_snapshot_core(
     days: Option<u32>,
     workspace_path: Option<String>,
 ) -> Result<LocalUsageSnapshot, String> {
-    let days = days.unwrap_or(30).clamp(1, 90);
+    let requested_days = days.unwrap_or(30).clamp(1, 90);
+    let month_days = Local::now().day().max(1);
+    let days = requested_days.max(month_days);
     let workspace_path = workspace_path.and_then(|value| {
         let trimmed = value.trim();
         if trimmed.is_empty() {
@@ -97,6 +100,7 @@ fn scan_local_usage(
         .map(|key| (key.clone(), DailyTotals::default()))
         .collect();
     let mut model_totals: HashMap<String, i64> = HashMap::new();
+    let mut source_totals: HashMap<String, i64> = HashMap::new();
     let mut rolling_hour_tokens = 0;
     let rolling_hour_start_ms = updated_at - ONE_HOUR_MS;
 
@@ -106,34 +110,32 @@ fn scan_local_usage(
             day_keys,
             daily,
             HashMap::new(),
+            HashMap::new(),
             rolling_hour_tokens,
         ));
     }
 
     for root in sessions_roots {
+        scan_usage_directory(
+            root,
+            &mut daily,
+            &mut model_totals,
+            &mut source_totals,
+            &mut rolling_hour_tokens,
+            rolling_hour_start_ms,
+            workspace_path,
+        )?;
         for day_key in &day_keys {
             let day_dir = day_dir_for_key(root, day_key);
-            if !day_dir.exists() {
-                continue;
-            }
-            let entries = match std::fs::read_dir(&day_dir) {
-                Ok(entries) => entries,
-                Err(_) => continue,
-            };
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
-                    continue;
-                }
-                scan_file(
-                    &path,
-                    &mut daily,
-                    &mut model_totals,
-                    &mut rolling_hour_tokens,
-                    rolling_hour_start_ms,
-                    workspace_path,
-                )?;
-            }
+            scan_usage_directory(
+                &day_dir,
+                &mut daily,
+                &mut model_totals,
+                &mut source_totals,
+                &mut rolling_hour_tokens,
+                rolling_hour_start_ms,
+                workspace_path,
+            )?;
         }
     }
 
@@ -142,6 +144,7 @@ fn scan_local_usage(
         day_keys,
         daily,
         model_totals,
+        source_totals,
         rolling_hour_tokens,
     ))
 }
@@ -151,15 +154,23 @@ fn build_snapshot(
     day_keys: Vec<String>,
     daily: HashMap<String, DailyTotals>,
     model_totals: HashMap<String, i64>,
+    source_totals: HashMap<String, i64>,
     rolling_hour_tokens: i64,
 ) -> LocalUsageSnapshot {
     let mut days: Vec<LocalUsageDay> = Vec::with_capacity(day_keys.len());
     let mut total_tokens = 0;
+    let month_start = Local::now().date_naive().with_day(1).unwrap_or_default();
+    let mut month_tokens = 0;
 
     for day_key in &day_keys {
         let totals = daily.get(day_key).copied().unwrap_or_default();
         let total = totals.input + totals.output;
         total_tokens += total;
+        if chrono::NaiveDate::parse_from_str(day_key, "%Y-%m-%d")
+            .is_ok_and(|day| day >= month_start)
+        {
+            month_tokens += total;
+        }
         days.push(LocalUsageDay {
             day: day_key.clone(),
             input_tokens: totals.input,
@@ -175,6 +186,7 @@ fn build_snapshot(
     let last7_tokens: i64 = last7.iter().map(|day| day.total_tokens).sum();
     let last7_input: i64 = last7.iter().map(|day| day.input_tokens).sum();
     let last7_cached: i64 = last7.iter().map(|day| day.cached_input_tokens).sum();
+    let last30_tokens: i64 = days.iter().rev().take(30).map(|day| day.total_tokens).sum();
 
     let average_daily_tokens = if last7.is_empty() {
         0
@@ -211,26 +223,96 @@ fn build_snapshot(
     top_models.sort_by(|a, b| b.tokens.cmp(&a.tokens));
     top_models.truncate(4);
 
+    let mut top_sources: Vec<LocalUsageSource> = source_totals
+        .into_iter()
+        .filter(|(_, tokens)| *tokens > 0)
+        .map(|(source, tokens)| LocalUsageSource {
+            source,
+            tokens,
+            share_percent: if total_tokens > 0 {
+                ((tokens as f64) / (total_tokens as f64) * 1000.0).round() / 10.0
+            } else {
+                0.0
+            },
+        })
+        .collect();
+    top_sources.sort_by(|a, b| b.tokens.cmp(&a.tokens));
+    top_sources.truncate(4);
+
     LocalUsageSnapshot {
         updated_at,
         days,
         totals: LocalUsageTotals {
             last_hour_tokens: rolling_hour_tokens,
             last7_days_tokens: last7_tokens,
-            last30_days_tokens: total_tokens,
+            last30_days_tokens: last30_tokens,
+            month_tokens,
             average_daily_tokens,
             cache_hit_rate_percent,
             peak_day,
             peak_day_tokens,
         },
         top_models,
+        top_sources,
     }
 }
 
+fn scan_usage_directory(
+    directory: &Path,
+    daily: &mut HashMap<String, DailyTotals>,
+    model_totals: &mut HashMap<String, i64>,
+    source_totals: &mut HashMap<String, i64>,
+    rolling_hour_tokens: &mut i64,
+    rolling_hour_start_ms: i64,
+    workspace_path: Option<&Path>,
+) -> Result<(), String> {
+    let entries = match std::fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(()),
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
+            continue;
+        }
+        scan_file_with_sources(
+            &path,
+            daily,
+            model_totals,
+            source_totals,
+            rolling_hour_tokens,
+            rolling_hour_start_ms,
+            workspace_path,
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
 fn scan_file(
     path: &Path,
     daily: &mut HashMap<String, DailyTotals>,
     model_totals: &mut HashMap<String, i64>,
+    rolling_hour_tokens: &mut i64,
+    rolling_hour_start_ms: i64,
+    workspace_path: Option<&Path>,
+) -> Result<(), String> {
+    scan_file_with_sources(
+        path,
+        daily,
+        model_totals,
+        &mut HashMap::new(),
+        rolling_hour_tokens,
+        rolling_hour_start_ms,
+        workspace_path,
+    )
+}
+
+fn scan_file_with_sources(
+    path: &Path,
+    daily: &mut HashMap<String, DailyTotals>,
+    model_totals: &mut HashMap<String, i64>,
+    source_totals: &mut HashMap<String, i64>,
     rolling_hour_tokens: &mut i64,
     rolling_hour_start_ms: i64,
     workspace_path: Option<&Path>,
@@ -244,6 +326,7 @@ fn scan_file(
     let reader = BufReader::new(file);
     let mut previous_totals: Option<UsageTotals> = None;
     let mut current_model: Option<String> = None;
+    let mut current_source = "unknown".to_string();
     let mut last_activity_ms: Option<i64> = None;
     let mut seen_runs: HashSet<i64> = HashSet::new();
     let mut match_known = workspace_path.is_none();
@@ -276,6 +359,22 @@ fn scan_file(
                         break;
                     }
                 }
+            }
+        }
+
+        if entry_type == "session_meta" {
+            if let Some(source) = value
+                .get("model_provider")
+                .and_then(Value::as_str)
+                .or_else(|| {
+                    value
+                        .get("payload")
+                        .and_then(|payload| payload.get("model_provider"))
+                        .and_then(Value::as_str)
+                })
+                .filter(|source| !source.trim().is_empty())
+            {
+                current_source = source.to_string();
             }
         }
 
@@ -424,6 +523,8 @@ fn scan_file(
                         .or_else(|| extract_model_from_token_count(&value))
                         .unwrap_or_else(|| "unknown".to_string());
                     *model_totals.entry(model).or_insert(0) += delta.input + delta.output;
+                    *source_totals.entry(current_source.clone()).or_insert(0) +=
+                        delta.input + delta.output;
                 }
             }
 
@@ -470,13 +571,23 @@ fn scan_thread_token_usage(
     workspace_path: &Path,
     thread_id: &str,
 ) -> Option<Value> {
-    let mut latest: Option<Value> = None;
+    let mut latest: Option<(i64, Value)> = None;
     for root in sessions_roots {
         let Ok(years) = std::fs::read_dir(root) else {
             continue;
         };
         for year in years.flatten() {
-            let Ok(months) = std::fs::read_dir(year.path()) else {
+            let year_path = year.path();
+            if year_path.extension().and_then(|ext| ext.to_str()) == Some("jsonl") {
+                update_latest_thread_token_usage(
+                    &mut latest,
+                    &year_path,
+                    workspace_path,
+                    thread_id,
+                );
+                continue;
+            }
+            let Ok(months) = std::fs::read_dir(year_path) else {
                 continue;
             };
             for month in months.flatten() {
@@ -489,27 +600,57 @@ fn scan_thread_token_usage(
                     };
                     for file in files.flatten() {
                         let path = file.path();
-                        if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
-                            continue;
-                        }
-                        if let Some(usage) =
-                            read_thread_token_usage_file(&path, workspace_path, thread_id)
-                        {
-                            latest = Some(usage);
-                        }
+                        update_latest_thread_token_usage(
+                            &mut latest,
+                            &path,
+                            workspace_path,
+                            thread_id,
+                        );
                     }
                 }
             }
         }
     }
-    latest
+    latest.map(|(_, usage)| usage)
 }
 
+fn update_latest_thread_token_usage(
+    latest: &mut Option<(i64, Value)>,
+    path: &Path,
+    workspace_path: &Path,
+    thread_id: &str,
+) {
+    if path.extension().and_then(|ext| ext.to_str()) != Some("jsonl") {
+        return;
+    }
+    let Some((observed_at_ms, usage)) =
+        read_thread_token_usage_file_with_timestamp(path, workspace_path, thread_id)
+    else {
+        return;
+    };
+    if latest
+        .as_ref()
+        .is_none_or(|(latest_at_ms, _)| observed_at_ms >= *latest_at_ms)
+    {
+        *latest = Some((observed_at_ms, usage));
+    }
+}
+
+#[cfg(test)]
 fn read_thread_token_usage_file(
     path: &Path,
     workspace_path: &Path,
     thread_id: &str,
 ) -> Option<Value> {
+    read_thread_token_usage_file_with_timestamp(path, workspace_path, thread_id)
+        .map(|(_, usage)| usage)
+}
+
+fn read_thread_token_usage_file_with_timestamp(
+    path: &Path,
+    workspace_path: &Path,
+    thread_id: &str,
+) -> Option<(i64, Value)> {
     let file = File::open(path).ok()?;
     let reader = BufReader::new(file);
     let mut owns_thread = false;
@@ -517,6 +658,7 @@ fn read_thread_token_usage_file(
     let mut total: Option<serde_json::Map<String, Value>> = None;
     let mut last: Option<serde_json::Map<String, Value>> = None;
     let mut model_context_window: Option<Value> = None;
+    let mut latest_token_timestamp_ms: Option<i64> = None;
 
     for line in reader.lines().map_while(Result::ok) {
         if line.len() > 512_000 {
@@ -556,17 +698,28 @@ fn read_thread_token_usage_file(
         let Some(info) = payload.get("info").and_then(Value::as_object) else {
             continue;
         };
+        let mut has_usage_snapshot = false;
         if let Some(map) = find_usage_map(info, &["total_token_usage", "totalTokenUsage"]) {
             total = Some(map.clone());
+            has_usage_snapshot = true;
         }
         if let Some(map) = find_usage_map(info, &["last_token_usage", "lastTokenUsage"]) {
             last = Some(map.clone());
+            has_usage_snapshot = true;
         }
         model_context_window = info
             .get("model_context_window")
             .or_else(|| info.get("modelContextWindow"))
             .cloned()
             .or(model_context_window);
+        if has_usage_snapshot {
+            if let Some(timestamp_ms) = read_timestamp_ms(&value) {
+                latest_token_timestamp_ms = Some(
+                    latest_token_timestamp_ms
+                        .map_or(timestamp_ms, |current| current.max(timestamp_ms)),
+                );
+            }
+        }
     }
 
     let last = last?;
@@ -578,7 +731,10 @@ fn read_thread_token_usage_file(
     if let Some(window) = model_context_window {
         usage.insert("model_context_window".to_string(), window);
     }
-    Some(Value::Object(usage))
+    Some((
+        latest_token_timestamp_ms.unwrap_or_default(),
+        Value::Object(usage),
+    ))
 }
 
 fn extract_model_from_turn_context(value: &Value) -> Option<String> {
@@ -688,10 +844,11 @@ fn make_day_keys(days: u32) -> Vec<String> {
         .collect()
 }
 
-fn resolve_codex_sessions_root(codex_home_override: Option<PathBuf>) -> Option<PathBuf> {
+fn resolve_codex_sessions_roots(codex_home_override: Option<PathBuf>) -> Vec<PathBuf> {
     codex_home_override
         .or_else(resolve_default_codex_home)
-        .map(|home| home.join("sessions"))
+        .map(|home| vec![home.join("sessions"), home.join("archived_sessions")])
+        .unwrap_or_default()
 }
 
 fn resolve_sessions_roots(
@@ -701,15 +858,13 @@ fn resolve_sessions_roots(
     if let Some(workspace_path) = workspace_path {
         let codex_home_override =
             resolve_workspace_codex_home_for_path(workspaces, Some(workspace_path));
-        return resolve_codex_sessions_root(codex_home_override)
-            .into_iter()
-            .collect();
+        return resolve_codex_sessions_roots(codex_home_override);
     }
 
     let mut roots = Vec::new();
     let mut seen = HashSet::new();
 
-    if let Some(root) = resolve_codex_sessions_root(None) {
+    for root in resolve_codex_sessions_roots(None) {
         if seen.insert(root.clone()) {
             roots.push(root);
         }
@@ -723,7 +878,7 @@ fn resolve_sessions_roots(
         let Some(codex_home) = resolve_workspace_codex_home(entry, parent_entry) else {
             continue;
         };
-        if let Some(root) = resolve_codex_sessions_root(Some(codex_home)) {
+        for root in resolve_codex_sessions_roots(Some(codex_home)) {
             if seen.insert(root.clone()) {
                 roots.push(root);
             }
@@ -831,6 +986,63 @@ mod tests {
     }
 
     #[test]
+    fn scan_local_usage_includes_flat_archived_sessions() {
+        let codex_home = make_temp_sessions_root();
+        let archived_root = codex_home.join("archived_sessions");
+        fs::create_dir_all(&archived_root).expect("create archived root");
+        let archived_path = archived_root.join("rollout-thread-archived.jsonl");
+        let mut archived_file = File::create(&archived_path).expect("create archived session");
+        writeln!(
+            archived_file,
+            "{}",
+            r#"{"type":"session_meta","payload":{"id":"thread-archived","cwd":"/repo","model_provider":"provider-archived"}}"#
+        )
+        .expect("write archived metadata");
+        writeln!(
+            archived_file,
+            "{}",
+            format!(
+                r#"{{"timestamp":"{}","type":"event_msg","payload":{{"type":"token_count","info":{{"last_token_usage":{{"input_tokens":40,"output_tokens":10}}}}}}}}"#,
+                Utc::now().to_rfc3339()
+            )
+        )
+        .expect("write archived token usage");
+
+        let snapshot =
+            scan_local_usage(30, None, &[archived_root]).expect("scan archived local usage");
+
+        assert_eq!(snapshot.totals.last30_days_tokens, 50);
+        assert_eq!(snapshot.top_sources.len(), 1);
+        assert_eq!(snapshot.top_sources[0].source, "provider-archived");
+        assert_eq!(snapshot.top_sources[0].tokens, 50);
+
+        let _ = fs::remove_file(archived_path);
+        let _ = fs::remove_dir_all(codex_home);
+    }
+
+    #[test]
+    fn build_snapshot_limits_last30_total_to_thirty_days() {
+        let day_keys = make_day_keys(31);
+        let daily = day_keys
+            .iter()
+            .map(|day| {
+                (
+                    day.clone(),
+                    DailyTotals {
+                        input: 1,
+                        ..DailyTotals::default()
+                    },
+                )
+            })
+            .collect();
+
+        let snapshot = build_snapshot(0, day_keys, daily, HashMap::new(), HashMap::new(), 0);
+
+        assert_eq!(snapshot.days.len(), 31);
+        assert_eq!(snapshot.totals.last30_days_tokens, 30);
+    }
+
+    #[test]
     fn thread_usage_requires_matching_session_and_workspace() {
         let path = write_temp_jsonl(&[
             r#"{"type":"session_meta","payload":{"id":"thread-usage","cwd":"/repo"}}"#,
@@ -846,6 +1058,48 @@ mod tests {
         assert!(read_thread_token_usage_file(&path, Path::new("/repo"), "other-thread").is_none());
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn thread_usage_prefers_latest_snapshot_across_session_roots() {
+        let codex_home = make_temp_sessions_root();
+        let active_root = codex_home.join("sessions");
+        let archived_root = codex_home.join("archived_sessions");
+        let active_path = write_session_file(
+            &active_root,
+            "2026-01-20",
+            &[
+                r#"{"type":"session_meta","payload":{"id":"thread-duplicate","cwd":"/repo"}}"#.to_string(),
+                r#"{"timestamp":"2026-01-20T11:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":10,"output_tokens":5},"model_context_window":1000}}}"#.to_string(),
+            ],
+        );
+        fs::create_dir_all(&archived_root).expect("create archived root");
+        let archived_path = archived_root.join("rollout-2026-01-20-thread-duplicate.jsonl");
+        let mut archived_file = File::create(&archived_path).expect("create archived session");
+        writeln!(
+            archived_file,
+            "{}",
+            r#"{"type":"session_meta","payload":{"id":"thread-duplicate","cwd":"/repo"}}"#
+        )
+        .expect("write archived metadata");
+        writeln!(
+            archived_file,
+            "{}",
+            r#"{"timestamp":"2026-01-20T12:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":20,"output_tokens":5},"model_context_window":1000}}}"#
+        )
+        .expect("write archived token usage");
+
+        let usage = scan_thread_token_usage(
+            &[active_root.clone(), archived_root.clone()],
+            Path::new("/repo"),
+            "thread-duplicate",
+        )
+        .expect("latest usage snapshot");
+        assert_eq!(usage["last"]["input_tokens"], 20);
+
+        let _ = fs::remove_file(active_path);
+        let _ = fs::remove_file(archived_path);
+        let _ = fs::remove_dir_all(codex_home);
     }
 
     #[test]
@@ -1107,9 +1361,7 @@ mod tests {
         workspaces.insert(entry_b.id.clone(), entry_b.clone());
 
         let roots = resolve_sessions_roots(&workspaces, None);
-        let expected = resolve_codex_sessions_root(None)
-            .map(|root| vec![root])
-            .unwrap_or_default();
+        let expected = resolve_codex_sessions_roots(None);
         assert_eq!(roots, expected);
     }
 }
