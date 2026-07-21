@@ -947,6 +947,7 @@ export default function MainApp() {
       threadListRuntimeContext.runtimeGeneration;
     void listThreadsForWorkspaces(connectedWorkspaces, {
       preserveState: true,
+      refreshReason: "app_server_runtime_refresh",
     });
   }, [
     listThreadsForWorkspaces,

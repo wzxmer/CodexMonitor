@@ -2234,6 +2234,29 @@ describe("useThreadActions", () => {
     });
   });
 
+  it("records the refresh reason in thread list debug entries", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    const onDebug = vi.fn();
+    const { result } = renderActions({ onDebug });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspaces([workspace], {
+        refreshReason: "workspace_poll",
+      });
+    });
+
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "thread/list",
+        payload: expect.objectContaining({
+          refreshReason: "workspace_poll",
+        }),
+      }),
+    );
+  });
+
   it("assigns shared-root threads to a single target workspace when listing multiple workspaces", async () => {
     const workspaceAlias: WorkspaceInfo = {
       ...workspaceTwo,

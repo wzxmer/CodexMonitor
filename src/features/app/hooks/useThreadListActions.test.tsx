@@ -44,7 +44,10 @@ describe("useThreadListActions", () => {
     expect(resetWorkspaceThreads).toHaveBeenNthCalledWith(1, "one");
     expect(resetWorkspaceThreads).toHaveBeenNthCalledWith(2, "three");
     expect(listThreadsForWorkspaces).toHaveBeenCalledTimes(1);
-    expect(listThreadsForWorkspaces).toHaveBeenCalledWith([fresh[0], fresh[2]]);
+    expect(listThreadsForWorkspaces).toHaveBeenCalledWith(
+      [fresh[0], fresh[2]],
+      { refreshReason: "manual_refresh" },
+    );
   });
 
   it("falls back to current workspaces when refresh fails", async () => {
@@ -73,7 +76,10 @@ describe("useThreadListActions", () => {
     expect(resetWorkspaceThreads).toHaveBeenCalledTimes(1);
     expect(resetWorkspaceThreads).toHaveBeenCalledWith("one");
     expect(listThreadsForWorkspaces).toHaveBeenCalledTimes(1);
-    expect(listThreadsForWorkspaces).toHaveBeenCalledWith([current[0]]);
+    expect(listThreadsForWorkspaces).toHaveBeenCalledWith(
+      [current[0]],
+      { refreshReason: "manual_refresh" },
+    );
   });
 
   it("reconnects disconnected workspaces before listing their threads", async () => {
@@ -101,8 +107,33 @@ describe("useThreadListActions", () => {
 
     expect(connectWorkspace).toHaveBeenCalledWith(disconnected);
     expect(resetWorkspaceThreads).toHaveBeenCalledWith("one");
-    expect(listThreadsForWorkspaces).toHaveBeenCalledWith([
-      { ...disconnected, connected: true },
-    ]);
+    expect(listThreadsForWorkspaces).toHaveBeenCalledWith(
+      [{ ...disconnected, connected: true }],
+      { refreshReason: "manual_refresh" },
+    );
+  });
+
+  it("marks a sort change when reloading connected workspace threads", () => {
+    const listThreadsForWorkspaces = vi.fn(async () => {});
+    const { result } = renderHook(() =>
+      useThreadListActions({
+        threadListSortKey: "updated_at",
+        setThreadListSortKey: vi.fn(),
+        workspaces: [workspace("one", true)],
+        refreshWorkspaces: vi.fn().mockResolvedValue([]),
+        connectWorkspace: vi.fn(),
+        listThreadsForWorkspaces,
+        resetWorkspaceThreads: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.handleSetThreadListSortKey("created_at");
+    });
+
+    expect(listThreadsForWorkspaces).toHaveBeenCalledWith(
+      [workspace("one", true)],
+      { sortKey: "created_at", refreshReason: "sort_change" },
+    );
   });
 });

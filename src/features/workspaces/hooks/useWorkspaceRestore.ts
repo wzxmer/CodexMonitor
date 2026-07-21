@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { WorkspaceInfo } from "../../../types";
 import { isLocalCodexWorkspaceId } from "@/features/workspaces/domain/localCodexWorkspace";
+import type { ThreadListRefreshReason } from "@threads/types";
 
 const INITIAL_THREAD_LIST_MAX_PAGES = 6;
 
@@ -10,7 +11,11 @@ type WorkspaceRestoreOptions = {
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   listThreadsForWorkspaces: (
     workspaces: WorkspaceInfo[],
-    options?: { preserveState?: boolean; maxPages?: number },
+    options?: {
+      preserveState?: boolean;
+      maxPages?: number;
+      refreshReason?: ThreadListRefreshReason;
+    },
   ) => Promise<void>;
 };
 
@@ -59,6 +64,7 @@ export function useWorkspaceRestore({
         if (connectedTargets.length > 0) {
           await listThreadsForWorkspaces(connectedTargets, {
             maxPages: INITIAL_THREAD_LIST_MAX_PAGES,
+            refreshReason: "initial_restore",
           });
         }
       } finally {

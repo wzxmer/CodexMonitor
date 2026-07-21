@@ -49,7 +49,7 @@ describe("useWorkspaceRefreshOnFocus", () => {
     expect(listThreadsForWorkspaces).toHaveBeenCalledTimes(1);
     expect(listThreadsForWorkspaces).toHaveBeenCalledWith(
       [expect.objectContaining({ id: "ws-1" })],
-      { preserveState: true },
+      { preserveState: true, refreshReason: "workspace_focus" },
     );
   });
 
@@ -87,6 +87,10 @@ describe("useWorkspaceRefreshOnFocus", () => {
     });
     expect(refreshWorkspaces).toHaveBeenCalledTimes(1);
     expect(listThreadsForWorkspaces).toHaveBeenCalledTimes(1);
+    expect(listThreadsForWorkspaces).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: "ws-1" })],
+      { preserveState: true, refreshReason: "workspace_poll" },
+    );
   });
 
   it("does not poll when backend mode is local", async () => {

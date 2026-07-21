@@ -1,9 +1,11 @@
 import { useCallback } from "react";
 import type { ThreadListSortKey, WorkspaceInfo } from "../../../types";
 import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
+import type { ThreadListRefreshReason } from "@threads/types";
 
 type ListThreadsOptions = {
   sortKey?: ThreadListSortKey;
+  refreshReason?: ThreadListRefreshReason;
 };
 
 type UseThreadListActionsOptions = {
@@ -36,7 +38,10 @@ export function useThreadListActions({
       setThreadListSortKey(nextSortKey);
       const connectedWorkspaces = workspaces.filter((workspace) => workspace.connected);
       if (connectedWorkspaces.length > 0) {
-        void listThreadsForWorkspaces(connectedWorkspaces, { sortKey: nextSortKey });
+        void listThreadsForWorkspaces(connectedWorkspaces, {
+          sortKey: nextSortKey,
+          refreshReason: "sort_change",
+        });
       }
     },
     [threadListSortKey, setThreadListSortKey, workspaces, listThreadsForWorkspaces],
@@ -68,7 +73,9 @@ export function useThreadListActions({
       resetWorkspaceThreads(workspace.id);
     });
     if (connectedWorkspaces.length > 0) {
-      await listThreadsForWorkspaces(connectedWorkspaces);
+      await listThreadsForWorkspaces(connectedWorkspaces, {
+        refreshReason: "manual_refresh",
+      });
     }
   }, [
     refreshWorkspaces,

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { WorkspaceInfo } from "../../../types";
+import type { ThreadListRefreshReason } from "@threads/types";
 
 export const REMOTE_WORKSPACE_REFRESH_INTERVAL_MS = 15_000;
 
@@ -8,7 +9,7 @@ type WorkspaceRefreshOptions = {
   refreshWorkspaces: () => Promise<WorkspaceInfo[] | void>;
   listThreadsForWorkspaces: (
     workspaces: WorkspaceInfo[],
-    options?: { preserveState?: boolean },
+    options?: { preserveState?: boolean; refreshReason?: ThreadListRefreshReason },
   ) => Promise<void>;
   backendMode?: string;
   pollIntervalMs?: number;
@@ -43,7 +44,7 @@ export function useWorkspaceRefreshOnFocus({
     let pollTimer: ReturnType<typeof setInterval> | null = null;
     let refreshInFlight = false;
 
-    const runRefreshCycle = () => {
+    const runRefreshCycle = (refreshReason: ThreadListRefreshReason) => {
       if (refreshInFlight) {
         return;
       }
@@ -65,7 +66,7 @@ export function useWorkspaceRefreshOnFocus({
         }
         const connected = latestWorkspaces.filter((entry) => entry.connected);
         if (connected.length > 0) {
-          await listThreads(connected, { preserveState: true });
+          await listThreads(connected, { preserveState: true, refreshReason });
         }
       })().finally(() => {
         refreshInFlight = false;
@@ -83,7 +84,7 @@ export function useWorkspaceRefreshOnFocus({
         return;
       }
       pollTimer = setInterval(() => {
-        runRefreshCycle();
+        runRefreshCycle("workspace_poll");
       }, intervalMs);
     };
 
@@ -92,7 +93,7 @@ export function useWorkspaceRefreshOnFocus({
         clearTimeout(debounceTimer);
       }
       debounceTimer = setTimeout(() => {
-        runRefreshCycle();
+        runRefreshCycle("workspace_focus");
       }, 500);
     };
 

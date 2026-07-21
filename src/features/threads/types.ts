@@ -5,6 +5,15 @@ export type ThreadListRuntimeContext = {
   runtimeGeneration: number;
 };
 
+export type ThreadListRefreshReason =
+  | "initial_restore"
+  | "workspace_focus"
+  | "workspace_poll"
+  | "manual_refresh"
+  | "sort_change"
+  | "app_server_runtime_refresh"
+  | "unknown";
+
 export type ThreadListContinuityState = {
   sourceId: string | null;
   runtimeGeneration: number;

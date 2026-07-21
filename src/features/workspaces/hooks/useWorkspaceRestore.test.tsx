@@ -66,7 +66,7 @@ describe("useWorkspaceRestore", () => {
       connected: true,
     };
 
-    renderHook(() =>
+    const { result } = renderHook(() =>
       useWorkspaceRestore({
         workspaces: [localWorkspace],
         hasLoaded: true,
@@ -77,8 +77,9 @@ describe("useWorkspaceRestore", () => {
 
     await waitFor(() => expect(listThreadsForWorkspaces).toHaveBeenCalledWith(
       [localWorkspace],
-      { maxPages: 6 },
+      { maxPages: 6, refreshReason: "initial_restore" },
     ));
+    await waitFor(() => expect(result.current).toBe(true));
     expect(connectWorkspace).not.toHaveBeenCalled();
   });
 });

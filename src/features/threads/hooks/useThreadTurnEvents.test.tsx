@@ -477,6 +477,28 @@ describe("useThreadTurnEvents", () => {
     expect(pendingInterruptsRef.current.has("thread-1")).toBe(false);
   });
 
+  it("records completion as thread activity before processing is cleared", () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_700_000_123_000);
+    const { result, dispatch, recordThreadActivity } = makeOptions();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadTimestamp",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      timestamp: 1_700_000_123_000,
+    });
+    expect(recordThreadActivity).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      1_700_000_123_000,
+    );
+    nowSpy.mockRestore();
+  });
+
   it("ignores turn completed events for stale turns", () => {
     const { result, markProcessing, setActiveTurnId } = makeOptions({
       activeTurnByThread: {

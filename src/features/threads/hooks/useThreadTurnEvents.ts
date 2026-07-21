@@ -297,7 +297,7 @@ export function useThreadTurnEvents({
 
   const onTurnCompleted = useCallback(
     (
-      _workspaceId: string,
+      workspaceId: string,
       threadId: string,
       turnId: string,
       status: "completed" | "interrupted" | "failed" = "completed",
@@ -306,6 +306,7 @@ export function useThreadTurnEvents({
       if (turnId && activeTurnId && turnId !== activeTurnId) {
         return;
       }
+      const timestamp = Date.now();
       const terminalTurnId = turnId || lastExecutionTurnIdByThreadRef.current[threadId];
       if (terminalTurnId) {
         dispatch({
@@ -313,9 +314,16 @@ export function useThreadTurnEvents({
           threadId,
           turnId: terminalTurnId,
           status,
-          timestamp: Date.now(),
+          timestamp,
         });
       }
+      dispatch({
+        type: "setThreadTimestamp",
+        workspaceId,
+        threadId,
+        timestamp,
+      });
+      recordThreadActivity(workspaceId, threadId, timestamp);
       continuationPendingByThreadRef.current[threadId] = false;
       markProcessing(threadId, false);
       resetThreadTurnState(
@@ -336,6 +344,7 @@ export function useThreadTurnEvents({
       getLatestKnownActiveTurnId,
       markProcessing,
       pendingInterruptsRef,
+      recordThreadActivity,
       setActiveTurnId,
       shouldClearCompletedPlan,
     ],

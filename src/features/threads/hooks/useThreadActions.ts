@@ -49,6 +49,7 @@ import {
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 import type {
   ThreadListContinuityState,
+  ThreadListRefreshReason,
   ThreadListRuntimeContext,
   ThreadListVerifiedCache,
 } from "@threads/types";
@@ -783,6 +784,7 @@ export function useThreadActions({
         preserveState?: boolean;
         sortKey?: ThreadListSortKey;
         maxPages?: number;
+        refreshReason?: ThreadListRefreshReason;
       },
     ) => {
       const targets = workspaces.filter((workspace) => workspace.id);
@@ -805,6 +807,7 @@ export function useThreadActions({
       const preserveState = options?.preserveState ?? false;
       const requestedSortKey = options?.sortKey ?? threadSortKey;
       const maxPages = Math.max(1, options?.maxPages ?? THREAD_LIST_MAX_PAGES_DEFAULT);
+      const refreshReason = options?.refreshReason ?? "unknown";
       const runtimeContext = getThreadListRuntimeContext();
       const { requestId, requestSequence } = beginThreadListRequest(
         requestWorkspaceIds,
@@ -867,6 +870,7 @@ export function useThreadActions({
           runtimeGeneration: runtimeContext.runtimeGeneration,
           preserveState,
           maxPages,
+          refreshReason,
         },
       });
       try {
@@ -1354,6 +1358,7 @@ export function useThreadActions({
         preserveState?: boolean;
         sortKey?: ThreadListSortKey;
         maxPages?: number;
+        refreshReason?: ThreadListRefreshReason;
       },
     ) => {
       await listThreadsForWorkspaces([workspace], options);
