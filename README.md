@@ -135,6 +135,8 @@ npm run tauri:build:win
 
 产物位于 `src-tauri/target/release/bundle/`。
 
+Release 工作流以 `src-tauri/tauri.conf.json` 中的合法 SemVer 作为包内版本，并将公开 patch 至少补足两位。示例：包内版本 `0.8.1` 对应 GitHub Tag、Release 标题、下载链接和公开资产版本 `0.8.01`。
+
 ### 国内更新镜像（可选）
 
 镜像未配置时保持 GitHub-only，不影响构建。启用镜像时，在 GitHub `release` Environment 配置：

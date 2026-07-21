@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      release_label_version: ${{ steps.version.outputs.release_label_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,42 +23,10 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          VERSION=$(python3 - <<'PY'
-          import json
-          import re
-          import subprocess
-          from pathlib import Path
-
-          current = json.loads(Path("src-tauri/tauri.conf.json").read_text())["version"]
-
-          def parse(version):
-              parts = version.split(".")
-              if len(parts) != 3:
-                  raise SystemExit(f"Expected version like 0.X.Y, got {version}")
-              return tuple(int(part) for part in parts)
-
-          current_tuple = parse(current)
-          tags = subprocess.check_output(
-              ["git", "tag", "--list", "v[0-9]*.[0-9]*.[0-9]*"],
-              text=True,
-          ).splitlines()
-
-          released = []
-          for tag in tags:
-              match = re.fullmatch(r"v(\d+\.\d+\.\d+)", tag.strip())
-              if match:
-                  released.append(parse(match.group(1)))
-
-          if released:
-              latest = max(released)
-              if current_tuple <= latest:
-                  current_tuple = (latest[0], latest[1], latest[2] + 1)
-
-          print(".".join(str(part) for part in current_tuple))
-          PY
-          )
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Resolved release version: ${VERSION}"
+          python3 scripts/resolve_release_version.py \
+            --config src-tauri/tauri.conf.json \
+            --github-output "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
 
   build_macos:
     name: macOS bundle (${{ matrix.arch }})
@@ -548,6 +517,7 @@ jobs:
       - build_windows
     env:
       RELEASE_VERSION: ${{ needs.prepare_release.outputs.version }}
+      RELEASE_LABEL_VERSION: ${{ needs.prepare_release.outputs.release_label_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -656,6 +626,7 @@ jobs:
             dir=$(dirname "$artifact")
             file=$(basename "$artifact")
             normalized="${file// /.}"
+            normalized="${normalized//${RELEASE_VERSION}/${RELEASE_LABEL_VERSION}}"
             if [ "$file" = "$normalized" ]; then
               continue
             fi
@@ -687,17 +658,8 @@ jobs:
       - name: Build release notes
         run: |
           set -euo pipefail
-          VERSION=$(python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          data = json.loads(Path("src-tauri/tauri.conf.json").read_text())
-          print(data["version"])
-          PY
-          )
-
           LAST_TAG=$(git tag --sort=-version:refname \
-            | grep -v "^v${VERSION}$" \
+            | grep -v "^v${RELEASE_LABEL_VERSION}$" \
             | head -n 1 || true)
           RANGE_END="${GITHUB_SHA}"
           if [ -n "$LAST_TAG" ]; then
@@ -709,7 +671,7 @@ jobs:
           python3 scripts/build_release_notes.py \
             --artifacts-dir release-artifacts \
             --repository "$GITHUB_REPOSITORY" \
-            --version "$VERSION" \
+            --version "$RELEASE_LABEL_VERSION" \
             --commits-file release-artifacts/release-commits.txt \
             --output release-artifacts/release-notes.md
 
@@ -727,6 +689,7 @@ jobs:
           from pathlib import Path
 
           version = os.environ["RELEASE_VERSION"]
+          release_label_version = os.environ["RELEASE_LABEL_VERSION"]
           notes = Path("release-artifacts/release-notes.md").read_text()
           excluded = (".sig", ".zip", ".blockmap")
           artifacts = [
@@ -743,7 +706,7 @@ jobs:
               if not base_url:
                   continue
               root = Path("update-mirrors") / provider
-              version_dir = root / f"v{version}"
+              version_dir = root / f"v{release_label_version}"
               version_dir.mkdir(parents=True, exist_ok=True)
               assets = []
               for artifact in artifacts:
@@ -754,11 +717,11 @@ jobs:
                       "name": artifact.name,
                       "size": target.stat().st_size,
                       "sha256": digest,
-                      "url": f"{base_url}/v{version}/{artifact.name}",
+                      "url": f"{base_url}/v{release_label_version}/{artifact.name}",
                   })
               manifest = {
                   "version": version,
-                  "htmlUrl": f"https://github.com/wzxmer/CodexMonitor/releases/tag/v{version}",
+                  "htmlUrl": f"https://github.com/wzxmer/CodexMonitor/releases/tag/v{release_label_version}",
                   "body": notes,
                   "assets": assets,
               }
@@ -808,7 +771,8 @@ jobs:
           output_dir.mkdir(parents=True, exist_ok=True)
           packages = {}
           cm_version = os.environ["RELEASE_VERSION"]
-          github_base = f"https://github.com/wzxmer/CodexMonitor/releases/download/v{cm_version}"
+          release_label_version = os.environ["RELEASE_LABEL_VERSION"]
+          github_base = f"https://github.com/wzxmer/CodexMonitor/releases/download/v{release_label_version}"
           mirror_bases = [
               os.environ.get("TENCENT_CODEX_CLI_BASE_URL", "").strip().rstrip("/"),
               os.environ.get("ALIYUN_CODEX_CLI_BASE_URL", "").strip().rstrip("/"),
@@ -869,15 +833,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          VERSION=$(python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          data = json.loads(Path("src-tauri/tauri.conf.json").read_text())
-          print(data["version"])
-          PY
-          )
-
           shopt -s nullglob globstar
           appimages=(release-artifacts/**/*.AppImage*)
           mapfile -t rpms < <(find release-artifacts -type f -name '*.rpm' | sort)
@@ -899,8 +854,8 @@ jobs:
             exit 1
           fi
 
-          gh release create "v${VERSION}" \
-            --title "v${VERSION}" \
+          gh release create "v${RELEASE_LABEL_VERSION}" \
+            --title "v${RELEASE_LABEL_VERSION}" \
             --notes-file release-artifacts/release-notes.md \
             --target "$GITHUB_SHA" \
             release-artifacts/CodexMonitor_*_*.zip \
