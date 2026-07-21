@@ -9,7 +9,10 @@ import type {
   TurnPlan,
   ExecutionBindingObserveInput,
 } from "@/types";
-import { getAppServerRawMethod } from "@utils/appServerEvents";
+import {
+  getAppServerRawMethod,
+  getAppServerThreadId,
+} from "@utils/appServerEvents";
 import { useThreadApprovalEvents } from "./useThreadApprovalEvents";
 import { useThreadHookEvents } from "./useThreadHookEvents";
 import { useThreadItemEvents } from "./useThreadItemEvents";
@@ -32,6 +35,11 @@ type ThreadEventHandlersOptions = {
   getActiveTurnId: (threadId: string) => string | null;
   safeMessageActivity: () => void;
   recordThreadActivity: (
+    workspaceId: string,
+    threadId: string,
+    timestamp?: number,
+  ) => void;
+  recordTurnActivity?: (
     workspaceId: string,
     threadId: string,
     timestamp?: number,
@@ -79,6 +87,7 @@ export function useThreadEventHandlers({
   getActiveTurnId,
   safeMessageActivity,
   recordThreadActivity,
+  recordTurnActivity,
   shouldContinueAfterError,
   onUserMessageCreated,
   pushThreadErrorMessage,
@@ -210,6 +219,19 @@ export function useThreadEventHandlers({
   const onAppServerEvent = useCallback(
     (event: AppServerEvent) => {
       const method = getAppServerRawMethod(event) ?? "";
+      const isTurnActivity =
+        method.startsWith("item/") ||
+        method.startsWith("turn/") ||
+        method.startsWith("hook/") ||
+        method === "error" ||
+        method === "thread/status/changed" ||
+        method === "thread/tokenUsage/updated";
+      if (isTurnActivity) {
+        const threadId = getAppServerThreadId(event);
+        if (threadId) {
+          recordTurnActivity?.(event.workspace_id, threadId, Date.now());
+        }
+      }
       const inferredSource = method === "codex/stderr" ? "stderr" : "event";
       onDebug?.({
         id: `${Date.now()}-server-event`,
@@ -219,7 +241,7 @@ export function useThreadEventHandlers({
         payload: event,
       });
     },
-    [onDebug],
+    [onDebug, recordTurnActivity],
   );
 
   const handlers = useMemo(

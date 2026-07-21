@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useThreadStallWarnings } from "./useThreadStallWarnings";
 
@@ -16,6 +16,7 @@ describe("useThreadStallWarnings", () => {
   it("warns once when a processing thread has been active for over 10 minutes", () => {
     const pushThreadErrorMessage = vi.fn();
     const safeMessageActivity = vi.fn();
+    const onReconcileThread = vi.fn();
 
     renderHook(() =>
       useThreadStallWarnings({
@@ -30,6 +31,7 @@ describe("useThreadStallWarnings", () => {
         },
         pushThreadErrorMessage,
         safeMessageActivity,
+        onReconcileThread,
       }),
     );
 
@@ -38,10 +40,76 @@ describe("useThreadStallWarnings", () => {
       "Turn may be stalled: Codex has been working for over 10 minutes without a completion or error event.",
     );
     expect(safeMessageActivity).toHaveBeenCalledTimes(1);
+    expect(onReconcileThread).toHaveBeenCalledWith("thread-1", "stall");
 
     vi.advanceTimersByTime(60 * 1000);
 
     expect(pushThreadErrorMessage).toHaveBeenCalledTimes(1);
+    expect(onReconcileThread).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the latest event activity instead of only the processing start", () => {
+    const pushThreadErrorMessage = vi.fn();
+    const onReconcileThread = vi.fn();
+
+    renderHook(() =>
+      useThreadStallWarnings({
+        threadStatusById: {
+          "thread-1": {
+            isProcessing: true,
+            hasUnread: false,
+            isReviewing: false,
+            processingStartedAt: 1_000_000 - 20 * 60 * 1000,
+            lastDurationMs: null,
+          },
+        },
+        lastActivityAtByThreadRef: {
+          current: { "thread-1": 1_000_000 - 2 * 60 * 1000 },
+        },
+        pushThreadErrorMessage,
+        safeMessageActivity: vi.fn(),
+        onReconcileThread,
+      }),
+    );
+
+    expect(pushThreadErrorMessage).not.toHaveBeenCalled();
+    expect(onReconcileThread).not.toHaveBeenCalled();
+  });
+
+  it("reconciles the active processing thread on window focus without warning", () => {
+    const pushThreadErrorMessage = vi.fn();
+    const onReconcileThread = vi.fn();
+
+    renderHook(() =>
+      useThreadStallWarnings({
+        threadStatusById: {
+          "thread-1": {
+            isProcessing: true,
+            hasUnread: false,
+            isReviewing: false,
+            processingStartedAt: 999_000,
+            lastDurationMs: null,
+          },
+          "thread-2": {
+            isProcessing: true,
+            hasUnread: false,
+            isReviewing: false,
+            processingStartedAt: 999_000,
+            lastDurationMs: null,
+          },
+        },
+        activeThreadId: "thread-1",
+        pushThreadErrorMessage,
+        safeMessageActivity: vi.fn(),
+        onReconcileThread,
+      }),
+    );
+
+    act(() => window.dispatchEvent(new Event("focus")));
+
+    expect(onReconcileThread).toHaveBeenCalledTimes(1);
+    expect(onReconcileThread).toHaveBeenCalledWith("thread-1", "focus");
+    expect(pushThreadErrorMessage).not.toHaveBeenCalled();
   });
 
   it("does not warn before the stall threshold", () => {

@@ -88,6 +88,40 @@ export function getAppServerParams(event: AppServerEvent): Record<string, unknow
   return params as Record<string, unknown>;
 }
 
+function getNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function getRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+export function getAppServerThreadId(event: AppServerEvent): string | null {
+  const params = getAppServerParams(event);
+  const directThreadId = getNonEmptyString(params.threadId ?? params.thread_id);
+  if (directThreadId) {
+    return directThreadId;
+  }
+
+  const turn = getRecord(params.turn);
+  const turnThreadId = getNonEmptyString(turn?.threadId ?? turn?.thread_id);
+  if (turnThreadId) {
+    return turnThreadId;
+  }
+
+  const thread = getRecord(params.thread);
+  return getNonEmptyString(
+    thread?.id ?? thread?.threadId ?? thread?.thread_id,
+  );
+}
+
 export function getAppServerRequestId(event: AppServerEvent): string | number | null {
   const message = getAppServerMessageObject(event);
   if (!message) {

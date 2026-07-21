@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getParentThreadIdFromThread,
+  getLatestTerminalTurnState,
   getResumedActiveTurnId,
   getResumedTurnState,
   isSubagentThreadSource,
@@ -66,6 +67,19 @@ describe("threadRpc", () => {
       activeTurnStartedAtMs: null,
       confidentNoActiveTurn: true,
     });
+  });
+
+  it.each([
+    ["done", "completed"],
+    ["failed", "failed"],
+    ["cancelled", "interrupted"],
+  ] as const)("maps terminal turn status %s to %s", (status, expected) => {
+    expect(
+      getLatestTerminalTurnState({
+        id: "thread-1",
+        turns: [{ id: "turn-1", status }],
+      }),
+    ).toEqual({ turnId: "turn-1", status: expected });
   });
 
   it("keeps confidence low when turn statuses are unknown", () => {

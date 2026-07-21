@@ -452,6 +452,22 @@ export function useThreadActions({
               payload: { workspaceId, threadId },
             });
           }
+          const localActiveTurnId =
+            activeTurnIdByThreadRef.current[threadId] ?? null;
+          if (
+            !hydrationPlan.shouldMarkProcessing &&
+            localActiveTurnId &&
+            hydrationPlan.terminalTurnId === localActiveTurnId &&
+            hydrationPlan.terminalTurnStatus
+          ) {
+            dispatch({
+              type: "completeTurnExecution",
+              threadId,
+              turnId: localActiveTurnId,
+              status: hydrationPlan.terminalTurnStatus,
+              timestamp: Date.now(),
+            });
+          }
           dispatch({
             type: "markProcessing",
             threadId,

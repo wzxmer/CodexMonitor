@@ -173,6 +173,63 @@ describe("useThreads UX integration", () => {
     }
   });
 
+  it("reconciles a missed terminal event from history when the window regains focus", async () => {
+    vi.mocked(readThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-focus",
+          updated_at: 9999,
+          turns: [],
+        },
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-focus");
+    });
+    await waitFor(() => {
+      expect(vi.mocked(readThread)).toHaveBeenCalledWith("ws-1", "thread-focus");
+    });
+
+    act(() => {
+      handlers?.onTurnStarted?.("ws-1", "thread-focus", "turn-focus");
+    });
+    expect(result.current.threadStatusById["thread-focus"]?.isProcessing).toBe(true);
+    expect(result.current.turnExecutionSummaryByThread["thread-focus"]?.status).toBe(
+      "active",
+    );
+
+    vi.mocked(readThread).mockClear();
+    vi.mocked(readThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-focus",
+          updated_at: 10_000,
+          turns: [{ id: "turn-focus", status: "completed", items: [] }],
+        },
+      },
+    });
+
+    act(() => window.dispatchEvent(new Event("focus")));
+
+    await waitFor(() => {
+      expect(vi.mocked(readThread)).toHaveBeenCalledWith("ws-1", "thread-focus");
+      expect(result.current.threadStatusById["thread-focus"]?.isProcessing).toBe(
+        false,
+      );
+      expect(result.current.turnExecutionSummaryByThread["thread-focus"]?.status).toBe(
+        "completed",
+      );
+    });
+  });
+
   it("hydrates subagent titles discovered while reading parent history", async () => {
     vi.mocked(readThread).mockResolvedValueOnce({
       result: {

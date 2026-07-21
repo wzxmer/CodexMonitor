@@ -242,6 +242,11 @@ export type ResumedTurnState = {
   confidentNoActiveTurn: boolean;
 };
 
+export type ResumedTerminalTurnState = {
+  turnId: string;
+  status: "completed" | "interrupted" | "failed";
+};
+
 function normalizeTurnStatus(value: unknown): string {
   return String(value ?? "")
     .trim()
@@ -317,6 +322,27 @@ function classifyTurnStatus(status: string): TurnStatusKind {
     return "terminal";
   }
   return "unknown";
+}
+
+function getTerminalTurnStatus(
+  status: string,
+): ResumedTerminalTurnState["status"] | null {
+  if (status === "failed" || status === "error") {
+    return "failed";
+  }
+  if (
+    status === "canceled" ||
+    status === "cancelled" ||
+    status === "aborted" ||
+    status === "stopped" ||
+    status === "interrupted"
+  ) {
+    return "interrupted";
+  }
+  if (status === "completed" || status === "done") {
+    return "completed";
+  }
+  return null;
 }
 
 function getExplicitActiveTurnState(
@@ -416,6 +442,38 @@ export function getResumedTurnState(
     activeTurnStartedAtMs: null,
     confidentNoActiveTurn: sawTerminalStatus && !sawUnknownStatus,
   };
+}
+
+export function getLatestTerminalTurnState(
+  thread: Record<string, unknown>,
+): ResumedTerminalTurnState | null {
+  const explicitState = getExplicitActiveTurnState(thread);
+  if (explicitState.activeTurnId) {
+    return null;
+  }
+
+  const turns = Array.isArray(thread.turns)
+    ? (thread.turns as Array<Record<string, unknown>>)
+    : [];
+  const latestTurn = turns[turns.length - 1];
+  if (!latestTurn || typeof latestTurn !== "object") {
+    return null;
+  }
+
+  const normalizedStatus = normalizeTurnStatus(
+    latestTurn.status ?? latestTurn.turnStatus ?? latestTurn.turn_status,
+  );
+  if (classifyTurnStatus(normalizedStatus) !== "terminal") {
+    return null;
+  }
+  const status = getTerminalTurnStatus(normalizedStatus);
+  const turnId = asString(
+    latestTurn.id ?? latestTurn.turnId ?? latestTurn.turn_id,
+  ).trim();
+  if (!status || !turnId) {
+    return null;
+  }
+  return { turnId, status };
 }
 
 export function getResumedActiveTurnId(thread: Record<string, unknown>): string | null {

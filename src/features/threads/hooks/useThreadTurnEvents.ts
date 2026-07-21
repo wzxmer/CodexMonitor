@@ -118,6 +118,15 @@ export function useThreadTurnEvents({
     [planByThreadRef],
   );
 
+  const clearCompletedPlan = useCallback(
+    (threadId: string, turnId: string) => {
+      if (shouldClearCompletedPlan(threadId, turnId)) {
+        dispatch({ type: "clearThreadPlan", threadId });
+      }
+    },
+    [dispatch, shouldClearCompletedPlan],
+  );
+
   const onThreadStarted = useCallback(
     (workspaceId: string, thread: Record<string, unknown>) => {
       const threadId = asString(thread.id);
@@ -335,9 +344,7 @@ export function useThreadTurnEvents({
         threadId,
       );
       setActiveTurnId(threadId, null);
-      if (shouldClearCompletedPlan(threadId, turnId)) {
-        dispatch({ type: "clearThreadPlan", threadId });
-      }
+      clearCompletedPlan(threadId, turnId);
     },
     [
       dispatch,
@@ -345,8 +352,8 @@ export function useThreadTurnEvents({
       markProcessing,
       pendingInterruptsRef,
       recordThreadActivity,
+      clearCompletedPlan,
       setActiveTurnId,
-      shouldClearCompletedPlan,
     ],
   );
 
@@ -375,6 +382,7 @@ export function useThreadTurnEvents({
         continuationPendingByThreadRef.current[threadId] = false;
         markProcessing(threadId, false);
         setActiveTurnId(threadId, null);
+        clearCompletedPlan(threadId, terminalTurnId ?? "");
         return;
       }
       if (
@@ -382,14 +390,17 @@ export function useThreadTurnEvents({
         statusType === "notloaded" ||
         statusType === "systemerror"
       ) {
-        if (!continuationPendingByThreadRef.current[threadId] && terminalTurnId) {
-          dispatch({
-            type: "completeTurnExecution",
-            threadId,
-            turnId: terminalTurnId,
-            status: statusType === "systemerror" ? "failed" : "completed",
-            timestamp: Date.now(),
-          });
+        if (!continuationPendingByThreadRef.current[threadId]) {
+          if (terminalTurnId) {
+            dispatch({
+              type: "completeTurnExecution",
+              threadId,
+              turnId: terminalTurnId,
+              status: statusType === "systemerror" ? "failed" : "completed",
+              timestamp: Date.now(),
+            });
+          }
+          clearCompletedPlan(threadId, terminalTurnId ?? "");
         }
         markProcessing(threadId, false);
         if (statusType === "notloaded") {
@@ -413,6 +424,7 @@ export function useThreadTurnEvents({
       markProcessing,
       markReviewing,
       pendingInterruptsRef,
+      clearCompletedPlan,
       setActiveTurnId,
       setThreadLoaded,
     ],

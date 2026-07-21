@@ -199,6 +199,8 @@ export function useThreads({
   const subagentHydrationInFlightRef = useRef<Record<string, true>>({});
   const tokenUsageRevisionByThreadRef = useRef<Record<string, number>>({});
   const autoArchiveInFlightRef = useRef(false);
+  const lastTurnActivityAtByThreadRef = useRef<Record<string, number>>({});
+  const stallReconcileInFlightRef = useRef<Set<string>>(new Set());
   const persistedExecutionRevisionRef = useRef<Record<string, number>>({});
   const workspacesRef = useRef(workspaces);
   const autoContinueSendRef = useRef<
@@ -413,11 +415,12 @@ export function useThreads({
     }
   }, [onMessageActivity]);
 
-  useThreadStallWarnings({
-    threadStatusById: state.threadStatusById,
-    pushThreadErrorMessage,
-    safeMessageActivity,
-  });
+  const recordTurnActivity = useCallback(
+    (_workspaceId: string, threadId: string, timestamp = Date.now()) => {
+      lastTurnActivityAtByThreadRef.current[threadId] = timestamp;
+    },
+    [],
+  );
 
   const setThreadLoaded = useCallback((threadId: string, isLoaded: boolean) => {
     loadedThreadsRef.current[threadId] = isLoaded;
@@ -710,6 +713,7 @@ export function useThreads({
     getActiveTurnId,
     safeMessageActivity,
     recordThreadActivity,
+    recordTurnActivity,
     shouldContinueAfterError,
     onUserMessageCreated,
     pushThreadErrorMessage,
@@ -982,6 +986,53 @@ export function useThreads({
     onSubagentTitleCandidate,
     onThreadCodexMetadataDetected,
     hydrateTurnExecutionSummary,
+  });
+
+  const findWorkspaceIdForThread = useCallback((threadId: string) => {
+    for (const [workspaceId, threads] of Object.entries(
+      threadsByWorkspaceRef.current,
+    )) {
+      if (threads.some((thread) => thread.id === threadId)) {
+        return workspaceId;
+      }
+    }
+    for (const [workspaceId, activeId] of Object.entries(
+      activeThreadIdByWorkspaceRef.current,
+    )) {
+      if (activeId === threadId) {
+        return workspaceId;
+      }
+    }
+    return null;
+  }, []);
+
+  const reconcileStalledThread = useCallback(
+    async (threadId: string, _reason: "stall" | "focus") => {
+      const workspaceId = findWorkspaceIdForThread(threadId);
+      if (!workspaceId) {
+        return;
+      }
+      const reconcileKey = `${workspaceId}:${threadId}`;
+      if (stallReconcileInFlightRef.current.has(reconcileKey)) {
+        return;
+      }
+      stallReconcileInFlightRef.current.add(reconcileKey);
+      try {
+        await readThreadForWorkspace(workspaceId, threadId, true, false);
+      } finally {
+        stallReconcileInFlightRef.current.delete(reconcileKey);
+      }
+    },
+    [findWorkspaceIdForThread, readThreadForWorkspace],
+  );
+
+  useThreadStallWarnings({
+    threadStatusById: state.threadStatusById,
+    lastActivityAtByThreadRef: lastTurnActivityAtByThreadRef,
+    activeThreadId,
+    onReconcileThread: reconcileStalledThread,
+    pushThreadErrorMessage,
+    safeMessageActivity,
   });
 
   const { isThreadHistoryEvicted, restoreThreadHistory } =

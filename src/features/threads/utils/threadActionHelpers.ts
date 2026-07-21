@@ -14,7 +14,7 @@ import {
 import { getThreadDisplayTitle } from "@threads/utils/threadSummary";
 import { insertThreadSummaryBySort } from "@threads/utils/threadSummaryOrder";
 import { asString, normalizeRootPath } from "./threadNormalize";
-import { getResumedTurnState } from "./threadRpc";
+import { getLatestTerminalTurnState, getResumedTurnState } from "./threadRpc";
 
 function isWithinWorkspaceRoot(path: string, workspaceRoot: string) {
   if (!path || !workspaceRoot) {
@@ -48,6 +48,8 @@ export type ResumeHydrationPlan = {
   resumedActiveTurnId: string | null;
   shouldHydrate: boolean;
   shouldMarkProcessing: boolean;
+  terminalTurnId: string | null;
+  terminalTurnStatus: "completed" | "interrupted" | "failed" | null;
   threadName: string | null;
   reviewing: boolean;
 };
@@ -146,6 +148,7 @@ export function buildResumeHydrationPlan({
 }): ResumeHydrationPlan {
   const items = buildItemsFromThread(thread);
   const resumedTurnState = getResumedTurnState(thread);
+  const terminalTurnState = getLatestTerminalTurnState(thread);
   const keepLocalProcessing =
     (localStatus?.isProcessing ?? false) &&
     !resumedTurnState.activeTurnId &&
@@ -194,6 +197,8 @@ export function buildResumeHydrationPlan({
     reviewing: isReviewingFromThread(thread),
     shouldHydrate: true,
     shouldMarkProcessing,
+    terminalTurnId: terminalTurnState?.turnId ?? null,
+    terminalTurnStatus: terminalTurnState?.status ?? null,
     threadName,
   };
 }

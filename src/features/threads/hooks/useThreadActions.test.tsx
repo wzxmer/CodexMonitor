@@ -1063,6 +1063,48 @@ describe("useThreadActions", () => {
       threadId: "thread-1",
       turnId: null,
     });
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "completeTurnExecution" }),
+    );
+  });
+
+  it("completes the matching active execution summary from resumed history", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-1",
+          updated_at: 1000,
+          turns: [{ id: "turn-2", status: "completed", items: [] }],
+        },
+      },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(isReviewingFromThread).mockReturnValue(false);
+
+    const { result, dispatch } = renderActions({
+      activeTurnIdByThread: { "thread-1": "turn-2" },
+      threadStatusById: {
+        "thread-1": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 10,
+          lastDurationMs: null,
+        },
+      },
+    });
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-1", true);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "completeTurnExecution",
+      threadId: "thread-1",
+      turnId: "turn-2",
+      status: "completed",
+      timestamp: expect.any(Number),
+    });
   });
 
   it("clears processing state from resume when latest turns are completed", async () => {
@@ -1162,6 +1204,9 @@ describe("useThreadActions", () => {
       threadId: "thread-1",
       turnId: "turn-local",
     });
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "completeTurnExecution" }),
+    );
   });
 
   it("uses latest local processing state while resume is in flight", async () => {

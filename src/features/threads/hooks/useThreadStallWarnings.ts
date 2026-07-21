@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { MutableRefObject } from "react";
 import type { ThreadState } from "./useThreadsReducer";
 
 const TURN_STALL_WARNING_AFTER_MS = 10 * 60 * 1000;
@@ -6,18 +7,40 @@ const TURN_STALL_CHECK_INTERVAL_MS = 30 * 1000;
 
 type UseThreadStallWarningsOptions = {
   threadStatusById: ThreadState["threadStatusById"];
+  lastActivityAtByThreadRef?: MutableRefObject<Record<string, number>>;
+  activeThreadId?: string | null;
+  onReconcileThread?: (
+    threadId: string,
+    reason: "stall" | "focus",
+  ) => void | Promise<void>;
   pushThreadErrorMessage: (threadId: string, message: string) => void;
   safeMessageActivity: () => void;
 };
 
 export function useThreadStallWarnings({
   threadStatusById,
+  lastActivityAtByThreadRef,
+  activeThreadId,
+  onReconcileThread,
   pushThreadErrorMessage,
   safeMessageActivity,
 }: UseThreadStallWarningsOptions) {
   const warnedProcessingStartByThreadRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
+    const reconcileThread = (
+      threadId: string,
+      reason: "stall" | "focus",
+    ) => {
+      try {
+        void Promise.resolve(onReconcileThread?.(threadId, reason)).catch(() => {
+          // Reconciliation is best-effort and must not break event handling.
+        });
+      } catch {
+        // Reconciliation is best-effort and must not break event handling.
+      }
+    };
+
     const checkStalledThreads = () => {
       const now = Date.now();
       const activeThreadIds = new Set<string>();
@@ -27,25 +50,51 @@ export function useThreadStallWarnings({
           continue;
         }
         activeThreadIds.add(threadId);
-        const startedAt = status.processingStartedAt;
-        if (warnedProcessingStartByThreadRef.current[threadId] === startedAt) {
+        const lastActivityAt = Math.max(
+          status.processingStartedAt,
+          lastActivityAtByThreadRef?.current[threadId] ?? 0,
+        );
+        if (
+          warnedProcessingStartByThreadRef.current[threadId] === lastActivityAt
+        ) {
           continue;
         }
-        if (now - startedAt < TURN_STALL_WARNING_AFTER_MS) {
+        if (now - lastActivityAt < TURN_STALL_WARNING_AFTER_MS) {
           continue;
         }
-        warnedProcessingStartByThreadRef.current[threadId] = startedAt;
+        warnedProcessingStartByThreadRef.current[threadId] = lastActivityAt;
         pushThreadErrorMessage(
           threadId,
           "Turn may be stalled: Codex has been working for over 10 minutes without a completion or error event.",
         );
         safeMessageActivity();
+        reconcileThread(threadId, "stall");
       }
 
       for (const threadId of Object.keys(warnedProcessingStartByThreadRef.current)) {
         if (!activeThreadIds.has(threadId)) {
           delete warnedProcessingStartByThreadRef.current[threadId];
         }
+      }
+      if (lastActivityAtByThreadRef) {
+        for (const threadId of Object.keys(lastActivityAtByThreadRef.current)) {
+          if (!activeThreadIds.has(threadId)) {
+            delete lastActivityAtByThreadRef.current[threadId];
+          }
+        }
+      }
+    };
+
+    const reconcileActiveThread = () => {
+      if (!activeThreadId || !threadStatusById[activeThreadId]?.isProcessing) {
+        return;
+      }
+      reconcileThread(activeThreadId, "focus");
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        reconcileActiveThread();
       }
     };
 
@@ -54,7 +103,19 @@ export function useThreadStallWarnings({
       checkStalledThreads,
       TURN_STALL_CHECK_INTERVAL_MS,
     );
-    return () => window.clearInterval(interval);
-  }, [pushThreadErrorMessage, safeMessageActivity, threadStatusById]);
+    window.addEventListener("focus", reconcileActiveThread);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", reconcileActiveThread);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [
+    activeThreadId,
+    lastActivityAtByThreadRef,
+    onReconcileThread,
+    pushThreadErrorMessage,
+    safeMessageActivity,
+    threadStatusById,
+  ]);
 }
-

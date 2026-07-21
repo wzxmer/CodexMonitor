@@ -588,6 +588,27 @@ describe("useThreadTurnEvents", () => {
     expect(pendingInterruptsRef.current.has("thread-1")).toBe(false);
   });
 
+  it("clears a completed plan when terminal thread status arrives without turn/completed", () => {
+    const { result, dispatch } = makeOptions({
+      planByThread: {
+        "thread-1": {
+          turnId: "turn-1",
+          explanation: "Done",
+          steps: [{ step: "Finish task", status: "completed" }],
+        },
+      },
+    });
+
+    act(() => {
+      result.current.onThreadStatusChanged("ws-1", "thread-1", { type: "idle" });
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "clearThreadPlan",
+      threadId: "thread-1",
+    });
+  });
+
   it("marks thread as unloaded when status changes to notLoaded", () => {
     const { result, setThreadLoaded, markReviewing } = makeOptions();
 
