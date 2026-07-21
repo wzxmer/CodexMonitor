@@ -1124,6 +1124,7 @@ describe("useThreadMessaging telemetry", () => {
         ReturnType<typeof sendUserMessageService>
       >;
     });
+    const dispatch = vi.fn();
     const refreshThread = vi.fn(async () => {
       callOrder.push("refresh");
       return "thread-1";
@@ -1143,7 +1144,7 @@ describe("useThreadMessaging telemetry", () => {
         activeTurnIdByThread: {},
         rateLimitsByWorkspace: {},
         pendingInterruptsRef: { current: new Set<string>() },
-        dispatch: vi.fn(),
+        dispatch,
         getCustomName: vi.fn(() => undefined),
         markProcessing: vi.fn(),
         markReviewing: vi.fn(),
@@ -1161,11 +1162,20 @@ describe("useThreadMessaging telemetry", () => {
     );
 
     await act(async () => {
-      await result.current.retryEditedUserMessage("edited retry");
+      await result.current.retryEditedUserMessage("edited retry", [], {
+        replaceMessageId: "msg-failed-user",
+      });
     });
 
     expect(rollbackThreadService).toHaveBeenCalledWith("ws-1", "thread-1", 1);
     expect(callOrder).toEqual(["rollback", "refresh", "send"]);
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upsertItem",
+        item: expect.objectContaining({ id: "msg-failed-user", text: "edited retry" }),
+        replaceExisting: true,
+      }),
+    );
   });
 
   it("does not resend when rollback fails", async () => {

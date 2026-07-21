@@ -235,7 +235,11 @@ type UseMainAppLayoutSurfacesArgs = {
   confirmCustom: ComposerProps["onReviewPromptConfirmCustom"];
   handleComposerSendWithDraftStart: ComposerProps["onSend"];
   interruptTurn: () => void;
-  retryEditedUserMessage: (text: string, images?: string[]) => Promise<SendMessageResult>;
+  retryEditedUserMessage: (
+    text: string,
+    images?: string[],
+    options?: { replaceMessageId?: string },
+  ) => Promise<SendMessageResult>;
   terminalOpen: boolean;
   debugOpen: boolean;
   debugEntries: LayoutNodesOptions["secondary"]["debugPanelProps"]["entries"];
@@ -597,8 +601,8 @@ function buildPrimarySurface({
         ? composerWorkspaceState.handleInsertComposerText
         : undefined,
       onReferenceMessage,
-      onResendUserMessage: (text, images) => {
-        return retryEditedUserMessage(text, images);
+      onResendUserMessage: (text, images, options) => {
+        return retryEditedUserMessage(text, images, options);
       },
       isThinking: composerWorkspaceState.isProcessing,
       isLoadingMessages: activeThreadId

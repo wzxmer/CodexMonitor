@@ -667,6 +667,7 @@ describe("Messages", () => {
     expect(onResendUserMessage).toHaveBeenCalledWith(
       "重新打包后的现在还有问题吗？",
       ["data:image/png;base64,AAA"],
+      { replaceMessageId: "msg-edit-user-1" },
     );
     await waitFor(() => {
       expect(screen.queryByLabelText("编辑消息")).toBeNull();

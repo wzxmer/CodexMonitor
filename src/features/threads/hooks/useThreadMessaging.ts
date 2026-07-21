@@ -1087,6 +1087,7 @@ export function useThreadMessaging({
     async (
       text: string,
       images: string[] = [],
+      options?: { replaceMessageId?: string },
     ): Promise<SendMessageResult> => {
       if (!activeWorkspace || !activeThreadId) {
         return { status: "blocked" };
@@ -1102,7 +1103,9 @@ export function useThreadMessaging({
           safeMessageActivity();
           return { status: "blocked" };
         }
-        return sendMessageToThread(activeWorkspace, activeThreadId, text, images);
+        return sendMessageToThread(activeWorkspace, activeThreadId, text, images, {
+          replaceMessageId: options?.replaceMessageId,
+        });
       } catch (error) {
         pushThreadErrorMessage(
           activeThreadId,

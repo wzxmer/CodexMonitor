@@ -757,7 +757,9 @@ export const Messages = memo(function Messages({
           onResendUserMessage={
             onResendUserMessage && item.id === retryableUserMessageId
               ? (message, text) =>
-                  onResendUserMessage(text, message.images ?? [])
+                  onResendUserMessage(text, message.images ?? [], {
+                    replaceMessageId: message.id,
+                  })
               : undefined
           }
           codeBlockCopyUseModifier={codeBlockCopyUseModifier}
