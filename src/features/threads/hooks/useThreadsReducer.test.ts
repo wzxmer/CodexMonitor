@@ -841,6 +841,55 @@ describe("threadReducer", () => {
     ).toBe(300);
   });
 
+  it("reorders active anchors already present in a refresh payload", () => {
+    const base: ThreadState = {
+      ...initialState,
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "active-a", name: "Active A", updatedAt: 1 },
+          { id: "old", name: "Old", updatedAt: 900 },
+          { id: "active-b", name: "Active B", updatedAt: 2 },
+        ],
+      },
+      threadStatusById: {
+        "active-a": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 3000,
+          lastDurationMs: null,
+        },
+        "active-b": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 2900,
+          lastDurationMs: null,
+        },
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      sortKey: "updated_at",
+      preserveAnchors: true,
+      threads: [
+        { id: "active-a", name: "Active A", updatedAt: 1 },
+        { id: "old", name: "Old", updatedAt: 900 },
+        { id: "active-b", name: "Active B", updatedAt: 2 },
+      ],
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "active-a",
+      "active-b",
+      "old",
+    ]);
+    expect(next.threadsByWorkspace["ws-1"]?.[0]?.updatedAt).toBe(3000);
+    expect(next.threadsByWorkspace["ws-1"]?.[1]?.updatedAt).toBe(2900);
+  });
+
   it("does not resurrect hidden anchors on partial setThreads payloads", () => {
     const base: ThreadState = {
       ...initialState,

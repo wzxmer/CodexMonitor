@@ -578,6 +578,40 @@ export function reduceThreadLifecycle(
         }
       });
 
+      const anchorIds = new Set<string>();
+      if (activeThreadId) {
+        anchorIds.add(activeThreadId);
+      }
+      existingThreads.forEach((thread) => {
+        if (
+          state.threadStatusById[thread.id]?.isProcessing ||
+          state.threadResumeLoadingById[thread.id]
+        ) {
+          anchorIds.add(thread.id);
+        }
+      });
+      if (anchorIds.size > 0) {
+        const presentAnchors = reconciled.filter((thread) =>
+          anchorIds.has(thread.id),
+        );
+        if (presentAnchors.length > 0) {
+          const presentAnchorIds = new Set(
+            presentAnchors.map((thread) => thread.id),
+          );
+          const reordered = reconciled.filter(
+            (thread) => !presentAnchorIds.has(thread.id),
+          );
+          presentAnchors.forEach((thread) => {
+            insertThreadSummaryBySort(
+              reordered,
+              freshenAnchorSummary(thread),
+              action.sortKey,
+            );
+          });
+          reconciled.splice(0, reconciled.length, ...reordered);
+        }
+      }
+
       return {
         ...state,
         threadsByWorkspace: {

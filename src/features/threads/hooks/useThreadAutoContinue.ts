@@ -46,6 +46,7 @@ export function useThreadAutoContinue({
   const timerByThreadRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const expectedAutoStartRef = useRef(new Set<string>());
   const manuallyStoppedTurnRef = useRef(new Set<string>());
+  const manualStopFenceByThreadRef = useRef(new Map<string, number>());
 
   statusRef.current = statusByThread;
 
@@ -75,6 +76,7 @@ export function useThreadAutoContinue({
   const scheduleRetry = useCallback(
     (workspaceId: string, threadId: string, attempt: number) => {
       clearTimer(threadId);
+      const stopFence = manualStopFenceByThreadRef.current.get(threadId) ?? 0;
       if (!(statusRef.current[threadId] ?? EMPTY_STATUS).enabled) {
         return;
       }
@@ -87,6 +89,9 @@ export function useThreadAutoContinue({
       }));
       const timer = setTimeout(async () => {
         timerByThreadRef.current.delete(threadId);
+        if ((manualStopFenceByThreadRef.current.get(threadId) ?? 0) !== stopFence) {
+          return;
+        }
         if (!(statusRef.current[threadId] ?? EMPTY_STATUS).enabled) {
           return;
         }
@@ -100,10 +105,17 @@ export function useThreadAutoContinue({
           scheduleRetryRef.current?.(workspaceId, threadId, attempt + 1);
           return;
         }
+        if ((manualStopFenceByThreadRef.current.get(threadId) ?? 0) !== stopFence) {
+          return;
+        }
         expectedAutoStartRef.current.add(threadId);
         updateStatus(threadId, (status) => ({ ...status, phase: "sending", nextRetryAt: null }));
         try {
           const result = await sendContinuation(workspace, threadId, AUTO_CONTINUE_PROMPT);
+          if ((manualStopFenceByThreadRef.current.get(threadId) ?? 0) !== stopFence) {
+            expectedAutoStartRef.current.delete(threadId);
+            return;
+          }
           if (result?.status && result.status !== "sent") {
             expectedAutoStartRef.current.delete(threadId);
             scheduleRetryRef.current?.(workspaceId, threadId, attempt + 1);
@@ -112,6 +124,9 @@ export function useThreadAutoContinue({
           updateStatus(threadId, (status) => ({ ...status, phase: "running", nextRetryAt: null }));
         } catch {
           expectedAutoStartRef.current.delete(threadId);
+          if ((manualStopFenceByThreadRef.current.get(threadId) ?? 0) !== stopFence) {
+            return;
+          }
           scheduleRetryRef.current?.(workspaceId, threadId, attempt + 1);
         }
       }, delay);
@@ -160,6 +175,12 @@ export function useThreadAutoContinue({
 
   const onTurnError = useCallback(
     (workspaceId: string, threadId: string, turnId: string, payload: { willRetry: boolean }) => {
+      if (manualStopFenceByThreadRef.current.has(threadId)) {
+        if (turnId) {
+          manuallyStoppedTurnRef.current.add(`${threadId}:${turnId}`);
+        }
+        return;
+      }
       if (payload.willRetry) {
         return;
       }
@@ -179,6 +200,9 @@ export function useThreadAutoContinue({
   const markManualStop = useCallback(
     (threadId: string, turnId: string | null) => {
       clearTimer(threadId);
+      const nextFence =
+        (manualStopFenceByThreadRef.current.get(threadId) ?? 0) + 1;
+      manualStopFenceByThreadRef.current.set(threadId, nextFence);
       expectedAutoStartRef.current.delete(threadId);
       if (turnId) {
         manuallyStoppedTurnRef.current.add(`${threadId}:${turnId}`);
@@ -191,14 +215,25 @@ export function useThreadAutoContinue({
   const shouldContinueAfterError = useCallback(
     (threadId: string, turnId: string) =>
       (statusRef.current[threadId] ?? EMPTY_STATUS).enabled &&
+      !manualStopFenceByThreadRef.current.has(threadId) &&
       !manuallyStoppedTurnRef.current.has(`${threadId}:${turnId}`),
     [],
   );
+
+  const clearManualStop = useCallback((threadId: string) => {
+    manualStopFenceByThreadRef.current.delete(threadId);
+    for (const key of manuallyStoppedTurnRef.current) {
+      if (key.startsWith(`${threadId}:`)) {
+        manuallyStoppedTurnRef.current.delete(key);
+      }
+    }
+  }, []);
 
   const clearThread = useCallback(
     (threadId: string) => {
       clearTimer(threadId);
       expectedAutoStartRef.current.delete(threadId);
+      clearManualStop(threadId);
       setStatusByThread((current) => {
         if (!current[threadId]) {
           return current;
@@ -208,7 +243,7 @@ export function useThreadAutoContinue({
         return rest;
       });
     },
-    [clearTimer],
+    [clearManualStop, clearTimer],
   );
 
   useEffect(
@@ -226,6 +261,7 @@ export function useThreadAutoContinue({
     onTurnCompleted,
     onTurnError,
     markManualStop,
+    clearManualStop,
     shouldContinueAfterError,
     clearThread,
   };

@@ -351,6 +351,7 @@ type UseThreadMessagingOptions = {
     threadId: string,
     text: string,
   ) => void;
+  onUserTurnRequested?: (workspaceId: string, threadId: string) => void;
 };
 
 export function useThreadMessaging({
@@ -394,6 +395,7 @@ export function useThreadMessaging({
   registerDetachedReviewChild,
   renameThread,
   onUserMessageCreated,
+  onUserTurnRequested,
 }: UseThreadMessagingOptions) {
   const { t } = useI18n();
   const interruptInFlightRef = useRef(new Set<string>());
@@ -511,6 +513,9 @@ export function useThreadMessaging({
           activeTurnId,
         },
       });
+      if (!shouldSteer && requestMode === "start") {
+        onUserTurnRequested?.(workspace.id, threadId);
+      }
       if (
         !shouldSteer &&
         !options?.skipRuntimePreflight &&
@@ -954,6 +959,7 @@ export function useThreadMessaging({
       threadStatusById,
       tokenUsageByThread,
       onUserMessageCreated,
+      onUserTurnRequested,
       t,
       upsertOptimisticUserMessage,
     ],

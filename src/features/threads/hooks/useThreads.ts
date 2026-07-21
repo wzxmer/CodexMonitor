@@ -260,6 +260,7 @@ export function useThreads({
     onTurnCompleted: handleAutoContinueTurnCompleted,
     onTurnError: handleAutoContinueTurnError,
     markManualStop: markAutoContinueManualStop,
+    clearManualStop: clearAutoContinueManualStop,
     shouldContinueAfterError,
     clearThread: clearAutoContinueThread,
   } = useThreadAutoContinue({
@@ -1461,6 +1462,8 @@ export function useThreads({
     registerDetachedReviewChild,
     renameThread,
     onUserMessageCreated,
+    onUserTurnRequested: (_workspaceId, threadId) =>
+      clearAutoContinueManualStop(threadId),
   });
   autoContinueSendRef.current = (workspace, threadId, message) =>
     sendUserMessageToThread(workspace, threadId, message, [], {
@@ -1471,7 +1474,7 @@ export function useThreads({
     if (activeThreadId) {
       markAutoContinueManualStop(
         activeThreadId,
-        activeTurnIdByThreadRef.current[activeThreadId] ?? "pending",
+        activeTurnIdByThreadRef.current[activeThreadId] ?? null,
       );
     }
     return interruptTurnRaw();
