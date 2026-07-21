@@ -37,7 +37,7 @@ def resolve_release_version(
         if version <= latest:
             version = (latest[0], latest[1], latest[2] + 1)
     internal = ".".join(str(part) for part in version)
-    public = f"{version[0]}.{version[1]}.{version[2]:02d}"
+    public = internal
     return internal, public
 
 
