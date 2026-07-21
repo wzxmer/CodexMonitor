@@ -327,6 +327,19 @@ export function reduceThreadItems(state: ThreadState, action: ThreadAction): Thr
           }),
         },
       };
+    case "evictThreadItems": {
+      const residentThreadIds = action.threadIds.filter(
+        (threadId) => threadId in state.itemsByThread,
+      );
+      if (residentThreadIds.length === 0) {
+        return state;
+      }
+      const itemsByThread = { ...state.itemsByThread };
+      residentThreadIds.forEach((threadId) => {
+        delete itemsByThread[threadId];
+      });
+      return { ...state, itemsByThread };
+    }
     case "appendReasoningSummary": {
       const list = state.itemsByThread[action.threadId] ?? [];
       const index = list.findIndex((entry) => entry.id === action.itemId);

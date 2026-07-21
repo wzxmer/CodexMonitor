@@ -36,6 +36,7 @@ import { useThreadTitleAutogeneration } from "./useThreadTitleAutogeneration";
 import { useSubagentCheckpointSync } from "./useSubagentCheckpointSync";
 import { useDetachedReviewTracking } from "./useDetachedReviewTracking";
 import { useThreadAutoContinue } from "./useThreadAutoContinue";
+import { useResidentThreadHistory } from "./useResidentThreadHistory";
 import {
   archiveThread as archiveThreadService,
   listThreads as listThreadsService,
@@ -981,6 +982,24 @@ export function useThreads({
     hydrateTurnExecutionSummary,
   });
 
+  const { isThreadHistoryEvicted, restoreThreadHistory } =
+    useResidentThreadHistory({
+      activeThreadId,
+      itemsByThread: state.itemsByThread,
+      itemsByThreadRef,
+      threadStatusById: state.threadStatusById,
+      threadResumeLoadingById: state.threadResumeLoadingById,
+      activeTurnIdByThread: state.activeTurnIdByThread,
+      approvals: state.approvals,
+      userInputRequests: state.userInputRequests,
+      pendingUserMessageReplacementByThread:
+        state.pendingUserMessageReplacementByThread,
+      loadedThreadsRef,
+      loadedThreadRuntimeKeyRef,
+      dispatch,
+      readThreadForWorkspace,
+    });
+
   useEffect(() => {
     if (!autoArchiveThreadsEnabled) {
       return;
@@ -1264,15 +1283,19 @@ export function useThreads({
       if (selectionStayedOnDraft) {
         dispatch({ type: "setActiveThreadId", workspaceId, threadId });
       }
-    } else if (!loadedThreadsRef.current[threadId]) {
-      await readThreadForWorkspace(activeWorkspace.id, threadId);
+    } else if (
+      !loadedThreadsRef.current[threadId] ||
+      isThreadHistoryEvicted(threadId)
+    ) {
+      await restoreThreadHistory(activeWorkspace.id, threadId);
     }
     return threadId;
   }, [
     activeWorkspace,
     activeThreadId,
     dispatch,
-    readThreadForWorkspace,
+    isThreadHistoryEvicted,
+    restoreThreadHistory,
     startThreadForWorkspace,
   ]);
 
@@ -1288,8 +1311,11 @@ export function useThreads({
         if (!threadId) {
           return null;
         }
-      } else if (!loadedThreadsRef.current[threadId]) {
-        await readThreadForWorkspace(workspaceId, threadId);
+      } else if (
+        !loadedThreadsRef.current[threadId] ||
+        isThreadHistoryEvicted(threadId)
+      ) {
+        await restoreThreadHistory(workspaceId, threadId);
       }
       if (shouldActivate && currentActiveThreadId !== threadId) {
         dispatch({ type: "setActiveThreadId", workspaceId, threadId });
@@ -1300,7 +1326,8 @@ export function useThreads({
       activeWorkspaceId,
       dispatch,
       loadedThreadsRef,
-      readThreadForWorkspace,
+      isThreadHistoryEvicted,
+      restoreThreadHistory,
       startThreadForWorkspace,
       state.activeThreadIdByWorkspace,
     ],
@@ -1431,20 +1458,22 @@ export function useThreads({
       }
       if (threadId) {
         void (async () => {
+          const historyWasEvicted = isThreadHistoryEvicted(threadId);
           const hasLocalSnapshot = hasLocalThreadSnapshot(threadId);
-          if (hasLocalSnapshot) {
+          if (hasLocalSnapshot && !historyWasEvicted) {
             loadedThreadsRef.current[threadId] = true;
             return;
           }
-          await readThreadForWorkspace(targetId, threadId);
+          await restoreThreadHistory(targetId, threadId);
         })();
       }
     },
     [
       activeWorkspaceId,
       hasLocalThreadSnapshot,
+      isThreadHistoryEvicted,
       loadedThreadsRef,
-      readThreadForWorkspace,
+      restoreThreadHistory,
       state.activeThreadIdByWorkspace,
     ],
   );

@@ -1000,6 +1000,38 @@ describe("threadReducer", () => {
     expect(next.itemsByThread["thread-1"]).toEqual([]);
   });
 
+  it("evicts only the requested resident thread items", () => {
+    const base: ThreadState = {
+      ...initialState,
+      itemsByThread: {
+        "thread-1": [
+          {
+            id: "message-1",
+            kind: "message",
+            role: "assistant",
+            text: "one",
+          },
+        ],
+        "thread-2": [
+          {
+            id: "message-2",
+            kind: "message",
+            role: "assistant",
+            text: "two",
+          },
+        ],
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "evictThreadItems",
+      threadIds: ["thread-1", "missing-thread"],
+    });
+
+    expect(next.itemsByThread["thread-1"]).toBeUndefined();
+    expect(next.itemsByThread["thread-2"]).toEqual(base.itemsByThread["thread-2"]);
+  });
+
   it("dedupes repeated thread summaries on complete setThreads payloads", () => {
     const next = threadReducer(initialState, {
       type: "setThreads",

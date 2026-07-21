@@ -24,6 +24,7 @@ import {
 import { STORAGE_KEY_DETACHED_REVIEW_LINKS } from "@threads/utils/threadStorage";
 import { LOCAL_CODEX_WORKSPACE_ID } from "@/features/workspaces/domain/localCodexWorkspace";
 import { useQueuedSend } from "./useQueuedSend";
+import { MAX_RESIDENT_THREAD_HISTORIES } from "./useResidentThreadHistory";
 import { useThreads } from "./useThreads";
 
 type AppServerHandlers = Parameters<typeof useAppServerEvents>[0];
@@ -305,6 +306,72 @@ describe("useThreads UX integration", () => {
     const ensureCallOrder = ensureWorkspaceRuntimeCodexArgs.mock.invocationCallOrder[0];
     const startThreadCallOrder = vi.mocked(startThread).mock.invocationCallOrder[0];
     expect(ensureCallOrder).toBeLessThan(startThreadCallOrder);
+  });
+
+  it("bounds resident histories and reloads an evicted thread on selection", async () => {
+    vi.mocked(readThread).mockImplementation(async (_workspaceId, threadId) => ({
+      result: {
+        thread: {
+          id: threadId,
+          turns: [
+            {
+              items: [
+                {
+                  type: "agentMessage",
+                  id: `message-${threadId}`,
+                  text: `history for ${threadId}`,
+                },
+              ],
+            },
+          ],
+        },
+      },
+    }) as Awaited<ReturnType<typeof readThread>>);
+    const totalThreads = MAX_RESIDENT_THREAD_HISTORIES + 3;
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    for (let index = 1; index <= totalThreads; index += 1) {
+      const threadId = `resident-${index}`;
+      act(() => {
+        result.current.setActiveThreadId(threadId);
+      });
+      await waitFor(() => {
+        expect(result.current.activeItems.some((item) => item.id === `message-${threadId}`))
+          .toBe(true);
+      });
+    }
+
+    await waitFor(() => {
+      expect(Object.keys(result.current.itemsByThread)).toHaveLength(
+        MAX_RESIDENT_THREAD_HISTORIES,
+      );
+    });
+    expect(result.current.itemsByThread["resident-1"]).toBeUndefined();
+    expect(result.current.itemsByThread[`resident-${totalThreads}`]).toBeDefined();
+
+    act(() => {
+      result.current.setActiveThreadId("resident-1");
+    });
+    await waitFor(() => {
+      expect(
+        vi.mocked(readThread).mock.calls.filter(
+          ([workspaceId, threadId]) =>
+            workspaceId === "ws-1" && threadId === "resident-1",
+        ),
+      ).toHaveLength(2);
+    });
+    await waitFor(() => {
+      expect(
+        result.current.activeItems.some(
+          (item) => item.id === "message-resident-1",
+        ),
+      ).toBe(true);
+    });
   });
 
   it("does not reactivate a first-send thread after the user switches away", async () => {

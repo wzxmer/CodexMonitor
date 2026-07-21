@@ -1,0 +1,147 @@
+// @vitest-environment jsdom
+import { renderHook, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import type { ConversationItem } from "@/types";
+import {
+  MAX_RESIDENT_THREAD_HISTORIES,
+  getProtectedResidentThreadIds,
+  selectResidentThreadEvictions,
+  useResidentThreadHistory,
+} from "./useResidentThreadHistory";
+
+function buildItemsByThread(count: number) {
+  return Object.fromEntries(
+    Array.from({ length: count }, (_, index) => [
+      `thread-${index + 1}`,
+      [
+        {
+          id: `message-${index + 1}`,
+          kind: "message",
+          role: "assistant",
+          text: `message ${index + 1}`,
+        },
+      ] as ConversationItem[],
+    ]),
+  );
+}
+
+describe("useResidentThreadHistory", () => {
+  it("keeps only the recent history budget and restores evicted threads by replacement", async () => {
+    const itemsByThread = buildItemsByThread(MAX_RESIDENT_THREAD_HISTORIES + 3);
+    const itemsByThreadRef = { current: itemsByThread };
+    const loadedThreadsRef = {
+      current: Object.fromEntries(
+        Object.keys(itemsByThread).map((threadId) => [threadId, true]),
+      ),
+    };
+    const loadedThreadRuntimeKeyRef = {
+      current: Object.fromEntries(
+        Object.keys(itemsByThread).map((threadId) => [threadId, "runtime-1"]),
+      ),
+    };
+    const dispatch = vi.fn();
+    const readThreadForWorkspace = vi.fn(async (_workspaceId, threadId) => threadId);
+
+    const { result } = renderHook(() =>
+      useResidentThreadHistory({
+        activeThreadId: `thread-${MAX_RESIDENT_THREAD_HISTORIES + 3}`,
+        itemsByThread,
+        itemsByThreadRef,
+        threadStatusById: {},
+        threadResumeLoadingById: {},
+        activeTurnIdByThread: {},
+        approvals: [],
+        userInputRequests: [],
+        pendingUserMessageReplacementByThread: {},
+        loadedThreadsRef,
+        loadedThreadRuntimeKeyRef,
+        dispatch,
+        readThreadForWorkspace,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "evictThreadItems",
+        threadIds: ["thread-1", "thread-2", "thread-3"],
+      });
+    });
+    expect(Object.keys(itemsByThreadRef.current)).toHaveLength(
+      MAX_RESIDENT_THREAD_HISTORIES,
+    );
+    expect(loadedThreadsRef.current["thread-1"]).toBe(false);
+    expect(loadedThreadRuntimeKeyRef.current["thread-1"]).toBeUndefined();
+
+    await result.current.restoreThreadHistory("ws-1", "thread-1");
+
+    expect(readThreadForWorkspace).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      false,
+      true,
+    );
+    expect(result.current.isThreadHistoryEvicted("thread-1")).toBe(false);
+  });
+
+  it("never evicts active, processing, interaction, or replacement threads", () => {
+    const protectedThreadIds = getProtectedResidentThreadIds({
+      activeThreadId: "thread-active",
+      threadStatusById: {
+        "thread-processing": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 1,
+          lastDurationMs: null,
+        },
+        "thread-review": {
+          isProcessing: false,
+          hasUnread: false,
+          isReviewing: true,
+          processingStartedAt: null,
+          lastDurationMs: null,
+        },
+      },
+      threadResumeLoadingById: { "thread-loading": true },
+      activeTurnIdByThread: { "thread-turn": "turn-1" },
+      approvals: [
+        {
+          workspace_id: "ws-1",
+          request_id: 1,
+          method: "approval/request",
+          params: { thread_id: "thread-approval" },
+        },
+      ],
+      userInputRequests: [
+        {
+          workspace_id: "ws-1",
+          request_id: 2,
+          params: {
+            thread_id: "thread-input",
+            turn_id: "turn-2",
+            item_id: "item-2",
+            questions: [],
+          },
+        },
+      ],
+      pendingUserMessageReplacementByThread: {
+        "thread-replacement": { messageId: "message-1", text: "pending" },
+      },
+    });
+    const protectedIds = [...protectedThreadIds];
+    const residents = [
+      ...protectedIds,
+      ...Array.from({ length: 10 }, (_, index) => `recent-${index}`),
+    ];
+    const evicted = selectResidentThreadEvictions(
+      residents,
+      residents,
+      protectedThreadIds,
+      2,
+    );
+
+    protectedIds.forEach((threadId) => {
+      expect(evicted).not.toContain(threadId);
+    });
+  });
+});

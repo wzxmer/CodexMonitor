@@ -138,6 +138,7 @@ export type ThreadAction =
       items: ConversationItem[];
       trimItems?: boolean;
     }
+  | { type: "evictThreadItems"; threadIds: string[] }
   | {
       type: "appendReasoningSummary";
       threadId: string;
