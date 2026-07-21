@@ -46,7 +46,7 @@ describe("message tool group interaction styles", () => {
     );
   });
 
-  it("keeps reading controls in document flow so they cannot cover messages", () => {
+  it("overlays the style panel without changing the message layout flow", () => {
     const controlsRule = messagesCss.match(
       /\.messages-tool-controls\s*\{([\s\S]*?)\n\}/,
     );
@@ -56,10 +56,14 @@ describe("message tool group interaction styles", () => {
 
     expect(controlsRule?.[1]).not.toMatch(/position:\s*(?:sticky|fixed|absolute)/);
     expect(controlsRule?.[1]).not.toMatch(/\btop:/);
-    expect(stylePopoverRule?.[1]).not.toMatch(
-      /position:\s*(?:sticky|fixed|absolute)/,
+    expect(messagesCss).toMatch(
+      /\.messages-style-panel-host\s*\{[^}]*position:\s*absolute;[^}]*top:\s*100%;[^}]*right:\s*var\(--main-panel-padding, 24px\);/s,
     );
-    expect(stylePopoverRule?.[1]).toContain("flex: 1 1 100%");
+    expect(messagesCss).toMatch(
+      /\.messages-style-panel-host\.is-open\s*\{[^}]*display:\s*block;/s,
+    );
+    expect(stylePopoverRule?.[1]).toContain("overflow-y: auto");
+    expect(stylePopoverRule?.[1]).not.toContain("flex: 1 1 100%");
   });
 
   it("keeps horizontal scrolling inside wide content instead of the conversation pane", () => {

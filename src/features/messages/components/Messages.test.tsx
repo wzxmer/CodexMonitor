@@ -3149,7 +3149,10 @@ describe("Messages", () => {
 
     const search = screen.getByRole("search");
     const styleDialog = screen.getByRole("dialog", { name: "对话样式" });
+    const stylePanelHost = container.querySelector(".messages-style-panel-host");
     expect(controlLayer?.contains(search)).toBe(true);
+    expect(stylePanelHost).toBeTruthy();
+    expect(stylePanelHost?.contains(styleDialog)).toBe(true);
     expect(controlLayer?.contains(styleDialog)).toBe(true);
     expect(scrollNode.contains(search)).toBe(false);
     expect(scrollNode.contains(styleDialog)).toBe(false);

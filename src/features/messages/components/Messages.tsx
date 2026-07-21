@@ -9,6 +9,7 @@ import {
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import ArrowDown from "lucide-react/dist/esm/icons/arrow-down";
 import ArrowUp from "lucide-react/dist/esm/icons/arrow-up";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
@@ -250,6 +251,7 @@ export const Messages = memo(function Messages({
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [searchNavigationVersion, setSearchNavigationVersion] = useState(0);
   const styleMenuRef = useRef<HTMLDivElement | null>(null);
+  const stylePanelHostRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchTargetRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const handledSearchNavigationVersionRef = useRef(0);
@@ -389,7 +391,11 @@ export const Messages = memo(function Messages({
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
-      if (target instanceof Node && styleMenuRef.current?.contains(target)) {
+      if (
+        target instanceof Node &&
+        (styleMenuRef.current?.contains(target) ||
+          stylePanelHostRef.current?.contains(target))
+      ) {
         return;
       }
       setStylePanelOpen(false);
@@ -887,7 +893,8 @@ export const Messages = memo(function Messages({
                 const nextTarget = event.relatedTarget;
                 if (
                   nextTarget instanceof Node &&
-                  event.currentTarget.contains(nextTarget)
+                  (event.currentTarget.contains(nextTarget) ||
+                    stylePanelHostRef.current?.contains(nextTarget))
                 ) {
                   return;
                 }
@@ -902,12 +909,27 @@ export const Messages = memo(function Messages({
               >
                 {t("messages.style")}
               </button>
-              {stylePanelOpen && (
-                <div
-                  className="messages-style-popover"
-                  role="dialog"
-                  aria-label={t("messages.styleDialog")}
-                >
+              {stylePanelOpen && stylePanelHostRef.current
+                ? createPortal(
+                    <div
+                      className="messages-style-popover"
+                      role="dialog"
+                      aria-label={t("messages.styleDialog")}
+                      onBlur={(event) => {
+                        if (isNativeColorPickerBlur(event)) {
+                          return;
+                        }
+                        const nextTarget = event.relatedTarget;
+                        if (
+                          nextTarget instanceof Node &&
+                          (styleMenuRef.current?.contains(nextTarget) ||
+                            event.currentTarget.contains(nextTarget))
+                        ) {
+                          return;
+                        }
+                        setStylePanelOpen(false);
+                      }}
+                    >
                   <div className="messages-style-section">
                     <div className="messages-style-section-title">
                       {t("messages.styleScheme")}
@@ -1050,11 +1072,18 @@ export const Messages = memo(function Messages({
                       />
                     </label>
                   </div>
-                </div>
-              )}
+                    </div>,
+                    stylePanelHostRef.current,
+                  )
+                : null}
             </div>
           </div>
         </div>
+        <div
+          ref={stylePanelHostRef}
+          className={`messages-style-panel-host${stylePanelOpen ? " is-open" : ""}`}
+          aria-hidden={!stylePanelOpen}
+        />
       </div>
       <div
         className="messages messages-full"
