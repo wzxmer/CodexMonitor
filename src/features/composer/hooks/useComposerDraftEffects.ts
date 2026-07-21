@@ -66,11 +66,9 @@ export function useComposerDraftEffects({
   onProgrammaticDraftChange,
 }: UseComposerDraftEffectsArgs) {
   useEffect(() => {
-    if (draftText !== text) {
-      onProgrammaticDraftChange?.();
-    }
+    onProgrammaticDraftChange?.();
     syncDraftText(draftText);
-  }, [draftText, onProgrammaticDraftChange, syncDraftText, text]);
+  }, [draftText, historyKey, onProgrammaticDraftChange, syncDraftText]);
 
   useEffect(() => {
     setAppMentionBindings([]);

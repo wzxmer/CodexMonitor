@@ -51,6 +51,8 @@ type HarnessProps = {
   canStop?: boolean;
   onStop?: () => void;
   controlledDraft?: boolean;
+  onDraftChangeOverride?: (text: string) => void;
+  draftKey?: string | null;
   autoReconnectEnabled?: boolean;
   autoReconnectPhase?: "idle" | "waiting" | "sending" | "running";
   autoReconnectAttempt?: number;
@@ -74,6 +76,8 @@ function ComposerHarness({
   canStop = false,
   onStop = () => {},
   controlledDraft = true,
+  onDraftChangeOverride,
+  draftKey = null,
   autoReconnectEnabled,
   autoReconnectPhase,
   autoReconnectAttempt,
@@ -118,7 +122,8 @@ function ComposerHarness({
       prompts={prompts}
       files={[]}
       draftText={controlledDraft ? draftText : ""}
-      onDraftChange={controlledDraft ? setDraftText : undefined}
+      onDraftChange={onDraftChangeOverride ?? (controlledDraft ? setDraftText : undefined)}
+      pasteUndoKey={draftKey}
       textareaRef={textareaRef}
       dictationEnabled={false}
       references={references}
@@ -180,6 +185,49 @@ describe("Composer send triggers", () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith("hello world", [], undefined, "default");
+  });
+
+  it("keeps local input when the parent mirrors drafts without rerendering", () => {
+    const onDraftChange = vi.fn();
+    render(
+      <ComposerHarness
+        onSend={vi.fn()}
+        controlledDraft={false}
+        onDraftChangeOverride={onDraftChange}
+      />,
+    );
+
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "hello world" } });
+
+    expect(onDraftChange).toHaveBeenCalledWith("hello world");
+    expect(textarea.value).toBe("hello world");
+  });
+
+  it("replaces local input when the active draft key changes", () => {
+    const onDraftChange = vi.fn();
+    const { rerender } = render(
+      <ComposerHarness
+        onSend={vi.fn()}
+        controlledDraft={false}
+        onDraftChangeOverride={onDraftChange}
+        draftKey="thread-a"
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "thread a draft" },
+    });
+    rerender(
+      <ComposerHarness
+        onSend={vi.fn()}
+        controlledDraft={false}
+        onDraftChangeOverride={onDraftChange}
+        draftKey="thread-b"
+      />,
+    );
+
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
   });
 
   it("serializes references in card order before the untouched body", () => {
