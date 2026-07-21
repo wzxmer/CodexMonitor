@@ -111,6 +111,33 @@ describe("threadReducer", () => {
     expect(next.threadsByWorkspace["ws-1"]?.[0]?.name).toBe("Assistant note");
   });
 
+  it("stores the completed agent message phase", () => {
+    const streaming = threadReducer(initialState, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-1",
+      delta: "Working",
+      hasCustomName: false,
+    });
+    const completed = threadReducer(streaming, {
+      type: "completeAgentMessage",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-1",
+      turnId: "turn-1",
+      text: "Working",
+      phase: "commentary",
+      hasCustomName: false,
+    });
+
+    expect(completed.itemsByThread["thread-1"]?.[0]).toMatchObject({
+      id: "assistant-1",
+      phase: "commentary",
+      turnId: "turn-1",
+    });
+  });
+
   it("updates thread timestamp when newer activity arrives", () => {
     const threads: ThreadSummary[] = [
       { id: "thread-1", name: "Agent 1", updatedAt: 1000 },

@@ -982,6 +982,35 @@ describe("threadItems", () => {
     });
   });
 
+  it("keeps the remote agent phase when local streamed text is richer", () => {
+    const merged = mergeThreadItems(
+      [
+        {
+          id: "assistant-1",
+          kind: "message",
+          role: "assistant",
+          text: "Done",
+          phase: "final_answer",
+          turnId: "turn-1",
+        },
+      ],
+      [
+        {
+          id: "assistant-1",
+          kind: "message",
+          role: "assistant",
+          text: "Done with streamed detail",
+        },
+      ],
+    );
+
+    expect(merged[0]).toMatchObject({
+      text: "Done with streamed detail",
+      phase: "final_answer",
+      turnId: "turn-1",
+    });
+  });
+
   it("uses trusted turn boundaries when historical message item timestamps are absent", () => {
     const items = buildItemsFromThread({
       turns: [
@@ -1014,8 +1043,16 @@ describe("threadItems", () => {
 
     expect(items).toMatchObject([
       { id: "user-1", createdAt: 1_700_000_000_000 },
-      { id: "assistant-progress-1", createdAt: undefined },
-      { id: "assistant-final-1", createdAt: 1_700_000_030_000 },
+      {
+        id: "assistant-progress-1",
+        phase: "commentary",
+        createdAt: undefined,
+      },
+      {
+        id: "assistant-final-1",
+        phase: "final_answer",
+        createdAt: 1_700_000_030_000,
+      },
     ]);
   });
 

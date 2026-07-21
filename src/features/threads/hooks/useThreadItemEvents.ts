@@ -185,11 +185,15 @@ export function useThreadItemEvents({
       workspaceId,
       threadId,
       itemId,
+      turnId,
+      phase,
       text,
     }: {
       workspaceId: string;
       threadId: string;
       itemId: string;
+      turnId?: string;
+      phase?: string | null;
       text: string;
     }) => {
       const timestamp = Date.now();
@@ -200,6 +204,8 @@ export function useThreadItemEvents({
         workspaceId,
         threadId,
         itemId,
+        turnId,
+        phase,
         text,
         hasCustomName,
       });

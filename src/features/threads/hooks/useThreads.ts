@@ -877,6 +877,8 @@ export function useThreads({
       workspaceId: string;
       threadId: string;
       itemId: string;
+      turnId?: string;
+      phase?: string | null;
       text: string;
     }) => {
       threadHandlers.onAgentMessageCompleted?.(event);

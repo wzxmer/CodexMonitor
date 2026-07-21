@@ -401,11 +401,13 @@ export function buildConversationItemFromThreadItem(
     return buildUserConversationItem(item, id);
   }
   if (type === "agentMessage") {
+    const phase = asString(item.phase).trim();
     return {
       id,
       kind: "message",
       role: "assistant",
       text: asString(item.text),
+      ...(phase ? { phase } : {}),
       createdAt: extractCreatedAt(item),
     };
   }

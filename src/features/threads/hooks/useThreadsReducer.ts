@@ -119,7 +119,9 @@ export type ThreadAction =
       workspaceId: string;
       threadId: string;
       itemId: string;
+      turnId?: string;
       text: string;
+      phase?: string | null;
       hasCustomName: boolean;
     }
   | {

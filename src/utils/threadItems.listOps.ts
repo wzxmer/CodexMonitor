@@ -182,7 +182,14 @@ function chooseRicherItem(remote: ConversationItem, local: ConversationItem) {
     return remote;
   }
   if (remote.kind === "message" && local.kind === "message") {
-    return local.text.length > remote.text.length ? local : remote;
+    const richer = local.text.length > remote.text.length ? local : remote;
+    const phase = remote.phase ?? local.phase;
+    const turnId = remote.turnId ?? local.turnId;
+    return {
+      ...richer,
+      ...(phase ? { phase } : {}),
+      ...(turnId ? { turnId } : {}),
+    };
   }
   if (remote.kind === "userInput" && local.kind === "userInput") {
     const remoteScore = remote.questions.reduce(

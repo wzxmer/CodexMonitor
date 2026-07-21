@@ -165,6 +165,7 @@ export type ConversationItem = (
       kind: "message";
       role: "user" | "assistant";
       text: string;
+      phase?: string;
       createdAt?: number;
       images?: string[];
       attachments?: string[];

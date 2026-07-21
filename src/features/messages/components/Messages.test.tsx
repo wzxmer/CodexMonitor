@@ -2549,7 +2549,7 @@ describe("Messages", () => {
     expect(screen.getByText("npm run test")).toBeTruthy();
   });
 
-  it("does not show process group timestamps or hide expanded CLI message timestamps", async () => {
+  it("keeps text-only commentary visible beside the final answer", async () => {
     const firstTimestamp = new Date("2026-07-08T19:54:52").getTime();
     const secondTimestamp = new Date("2026-07-08T19:55:44").getTime();
     const items: ConversationItem[] = [
@@ -2557,6 +2557,8 @@ describe("Messages", () => {
         id: "assistant-process-cli-time-1",
         kind: "message",
         role: "assistant",
+        phase: "commentary",
+        turnId: "turn-text-only",
         text: "First process message.",
         createdAt: firstTimestamp,
       },
@@ -2564,6 +2566,8 @@ describe("Messages", () => {
         id: "assistant-process-cli-time-2",
         kind: "message",
         role: "assistant",
+        phase: "commentary",
+        turnId: "turn-text-only",
         text: "Second process message.",
         createdAt: secondTimestamp,
       },
@@ -2571,6 +2575,8 @@ describe("Messages", () => {
         id: "assistant-final-cli-time",
         kind: "message",
         role: "assistant",
+        phase: "final_answer",
+        turnId: "turn-text-only",
         text: "Final result.",
       },
     ];
@@ -2587,11 +2593,8 @@ describe("Messages", () => {
       />,
     );
 
-    expect(screen.getByText("2 条过程消息")).toBeTruthy();
-    expect(screen.queryByText("2026-07-08 19:54:52")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "展开过程消息" }));
-
+    expect(screen.queryByText("2 条过程消息")).toBeNull();
+    expect(screen.queryByRole("button", { name: "展开过程消息" })).toBeNull();
     const firstBubble = screen
       .getByText("First process message.")
       .closest(".message-bubble");
@@ -2599,6 +2602,7 @@ describe("Messages", () => {
       .getByText("Second process message.")
       .closest(".message-bubble");
 
+    expect(firstBubble?.getAttribute("data-cli-timestamp")).toBe("2026-07-08 19:54:52");
     expect(firstBubble?.classList.contains("message-bubble-cli-timestamp-hidden")).toBe(
       false,
     );

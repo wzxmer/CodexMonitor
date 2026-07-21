@@ -384,6 +384,7 @@ export function useMessagesViewState({
         return;
       }
       let finalAssistantIndex = -1;
+      let fallbackAssistantIndex = -1;
       for (let index = turnEntries.length - 1; index >= 0; index -= 1) {
         const entry = turnEntries[index];
         if (
@@ -391,10 +392,16 @@ export function useMessagesViewState({
           entry.item.kind === "message" &&
           entry.item.role === "assistant"
         ) {
-          finalAssistantIndex = index;
-          break;
+          if (fallbackAssistantIndex < 0) {
+            fallbackAssistantIndex = index;
+          }
+          if (entry.item.phase === "final_answer") {
+            finalAssistantIndex = index;
+            break;
+          }
         }
       }
+      finalAssistantIndex = finalAssistantIndex >= 0 ? finalAssistantIndex : fallbackAssistantIndex;
       if (finalAssistantIndex < 0 || turnEntries.length <= 1) {
         result.push(...turnEntries);
         turnEntries = [];
@@ -408,6 +415,30 @@ export function useMessagesViewState({
           : turnEntries.slice(0, finalAssistantIndex);
       const trailingEntries =
         finalAssistantIndex === 0 ? [] : turnEntries.slice(finalAssistantIndex + 1);
+      const hasStructuredProcessActivity = processEntries.some(
+        (entry) =>
+          entry.kind === "toolGroup" ||
+          entry.item.kind !== "message" ||
+          entry.item.role !== "assistant",
+      );
+      const isExplicitTextOnlyTurn =
+        turnId !== null &&
+        finalEntry.kind === "item" &&
+        finalEntry.item.kind === "message" &&
+        finalEntry.item.phase === "final_answer" &&
+        processEntries.every(
+          (entry) =>
+            entry.kind === "item" &&
+            entry.item.kind === "message" &&
+            entry.item.role === "assistant" &&
+            entry.item.phase === "commentary",
+        );
+      if (!hasStructuredProcessActivity && isExplicitTextOnlyTurn) {
+        result.push(...turnEntries);
+        turnEntries = [];
+        turnId = null;
+        return;
+      }
       const processGroup = buildProcessGroup(processEntries, finalEntry);
       if (processGroup) {
         result.push(processGroup, finalEntry, ...trailingEntries);

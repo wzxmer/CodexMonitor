@@ -312,6 +312,8 @@ describe("useThreadItemEvents", () => {
         workspaceId: "ws-1",
         threadId: "thread-1",
         itemId: "assistant-1",
+        turnId: "turn-1",
+        phase: "final_answer",
         text: "Done",
       });
     });
@@ -326,6 +328,8 @@ describe("useThreadItemEvents", () => {
       workspaceId: "ws-1",
       threadId: "thread-1",
       itemId: "assistant-1",
+      turnId: "turn-1",
+      phase: "final_answer",
       text: "Done",
       hasCustomName: false,
     });
