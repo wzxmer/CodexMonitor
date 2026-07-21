@@ -32,6 +32,7 @@ import { RequestUserInputMessage } from "../../app/components/RequestUserInputMe
 import { useFileLinkOpener } from "../hooks/useFileLinkOpener";
 import {
   formatCount,
+  countApplyPatchLineChanges,
   countDiffLineChanges,
   getConversationItemSearchText,
   parseReasoning,
@@ -84,6 +85,68 @@ function entryContainsTurn(entry: MessageListEntry, turnChain: Set<string>): boo
     return entry.group.items.some((item) => item.turnId && turnChain.has(item.turnId));
   }
   return entry.group.entries.some((child) => entryContainsTurn(child, turnChain));
+}
+
+function toolItemsForEntry(
+  entry: MessageListEntry,
+): Extract<ConversationItem, { kind: "tool" }>[] {
+  if (entry.kind === "item") {
+    return entry.item.kind === "tool" ? [entry.item] : [];
+  }
+  if (entry.kind === "toolGroup") {
+    return entry.group.items.filter(
+      (item): item is Extract<ConversationItem, { kind: "tool" }> =>
+        item.kind === "tool",
+    );
+  }
+  return entry.group.entries.flatMap((child) => toolItemsForEntry(child));
+}
+
+function addLineChangeStats(
+  total: { additions: number; deletions: number },
+  next: { additions: number; deletions: number } | null,
+) {
+  if (next) {
+    total.additions += next.additions;
+    total.deletions += next.deletions;
+  }
+}
+
+function derivePersistedLineChangeStats(entry: MessageListEntry) {
+  const tools = toolItemsForEntry(entry);
+  const fileChangeStats = { additions: 0, deletions: 0 };
+  let hasFileChangeDiff = false;
+  tools.forEach((item) => {
+    if (item.toolType !== "fileChange") {
+      return;
+    }
+    const diffs = item.changes?.map((change) => change.diff ?? "").filter(Boolean) ?? [];
+    const sourceDiffs = diffs.length > 0 ? diffs : item.output ? [item.output] : [];
+    sourceDiffs.forEach((diff) => {
+      const stats = countDiffLineChanges(diff);
+      if (stats) {
+        hasFileChangeDiff = true;
+        addLineChangeStats(fileChangeStats, stats);
+      }
+    });
+  });
+  if (hasFileChangeDiff) {
+    return fileChangeStats;
+  }
+
+  const patchStats = { additions: 0, deletions: 0 };
+  let hasPatch = false;
+  tools.forEach((item) => {
+    if (item.toolType !== "dynamicToolCall") {
+      return;
+    }
+    const stats = item.lineChangeStats ?? countApplyPatchLineChanges(item.detail);
+    if (stats) {
+      hasPatch = true;
+      addLineChangeStats(patchStats, stats);
+    }
+  });
+  return hasPatch ? patchStats : null;
 }
 
 function getSearchTargetForItem(entries: MessageListEntry[], itemId: string) {
@@ -606,6 +669,15 @@ export const Messages = memo(function Messages({
       }
       return null;
     };
+    groupedItems.forEach((entry) => {
+      if (entry.kind !== "processGroup" && entry.kind !== "toolGroup") {
+        return;
+      }
+      const stats = derivePersistedLineChangeStats(entry);
+      if (stats) {
+        result.set(entry.group.id, stats);
+      }
+    });
     summaries.forEach((summary) => {
       const additions = summary.addedLines ?? 0;
       const deletions = summary.deletedLines ?? 0;

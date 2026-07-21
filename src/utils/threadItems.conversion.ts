@@ -340,6 +340,50 @@ export function buildConversationItem(
       output: asString(item.result ?? item.error ?? ""),
     };
   }
+  if (type === "dynamicToolCall") {
+    const namespace = asString(item.namespace ?? "").trim();
+    const tool = asString(item.tool ?? "").trim();
+    const args =
+      typeof item.arguments === "string"
+        ? item.arguments
+        : item.arguments !== undefined
+          ? JSON.stringify(item.arguments, null, 2)
+          : "";
+    const contentItems = Array.isArray(item.contentItems) ? item.contentItems : [];
+    const output = contentItems
+      .map((contentItem) => {
+        const content = contentItem as Record<string, unknown>;
+        if (asString(content.type) === "inputText") {
+          return asString(content.text);
+        }
+        if (asString(content.type) === "inputImage") {
+          return asString(content.imageUrl);
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+    const rawLineChangeStats = item.lineChangeStats as
+      | Record<string, unknown>
+      | undefined;
+    const additions = asNumber(rawLineChangeStats?.additions);
+    const deletions = asNumber(rawLineChangeStats?.deletions);
+    const lineChangeStats =
+      additions !== null && deletions !== null && (additions > 0 || deletions > 0)
+        ? { additions, deletions }
+        : undefined;
+    return {
+      id,
+      kind: "tool",
+      toolType: type,
+      title: `Tool: ${[namespace, tool].filter(Boolean).join(" / ") || "custom"}`,
+      detail: args,
+      status: asString(item.status ?? ""),
+      output,
+      durationMs: asNumber(item.durationMs ?? item.duration_ms),
+      ...(lineChangeStats ? { lineChangeStats } : {}),
+    };
+  }
   if (type === "collabToolCall" || type === "collabAgentToolCall") {
     return parseCollabToolCallItem(item);
   }

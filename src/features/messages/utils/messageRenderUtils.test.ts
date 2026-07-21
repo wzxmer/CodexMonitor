@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ConversationItem } from "../../../types";
 import {
   buildToolSummary,
+  countApplyPatchLineChanges,
   countDiffLineChanges,
   getConversationItemSearchText,
   scrollKeyForItems,
@@ -89,6 +90,22 @@ describe("messageRenderUtils", () => {
           "-old",
           "+new",
           "+added",
+        ].join("\n"),
+      ),
+    ).toEqual({ additions: 2, deletions: 1 });
+  });
+
+  it("counts apply_patch blocks without counting patch metadata", () => {
+    expect(
+      countApplyPatchLineChanges(
+        [
+          "await tools.apply_patch(`*** Begin Patch",
+          "*** Update File: src/a.ts",
+          "@@",
+          "-old",
+          "+new",
+          "+added",
+          "*** End Patch`);",
         ].join("\n"),
       ),
     ).toEqual({ additions: 2, deletions: 1 });

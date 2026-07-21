@@ -123,6 +123,7 @@ export function upsertItem(list: ConversationItem[], item: ConversationItem) {
       status: item.status?.trim() ? item.status : existing.status,
       output: hasIncomingOutput ? incomingOutput : existingOutput,
       changes: hasIncomingChanges ? item.changes : existing.changes,
+      lineChangeStats: item.lineChangeStats ?? existing.lineChangeStats,
       durationMs:
         typeof item.durationMs === "number" ? item.durationMs : existing.durationMs,
     };
@@ -219,6 +220,7 @@ function chooseRicherItem(remote: ConversationItem, local: ConversationItem) {
       status: remoteStatus ? remote.status : local.status,
       output: hasRemoteOutput ? remoteOutput : localOutput,
       changes: remote.changes ?? local.changes,
+      lineChangeStats: remote.lineChangeStats ?? local.lineChangeStats,
       collabSender: remote.collabSender ?? local.collabSender,
       collabReceiver: remote.collabReceiver ?? local.collabReceiver,
       collabModel: remote.collabModel ?? local.collabModel,

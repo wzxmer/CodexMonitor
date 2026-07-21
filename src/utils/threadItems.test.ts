@@ -982,6 +982,31 @@ describe("threadItems", () => {
     });
   });
 
+  it("builds dynamic tool call items from persisted history", () => {
+    const item = buildConversationItem({
+      type: "dynamicToolCall",
+      id: "dynamic-1",
+      namespace: "functions",
+      tool: "exec",
+      arguments: "const result = await tools.exec_command({ cmd: 'git status' });",
+      status: "completed",
+      contentItems: [{ type: "inputText", text: "Script completed" }],
+      success: true,
+      durationMs: 25,
+      lineChangeStats: { additions: 3, deletions: 1 },
+    });
+
+    expect(item).not.toBeNull();
+    if (item?.kind === "tool") {
+      expect(item.toolType).toBe("dynamicToolCall");
+      expect(item.title).toBe("Tool: functions / exec");
+      expect(item.detail).toContain("tools.exec_command");
+      expect(item.output).toBe("Script completed");
+      expect(item.durationMs).toBe(25);
+      expect(item.lineChangeStats).toEqual({ additions: 3, deletions: 1 });
+    }
+  });
+
   it("keeps the remote agent phase when local streamed text is richer", () => {
     const merged = mergeThreadItems(
       [

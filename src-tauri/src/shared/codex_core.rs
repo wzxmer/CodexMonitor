@@ -378,12 +378,128 @@ fn build_read_thread_params(thread_id: String) -> Value {
     json!({ "threadId": thread_id, "includeTurns": true })
 }
 
-type RolloutMessageTimestamps = HashMap<String, Vec<(String, String)>>;
+const MAX_ROLLOUT_TOOL_ARGUMENT_CHARS: usize = 200_000;
+const MAX_ROLLOUT_TOOL_OUTPUT_CHARS: usize = 20_000;
 
-fn collect_rollout_message_timestamp_line(
+#[derive(Default)]
+struct RolloutThreadEnrichment {
+    turns: HashMap<String, RolloutTurnEnrichment>,
+    pending_tools: HashMap<String, (String, usize)>,
+}
+
+#[derive(Default)]
+struct RolloutTurnEnrichment {
+    message_timestamps: Vec<(String, String)>,
+    sequence: Vec<RolloutSequenceItem>,
+}
+
+enum RolloutSequenceItem {
+    Anchor {
+        id: Option<String>,
+        item_type: &'static str,
+    },
+    DynamicTool(Value),
+}
+
+fn truncate_rollout_text(value: &str, max_chars: usize) -> String {
+    let mut chars = value.chars();
+    let prefix: String = chars.by_ref().take(max_chars).collect();
+    if chars.next().is_none() {
+        prefix
+    } else {
+        format!("{prefix}...")
+    }
+}
+
+fn normalize_rollout_tool_status(status: Option<&str>) -> &'static str {
+    match status.unwrap_or_default() {
+        "failed" | "error" => "failed",
+        "inProgress" | "in_progress" | "running" => "inProgress",
+        _ => "completed",
+    }
+}
+
+fn rollout_apply_patch_line_stats(input: Option<&str>) -> Value {
+    let Some(input) = input.filter(|value| value.contains("*** Begin Patch")) else {
+        return Value::Null;
+    };
+    let mut additions = 0usize;
+    let mut deletions = 0usize;
+    let mut inside_patch = false;
+    for line in input.lines() {
+        if line.contains("*** Begin Patch") {
+            inside_patch = true;
+            continue;
+        }
+        if line.contains("*** End Patch") {
+            inside_patch = false;
+            continue;
+        }
+        if !inside_patch || line.starts_with("+++") || line.starts_with("---") {
+            continue;
+        }
+        if line.starts_with('+') {
+            additions += 1;
+        } else if line.starts_with('-') {
+            deletions += 1;
+        }
+    }
+    if additions == 0 && deletions == 0 {
+        Value::Null
+    } else {
+        json!({ "additions": additions, "deletions": deletions })
+    }
+}
+
+fn rollout_tool_arguments(payload: &Value, field: &str) -> Value {
+    let Some(raw) = payload.get(field) else {
+        return Value::Null;
+    };
+    let Some(text) = raw.as_str() else {
+        return raw.clone();
+    };
+    let text = truncate_rollout_text(text, MAX_ROLLOUT_TOOL_ARGUMENT_CHARS);
+    serde_json::from_str(&text).unwrap_or(Value::String(text))
+}
+
+fn rollout_tool_content_items(output: Option<&Value>) -> Vec<Value> {
+    let Some(output) = output else {
+        return Vec::new();
+    };
+    let raw_items = output
+        .as_array()
+        .cloned()
+        .unwrap_or_else(|| vec![output.clone()]);
+    raw_items
+        .into_iter()
+        .filter_map(|item| {
+            if let Some(text) = item.get("text").and_then(Value::as_str) {
+                return Some(json!({
+                    "type": "inputText",
+                    "text": truncate_rollout_text(text, MAX_ROLLOUT_TOOL_OUTPUT_CHARS)
+                }));
+            }
+            if let Some(image_url) = item
+                .get("image_url")
+                .or_else(|| item.get("imageUrl"))
+                .and_then(Value::as_str)
+            {
+                return Some(json!({ "type": "inputImage", "imageUrl": image_url }));
+            }
+            item.as_str().map(|text| {
+                json!({
+                    "type": "inputText",
+                    "text": truncate_rollout_text(text, MAX_ROLLOUT_TOOL_OUTPUT_CHARS)
+                })
+            })
+        })
+        .collect()
+}
+
+fn collect_rollout_enrichment_line(
     line: &str,
     current_turn_id: &mut Option<String>,
-    timestamps: &mut RolloutMessageTimestamps,
+    enrichment: &mut RolloutThreadEnrichment,
 ) {
     let Ok(value) = serde_json::from_str::<Value>(line) else {
         return;
@@ -399,27 +515,130 @@ fn collect_rollout_message_timestamp_line(
             let Some(turn_id) = current_turn_id.as_ref() else {
                 return;
             };
-            if value.pointer("/payload/type").and_then(Value::as_str) != Some("message") {
+            let Some(payload) = value.get("payload") else {
                 return;
+            };
+            let payload_type = payload.get("type").and_then(Value::as_str);
+            let turn = enrichment.turns.entry(turn_id.clone()).or_default();
+            match payload_type {
+                Some("message") => {
+                    if let (Some(role @ ("user" | "assistant")), Some(timestamp)) = (
+                        payload.get("role").and_then(Value::as_str),
+                        value.get("timestamp").and_then(Value::as_str),
+                    ) {
+                        turn.message_timestamps
+                            .push((role.to_string(), timestamp.to_string()));
+                    }
+                    let item_type = match payload.get("role").and_then(Value::as_str) {
+                        Some("user") => Some("userMessage"),
+                        Some("assistant") => Some("agentMessage"),
+                        _ => None,
+                    };
+                    if let Some(item_type) = item_type {
+                        turn.sequence.push(RolloutSequenceItem::Anchor {
+                            id: payload
+                                .get("id")
+                                .and_then(Value::as_str)
+                                .map(str::to_string),
+                            item_type,
+                        });
+                    }
+                }
+                Some("reasoning") => {
+                    turn.sequence.push(RolloutSequenceItem::Anchor {
+                        id: payload
+                            .get("id")
+                            .and_then(Value::as_str)
+                            .map(str::to_string),
+                        item_type: "reasoning",
+                    });
+                }
+                Some("custom_tool_call") => {
+                    let (Some(id), Some(call_id), Some(tool)) = (
+                        payload.get("id").and_then(Value::as_str),
+                        payload.get("call_id").and_then(Value::as_str),
+                        payload.get("name").and_then(Value::as_str),
+                    ) else {
+                        return;
+                    };
+                    let item = json!({
+                        "type": "dynamicToolCall",
+                        "id": id,
+                        "namespace": "functions",
+                        "tool": tool,
+                        "arguments": rollout_tool_arguments(payload, "input"),
+                        "lineChangeStats": rollout_apply_patch_line_stats(
+                            payload.get("input").and_then(Value::as_str)
+                        ),
+                        "status": normalize_rollout_tool_status(
+                            payload.get("status").and_then(Value::as_str)
+                        ),
+                        "contentItems": Value::Null,
+                        "success": Value::Null,
+                        "durationMs": Value::Null
+                    });
+                    let index = turn.sequence.len();
+                    turn.sequence.push(RolloutSequenceItem::DynamicTool(item));
+                    enrichment
+                        .pending_tools
+                        .insert(call_id.to_string(), (turn_id.clone(), index));
+                }
+                Some("function_call")
+                    if payload.get("name").and_then(Value::as_str) == Some("wait") =>
+                {
+                    let (Some(id), Some(call_id), Some(tool)) = (
+                        payload.get("id").and_then(Value::as_str),
+                        payload.get("call_id").and_then(Value::as_str),
+                        payload.get("name").and_then(Value::as_str),
+                    ) else {
+                        return;
+                    };
+                    let item = json!({
+                        "type": "dynamicToolCall",
+                        "id": id,
+                        "namespace": "functions",
+                        "tool": tool,
+                        "arguments": rollout_tool_arguments(payload, "arguments"),
+                        "status": "inProgress",
+                        "contentItems": Value::Null,
+                        "success": Value::Null,
+                        "durationMs": Value::Null
+                    });
+                    let index = turn.sequence.len();
+                    turn.sequence.push(RolloutSequenceItem::DynamicTool(item));
+                    enrichment
+                        .pending_tools
+                        .insert(call_id.to_string(), (turn_id.clone(), index));
+                }
+                Some("custom_tool_call_output" | "function_call_output") => {
+                    let Some(call_id) = payload.get("call_id").and_then(Value::as_str) else {
+                        return;
+                    };
+                    let Some((pending_turn_id, index)) = enrichment.pending_tools.remove(call_id)
+                    else {
+                        return;
+                    };
+                    let Some(RolloutSequenceItem::DynamicTool(item)) = enrichment
+                        .turns
+                        .get_mut(&pending_turn_id)
+                        .and_then(|pending_turn| pending_turn.sequence.get_mut(index))
+                    else {
+                        return;
+                    };
+                    let content_items = rollout_tool_content_items(payload.get("output"));
+                    if let Some(object) = item.as_object_mut() {
+                        object.insert("status".to_string(), json!("completed"));
+                        object.insert("contentItems".to_string(), json!(content_items));
+                    }
+                }
+                _ => {}
             }
-            let Some(role @ ("user" | "assistant")) =
-                value.pointer("/payload/role").and_then(Value::as_str)
-            else {
-                return;
-            };
-            let Some(timestamp) = value.get("timestamp").and_then(Value::as_str) else {
-                return;
-            };
-            timestamps
-                .entry(turn_id.clone())
-                .or_default()
-                .push((role.to_string(), timestamp.to_string()));
         }
         _ => {}
     }
 }
 
-fn apply_rollout_message_timestamps(response: &mut Value, timestamps: &RolloutMessageTimestamps) {
+fn apply_rollout_enrichment(response: &mut Value, enrichment: &RolloutThreadEnrichment) {
     let Some(turns) = response
         .pointer_mut("/result/thread/turns")
         .and_then(Value::as_array_mut)
@@ -430,12 +649,49 @@ fn apply_rollout_message_timestamps(response: &mut Value, timestamps: &RolloutMe
         let Some(turn_id) = turn.get("id").and_then(Value::as_str).map(str::to_string) else {
             continue;
         };
-        let Some(turn_timestamps) = timestamps.get(&turn_id) else {
+        let Some(turn_enrichment) = enrichment.turns.get(&turn_id) else {
             continue;
         };
         let Some(items) = turn.get_mut("items").and_then(Value::as_array_mut) else {
             continue;
         };
+        let mut existing_ids: HashSet<String> = items
+            .iter()
+            .filter_map(|item| item.get("id").and_then(Value::as_str).map(str::to_string))
+            .collect();
+        let mut cursor = items
+            .iter()
+            .take_while(|item| item.get("type").and_then(Value::as_str) == Some("userMessage"))
+            .count();
+        for sequence_item in &turn_enrichment.sequence {
+            match sequence_item {
+                RolloutSequenceItem::Anchor { id, item_type } => {
+                    let id_match = id.as_deref().and_then(|id| {
+                        items
+                            .iter()
+                            .position(|item| item.get("id").and_then(Value::as_str) == Some(id))
+                    });
+                    let type_match = items[cursor.min(items.len())..]
+                        .iter()
+                        .position(|item| {
+                            item.get("type").and_then(Value::as_str) == Some(*item_type)
+                        })
+                        .map(|relative_index| cursor + relative_index);
+                    if let Some(index) = id_match.or(type_match) {
+                        cursor = cursor.max(index + 1);
+                    }
+                }
+                RolloutSequenceItem::DynamicTool(item) => {
+                    let Some(id) = item.get("id").and_then(Value::as_str) else {
+                        continue;
+                    };
+                    if existing_ids.insert(id.to_string()) {
+                        items.insert(cursor.min(items.len()), item.clone());
+                        cursor += 1;
+                    }
+                }
+            }
+        }
         let mut timestamp_index = 0;
         for item in items {
             let expected_role = match item.get("type").and_then(Value::as_str) {
@@ -443,7 +699,7 @@ fn apply_rollout_message_timestamps(response: &mut Value, timestamps: &RolloutMe
                 Some("agentMessage") => "assistant",
                 _ => continue,
             };
-            let Some(relative_index) = turn_timestamps[timestamp_index..]
+            let Some(relative_index) = turn_enrichment.message_timestamps[timestamp_index..]
                 .iter()
                 .position(|(role, _)| role == expected_role)
             else {
@@ -454,7 +710,11 @@ fn apply_rollout_message_timestamps(response: &mut Value, timestamps: &RolloutMe
                 if let Some(object) = item.as_object_mut() {
                     object.insert(
                         "createdAt".to_string(),
-                        Value::String(turn_timestamps[timestamp_index].1.clone()),
+                        Value::String(
+                            turn_enrichment.message_timestamps[timestamp_index]
+                                .1
+                                .clone(),
+                        ),
                     );
                 }
             }
@@ -463,7 +723,7 @@ fn apply_rollout_message_timestamps(response: &mut Value, timestamps: &RolloutMe
     }
 }
 
-async fn enrich_thread_read_message_timestamps(response: &mut Value) {
+async fn enrich_thread_read_from_rollout(response: &mut Value) {
     let Some(path) = response
         .pointer("/result/thread/path")
         .and_then(Value::as_str)
@@ -476,11 +736,11 @@ async fn enrich_thread_read_message_timestamps(response: &mut Value) {
     };
     let mut lines = BufReader::new(file).lines();
     let mut current_turn_id = None;
-    let mut timestamps = RolloutMessageTimestamps::new();
+    let mut enrichment = RolloutThreadEnrichment::default();
     while let Ok(Some(line)) = lines.next_line().await {
-        collect_rollout_message_timestamp_line(&line, &mut current_turn_id, &mut timestamps);
+        collect_rollout_enrichment_line(&line, &mut current_turn_id, &mut enrichment);
     }
-    apply_rollout_message_timestamps(response, &timestamps);
+    apply_rollout_enrichment(response, &enrichment);
 }
 
 fn build_thread_list_params(
@@ -592,7 +852,7 @@ pub(crate) async fn read_thread_with_session_core(
     let mut response = session
         .send_request_for_workspace(&workspace_id, "thread/read", params)
         .await?;
-    enrich_thread_read_message_timestamps(&mut response).await;
+    enrich_thread_read_from_rollout(&mut response).await;
     Ok(response)
 }
 
@@ -1801,7 +2061,7 @@ base_url = "{base_url}"
     #[test]
     fn rollout_message_timestamps_are_applied_to_matching_thread_items() {
         let mut current_turn_id = None;
-        let mut timestamps = RolloutMessageTimestamps::new();
+        let mut enrichment = RolloutThreadEnrichment::default();
         for line in [
             r#"{"type":"turn_context","payload":{"turn_id":"turn-1"}}"#,
             r#"{"timestamp":"2026-07-18T12:00:00.000Z","type":"response_item","payload":{"type":"message","role":"user"}}"#,
@@ -1809,7 +2069,7 @@ base_url = "{base_url}"
             r#"{"timestamp":"2026-07-18T12:00:10.000Z","type":"response_item","payload":{"type":"message","role":"assistant"}}"#,
             r#"{"timestamp":"2026-07-18T12:00:20.000Z","type":"response_item","payload":{"type":"message","role":"assistant"}}"#,
         ] {
-            collect_rollout_message_timestamp_line(line, &mut current_turn_id, &mut timestamps);
+            collect_rollout_enrichment_line(line, &mut current_turn_id, &mut enrichment);
         }
         let mut response = json!({
             "result": {
@@ -1827,7 +2087,7 @@ base_url = "{base_url}"
             }
         });
 
-        apply_rollout_message_timestamps(&mut response, &timestamps);
+        apply_rollout_enrichment(&mut response, &enrichment);
 
         let items = response["result"]["thread"]["turns"][0]["items"]
             .as_array()
@@ -1836,6 +2096,76 @@ base_url = "{base_url}"
         assert!(items[1].get("createdAt").is_none());
         assert_eq!(items[2]["createdAt"], json!("2026-07-18T12:00:10.000Z"));
         assert_eq!(items[3]["createdAt"], json!("2026-07-18T12:00:20.000Z"));
+    }
+
+    #[test]
+    fn rollout_dynamic_tools_are_restored_in_sequence_without_duplicates() {
+        let mut current_turn_id = None;
+        let mut enrichment = RolloutThreadEnrichment::default();
+        for line in [
+            r#"{"type":"turn_context","payload":{"turn_id":"turn-1"}}"#,
+            r#"{"timestamp":"2026-07-18T11:59:59.000Z","type":"response_item","payload":{"type":"message","role":"user"}}"#,
+            r#"{"timestamp":"2026-07-18T12:00:00.000Z","type":"response_item","payload":{"type":"message","id":"message-1","role":"assistant"}}"#,
+            r#"{"type":"response_item","payload":{"type":"custom_tool_call","id":"tool-1","status":"completed","call_id":"call-1","name":"exec","input":"const result = await tools.exec_command({ cmd: 'git status' });"}}"#,
+            r#"{"type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-1","output":[{"type":"input_text","text":"Script completed"}]}}"#,
+            r#"{"type":"response_item","payload":{"type":"function_call","id":"wait-1","call_id":"call-2","name":"wait","arguments":"{\"cell_id\":\"cell-1\"}"}}"#,
+            r#"{"type":"response_item","payload":{"type":"function_call_output","call_id":"call-2","output":[{"type":"input_text","text":"Finished"}]}}"#,
+            r#"{"timestamp":"2026-07-18T12:00:10.000Z","type":"response_item","payload":{"type":"message","id":"message-2","role":"assistant"}}"#,
+        ] {
+            collect_rollout_enrichment_line(line, &mut current_turn_id, &mut enrichment);
+        }
+        let mut response = json!({
+            "result": {
+                "thread": {
+                    "turns": [{
+                        "id": "turn-1",
+                        "items": [
+                            { "type": "userMessage", "id": "item-0", "content": [] },
+                            { "type": "agentMessage", "id": "item-1", "text": "Working" },
+                            { "type": "dynamicToolCall", "id": "wait-1", "tool": "wait" },
+                            { "type": "agentMessage", "id": "item-2", "text": "Done" }
+                        ]
+                    }]
+                }
+            }
+        });
+
+        apply_rollout_enrichment(&mut response, &enrichment);
+
+        let items = response["result"]["thread"]["turns"][0]["items"]
+            .as_array()
+            .expect("thread items");
+        assert_eq!(items.len(), 5);
+        assert_eq!(items[0]["id"], json!("item-0"));
+        assert_eq!(items[1]["id"], json!("item-1"));
+        assert_eq!(items[2]["id"], json!("tool-1"));
+        assert_eq!(items[2]["type"], json!("dynamicToolCall"));
+        assert_eq!(items[2]["status"], json!("completed"));
+        assert_eq!(
+            items[2]["contentItems"][0]["text"],
+            json!("Script completed")
+        );
+        assert_eq!(items[3]["id"], json!("wait-1"));
+        assert_eq!(items[4]["id"], json!("item-2"));
+    }
+
+    #[test]
+    fn rollout_apply_patch_stats_are_computed_before_argument_truncation() {
+        let input = [
+            "await tools.apply_patch(`*** Begin Patch",
+            "*** Update File: src/a.ts",
+            "@@",
+            "-old",
+            "+new",
+            "+added",
+            "*** End Patch`);",
+        ]
+        .join("\n");
+
+        assert_eq!(
+            rollout_apply_patch_line_stats(Some(&input)),
+            json!({ "additions": 2, "deletions": 1 })
+        );
     }
 
     #[test]

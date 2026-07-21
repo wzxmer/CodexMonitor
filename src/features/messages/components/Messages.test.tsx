@@ -2485,6 +2485,106 @@ describe("Messages", () => {
     });
   });
 
+  it("derives historical line changes from persisted fileChange diffs", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "file-change-history",
+        kind: "tool",
+        toolType: "fileChange",
+        title: "File changes",
+        detail: "M src/a.ts",
+        status: "completed",
+        output: "",
+        changes: [
+          {
+            path: "src/a.ts",
+            kind: "update",
+            diff: [
+              "diff --git a/src/a.ts b/src/a.ts",
+              "--- a/src/a.ts",
+              "+++ b/src/a.ts",
+              "@@ -1 +1,2 @@",
+              "-old",
+              "+new",
+              "+added",
+            ].join("\n"),
+          },
+        ],
+        turnId: "turn-history",
+      },
+      {
+        id: "assistant-history-final",
+        kind: "message",
+        role: "assistant",
+        phase: "final_answer",
+        text: "Done.",
+        turnId: "turn-history",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      const stats = container.querySelector(
+        ".tool-group-header .tool-group-line-change-stats",
+      );
+      expect(stats?.textContent).toContain("+2");
+      expect(stats?.textContent).toContain("-1");
+    });
+  });
+
+  it("derives historical line changes from persisted dynamic apply_patch calls", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "dynamic-patch-history",
+        kind: "tool",
+        toolType: "dynamicToolCall",
+        title: "Tool: functions / exec",
+        detail: "truncated persisted arguments",
+        status: "completed",
+        output: "",
+        lineChangeStats: { additions: 1, deletions: 1 },
+        turnId: "turn-dynamic-history",
+      },
+      {
+        id: "assistant-dynamic-history-final",
+        kind: "message",
+        role: "assistant",
+        phase: "final_answer",
+        text: "Done.",
+        turnId: "turn-dynamic-history",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      const stats = container.querySelector(
+        ".tool-group-header .tool-group-line-change-stats",
+      );
+      expect(stats?.textContent).toContain("+1");
+      expect(stats?.textContent).toContain("-1");
+    });
+  });
+
   it("collapses assistant process messages before a final message without a visible user anchor", async () => {
     const items: ConversationItem[] = [
       {

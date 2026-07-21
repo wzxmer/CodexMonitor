@@ -220,6 +220,7 @@ export type ConversationItem = (
       status?: string;
       output?: string;
       durationMs?: number | null;
+      lineChangeStats?: LineChangeStats;
       changes?: { path: string; kind?: string; diff?: string }[];
       collabSender?: CollabAgentRef;
       collabReceiver?: CollabAgentRef;

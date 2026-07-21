@@ -622,6 +622,36 @@ export function countDiffLineChanges(diff: string | null | undefined): LineChang
   return additions > 0 || deletions > 0 ? { additions, deletions } : null;
 }
 
+export function countApplyPatchLineChanges(
+  input: string | null | undefined,
+): LineChangeStats | null {
+  if (!input?.includes("*** Begin Patch")) {
+    return null;
+  }
+  let additions = 0;
+  let deletions = 0;
+  let insidePatch = false;
+  for (const line of input.split(/\r?\n/)) {
+    if (line.includes("*** Begin Patch")) {
+      insidePatch = true;
+      continue;
+    }
+    if (line.includes("*** End Patch")) {
+      insidePatch = false;
+      continue;
+    }
+    if (!insidePatch || line.startsWith("+++") || line.startsWith("---")) {
+      continue;
+    }
+    if (line.startsWith("+")) {
+      additions += 1;
+    } else if (line.startsWith("-")) {
+      deletions += 1;
+    }
+  }
+  return additions > 0 || deletions > 0 ? { additions, deletions } : null;
+}
+
 export function getConversationItemSearchText(item: ConversationItem): string {
   switch (item.kind) {
     case "message":
