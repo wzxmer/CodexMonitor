@@ -21,6 +21,8 @@ import { useMessageHistoryWindow } from "./useMessageHistoryWindow";
 import { toMarkdownQuote } from "../utils/messageReferences";
 import { dedupeSubagentCheckpointItems } from "../utils/subagentCheckpointDisplay";
 
+const MAX_VISIBLE_TEXT_ONLY_COMMENTARY = 2;
+
 function baseEntryContainsItem(entry: MessageListBaseEntry, itemId: string) {
   return entry.kind === "toolGroup"
     ? entry.group.items.some((item) => item.id === itemId)
@@ -433,7 +435,11 @@ export function useMessagesViewState({
             entry.item.role === "assistant" &&
             entry.item.phase === "commentary",
         );
-      if (!hasStructuredProcessActivity && isExplicitTextOnlyTurn) {
+      if (
+        !hasStructuredProcessActivity &&
+        isExplicitTextOnlyTurn &&
+        processEntries.length <= MAX_VISIBLE_TEXT_ONLY_COMMENTARY
+      ) {
         result.push(...turnEntries);
         turnEntries = [];
         turnId = null;

@@ -2714,6 +2714,44 @@ describe("Messages", () => {
     ).toHaveLength(0);
   });
 
+  it("collapses verbose text-only commentary before the final answer", async () => {
+    const items: ConversationItem[] = [
+      ...Array.from({ length: 3 }, (_, index) => ({
+        id: `assistant-verbose-commentary-${index}`,
+        kind: "message" as const,
+        role: "assistant" as const,
+        phase: "commentary",
+        turnId: "turn-verbose-text-only",
+        text: `Verbose process message ${index + 1}.`,
+      })),
+      {
+        id: "assistant-verbose-final",
+        kind: "message",
+        role: "assistant",
+        phase: "final_answer",
+        turnId: "turn-verbose-text-only",
+        text: "Final result.",
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("Verbose process message 1.")).toBeNull();
+    });
+    expect(screen.getByText("3 条过程消息")).toBeTruthy();
+    expect(screen.getByText("Final result.")).toBeTruthy();
+  });
+
   it("collapses process messages in every completed turn", async () => {
     const items: ConversationItem[] = [
       {
